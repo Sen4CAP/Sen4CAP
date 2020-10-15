@@ -927,22 +927,22 @@ class L2aProcessor(object):
         acquisition_date = None
         satellite_id = UNKNOWN_SATELLITE_ID
         if product_name.startswith("S2"):
-            m = re.match("\w+_V(\d{8}T\d{6})_\w+.SAFE", product_name)
+            m = re.match(r"\w+_V(\d{8}T\d{6})_\w+.SAFE", product_name)
             # check if the new convention naming aplies
             if m is None:
-                m = re.match("\w+_(\d{8}T\d{6})_\w+.SAFE", product_name)
+                m = re.match(r"\w+_(\d{8}T\d{6})_\w+.SAFE", product_name)
             if m is not None:
                 satellite_id = SENTINEL2_SATELLITE_ID
                 acquisition_date = m.group(1)
         elif product_name.startswith("LC8") or product_name.startswith("LC08"):
-            m = re.match("LC8\d{6}(\d{7})[A-Z]{3}\d{2}", product_name)
+            m = re.match(r"LC8\d{6}(\d{7})[A-Z]{3}\d{2}", product_name)
             if m is not None:
                 acquisition_date = datetime.datetime.strptime(
                     "{} {}".format(m.group(1)[0:4], m.group(1)[4:]), "%Y %j"
                 ).strftime("%Y%m%dT%H%M%S")
             else:
                 m = re.match(
-                    "LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name
+                    r"LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name
                 )
                 if m is not None:
                     acquisition_date = datetime.datetime.strptime(
@@ -998,7 +998,7 @@ class L2aProcessor(object):
 
         # determine the acq date
         if lin_basename.startswith("S2"):
-            result = re.findall("_\d{8}T\d{6}_", lin_basename)
+            result = re.findall(r"_\d{8}T\d{6}_", lin_basename)
             if result:
                 acq_date = result[0].strip("_").split("T")[0]
                 acq_year = acq_date[:4]
@@ -1017,7 +1017,7 @@ class L2aProcessor(object):
                 )
                 return False
         elif lin_basename.startswith("LC"):
-            result = re.findall("_\d{8}_", lin_basename)
+            result = re.findall(r"_\d{8}_", lin_basename)
             if result:
                 acq_date = result[0].strip("_")
                 acq_year = acq_date[:4]
@@ -1152,7 +1152,7 @@ class Maja(L2aProcessor):
                         maccs_report_file, e
                     )
                 )
-                return Falsezip
+                return False
         else:
             self.update_rejection_reason(
                 "Can NOT find the MAJA report text file: {}".format(
@@ -1432,9 +1432,11 @@ class Maja(L2aProcessor):
             )
             return False
         if acquisition_date is None:
-            self.update_rejection_reason("Aquisition date could not be retrieved.")
-            self.l2a_log("Aquisition date could not be retrieved.")
+            self.update_rejection_reason("Acquisition date could not be retrieved.")
+            self.l2a_log("Acquisition date could not be retrieved.")
             return False
+        else:
+            self.l2a.acquisition_date = acquisition_date
 
         return True
 
@@ -1481,7 +1483,8 @@ class Maja(L2aProcessor):
             if (tile is not None) and (tile.group(1) == self.lin.tile_id):
                 self.l2a.processed_tiles.append(self.lin.tile_id)
                 self.l2a.product_path = tile_dbl_dir
-                self.l2a.name = os.path.basename(tile_dbl_dir)
+                #self.l2a.name = os.path.basename(tile_dbl_dir)
+                self.l2a.name = os.path.basename(self.l2a.output_path)
                 l2a_found = True
             else:
                 self.update_rejection_reason("None or multiple tiles were processed.")
@@ -1491,7 +1494,8 @@ class Maja(L2aProcessor):
             search_path = os.path.join(self.l2a.output_path, name_pattern)
             l2a_products = glob.glob(search_path)
             if len(l2a_products) == 1 and os.path.isdir(l2a_products[0]):
-                self.l2a.name = os.path.basename(l2a_products[0])
+                #self.l2a.name = os.path.basename(l2a_products[0])
+                self.l2a.name = os.path.basename(self.l2a.output_path)
                 self.l2a.product_path = l2a_products[0]
                 if self.check_theia_muscate_format() == True:
                     self.l2a.processed_tiles.append(self.lin.tile_id)
@@ -1503,10 +1507,7 @@ class Maja(L2aProcessor):
             self.update_rejection_reason("Invalid output format.")
             self.l2a_log("Invalid output format.")
 
-        if l2a_found:
-            quality_indicators_acquired = self.get_quality_indicators()
-        else:
-            quality_indicators_acquired = False
+        quality_indicators_acquired = self.get_quality_indicators()
 
         if l2a_found and quality_indicators_acquired and run_script_ok:
             return True
@@ -1515,11 +1516,11 @@ class Maja(L2aProcessor):
             return False
 
     def run_script(self):
-        l2a_tiles_paths = []
-        l2a_tiles = []
+        prev_l2a_tiles_paths = []
+        prev_l2a_tiles = []
         if self.lin.previous_l2a_path is not None:
-            l2a_tiles.append(self.lin.tile_id)
-            l2a_tiles_paths.append(self.lin.previous_l2a_path)
+            prev_l2a_tiles.append(self.lin.tile_id)
+            prev_l2a_tiles_paths.append(self.lin.previous_l2a_path)
 
         script_name = "demmaccs.py"
         script_path = os.path.join(self.context.base_abs_path, script_name)
@@ -1549,11 +1550,12 @@ class Maja(L2aProcessor):
             tiles = []
             tiles.append(self.lin.tile_id)
             script_command += tiles
-        if len(l2a_tiles) > 0:
+        
+        if len(prev_l2a_tiles) > 0:
             script_command.append("--prev-l2a-tiles")
-            script_command += l2a_tiles
+            script_command += prev_l2a_tiles
             script_command.append("--prev-l2a-products-paths")
-            script_command += l2a_tiles_paths
+            script_command += prev_l2a_tiles_paths  
 
         command_return = run_command(
             script_command, self.l2a.output_path, self.l2a_log_file
@@ -1599,11 +1601,11 @@ class Maja(L2aProcessor):
                             optgtiffArgs += " --no-compress"
 
                         if self.context.cogTiffs:
-                            isMask = re.match(".*_((MSK)|(QLT))_*.\.DBL\.TIF", filename)
+                            isMask = re.match(r".*_((MSK)|(QLT))_*.\.DBL\.TIF", filename)
                             if isMask is None:
                                 # check for MAJA mask rasters
                                 isMask = re.match(
-                                    ".*_((CLM)|(MG2)|(EDG)|(DFP))_.*\.tif", filename
+                                    r".*_((CLM)|(MG2)|(EDG)|(DFP))_.*\.tif", filename
                                 )
                             if isMask is not None:
                                 optgtiffArgs += " --resampler"
