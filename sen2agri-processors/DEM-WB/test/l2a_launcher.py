@@ -641,7 +641,7 @@ class L2aWorker(Thread):
         if tile.satellite_id == LANDSAT_ID:
             # only MAJA can process L8 images
             maja_context = MajaContext(site_context, self.worker_id)
-            maja = Maja(maja_context, tile)
+            maja = Maja_322(maja_context, tile)
             lin, l2a = maja.run()
             del maja
             return lin, l2a
@@ -655,7 +655,7 @@ class L2aWorker(Thread):
                 return lin, l2a
             elif site_context.implementation == "maja":
                 maja_context = MajaContext(site_context, self.worker_id)
-                maja = Maja(maja_context, tile)
+                maja = Maja_322(maja_context, tile)
                 lin, l2a = maja.run()
                 del maja
                 return lin, l2a
@@ -934,23 +934,20 @@ class L2aProcessor(object):
             if m is not None:
                 satellite_id = SENTINEL2_SATELLITE_ID
                 acquisition_date = m.group(1)
-        elif product_name.startswith("LC8") or product_name.startswith("LC08"):
+        elif product_name.startswith("LC8"):
             m = re.match(r"LC8\d{6}(\d{7})[A-Z]{3}\d{2}", product_name)
             if m is not None:
                 acquisition_date = datetime.datetime.strptime(
                     "{} {}".format(m.group(1)[0:4], m.group(1)[4:]), "%Y %j"
                 ).strftime("%Y%m%dT%H%M%S")
-            else:
-                m = re.match(
-                    r"LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name
-                )
-                if m is not None:
-                    acquisition_date = datetime.datetime.strptime(
-                        "{} {} {}".format(
-                            m.group(1)[0:4], m.group(1)[4:6], m.group(1)[6:]
-                        ),
-                        "%Y %m %d",
-                    ).strftime("%Y%m%dT%H%M%S")
+                satellite_id = LANDSAT8_SATELLITE_ID
+        elif product_name.startswith("LC08"):
+            m = re.match(
+                r"LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name
+            )
+            if m is not None:
+                acquisition_date = "{}{}{}T000000".format(
+                        m.group(1)[0:4], m.group(1)[4:6], m.group(1)[6:])
             if m is not None:
                 satellite_id = LANDSAT8_SATELLITE_ID
 
@@ -1079,9 +1076,9 @@ class L2aProcessor(object):
             )
 
 
-class Maja(L2aProcessor):
+class Maja_322(L2aProcessor):
     def __init__(self, processor_context, input_context):
-        super(Maja, self).__init__(processor_context, input_context)
+        super(Maja_322, self).__init__(processor_context, input_context)
         self.name = "maja"
 
     def get_l2a_footprint(self):
@@ -1144,12 +1141,12 @@ class Maja(L2aProcessor):
             except Exception as e:
                 self.update_rejection_reason(
                     "Exception received when trying to read the MAJA report text from file {}: {}".format(
-                        maccs_report_file, e
+                        maja_report_file_path, e
                     )
                 )
                 self.l2a_log(
                     "Exception received when trying to read the MAJA report text from file {}: {}".format(
-                        maccs_report_file, e
+                        maja_report_file_path, e
                     )
                 )
                 return False
@@ -1213,12 +1210,12 @@ class Maja(L2aProcessor):
             except Exception as e:
                 self.update_rejection_reason(
                     "Exception received when trying to read the MAJA report text from file {}: {}".format(
-                        maccs_report_file, e
+                        maja_report_file_path, e
                     )
                 )
                 self.l2a_log(
                     "Exception received when trying to read the MAJA report text from file {}: {}".format(
-                        maccs_report_file, e
+                        maja_report_file_path, e
                     )
                 )
         else:
@@ -1383,14 +1380,6 @@ class Maja(L2aProcessor):
             if os.path.isdir(filename) and re.search(".*\MASKS$", filename) is not None:
                 masks_dir = True
 
-        # check the name of the l2a product
-        if self.l2a.output_path.endswith("/"):
-            tmp_path = self.l2a.output_path[:-1]
-        else:
-            tmp_path = self.l2a.output_path
-        l2a_product_name = os.path.basename(tmp_path)
-        satellite_id, acquisition_date = self.get_l2a_info(l2a_product_name)
-
         if atb_files_count == 0:
             self.update_rejection_reason("Can NOT find ATB files.")
             self.l2a_log("Can NOT find ATB files.")
@@ -1431,12 +1420,6 @@ class Maja(L2aProcessor):
                 )
             )
             return False
-        if acquisition_date is None:
-            self.update_rejection_reason("Acquisition date could not be retrieved.")
-            self.l2a_log("Acquisition date could not be retrieved.")
-            return False
-        else:
-            self.l2a.acquisition_date = acquisition_date
 
         return True
 
@@ -1467,6 +1450,25 @@ class Maja(L2aProcessor):
 
     def check_l2a(self, run_script_ok):
         l2a_found = False
+
+        # check the name of the l2a product
+        if self.l2a.output_path.endswith("/"):
+            tmp_path = self.l2a.output_path[:-1]
+        else:
+            tmp_path = self.l2a.output_path
+        l2a_product_name = os.path.basename(tmp_path)
+        satellite_id, acquisition_date = self.get_l2a_info(l2a_product_name)
+        if acquisition_date is None:
+            self.update_rejection_reason("Acquisition date could not be retrieved.")
+            self.l2a_log("Acquisition date could not be retrieved.")
+            return False
+        else:
+            self.l2a.acquisition_date = acquisition_date
+        if satellite_id == UNKNOWN_SATELLITE_ID:
+            self.update_rejection_reason("UNKNOWN SATELLITE ID: {}.".format(satellite_id))
+            self.l2a_log("UNKNOWN SATELLITE ID: {}.".format(satellite_id))
+            return False
+
         self.get_output_format()
         # check l2a product content
         if self.l2a.output_format == MACCS_OUTPUT_FORMAT:
@@ -1706,6 +1708,518 @@ class Maja(L2aProcessor):
             preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
         )
         return self.lin, self.l2a
+
+class Maja_421(L2aProcessor):
+    def __init__(self, processor_context, input_context):
+        super(Maja_421, self).__init__(processor_context, input_context)
+        self.name = "maja"
+
+    def get_l2a_footprint(self):
+        wgs84_extent_list = []
+        tile_img = ""
+
+        if self.l2a.output_format == MACCS_OUTPUT_FORMAT:
+            if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
+                fre_tif_pattern = "/**/*_FRE_R1.DBL.TIF"
+            if self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
+                fre_tif_pattern = "/**/*_FRE.DBL.TIF"
+        if self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
+            fre_tif_pattern = "/**/*_FRE_B2.tif"
+
+        if self.l2a.output_path.endswith("/"):
+            fre_tif_path = self.l2a.output_path[:-1] + fre_tif_pattern
+        else:
+            fre_tif_path = self.l2a.output_path + fre_tif_pattern
+        tile_img = glob.glob(fre_tif_path)
+
+        if len(tile_img) > 0:
+            wgs84_extent_list.append(get_footprint(tile_img[0])[0])
+            self.l2a_log("MAJA common footprint tif file: {}".format(tile_img))
+            self.l2a.footprint = self.get_envelope(wgs84_extent_list)
+            return True
+
+        self.update_rejection_reason(
+            "Can NOT create the footprint, no FRE tif file exists."
+        )
+        self.l2a_log("Can NOT create the footprint, no FRE tif file exists.")
+        return False
+
+    def check_jpi_file(self):
+        jpi_file_pattern = "*_JPI_ALL.xml"
+        jpi_file_path = os.path.join(self.l2a.output_path, jpi_file_pattern)
+        tmp_jpi = glob.glob(jpi_file_path)
+        if len(tmp_jpi) > 0:
+            jpi_file = tmp_jpi[0]
+            try:
+                # Normally, if the file exists here it would be enough but we check just to be sure that we also have L2NOTV
+                xml_handler = open(jpi_file).read()
+                soup = Soup(xml_handler, "lxml")
+                for message in soup.find_all("processing_flags_and_modes"):
+                    key = message.find("key").get_text()
+                    if key == "Validity_Flag":
+                        value = message.find("value").get_text()
+                        if value == "L2NOTV":
+                            self.l2a_log(
+                                path,
+                                "L2NOTV found in the MAJA JPI file {}. The product will not be retried ... ".format(
+                                    jpi_file
+                                ),
+                                tile_log_filename,
+                            )
+                            self.lin.should_retry = False
+                            self.update_rejection_reason(
+                                "L2NOTV found in the MAJA JPI file {}. The product will not be retried!".format(
+                                    jpi_file
+                                )
+                            )
+            except Exception as e:
+                self.update_rejection_reason(
+                    "Exception received when trying to read the MAJA JPI from file {}: {}".format(
+                        jpi_file, e
+                    )
+                )
+                self.l2a_log(
+                    "Exception received when trying to read the MAJA JPI from file {}: {}".format(
+                        jpi_file, e
+                    )
+                )
+
+    def check_l2a_log(self):
+        tile_log_filename = "l2a_{}.log".format(self.lin.tile_id)
+        tile_log_filepath = os.path.join(self.l2a.output_path, tile_log_filename)
+        try:
+            with open(tile_log_filepath) as in_file:
+                contents = in_file.readlines()
+                for line in contents:
+                    index = line.find("Tile failure: ")
+                    if index != -1:
+                        self.update_rejection_reason(line[index + 14 :])
+                        break
+        except IOError as e:
+            self.update_rejection_reason(
+                "Could not read l2a product log at {}".format(tile_log_filepath)
+            )
+
+    def create_mosaic(self):
+        mosaic = ""
+        if self.l2a.output_format == MACCS_OUTPUT_FORMAT:
+            qkl_pattern = "*DBL.JPG"
+        if self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
+            qkl_pattern = "*QKL*.jpg"
+        qkl_search_path = os.path.join(self.l2a.product_path, qkl_pattern)
+        qkl_files = glob.glob(qkl_search_path)
+        if (len(qkl_files) == 1) and os.path.isfile(qkl_files[0]):
+            mosaic = os.path.join(self.l2a.output_path, "mosaic.jpg")
+            qkl = qkl_files[0]
+            try:
+                shutil.copy(qkl, mosaic)
+                return True
+            except:
+                self.update_rejection_reason(
+                    "Can NOT copy QKL {} to {}".format(qkl, mosaic)
+                )
+                self.l2a_log("Can NOT copy QKL {} to {}".format(qkl, mosaic))
+                return False
+        else:
+            self.update_rejection_reason("Can NOT find QKL file.")
+            self.l2a_log("Can NOT find QKL file.")
+            return False
+
+    def check_theia_muscate_format(self):
+        if self.l2a.product_path.endswith("/"):
+            search_pattern = self.l2a.product_path + "*"
+        else:
+            search_pattern = self.l2a.product_path + "/*"
+        dir_content = glob.glob(search_pattern)
+        atb_files_count = 0
+        fre_files_count = 0
+        sre_files_count = 0
+        qkl_file = False
+        mtd_file = False
+        data_dir = False
+        masks_dir = False
+        for filename in dir_content:
+            if (
+                os.path.isfile(filename)
+                and re.search(
+                    "_L2A_T{}_.*ATB.*\.tif$".format(self.lin.tile_id),
+                    filename,
+                    re.IGNORECASE,
+                )
+                is not None
+            ):
+                atb_files_count += 1
+            if (
+                os.path.isfile(filename)
+                and re.search(
+                    "_L2A_T{}_.*FRE.*\.tif$".format(self.lin.tile_id),
+                    filename,
+                    re.IGNORECASE,
+                )
+                is not None
+            ):
+                fre_files_count += 1
+            if (
+                os.path.isfile(filename)
+                and re.search(
+                    "_L2A_T{}_.*SRE.*\.tif$".format(self.lin.tile_id),
+                    filename,
+                    re.IGNORECASE,
+                )
+                is not None
+            ):
+                sre_files_count += 1
+            if (
+                os.path.isfile(filename)
+                and re.search(
+                    "_L2A_T{}_.*MTD.*\.xml$".format(self.lin.tile_id),
+                    filename,
+                    re.IGNORECASE,
+                )
+                is not None
+            ):
+                mtd_file = True
+            if (
+                os.path.isfile(filename)
+                and re.search(
+                    "_L2A_T{}_.*QKL.*\.jpg$".format(self.lin.tile_id),
+                    filename,
+                    re.IGNORECASE,
+                )
+                is not None
+            ):
+                qkl_file = True
+            if os.path.isdir(filename) and re.search(".*\DATA$", filename) is not None:
+                data_dir = True
+            if os.path.isdir(filename) and re.search(".*\MASKS$", filename) is not None:
+                masks_dir = True
+
+        if atb_files_count == 0:
+            self.update_rejection_reason("Can NOT find ATB files.")
+            self.l2a_log("Can NOT find ATB files.")
+            return False
+        if fre_files_count == 0:
+            self.update_rejection_reason("Can NOT find FRE files.")
+            self.l2a_log("Can NOT find FRE files.")
+            return False
+        if sre_files_count == 0:
+            self.update_rejection_reason("Can NOT find SRE files.")
+            self.l2a_log("Can NOT find SRE files.")
+            return False
+        if qkl_file == False:
+            self.update_rejection_reason("Can NOT find QKL files.")
+            self.l2a_log("Can NOT find QKL files.")
+            return False
+        if mtd_file == False:
+            self.update_rejection_reason("Can NOT find MTD files.")
+            self.l2a_log("Can NOT find MTD files.")
+            return False
+        if data_dir == False:
+            self.update_rejection_reason("Can NOT find DATA dir.")
+            self.l2a_log("Can NOT find DATA dir.")
+            return False
+        if masks_dir == False:
+            self.update_rejection_reason("Can NOT find MASKS dir.")
+            self.l2a_log("Can NOT find MASKS dir.")
+            return False
+        if self.lin.satellite_id != satellite_id:
+            self.update_rejection_reason(
+                "L2A and input product have different satellite ids: {} vs {} .".format(
+                    satellite_id, self.lin.satellite_id
+                )
+            )
+            self.l2a_log(
+                "L2A and input product have different satellite ids: {} vs {} .".format(
+                    satellite_id, self.lin.satellite_id
+                )
+            )
+            return False
+
+        return True
+
+    def get_rejection_reason(self):
+        self.check_jpi_file()
+        self.check_l2a_log()
+
+    def get_output_format(self):
+        # check for MACCS format
+        maccs_dbl_dir_pattern = "*_L2VALD_{}*.DBL.DIR".format(self.lin.tile_id)
+        maccs_dbl_dir_path = os.path.join(self.l2a.output_path, maccs_dbl_dir_pattern)
+        maccs_dbl_dir = glob.glob(maccs_dbl_dir_path)
+        maccs_hdr_file_pattern = "*_L2VALD_{}*.HDR".format(self.lin.tile_id)
+        maccs_hdr_file_path = os.path.join(self.l2a.output_path, maccs_hdr_file_pattern)
+        maccs_hdr_file = glob.glob(maccs_hdr_file_path)
+        if len(maccs_dbl_dir) >= 1 and len(maccs_hdr_file) >= 1:
+            self.l2a.output_format = MACCS_OUTPUT_FORMAT
+
+        # check for THEIA/MUSCATE format
+        theia_muscate_dir_pattern = "*_L2A_T{}_*".format(self.lin.tile_id)
+        theia_muscate_dir_path = os.path.join(
+            self.l2a.output_path, theia_muscate_dir_pattern
+        )
+        theia_muscate_dir = glob.glob(theia_muscate_dir_path)
+        if len(theia_muscate_dir) >= 1:
+            self.l2a.output_format = THEIA_MUSCATE_OUTPUT_FORMAT
+
+    def check_l2a(self, run_script_ok):
+        l2a_found = False
+
+        # check the name of the l2a product
+        if self.l2a.output_path.endswith("/"):
+            tmp_path = self.l2a.output_path[:-1]
+        else:
+            tmp_path = self.l2a.output_path
+        l2a_product_name = os.path.basename(tmp_path)
+        satellite_id, acquisition_date = self.get_l2a_info(l2a_product_name)
+        if acquisition_date is None:
+            self.update_rejection_reason("Acquisition date could not be retrieved.")
+            self.l2a_log("Acquisition date could not be retrieved.")
+            return False
+        else:
+            self.l2a.acquisition_date = acquisition_date
+        if satellite_id == UNKNOWN_SATELLITE_ID:
+            self.update_rejection_reason("UNKNOWN SATELLITE ID: {}.".format(satellite_id))
+            self.l2a_log("UNKNOWN SATELLITE ID: {}.".format(satellite_id))
+            return False
+
+        self.get_output_format()
+        # check l2a product content
+        if self.l2a.output_format == MACCS_OUTPUT_FORMAT:
+            tile_dir_list_pattern = "*.DBL.DIR"
+            tile_dir_list_path = os.path.join(
+                self.l2a.output_path, tile_dir_list_pattern
+            )
+            tile_dbl_dir = glob.glob(tile_dir_list_path)[0]
+            tile = None
+            if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
+                tile = re.search(r"_L2VALD_(\d\d[a-zA-Z]{3})____[\w\.]+$", tile_dbl_dir)
+            elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
+                tile = re.search(r"_L2VALD_([\d]{6})_[\w\.]+$", tile_dbl_dir)
+            if (tile is not None) and (tile.group(1) == self.lin.tile_id):
+                self.l2a.processed_tiles.append(self.lin.tile_id)
+                self.l2a.product_path = tile_dbl_dir
+                #self.l2a.name = os.path.basename(tile_dbl_dir)
+                self.l2a.name = os.path.basename(self.l2a.output_path)
+                l2a_found = True
+            else:
+                self.update_rejection_reason("None or multiple tiles were processed.")
+                self.l2a_log("None or multiple tiles were processed.")
+        elif self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
+            name_pattern = "*_T{}_[CHD]_V*".format(self.lin.tile_id)
+            search_path = os.path.join(self.l2a.output_path, name_pattern)
+            l2a_products = glob.glob(search_path)
+            if len(l2a_products) == 1 and os.path.isdir(l2a_products[0]):
+                #self.l2a.name = os.path.basename(l2a_products[0])
+                self.l2a.name = os.path.basename(self.l2a.output_path)
+                self.l2a.product_path = l2a_products[0]
+                if self.check_theia_muscate_format() == True:
+                    self.l2a.processed_tiles.append(self.lin.tile_id)
+                    l2a_found = True
+            else:
+                self.update_rejection_reason("None or multiple tiles were processed.")
+                self.l2a_log("None or multiple tiles were processed.")
+        else:
+            self.update_rejection_reason("Invalid output format.")
+            self.l2a_log("Invalid output format.")
+
+        if l2a_found and run_script_ok:
+            return True
+        else:
+            self.get_rejection_reason()
+            return False
+
+    def run_script(self):
+        prev_l2a_tiles_paths = []
+        prev_l2a_tiles = []
+        if self.lin.previous_l2a_path is not None:
+            prev_l2a_tiles.append(self.lin.tile_id)
+            prev_l2a_tiles_paths.append(self.lin.previous_l2a_path)
+
+        script_name = "demmaccs421.py"
+        script_path = os.path.join(self.context.base_abs_path, script_name)
+        script_command = [
+            script_path,
+            "--srtm",
+            self.context.srtm_path,
+            "--swbd",
+            self.context.swbd_path,
+            "--processes-number-dem",
+            "1",
+            "--processes-number-maccs",
+            "1",
+            "--gipp-dir",
+            self.context.gips_path,
+            "--working-dir",
+            self.context.working_dir,
+            "--maccs-launcher",
+            self.context.maja_launcher,
+            "--delete-temp",
+            "True",
+            self.lin.path,
+            self.l2a.output_path,
+        ]
+        if len(self.lin.tile_id) > 0:
+            script_command.append("--tiles-to-process")
+            tiles = []
+            tiles.append(self.lin.tile_id)
+            script_command += tiles
+        
+        if len(prev_l2a_tiles) > 0:
+            script_command.append("--prev-l2a-tiles")
+            script_command += prev_l2a_tiles
+            script_command.append("--prev-l2a-products-paths")
+            script_command += prev_l2a_tiles_paths  
+
+        command_return = run_command(
+            script_command, self.l2a.output_path, self.l2a_log_file
+        )
+        if (command_return == 0) and os.path.isdir(self.l2a.output_path):
+            return True
+        else:
+            self.update_rejection_reason(
+                "Can NOT run MAJA script, error code: {}.".format(command_return)
+            )
+            self.l2a_log(
+                "Can NOT run MAJA script, error code: {}.".format(command_return)
+            )
+            return False
+
+    def postprocess(self):
+        # pe aici am ramas
+        for root, dirnames, filenames in os.walk(self.l2a.output_path):
+            for filename in filenames:
+                if filename.endswith((".TIF", ".tif")):
+                    tifFilePath = os.path.join(root, filename)
+                    print("Post-processing {}".format(filename))
+                    if self.context.removeSreFiles:
+                        delete_file_if_match(
+                            tifFilePath, filename, ".*SRE.*\.DBL\.TIF", "SRE"
+                        )
+                        delete_file_if_match(
+                            tifFilePath, filename, ".*_SRE_B.*\.tif", "SRE"
+                        )
+                    elif self.context.removeFreFiles:
+                        delete_file_if_match(
+                            tifFilePath, filename, ".*FRE.*\.DBL\.TIF", "FRE"
+                        )
+                        delete_file_if_match(
+                            tifFilePath, filename, ".*_FRE_B.*\.tif", "FRE"
+                        )
+                    if self.context.compressTiffs or self.context.cogTiffs:
+                        optgtiffArgs = ""
+                        if self.context.compressTiffs:
+                            optgtiffArgs += " --compress"
+                            optgtiffArgs += " DEFLATE"
+                        else:
+                            optgtiffArgs += " --no-compress"
+
+                        if self.context.cogTiffs:
+                            isMask = re.match(r".*_((MSK)|(QLT))_*.\.DBL\.TIF", filename)
+                            if isMask is None:
+                                # check for MAJA mask rasters
+                                isMask = re.match(
+                                    r".*_((CLM)|(MG2)|(EDG)|(DFP))_.*\.tif", filename
+                                )
+                            if isMask is not None:
+                                optgtiffArgs += " --resampler"
+                                optgtiffArgs += " nearest"
+                            else:
+                                optgtiffArgs += " --resampler"
+                                optgtiffArgs += " average"
+                            optgtiffArgs += " --overviews"
+                            optgtiffArgs += " --tiled"
+                        else:
+                            optgtiffArgs += " --no-overviews"
+                            optgtiffArgs += " --strippped"
+                        optgtiffArgs += " "
+                        optgtiffArgs += tifFilePath
+                        print(
+                            "Running optimize_gtiff.py with params {}".format(
+                                optgtiffArgs
+                            )
+                        )
+                        os.system("optimize_gtiff.py" + optgtiffArgs)
+
+    def manage_prods_status(
+        self, preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
+    ):
+        maja_text_to_stop_retrying = [
+            "The number of cloudy pixel is too high",
+            "algorithm processing is stopped",
+            "The dark surface reflectance associated to the value of AOT index min is lower than the dark surface reflectance threshold",
+            "The number of NoData pixel in the output L2 composite product is too high",
+            "PersistentStreamingConditionalStatisticsImageFilter::Synthetize.No pixel is valid. Return null statistics",
+        ]
+
+        if (
+            (preprocess_succesful == True)
+            and (process_succesful == True)
+            and (l2a_ok == True)
+            and (postprocess_succesful == True)
+        ):
+            self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
+        else:
+            self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
+            if self.lin.should_retry != False:
+                for text in maja_text_to_stop_retrying:
+                    if text in self.lin.rejection_reason:
+                        self.lin.should_retry = False
+                        break
+
+            if self.lin.should_retry is None:
+                self.lin.should_retry = True
+
+    def run(self):
+        preprocess_succesful = False
+        process_succesful = False
+        postprocess_succesful = False
+        l2a_ok = False
+
+        # pre-processing
+        if self.check_lin() and self.l2a_setup():
+            preprocess_succesful = True
+        print(
+            "\n(launcher info) <worker {}>: NOMINAL pre-processing = {}".format(
+                self.context.worker_id, preprocess_succesful
+            )
+        )
+        self.l2a_log("NOMINAL pre-processing = {}".format(preprocess_succesful))
+
+        # processing
+        if preprocess_succesful:
+            process_succesful = self.run_script()
+        print(
+            "\n(launcher info) <worker {}>: NOMINAL processing = {}".format(
+                self.context.worker_id, process_succesful
+            )
+        )
+        self.l2a_log("NOMINAL processing = {}".format(process_succesful))
+
+        # processing checks
+        l2a_ok = self.check_l2a(process_succesful)
+        print(
+            "\n(launcher info) <worker {}>: NOMINAL L2a product = {}".format(
+                self.context.worker_id, l2a_ok
+            )
+        )
+        self.l2a_log("NOMINAL L2a product = {}".format(l2a_ok))
+
+        # postprocessing
+        if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
+            self.postprocess()
+            postprocess_succesful = True
+        print(
+            "\n(launcher info) <worker {}>: NOMINAL post-processing = {}".format(
+                self.context.worker_id, postprocess_succesful
+            )
+        )
+        self.l2a_log("NOMINAL post-processing = {}".format(postprocess_succesful))
+
+        self.manage_prods_status(
+            preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
+        )
+        return self.lin, self.l2a
+
 
 
 class Sen2Cor(L2aProcessor):
