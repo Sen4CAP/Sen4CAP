@@ -34,7 +34,7 @@ import tempfile
 from bs4 import BeautifulSoup as Soup
 
 general_log_path = "/tmp/"
-general_log_filename = "demmaccs.log"
+general_log_filename = "maja.log"
 
 def create_sym_links(filenames, target_directory, log_path, log_filename):
 
@@ -75,12 +75,9 @@ def get_prev_l2a_tile_path(tile_id, prev_l2a_product_path):
         all_files = glob.glob("{}/*".format(prev_l2a_product_path))
         print("all_files = {}".format(all_files))
         for filename in all_files:
-            print("Checking {}".format(filename))
-            if filename.rfind(tile_id, len(prev_l2a_product_path)) > 0:
+            if not filename.endswith(".log"):
                 print("added: {}".format(filename))
                 tile_files.append(filename)
-            else:
-                print("Ignoring {}".format(filename))
     else:
         print("The dir {} does not exist or is not a dir".format(prev_l2a_product_path))
     print("STOP get_prev_l2a_tile_path")
@@ -107,7 +104,7 @@ def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context, log_filename):
 
     try:
         xml_handler = open(maja_jpi_file).read()
-        soup = Soup(xml_handler)
+        soup = Soup(xml_handler,"lxml")
         for message in soup.find_all('processing_flags_and_modes'):
             key = message.find('key').get_text()
             if key == 'Validity_Flag' :
@@ -118,7 +115,7 @@ def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context, log_filename):
                     new_file = os.path.join(demmaccs_context.output, os.path.basename(maja_jpi_file))
                     shutil.copy(maja_jpi_file, new_file)
                     return False
-    except Exception, e:
+    except Exception as e:
         print("Exception received when trying to read the MAJA JPI from file {}: {}".format(maja_jpi_file, e))
         log(demmaccs_context.output, "Exception received when trying to read the MAJA JPI from file {}: {}".format(maja_jpi_file, e), log_filename)
         pass
@@ -142,9 +139,9 @@ def copy_common_gipp_file(working_dir, gipp_base_dir, gipp_sat_dir, gipp_sat_pre
                 common_gipp_file = cmn_gipp_file_tmp
                 basename_tile_gipp_file = tmpFile1
                 break
-            
-        try:
-            tile_gipp_file = "{}/{}".format(working_dir, basename_tile_gipp_file)
+
+        tile_gipp_file = "{}/{}".format(working_dir, basename_tile_gipp_file)  
+        try: 
             with open(common_gipp_file, 'r') as handler_common_gipp_file, open(tile_gipp_file, 'w') as handler_tile_gipp_file:
                 for line in handler_common_gipp_file:
                     if "<File_Name>" in line or "<Applicability_NickName>" in line or "<Applicable_SiteDefinition_Id" in line:
@@ -192,6 +189,16 @@ def maccs_launcher(demmaccs_context):
     tile_id = ""
     gipp_sat_dir = ""
     gipp_tile_prefix = ""
+
+    eucmn00_file_path = os.path.join(demmaccs_context.gipp_base_dir, "LANDSAT8/*EUCMN00*")
+    eucmn00_file = glob.glob(eucmn00_file_path)
+    if len(eucmn00_file) > 0:
+        common_tile_id = "CMN00"
+        if sat_id == LANDSAT8_SATELLITE_ID:
+            gipp_tile_prefix = "EU"
+    else:
+        common_tile_id = "ALLSITES"
+
     if sat_id == SENTINEL2_SATELLITE_ID:
         gipp_sat_prefix = "S2"
         full_gipp_sat_prefix = gipp_sat_prefix
@@ -204,20 +211,15 @@ def maccs_launcher(demmaccs_context):
         
         print ("full_gipp_sat_prefix is {}".format(full_gipp_sat_prefix))
         
-        common_tile_id = "CMN00"
-        #no prefix for sentinel
-        gipp_tile_prefix = ""
         gipp_sat_dir = "SENTINEL2"
-        tile = re.match("S2\w+_REFDE2_(\w{5})\w+", basename[0:len(basename) - 4])
+        tile = re.match(r"S2\w+_REFDE2_(\w{5})\w+", basename[0:len(basename) - 4])
         if tile is not None:
             tile_id = tile.group(1)
     elif sat_id == LANDSAT8_SATELLITE_ID:
         gipp_sat_prefix = "L8"
-        full_gipp_sat_prefix = "L8" 
-        common_tile_id = "CMN000"
-        gipp_tile_prefix = "EU"
+        full_gipp_sat_prefix = "L8"
         gipp_sat_dir = "LANDSAT8"
-        tile = re.match("L8\w+_REFDE2_(\w{6})\w+", basename[0:len(basename) - 4])
+        tile = re.match(r"L8\w+_REFDE2_(\w{6})\w+", basename[0:len(basename) - 4])
         if tile is not None:
             tile_id = tile.group(1)
     else:
@@ -278,7 +280,7 @@ def maccs_launcher(demmaccs_context):
                 return ""
 
     if not create_sym_links([demmaccs_context.dem_hdr_file, dem_dir], working_dir, demmaccs_context.output, tile_log_filename):
-        log(demmaccs_context.output, "Tile failure: Could not create symbolic links for {0} and {1}".format(dem_hdr_file, dem_dir), tile_log_filename)
+        log(demmaccs_context.output, "Tile failure: Could not create symbolic links for {0} and {1}".format(demmaccs_context.dem_hdr_file, dem_dir), tile_log_filename)
         return ""
     start = time.time()
     maccs_mode = "L2INIT"
@@ -318,13 +320,10 @@ def maccs_launcher(demmaccs_context):
                     "--input", working_dir,
                     "--TileId", tile_id,
                     "--output", maccs_working_dir,
-                    "--mode", maccs_mode,
-                    "--loglevel", "DEBUG",
-                    "--enableTest", "false",
-                    "--CheckXMLFilesWithSchema", "false"]
-    if sat_id == SENTINEL2_SATELLITE_ID:
-        #UserConfiguration has to be added for SENTINEL in cmd_array (don't know why, but I saw this is the only way to make it working)
-        cmd_array += ["--conf", "/usr/share/sen2agri/sen2agri-demmaccs/UserConfiguration"]
+                    "--mode", maccs_mode]
+    #tmp cmd_array += ["--conf", "/usr/share/sen2agri/sen2agri-demmaccs/UserConfiguration"]
+    if args.conf != "":
+        cmd_array += ["--conf", args.conf]
     log(demmaccs_context.output, "sat_id = {} | acq_date = {}".format(sat_id, acquistion_date), tile_log_filename)
     log(demmaccs_context.output, "Starting MACCS/MAJA in {} for {} | TileID: {}".format(maccs_mode, demmaccs_context.input, tile_id), tile_log_filename)
     log(demmaccs_context.output, "MACCS_COMMAND: {}".format(cmd_array), tile_log_filename)
@@ -359,8 +358,6 @@ def maccs_launcher(demmaccs_context):
                 pass
             log(demmaccs_context.output, "Moving {} to {}".format(maccs_report_file[0], new_maccs_report_file), tile_log_filename)
             shutil.move(maccs_report_file[0], new_maccs_report_file)
-        else:
-            log(demmaccs_context.output, "No report maccs files (REPT) found in: {}.".format(maccs_working_dir), tile_log_filename)
         working_dir_content = glob.glob("{}/*".format(maccs_working_dir))
         log(demmaccs_context.output, "Searching for valid products in working dir: {}. Following is the content of this dir: {}".format(maccs_working_dir, working_dir_content), tile_log_filename)
         #check for MACCS format
@@ -406,7 +403,7 @@ def maccs_launcher(demmaccs_context):
             log(demmaccs_context.output, "No valid products (MACCS VALD status or THEIA/MUSCATE formats) found in: {}.".format(maccs_working_dir), tile_log_filename)
         log(demmaccs_context.output, "Erasing the MACCS/MAJA working directory: rmtree: {}".format(maccs_working_dir), tile_log_filename)
         shutil.rmtree(maccs_working_dir)
-    except Exception, e:
+    except Exception as e:
         return_tile_id = ""
         log(demmaccs_context.output, "Tile failure: Exception caught when moving maccs files for tile {} to the output directory {}: {}".format(tile_id, demmaccs_context.output, e), tile_log_filename)
  
@@ -434,11 +431,13 @@ parser.add_argument('--prev-l2a-tiles', required=False,
                         help="Previous processed tiles from L2A product", default=[], nargs="+")
 parser.add_argument('--prev-l2a-products-paths', required=False,
                         help="Path of the previous processed tiles from L2A product", default=[], nargs="+")
-parser.add_argument('--delete-temp', required=False,
+parser.add_argument('--delete-temp', required=False, type = bool,
                         help="if set to True, it will delete all the temporary files and directories. Default: True", default="True")
 parser.add_argument('--suffix-log-name', required=False,
                         help="if set, the string will be part of the log filename . Default: null", default=None)
 parser.add_argument('output', help="output location")
+parser.add_argument("--conf", required=True,
+                        help = "Configuration file for maja")
 
 args = parser.parse_args()
 log_filename = "demmaccs.log"
@@ -568,17 +567,15 @@ else:
         if len(out) >=5:
             processed_tiles.append(out)
 
-sys_exit = int(0)
+ret = 0
 if len(processed_tiles) == 0:
     log(general_log_path, "MACCS/MAJA did not processed any tiles for L1C product {}".format(args.input), log_filename)
-    sys_exit = 1
+    ret = 1
 else:
     log(general_log_path, "MACCS/MAJA processed the following tiles for L1C product {} :".format(args.input), log_filename)
     log(general_log_path, "{}".format(processed_tiles), log_filename)
-#    if run_command([os.path.dirname(os.path.abspath(__file__)) + "/mosaic_l2a.py", "-i", args.output, "-w", working_dir], args.output, log_filename) != 0:
-#        log(general_log_path, "Mosaic didn't work", log_filename)
 
-if args.delete_temp == "True":
+if args.delete_temp:
     log(general_log_path, "Remove all the temporary files and directory", log_filename)
     if not remove_dir(dem_working_dir):
         log(general_log_path, "Couldn't remove the temp dir {}".format(dem_working_dir), log_filename)
@@ -589,4 +586,5 @@ if args.delete_temp == "True":
 
 log(general_log_path, "Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), log_filename)
 
-sys.exit(sys_exit)
+sys.exit(ret)
+

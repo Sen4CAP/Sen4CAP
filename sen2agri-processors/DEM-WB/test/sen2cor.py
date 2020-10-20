@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
 _____________________________________________________________________________
@@ -517,7 +517,6 @@ def RunSen2Cor():
         # docker run
         cmd.append("docker")
         cmd.append("run")
-        cmd.append("-it")
         cmd.append("--rm")
         cmd.append("-u")
         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
@@ -698,7 +697,6 @@ def TranslateToTif(L2A_product_name):
             local_jp2_dir = os.path.dirname(jp2)
             cmd.append("docker")
             cmd.append("run")
-            cmd.append("-it")
             cmd.append("--rm")
             cmd.append("-u")
             cmd.append("{}:{}".format(os.getuid(), os.getgid()))
@@ -921,7 +919,6 @@ def ConvertPreviews(L2A_product_name):
             local_jp2_dir = os.path.dirname(jp2)
             cmd.append("docker")
             cmd.append("run")
-            cmd.append("-it")
             cmd.append("--rm")
             cmd.append("-u")
             cmd.append("{}:{}".format(os.getuid(), os.getgid()))
@@ -1053,24 +1050,24 @@ def RunScript():
 
         # initialisation operations
         if InitLog():
-            print("(sen2cor info) NOMINAL initialisation of Sen2Cor script.")
+            print("(sen2cor info) Succesful initialisation of Sen2Cor script.")
         else:
-            print("(sen2cor err) NON-NOMINAL initialisation of Sen2Cor script.")
+            print("(sen2cor err) Unsuccesful initialisation of Sen2Cor script.")
             log(
                 SEN2COR_LOG_DIR_PATH,
-                "(sen2cor err) NON-NOMINAL initialisation of Sen2Cor script.",
+                "(sen2cor err) Unsuccesful initialisation of Sen2Cor script.",
                 SEN2COR_LOG_FILE_NAME,
             )
             run_script_ok = False
 
         if run_script_ok:
             if CheckInput():
-                print("(sen2cor info) NOMINAL input.")
+                print("(sen2cor info) VALID input.")
             else:
-                print("(sen2cor err) NON-NOMINAL input.")
+                print("(sen2cor err) INVALID input.")
                 log(
                     SEN2COR_LOG_DIR_PATH,
-                    "(sen2cor err) NON-NOMINAL input.",
+                    "(sen2cor err) INVALID input.",
                     SEN2COR_LOG_FILE_NAME,
                 )
                 run_script_ok = False
@@ -1078,12 +1075,12 @@ def RunScript():
         # run Sen2Cor processor
         if run_script_ok:
             if RunSen2Cor():
-                print("(sen2cor info) NOMINAL execution of Sen2Cor.")
+                print("(sen2cor info) Succesful execution of Sen2Cor.")
             else:
-                print("(sen2cor err) NON-NOMINAL execution of Sen2Cor.")
+                print("(sen2cor err) Unsuccesful execution of Sen2Cor.")
                 log(
                     SEN2COR_LOG_DIR_PATH,
-                    "(sen2cor err) NON-NOMINAL execution of Sen2Cor.",
+                    "(sen2cor err) Unsuccesful execution of Sen2Cor.",
                     SEN2COR_LOG_FILE_NAME,
                 )
                 run_script_ok = False
@@ -1092,12 +1089,12 @@ def RunScript():
         if run_script_ok:
             output_ok, L2A_product_name = CheckOutput()
             if output_ok and L2A_product_name is not None:
-                print("(sen2cor info) NOMINAL output of Sen2Cor processor.")
+                print("(sen2cor info) VALID output of Sen2Cor processor.")
             else:
-                print("(sen2cor err) NON-NOMINAL output of Sen2Cor processor.")
+                print("(sen2cor err) INVALID output of Sen2Cor processor.")
                 log(
                     SEN2COR_LOG_DIR_PATH,
-                    "(sen2cor err) NON-NOMINAL output of Sen2Cor processor.",
+                    "(sen2cor err) INVALID output of Sen2Cor processor.",
                     SEN2COR_LOG_FILE_NAME,
                 )
                 run_script_ok = False
@@ -1106,15 +1103,15 @@ def RunScript():
         if run_script_ok:
             if ConvertPreviews(L2A_product_name):
                 print(
-                    "(sen2cor info) NOMINAL conversion of preview images (TCI, PVI) to jpeg format."
+                    "(sen2cor info) Succesful conversion of preview images (TCI, PVI) to JPEG format."
                 )
             else:
                 print(
-                    "(sen2cor err) NON-NOMINAL conversion of preview images (TCI, PVI) to jpeg format."
+                    "(sen2cor err) Unsuccesful conversion of preview images (TCI, PVI) to jpeg format."
                 )
                 log(
                     SEN2COR_LOG_DIR_PATH,
-                    "(sen2cor err) NON-NOMINAL conversion of preview images (TCI, PVI) to jpeg format.",
+                    "(sen2cor err) Unsuccesful conversion of preview images (TCI, PVI) to jpeg format.",
                     SEN2COR_LOG_FILE_NAME,
                 )
                 run_script_ok = False
@@ -1130,20 +1127,20 @@ def RunScript():
                 if args.tif:
                     log(
                         SEN2COR_LOG_DIR_PATH,
-                        "(sen2cor info) NOMINAL Tiff translation.",
+                        "(sen2cor info) Succesful TIFF translation.",
                         SEN2COR_LOG_FILE_NAME,
                     )
                 if args.cog:
                     log(
                         SEN2COR_LOG_DIR_PATH,
-                        "(sen2cor info) NOMINAL COG translation.",
+                        "(sen2cor info) Succesful COG translation.",
                         SEN2COR_LOG_FILE_NAME,
                     )
             else:
-                print("(sen2cor err) NON-NOMINAL Tiff/COG translation.")
+                print("(sen2cor err) Unsuccesful Tiff/COG translation.")
                 log(
                     SEN2COR_LOG_DIR_PATH,
-                    "(sen2cor err) NON-NOMINAL Tiff/COG translation.",
+                    "(sen2cor err) Unsuccesful Tiff/COG translation.",
                     SEN2COR_LOG_FILE_NAME,
                 )
                 run_script_ok = False
@@ -1198,7 +1195,7 @@ parser.add_argument(
     "-i", "--input_dir", required=True, help="Input L1C product directory"
 )
 parser.add_argument(
-    "-o", "--output_dir", required=True, help="Output dir of the L2A product"
+    "-o", "--output_dir", required=True, help="L2A product directory"
 )
 # flags related to the script execution
 parser.add_argument(

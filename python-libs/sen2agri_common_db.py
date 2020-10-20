@@ -148,7 +148,7 @@ def manage_log_file(location, log_filename):
                 #the main 'if'  can be replaced by 'while', and the following line should
                 #be uncommented. be aware though...it can lead to infinite loop (probably not, but never say never again
                 previous_log_files = glob.glob("{}*.log_20*".format(location if location.endswith("/") else location + "/"))
-    except Exception, e:
+    except Exception as e:
         print("Error in manage_log_file: exception {} !".format(e))
 
 
@@ -288,16 +288,16 @@ def get_product_info(product_name):
         m = re.match("\w+_V(\d{8}T\d{6})_\w+.SAFE", product_name)
         # check if the new convention naming aplies
         if m == None:
-            m = re.match("\w+_(\d{8}T\d{6})_\w+.SAFE", product_name)
+            m = re.match(r"\w+_(\d{8}T\d{6})_\w+.SAFE", product_name)
         if m != None:
             sat_id = SENTINEL2_SATELLITE_ID
             acquisition_date = m.group(1)
     elif product_name.startswith("LC8") or product_name.startswith("LC08"):
-        m = re.match("LC8\d{6}(\d{7})[A-Z]{3}\d{2}", product_name)
+        m = re.match(r"LC8\d{6}(\d{7})[A-Z]{3}\d{2}", product_name)
         if m != None:
             acquisition_date = datetime.datetime.strptime("{} {}".format(m.group(1)[0:4],m.group(1)[4:]), '%Y %j').strftime("%Y%m%dT%H%M%S")
         else :
-            m = re.match("LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name)
+            m = re.match(r"LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name)
             if m != None:
                 acquisition_date = datetime.datetime.strptime("{} {} {}".format(m.group(1)[0:4],m.group(1)[4:6], m.group(1)[6:]), '%Y %m %d').strftime("%Y%m%dT%H%M%S")
         if m != None:
@@ -317,21 +317,23 @@ def check_maja_valid_output(maja_out, tile_id):
     data_dir = False
     masks_dir = False
     for filename in dir_content:
-        if os.path.isfile(filename) and re.search("_L2A_T{}_.*ATB.*\.tif$".format(tile_id), filename, re.IGNORECASE) is not None:
+        if os.path.isfile(filename) and re.search(r"_L2A_.*ATB.*\.tif$", filename, re.IGNORECASE) is not None:
             atb_files_count += 1
-        if os.path.isfile(filename) and re.search("_L2A_T{}_.*FRE.*\.tif$".format(tile_id), filename, re.IGNORECASE) is not None:
+        if os.path.isfile(filename) and re.search(r"_L2A_.*FRE.*\.tif$", filename, re.IGNORECASE) is not None:
             fre_files_count += 1
-        if os.path.isfile(filename) and re.search("_L2A_T{}_.*SRE.*\.tif$".format(tile_id), filename, re.IGNORECASE) is not None:
+        if os.path.isfile(filename) and re.search(r"_L2A_.*SRE.*\.tif$", filename, re.IGNORECASE) is not None:
             sre_files_count += 1
-        if os.path.isfile(filename) and re.search("_L2A_T{}_.*MTD.*\.xml$".format(tile_id), filename, re.IGNORECASE) is not None:
+        if os.path.isfile(filename) and re.search(r"_L2A_.*MTD.*\.xml$", filename, re.IGNORECASE) is not None:
             mtd_file = True
-        if os.path.isfile(filename) and re.search("_L2A_T{}_.*QKL.*\.jpg$".format(tile_id), filename, re.IGNORECASE) is not None:
+        if os.path.isfile(filename) and re.search(r"_L2A_.*QKL.*\.jpg$", filename, re.IGNORECASE) is not None:
             qkl_file = True
-        if os.path.isdir(filename) and re.search(".*\DATA$", filename) is not None:
+        if os.path.isdir(filename) and re.search(r".*\DATA$", filename) is not None:
             data_dir = True
-        if os.path.isdir(filename) and re.search(".*\MASKS$", filename) is not None:
+        if os.path.isdir(filename) and re.search(r".*\MASKS$", filename) is not None:
             masks_dir = True
-    return (atb_files_count > 0 and fre_files_count > 0 and sre_files_count > 0 and qkl_file and mtd_file and data_dir and masks_dir)
+
+    res = (atb_files_count > 0 and fre_files_count > 0 and sre_files_count > 0 and qkl_file and mtd_file and data_dir and masks_dir)
+    return res
 
 def get_l1c_processor_output_format(working_directory, tile_id):
     if not os.path.isdir(working_directory):
@@ -344,14 +346,14 @@ def get_l1c_processor_output_format(working_directory, tile_id):
     #check for THEIA/MUSCATE format
     working_dir_content = glob.glob("{}/*".format(working_directory))
     for maja_out in working_dir_content:
-        if os.path.isdir(maja_out) and re.search(".*_L2A_T{}_.*".format(tile_id), maja_out, re.IGNORECASE) and check_maja_valid_output(maja_out, tile_id):
+        if os.path.isdir(maja_out) and re.search(r".*_L2A_.*", maja_out, re.IGNORECASE) and check_maja_valid_output(maja_out, tile_id):
             return L1C_MAJA_PROCESSOR_OUTPUT_FORMAT, maja_out
 	#check for Sen2Cor format
 	pvi_pattern = "S2[A|B|C|D]_MSIL2A_*/GRANULE/L2A*_T{}_*/QI_DATA/*PVI.[jp2|tif|jpeg]".format(tile_id)
 	pvi_path = os.path.join(working_directory,pvi_pattern)
 	pvi_files = glob.glob(pvi_path)
 	if len(pvi_files) == 1:
-		return L1C_SEN2COR_PROCESSOR_OUTPUT_FORMAT, None
+            return L1C_SEN2COR_PROCESSOR_OUTPUT_FORMAT, None
 		
     return L1C_UNKNOWN_PROCESSOR_OUTPUT_FORMAT, None
 
@@ -455,7 +457,7 @@ def landsat_crop_to_cutline(landsat_product_path, working_dir):
             run_command(["ogr2ogr", "-t_srs", out, "-where", "PR={}".format(tile_id), "-overwrite", tmp_shape_file, "/usr/share/sen2agri/wrs2_descending/wrs2_descending.shp"])
             break
     if not first_tile_file_path :
-	return "", "Unable to find B1 in output product"
+	    return "", "Unable to find B1 in output product"
 
     processed_files_counter = 0
     for landsat_file in landsat_files:
@@ -473,52 +475,52 @@ def landsat_crop_to_cutline(landsat_product_path, working_dir):
         landsat_file_basename = os.path.basename(landsat_file[:len(landsat_file) - 1]) if landsat_file.endswith("/") else os.path.basename(landsat_file)
 	metadata = re.match("LC8\w{13}[A-Z]{3}\w{2}_MTL.txt|[A-Z][A-Z]\d\d_[A-Z0-9]+_\d{6}_\d{8}_\d{8}_\d{2}_[A-Z0-9]{2}_MTL\.txt", landsat_file_basename)
 	if metadata is not None:
-	    output_metadata_file = "{}/{}".format(aligned_landsat_directory_path, landsat_file_basename)
-	    print(output_metadata_file)
-	    shape_env_points_wgs84, shape_env_points = get_footprint(first_tile_file_path)
-	    try:
+            output_metadata_file = "{}/{}".format(aligned_landsat_directory_path, landsat_file_basename)
+            print(output_metadata_file)
+            shape_env_points_wgs84, shape_env_points = get_footprint(first_tile_file_path)
+        try:
 	        with open(landsat_file, 'r') as genuine_metadata, open(output_metadata_file, 'w') as modified_metadata:
-		    for line in genuine_metadata:
-		        # UTM coordinates
-		        if "CORNER_UL_PROJECTION_X_PRODUCT" in line:
-		    	    line = "    CORNER_UL_PROJECTION_X_PRODUCT = " + str(shape_env_points[0][0]) + "\n"
-		        if "CORNER_UL_PROJECTION_Y_PRODUCT" in line:
-		    	    line = "    CORNER_UL_PROJECTION_Y_PRODUCT = " + str(shape_env_points[0][1]) + "\n"
-		        if "CORNER_UR_PROJECTION_X_PRODUCT" in line:
-		    	    line = "    CORNER_UR_PROJECTION_X_PRODUCT = " + str(shape_env_points[3][0]) + "\n"
-		        if "CORNER_UR_PROJECTION_Y_PRODUCT" in line:
-		    	    line = "    CORNER_UR_PROJECTION_Y_PRODUCT = " + str(shape_env_points[3][1]) + "\n"
-		        if "CORNER_LL_PROJECTION_X_PRODUCT" in line:
-		    	    line = "    CORNER_LL_PROJECTION_X_PRODUCT = " + str(shape_env_points[1][0]) + "\n"
-		        if "CORNER_LL_PROJECTION_Y_PRODUCT" in line:
-		    	    line = "    CORNER_LL_PROJECTION_Y_PRODUCT = " + str(shape_env_points[1][1]) + "\n"
-		        if "CORNER_LR_PROJECTION_X_PRODUCT" in line:
-		    	    line = "    CORNER_LR_PROJECTION_X_PRODUCT = " + str(shape_env_points[2][0]) + "\n"
-		        if "CORNER_LR_PROJECTION_Y_PRODUCT" in line:
-		    	    line = "    CORNER_LR_PROJECTION_Y_PRODUCT = " + str(shape_env_points[2][1]) + "\n"
-		        # latlong coordinates
+                    for line in genuine_metadata:
+                        # UTM coordinates
+                        if "CORNER_UL_PROJECTION_X_PRODUCT" in line:
+                            line = "    CORNER_UL_PROJECTION_X_PRODUCT = " + str(shape_env_points[0][0]) + "\n"
+                        if "CORNER_UL_PROJECTION_Y_PRODUCT" in line:
+                            line = "    CORNER_UL_PROJECTION_Y_PRODUCT = " + str(shape_env_points[0][1]) + "\n"
+                        if "CORNER_UR_PROJECTION_X_PRODUCT" in line:
+                            line = "    CORNER_UR_PROJECTION_X_PRODUCT = " + str(shape_env_points[3][0]) + "\n"
+                        if "CORNER_UR_PROJECTION_Y_PRODUCT" in line:
+                            line = "    CORNER_UR_PROJECTION_Y_PRODUCT = " + str(shape_env_points[3][1]) + "\n"
+                        if "CORNER_LL_PROJECTION_X_PRODUCT" in line:
+                            line = "    CORNER_LL_PROJECTION_X_PRODUCT = " + str(shape_env_points[1][0]) + "\n"
+                        if "CORNER_LL_PROJECTION_Y_PRODUCT" in line:
+                            line = "    CORNER_LL_PROJECTION_Y_PRODUCT = " + str(shape_env_points[1][1]) + "\n"
+                        if "CORNER_LR_PROJECTION_X_PRODUCT" in line:
+                            line = "    CORNER_LR_PROJECTION_X_PRODUCT = " + str(shape_env_points[2][0]) + "\n"
+                        if "CORNER_LR_PROJECTION_Y_PRODUCT" in line:
+                            line = "    CORNER_LR_PROJECTION_Y_PRODUCT = " + str(shape_env_points[2][1]) + "\n"
+                        # latlong coordinates
 
-		        if "CORNER_UL_LAT_PRODUCT" in line:
-		    	    line = "    CORNER_UL_LAT_PRODUCT = " + str(shape_env_points_wgs84[0][0]) + "\n"
-		        if "CORNER_UL_LON_PRODUCT" in line:
-		    	    line = "    CORNER_UL_LON_PRODUCT = " + str(shape_env_points_wgs84[0][1]) + "\n"
-		        if "CORNER_UR_LAT_PRODUCT" in line:
-		    	    line = "    CORNER_UR_LAT_PRODUCT = " + str(shape_env_points_wgs84[3][0]) + "\n"
-		        if "CORNER_UR_LON_PRODUCT" in line:
-		    	    line = "    CORNER_UR_LON_PRODUCT = " + str(shape_env_points_wgs84[3][1]) + "\n"
-		        if "CORNER_LL_LAT_PRODUCT" in line:
-		    	    line = "    CORNER_LL_LAT_PRODUCT = " + str(shape_env_points_wgs84[1][0]) + "\n"
-		        if "CORNER_LL_LON_PRODUCT" in line:
-		    	    line = "    CORNER_LL_LON_PRODUCT = " + str(shape_env_points_wgs84[1][1]) + "\n"
-		        if "CORNER_LR_LAT_PRODUCT" in line:
-		    	    line = "    CORNER_LR_LAT_PRODUCT = " + str(shape_env_points_wgs84[2][0]) + "\n"
-		        if "CORNER_LR_LON_PRODUCT" in line:
-		    	    line = "    CORNER_LR_LON_PRODUCT = " + str(shape_env_points_wgs84[2][1]) + "\n"
+                        if "CORNER_UL_LAT_PRODUCT" in line:
+                            line = "    CORNER_UL_LAT_PRODUCT = " + str(shape_env_points_wgs84[0][0]) + "\n"
+                        if "CORNER_UL_LON_PRODUCT" in line:
+                            line = "    CORNER_UL_LON_PRODUCT = " + str(shape_env_points_wgs84[0][1]) + "\n"
+                        if "CORNER_UR_LAT_PRODUCT" in line:
+                            line = "    CORNER_UR_LAT_PRODUCT = " + str(shape_env_points_wgs84[3][0]) + "\n"
+                        if "CORNER_UR_LON_PRODUCT" in line:
+                            line = "    CORNER_UR_LON_PRODUCT = " + str(shape_env_points_wgs84[3][1]) + "\n"
+                        if "CORNER_LL_LAT_PRODUCT" in line:
+                            line = "    CORNER_LL_LAT_PRODUCT = " + str(shape_env_points_wgs84[1][0]) + "\n"
+                        if "CORNER_LL_LON_PRODUCT" in line:
+                            line = "    CORNER_LL_LON_PRODUCT = " + str(shape_env_points_wgs84[1][1]) + "\n"
+                        if "CORNER_LR_LAT_PRODUCT" in line:
+                            line = "    CORNER_LR_LAT_PRODUCT = " + str(shape_env_points_wgs84[2][0]) + "\n"
+                        if "CORNER_LR_LON_PRODUCT" in line:
+                            line = "    CORNER_LR_LON_PRODUCT = " + str(shape_env_points_wgs84[2][1]) + "\n"
 
 		        modified_metadata.write(line)
-	    except EnvironmentError:
+        except EnvironmentError:
 	        return "", "Could not open the landsat metadata file for alignment or could not create the output file: Input = {} | Output = {}".format(landsat_file, output_metadata_file)
-	    processed_files_counter += 1
+        processed_files_counter += 1
     if(processed_files_counter != FILES_IN_LANDSAT_L1_PRODUCT):
         return "", "The number of processed files in LANDSAT alignment is {} which is different than how many the should have been: {}".format(processed_files_counter, FILES_IN_LANDSAT_L1_PRODUCT)
     #all went ok, return the path for the aligned product
@@ -1005,7 +1007,7 @@ class AOIInfo(object):
                                 # set the end season date
                                 currentSeasonInfo.setEndSeasonDate(siteSeasonRow[4])
                                 currentAOI.aoiSeasonInfos.append(currentSeasonInfo)
-                    except Exception, e:
+                    except Exception as e:
                         print("exception in query for seasons for query {}:".format(siteSeasonsQuery))
                         print("{}".format(e))
                         self.databaseDisconnect()
@@ -1046,7 +1048,7 @@ class AOIInfo(object):
                             result = self.cursor.fetchall()
                             #print("result={}".format(result))
                             configArray.append(result[0][2])
-                    except Exception, e:
+                    except Exception as e:
                         print("exception in query for downloader.{}:".format(suffix))
                         print("{}".format(e))
                         self.databaseDisconnect()
@@ -1080,7 +1082,7 @@ class AOIInfo(object):
                             for res in result:
                                 if len(res) == 1:
                                     currentAOI.appendTile(res[0])
-                    except Exception, e:
+                    except Exception as e:
                         print("exception = {}".format(e))
                         print("Error in getting the downloaded files")
                         dbHandler = False
@@ -1181,7 +1183,7 @@ class AOIInfo(object):
                     print("The provided status {} is not one of the known status from DB. Check downloader_status table !".format(status))
                     return False
             self.conn.commit()
-        except Exception, e:
+        except Exception as e:
             print("The query for product {} raised an exception {} !".format(productName, e))
             self.databaseDisconnect()
             return False
