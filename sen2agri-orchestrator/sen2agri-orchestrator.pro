@@ -49,9 +49,7 @@ SOURCES += main.cpp \
     processor/grasslandmowinghandler.cpp \
     processor/s4c_utils.cpp \
     processor/s4c_markersdb1.cpp \
-    processor/agricpracticeshandler_old.cpp \
-    processor/s4c_mdb1_dataextract_steps_builder.cpp \
-    processor/s4c_markersdb1_bkp.cpp
+    processor/s4c_mdb1_dataextract_steps_builder.cpp
 
 HEADERS += \
     pch.hpp \
@@ -80,9 +78,7 @@ HEADERS += \
     processor/grasslandmowinghandler.hpp \
     processor/s4c_utils.hpp \
     processor/s4c_markersdb1.hpp \
-    processor/agricpracticeshandler_old.hpp \
-    processor/s4c_mdb1_dataextract_steps_builder.hpp \
-    processor/s4c_markersdb1_bkp.hpp
+    processor/s4c_mdb1_dataextract_steps_builder.hpp
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \
