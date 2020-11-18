@@ -161,6 +161,8 @@ def import_crop_type(config, conn, pg_path, product_id, path):
 def import_agricultural_practices(config, conn, pg_path, product_id, path):
     path = os.path.join(path, "VECTOR_DATA", "*.csv")
     for file in glob(path):
+        if file.endswith("_ContinousProduct.csv") : 
+            continue
         practice = os.path.basename(file).split("_")[2]
         practice_id = get_practice(practice)
 
