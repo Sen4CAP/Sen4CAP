@@ -273,74 +273,46 @@ inline void NormalizeFieldId(std::string &fieldId) {
 }
 
 inline bool GetFileInfosFromName(const std::string &filePath, std::string &fileType, std::string & polarisation,
-                          std::string & orbit, time_t &fileDate, time_t &additionalFileDate, bool useLatestNameFormat = true)
+                          std::string & orbit, time_t &fileDate, time_t &additionalFileDate)
 {
     boost::filesystem::path p(filePath);
     boost::filesystem::path pf = p.filename();
     std::string fileName = pf.string();
 
-    std::string lowerCaseFileName = fileName;
-    boost::algorithm::to_lower(lowerCaseFileName);
-    std::string lowerCaseAmpStr = AMP_STR;
-    std::string lowerCaseCoheStr = COHE_STR;
-    boost::algorithm::to_lower(lowerCaseAmpStr);
-    boost::algorithm::to_lower(lowerCaseCoheStr);
-
-    std::string regexExpStr;
-    int dateRegexIdx;
-    int dateRegexIdx2 = -1;
-    int orbitIdx = -1;
+    fileType = "";
+    polarisation = "";
+    orbit = "";
+    fileDate = 0;
     additionalFileDate = 0;
-    bool useDate2 = false;
 
-    if (fileName.find(NDVI_STR) != std::string::npos) {
-        fileType = NDVI_FT;
-        regexExpStr = NDVI_REGEX;
-        dateRegexIdx = NDVI_REGEX_DATE_IDX;
-    } else if (fileName.find(VV_STR) != std::string::npos) {
-        polarisation = "VV";
-        if (lowerCaseFileName.find(lowerCaseAmpStr) != std::string::npos) {
-            fileType = AMP_FT;
-            regexExpStr = useLatestNameFormat ? AMP_VV_REGEX : AMP_VV_REGEX_OLD;
-            dateRegexIdx = AMP_REGEX_DATE_IDX;
-            dateRegexIdx2 = useLatestNameFormat ? AMP_REGEX_DATE2_IDX : -1; // we did not had 2 dates here in 2017
-        } else if (lowerCaseFileName.find(lowerCaseCoheStr) != std::string::npos) {
-            fileType = COHE_FT;
-            useDate2 = true;
-            regexExpStr = useLatestNameFormat ? COHE_VV_REGEX : COHE_VV_REGEX_OLD;
-            dateRegexIdx = COHE_REGEX_DATE_IDX;
-            dateRegexIdx2 = COHE_REGEX_DATE2_IDX;
-            orbitIdx = COHE_REGEX_ORBIT_IDX;
-        }
-    } else if (fileName.find(VH_STR) != std::string::npos) {
-        polarisation = "VH";
-        if (lowerCaseFileName.find(lowerCaseAmpStr) != std::string::npos) {
-            fileType = AMP_FT;
-            regexExpStr = useLatestNameFormat ? AMP_VH_REGEX : AMP_VH_REGEX_OLD;
-            dateRegexIdx = AMP_REGEX_DATE_IDX;
-            dateRegexIdx2 = useLatestNameFormat ? AMP_REGEX_DATE2_IDX : -1; // we did not had 2 dates here in 2017
-        } else if (lowerCaseFileName.find(lowerCaseCoheStr) != std::string::npos) {
-            fileType = COHE_FT;
-            useDate2 = true;
-            regexExpStr = useLatestNameFormat ? COHE_VH_REGEX : COHE_VH_REGEX_OLD;
-            dateRegexIdx = COHE_REGEX_DATE_IDX;
-            dateRegexIdx2 = COHE_REGEX_DATE2_IDX;
-            orbitIdx = COHE_REGEX_ORBIT_IDX;
-        }
-    } else if (fileName.find(LAI_STR) != std::string::npos) {
-        fileType = "LAI";
-        regexExpStr = LAI_REGEX;
-        dateRegexIdx = LAI_REGEX_DATE_IDX;
-    } else {
-        return false;
-    }
-
-    boost::regex regexExp {regexExpStr};
+    boost::regex regexExp {L3B_REGEX};
     boost::smatch matches;
     if (boost::regex_match(fileName,matches,regexExp)) {
-        const std::string &fileDateTmp = matches[dateRegexIdx].str();
-        fileDate = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp));
-
+        fileType = matches[L3B_REGEX_TYPE_IDX].str();
+        fileDate = to_time_t(boost::gregorian::from_undelimited_string(matches[L3B_REGEX_DATE_IDX].str()));
+    } else {
+        regexExp = {S1_REGEX};
+        int dateRegexIdx2 = -1;
+        if (boost::regex_match(fileName,matches,regexExp)) {
+            fileType = matches[S1_REGEX_TYPE_IDX].str();
+            const std::string &fileDateTmp2 = matches[S1_REGEX_DATE_IDX].str();
+            fileDate = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
+            orbit = matches[S1_REGEX_ORBIT_IDX].str();
+            polarisation = matches[S1_REGEX_POLARISATION_IDX].str();
+            dateRegexIdx2 = S1_REGEX_DATE2_IDX;
+        } else {
+            regexExp = {S1_REGEX_OLD};
+            if (boost::regex_match(fileName,matches,regexExp)) {
+                fileType = matches[S1_REGEX_TYPE_OLD_IDX].str();
+                boost::algorithm::to_upper(fileType);
+                const std::string &fileDateTmp2 = matches[S1_REGEX_DATE_IDX].str();
+                fileDate = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
+                orbit = matches[S1_REGEX_ORBIT_OLD_IDX].str();
+                polarisation = matches[S1_REGEX_POLAR_OLD_IDX].str();
+                // In 2017 we had only one date in AMP prd
+                dateRegexIdx2 = (fileType == COHE_FT ? S1_REGEX_DATE2_OLD_IDX : -1);
+            }
+        }
         if (dateRegexIdx2 != -1) {
             const std::string &fileDateTmp2 = matches[dateRegexIdx2].str();
             time_t fileDate2 = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
@@ -350,18 +322,13 @@ inline bool GetFileInfosFromName(const std::string &filePath, std::string &fileT
                 additionalFileDate = fileDate;
                 fileDate = fileDate2;
             }
-            // even if we have 2 dates, for amplitude for ex. we need only one
-            if (!useDate2) {
+            // additional date for AMP is 0 (irrellevant)
+            if (fileType == AMP_FT) {
                 additionalFileDate = 0;
             }
         }
-        if (orbitIdx != -1) {
-            orbit = matches[orbitIdx].str();
-        }
-        return true;
     }
-
-    return false;
+    return (fileType.size() > 0);
 }
 
 inline std::string BuildOutputFileName(const std::string &fid, const std::string &fileType,

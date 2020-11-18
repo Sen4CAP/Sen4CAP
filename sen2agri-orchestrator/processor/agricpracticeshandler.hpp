@@ -3,9 +3,9 @@
 
 #include "processorhandler.hpp"
 #include "s4c_utils.hpp"
+#include "s4c_mdb1_dataextract_steps_builder.hpp"
 
 #define L4C_AP_CFG_PREFIX   "processor.s4c_l4c."
-#define LPIS_PATH_CFG_KEY   "processor.lpis.path"
 
 typedef struct AgricPracticesSiteCfg {
     AgricPracticesSiteCfg() {
@@ -21,8 +21,6 @@ typedef struct AgricPracticesSiteCfg {
 
     // LPIS informations
     QString fullDeclsFilePath;
-    QString ndviIdsGeomShapePath;
-    QString ampCoheIdsGeomShapePath;
 
     // TSA parameters
     TQStrQStrMap ccTsaParams;
@@ -30,16 +28,12 @@ typedef struct AgricPracticesSiteCfg {
     TQStrQStrMap nfcTsaParams;
     TQStrQStrMap naTsaParams;
 
-    // parameters used for data extraction step
-    int prdsPerGroup;
-
     // TSA minimum acquisitions
     QString tsaMinAcqsNo;
 
 } AgricPracticesSiteCfg;
 
 enum AgricPractOperation {none = 0x00,
-                          dataExtraction = 0x01,
                           catchCrop = 0x02,
                           fallow = 0x04,
                           nfc = 0x08,
@@ -49,25 +43,20 @@ enum AgricPractOperation {none = 0x00,
 
 class AgricPracticesHandler;
 
-typedef struct AgricPracticesJobCfg {
-    AgricPracticesJobCfg(EventProcessingContext *pContext, const JobSubmittedEvent &evt) : event(evt) {
+typedef struct AgricPracticesJobPayload {
+    AgricPracticesJobPayload(EventProcessingContext *pContext, const JobSubmittedEvent &evt) : event(evt) {
         pCtx = pContext;
         parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
         configParameters = pCtx->GetJobConfigurationParameters(evt.jobId, L4C_AP_CFG_PREFIX);
-        siteId = evt.siteId;
         siteShortName = pContext->GetSiteShortName(evt.siteId);
-        siteCfg.prdsPerGroup = ProcessorHandlerHelper::GetIntConfigValue(parameters, configParameters, "prds_per_group", L4C_AP_CFG_PREFIX);
-        isScheduledJob = false;
+        int jobVal;
+        isScheduledJob = ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1);
         execOper = GetExecutionOperation(parameters, configParameters);
         siteCfg.country = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
                                                                    "country", L4C_AP_CFG_PREFIX);
         siteCfg.tsaMinAcqsNo = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
                                                                         "tsa_min_acqs_no", L4C_AP_CFG_PREFIX);
         siteCfg.year = GetYear(parameters, configParameters, siteShortName);
-        lpisConfigValue = ProcessorHandlerHelper::GetMapValue(pCtx->GetJobConfigurationParameters(evt.jobId, LPIS_PATH_CFG_KEY), LPIS_PATH_CFG_KEY,
-                                                              "/mnt/archive/lpis/{site}/{year}");
-        lpisConfigValue = lpisConfigValue.replace("{site}", siteShortName);
-        lpisConfigValue = lpisConfigValue.replace("{year}", siteCfg.year);
     }
     static AgricPractOperation GetExecutionOperation(const QJsonObject &parameters,
                                                      const std::map<QString, QString> &configParameters);
@@ -78,25 +67,23 @@ typedef struct AgricPracticesJobCfg {
     JobSubmittedEvent event;
     QJsonObject parameters;
     std::map<QString, QString> configParameters;
-    QString lpisConfigValue;
 
     AgricPracticesSiteCfg siteCfg;
 
-    int siteId;
     QString siteShortName;
 
     // parameters used for data extraction step
     bool isScheduledJob;
 
-    // Extracted season start and end dates
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
-    QDateTime prdMinDate;
-    QDateTime prdMaxDate;
+
+    QDateTime minDate;
+    QDateTime maxDate;
 
     AgricPractOperation execOper;
 
-} AgricPracticesJobCfg;
+} AgricPracticesJobPayload;
 
 class AgricPracticesHandler : public ProcessorHandler
 {
@@ -111,66 +98,50 @@ private:
     void HandleProductAvailableImpl(EventProcessingContext &ctx,
                                     const ProductAvailableEvent &event) override;
 
-    void CreateTasks(const AgricPracticesJobCfg &jobCfg, QList<TaskToSubmit> &outAllTasksList, const QStringList &ndviPrds,
-                     const QStringList &ampPrds, const QStringList &cohePrds);
+    void CreateTasks(const AgricPracticesJobPayload &jobCfg, QList<TaskToSubmit> &outAllTasksList, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder);
     void CreateSteps(QList<TaskToSubmit> &allTasksList,
-                     const AgricPracticesJobCfg &siteCfg, const QStringList &ndviPrds, const QStringList &ampPrds,
-                     const QStringList &cohePrds, NewStepList &steps);
+                     const AgricPracticesJobPayload &siteCfg, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder, NewStepList &steps);
     void WriteExecutionInfosFile(const QString &executionInfosPath,
                                  const QStringList &listProducts);
-    QStringList GetExportProductLauncherArgs(const AgricPracticesJobCfg &jobCfg,
+    QStringList GetExportProductLauncherArgs(const AgricPracticesJobPayload &jobCfg,
                                             const QString &productFormatterPrdFileIdFile);
-    QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const AgricPracticesJobCfg &jobCfg,
+    QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const AgricPracticesJobPayload &jobCfg,
                                         const QStringList &listFiles);
 
     ProcessorJobDefinitionParams GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
 
 private:
-    bool GetL4CConfigForSiteId(AgricPracticesJobCfg &jobCfg);
+    bool GetL4CConfigForSiteId(AgricPracticesJobPayload &jobCfg);
 
-    QString GetL4CConfigFilePath(AgricPracticesJobCfg &jobCfg);
-    bool LoadL4CConfigFile(AgricPracticesJobCfg &jobCfg, const QString &siteCfgFilePath);
+    QString GetL4CConfigFilePath(AgricPracticesJobPayload &jobCfg);
+    bool LoadL4CConfigFile(AgricPracticesJobPayload &jobCfg, const QString &siteCfgFilePath);
 
-    void ExtractProductFiles(AgricPracticesJobCfg &jobCfg, QStringList &ndviFiles, QStringList &ampFiles, QStringList &coheFiles);
-    bool ValidateProductsForOperation(const AgricPracticesJobCfg &jobCfg, const QStringList &ndviFiles,
-                                      const QStringList &ampFiles, const QStringList &coheFiles);
-    QStringList ExtractNdviFiles(AgricPracticesJobCfg &jobCfg, QDateTime &minDate, QDateTime &maxDate);
-    QStringList ExtractAmpFiles(AgricPracticesJobCfg &jobCfg, QDateTime &minDate, QDateTime &maxDate);
-    QStringList ExtractCoheFiles(AgricPracticesJobCfg &jobCfg, QDateTime &minDate, QDateTime &maxDate);
+//    bool ValidateProductsForOperation(const AgricPracticesJobPayload &jobCfg, const QStringList &ndviFiles,
+//                                      const QStringList &ampFiles, const QStringList &coheFiles);
     // QStringList GetIdsExtractorArgs(const AgricPracticesJobCfg &siteCfg, const QString &outFile, const QString &finalTargetDir);
     // QStringList GetPracticesExtractionArgs(const AgricPracticesJobCfg &siteCfg, const QString &outFile, const QString &practice, const QString &finalTargetDir);
-    QStringList GetDataExtractionArgs(const AgricPracticesJobCfg &jobCfg, const QString &filterIds, const ProductType &prdType,
-                                      const QString &uidField, const QStringList &inputFiles,
-                                      const QString &outDir);
     QStringList GetFilesMergeArgs(const QStringList &listInputPaths, const QString &outFileName, const QDateTime &prdMaxDate);
-    QStringList GetTimeSeriesAnalysisArgs(const AgricPracticesJobCfg &jobCfg, const QString &practice, const QString &practicesFile,
-                                          const QString &inNdviFile, const QString &inAmpFile, const QString &inCoheFile,
+    QStringList GetTimeSeriesAnalysisArgs(const AgricPracticesJobPayload &jobCfg, const QString &practice, const QString &practicesFile,
+                                          const QMap<QString, QString> &inFiles,
                                           const QString &outDir);
     QString BuildMergeResultFileName(const QString &country, const QString &year, const ProductType &prdsType);
     QString BuildPracticesTableResultFileName(const QString &practice, const QString &year, const QString &country = "");
 
-    void CreatePrdDataExtrTasks(const AgricPracticesJobCfg &jobCfg, QList<TaskToSubmit> &outAllTasksList,
-                                const QString &taskName,
-                                const QStringList &prdsList, const QList<std::reference_wrapper<const TaskToSubmit>> &dataExtParents, int &minPrdDataExtrIndex, int &maxPrdDataExtrIndex, int &curTaskIdx);
     int CreateMergeTasks(QList<TaskToSubmit> &outAllTasksList, const QString &taskName,
                           int minPrdDataExtrIndex, int maxPrdDataExtrIndex, int &curTaskIdx);
-    int CreateTSATasks(const AgricPracticesJobCfg &jobCfg, QList<TaskToSubmit> &outAllTasksList,
+    int CreateTSATasks(const AgricPracticesJobPayload &jobCfg, QList<TaskToSubmit> &outAllTasksList,
                        const QString &practiceName,
-                       int ndviMergeTaskIdx, int ampMergeTaskIdx, int coheMergeTaskIdx, int &curTaskIdx);
+                       const QList<int> &mergeTaskIdxs, int &curTaskIdx);
 
 //    QString CreateStepForLPISSelection(const QString &practice, const AgricPracticesJobCfg &jobCfg,
 //                                              QList<TaskToSubmit> &allTasksList, NewStepList &steps, int &curTaskIdx);
 
-    QStringList CreateStepsForDataExtraction(const AgricPracticesJobCfg &jobCfg, const QString &filterIds, const ProductType &prdType,
-                                             const QStringList &prds,
-                                             QList<TaskToSubmit> &allTasksList, NewStepList &steps, int &curTaskIdx);
-
-    QString CreateStepsForFilesMerge(const AgricPracticesJobCfg &jobCfg, const ProductType &prdType, const QStringList &dataExtrDirs,
+    QString CreateStepsForFilesMerge(const AgricPracticesJobPayload &jobCfg, const ProductType &prdType, const QStringList &dataExtrDirs,
                                   NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
 
-    QStringList CreateTimeSeriesAnalysisSteps(const AgricPracticesJobCfg &jobCfg, const QString &practice,
-                                              const QString &ndviMergedFile, const QString &ampMergedFile, const QString &coheMergedFile,
+    QStringList CreateTimeSeriesAnalysisSteps(const AgricPracticesJobPayload &jobCfg, const QString &practice,
+                                              const QMap<QString, QString> &mergedFiles,
                                               NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
 
     TQStrQStrMap LoadParamsFromFile(QSettings &settings, const QString &practicePrefix, const QString &sectionName, const AgricPracticesSiteCfg &cfg);
@@ -178,25 +149,15 @@ private:
 
     void UpdatePracticesParams(const QJsonObject &parameters, std::map<QString, QString> &configParameters, const TQStrQStrMap &cfgVals, const QString &prefix, TQStrQStrMap *params);
 
-    QStringList GetListValue(const QSettings &settings, const QString &key);
     QString GetTsaExpectedPractice(const QString &practice);
     bool IsOperationEnabled(AgricPractOperation oper, AgricPractOperation expected);
-    bool GetPrevL4CProduct(const AgricPracticesJobCfg &jobCfg,  const QDateTime &seasonStart, const QDateTime &curDate, QString &prevL4cProd);
+    bool GetPrevL4CProduct(const AgricPracticesJobPayload &jobCfg,  const QDateTime &seasonStart, const QDateTime &curDate, QString &prevL4cProd);
     ProductList GetLpisProduct(ExecutionContextBase *pCtx, int siteId);
-    bool GetLpisProductFiles(AgricPracticesJobCfg &jobCfg);
     //QStringList GetAdditionalFilesAsList(const QString &files, const AgricPracticesSiteCfg &cfg);
 
     QString GetShortNameForProductType(const ProductType &prdType);
-    int UpdateJobSubmittedParamsFromSchedReq(AgricPracticesJobCfg &jobCfg, JobSubmittedEvent &newEvent, bool &isSchedJob);
-    QStringList ExtractMissingDataExtractionProducts(AgricPracticesJobCfg &jobCfg, const ProductType &prdType, const QDateTime &startDate,
-                                                     const QDateTime &endDate, QStringList &alreadyProcessedFiles);
-    bool IsDataExtractionPerformed(const QString &dataExtrDirPath, const QString &prdPath);
-    QStringList FilterAndUpdateAlreadyProcessingPrds(AgricPracticesJobCfg &jobCfg, const QStringList &missingPrdsFiles, const QStringList &processedPrdsFiles, const ProductType &prdType);
-    QJsonArray ProductListToJSonArray(const QStringList &prdList);
-    bool IsScheduledJobRequest(const QJsonObject &parameters);
     QString GetProcessorDirValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                                  const QString &key, const QString &siteShortName, const QString &year, const QString &defVal );
-    QString GetDataExtractionDir(const AgricPracticesJobCfg &jobCfg, const ProductType &prdType);
     QString GetTsInputTablesDir(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                                 const QString &siteShortName, const QString &year, const QString &practice);
 
@@ -206,7 +167,6 @@ private:
     bool CheckExecutionPreconditions(ExecutionContextBase *pCtx, const QJsonObject &parameters,
                                         const std::map<QString, QString> &configParameters, int siteId,
                                         const QString &siteShortName, const QString &year, QString &errMsg);
-    QString GetDataExtractionTaskName(const AgricPracticesJobCfg &jobCfg, const QString &taskName);
 };
 
 #endif // AGRICPRACTICESHANDLER_HPP

@@ -33,7 +33,7 @@ namespace otb {
 template < class TMeasurementVector >
 AgricPractDataExtrFileWriter2<TMeasurementVector>
 ::AgricPractDataExtrFileWriter2(): m_TargetFileName(""),
-    m_bOutputCsvFormat(true), m_bCsvCompactMode(true), m_bMultiFileMode(false), m_bUseLatestNamingFormat(true),
+    m_bOutputCsvFormat(true), m_bCsvCompactMode(true), m_bMultiFileMode(false),
     m_bUseDate2(false), m_bUseMinMax(false)
 {
     m_MeanPosInHeader = -1;
@@ -58,7 +58,7 @@ AgricPractDataExtrFileWriter2<TMeasurementVector>
     std::string orbit;
     time_t fileDate;
     time_t additionalFileDate = 0;
-    if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate, m_bUseLatestNamingFormat))
+    if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate))
     {
         std::cout << "Error extracting file informations from file name " << fileName << std::endl;
         return;
@@ -134,7 +134,7 @@ AgricPractDataExtrFileWriter2<TMeasurementVector>
     std::string orbit;
     time_t fileDate;
     time_t additionalFileDate = 0;
-    if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate, m_bUseLatestNamingFormat))
+    if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate))
     {
         std::cout << "Error extracting file informations from file name " << fileName << std::endl;
         return;

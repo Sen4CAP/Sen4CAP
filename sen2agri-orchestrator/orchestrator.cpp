@@ -17,6 +17,7 @@
 #include "processor/s4c_croptypehandler.hpp"
 #include "processor/grasslandmowinghandler.hpp"
 #include "processor/agricpracticeshandler.hpp"
+#include "processor/s4c_markersdb1.hpp"
 #include "json_conversions.hpp"
 #include "schedulingcontext.h"
 #include "logger.hpp"
@@ -50,6 +51,8 @@ std::map<int, std::unique_ptr<ProcessorHandler>> & GetHandlersMap(PersistenceMan
             handlersMap.emplace(procDescr.processorId, std::make_unique<LaiRetrievalHandlerL3C>());
         } else if(procDescr.shortName == "s2a_l3d") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<LaiRetrievalHandlerL3D>());
+        }else if(procDescr.shortName == "s4c_mdb1") {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<S4CMarkersDB1Handler>());
         } else {
             bAdded = false;
             Logger::error(QStringLiteral("Invalid processor configuration found in database: %1, "

@@ -4,6 +4,8 @@
 
 QString S4CUtils::GetShortNameForProductType(const ProductType &prdType) {
     switch(prdType) {
+        // TODO: This should be changed as there is not only NDVI but should be L3B
+        //       Pay attention that this requires changes in website.
         case ProductType::L3BProductTypeId:
             return "NDVI";
         case ProductType::S4CS1L2AmpProductTypeId:
@@ -48,16 +50,17 @@ QJsonArray S4CUtils::FilterProducts(const QJsonArray &allPrds, const ProductType
 QStringList S4CUtils::FindL3BProductTiffFiles(const QString &path, const QStringList &s2L8TilesFilter, const QString &l3bBioIndexType)
 {
     QFileInfo fileInfo(path);
+    QStringList retList;
     if (!fileInfo.isDir()) {
         const QString &fileName = fileInfo.fileName();
-        const QString substr = QString("S2AGRI_L3B_%1_A").arg(l3bBioIndexType);
+        const QString &substr = QString("S2AGRI_L3B_%1_A").arg(l3bBioIndexType);
         if (fileName.contains(substr) && fileName.endsWith(".TIF")) {
-            return QStringList(path);
+            retList.append(path);
         }
+        return retList;
     }
     QString absPath = path;
     const QMap<QString, QString> &prdTiles = ProcessorHandlerHelper::GetHighLevelProductTilesDirs(absPath);
-    QStringList retList;
     for(const auto &tileId : prdTiles.keys()) {
         if (s2L8TilesFilter.size() > 0 && !s2L8TilesFilter.contains(tileId)) {
             continue;
@@ -76,7 +79,8 @@ QStringList S4CUtils::FindL3BProductTiffFiles(const QString &path, const QString
 }
 
 QStringList S4CUtils::FindL3BProductTiffFiles(EventProcessingContext &ctx, int siteId,
-                                              const QString &path, const QStringList &s2L8TilesFilter)
+                                              const QString &path, const QStringList &s2L8TilesFilter,
+                                              const QString &biophysicalIndicatorStr)
 {
     QFileInfo fileInfo(path);
     QString absPath = path;
@@ -84,8 +88,25 @@ QStringList S4CUtils::FindL3BProductTiffFiles(EventProcessingContext &ctx, int s
         // if we have the product name, we need to get the product path from the database
         absPath = ctx.GetProductAbsolutePath(siteId, path);
     }
-    return FindL3BProductTiffFiles(absPath, s2L8TilesFilter, "SNDVI");
+    return FindL3BProductTiffFiles(absPath, s2L8TilesFilter, biophysicalIndicatorStr);
 }
+
+QStringList S4CUtils::FindL3BProductTiffFiles(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+                                       const QStringList &inputProducts, const QString &processorCfgPrefix,
+                                       const QString &biophysicalIndicatorStr) {
+    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
+    const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, processorCfgPrefix);
+    const QString &s2L8TilesStr = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "s2_l8_tiles", processorCfgPrefix);
+    const QStringList &s2L8Tiles = s2L8TilesStr.split(',',  QString::SkipEmptyParts);
+
+    QStringList retListProducts;
+    for (const auto &inputProduct : inputProducts) {
+        const QStringList &tiffFiles = FindL3BProductTiffFiles(ctx, event.siteId, inputProduct, s2L8Tiles, biophysicalIndicatorStr);
+        retListProducts.append(tiffFiles);
+    }
+    return retListProducts;
+}
+
 
 QJsonArray S4CUtils::GetInputProducts(const QJsonObject &parameters, const ProductType &prdType) {
     const QString &prdTypeShortName = GetShortNameForProductType(prdType);
@@ -106,14 +127,10 @@ QJsonArray S4CUtils::GetInputProducts(const QJsonObject &parameters, const Produ
 
 QStringList S4CUtils::GetInputProducts(EventProcessingContext &ctx,
                                        const JobSubmittedEvent &event, const ProductType &prdType,
-                                       QDateTime &minDate, QDateTime &maxDate, const QString &processorCfgPrefix,
-                                       bool extractFromInputParamOnly, bool bExtractTiffFiles) {
+                                       QDateTime &minDate, QDateTime &maxDate,
+                                       bool extractFromInputParamOnly) {
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
     auto inputProducts = GetInputProducts(parameters, prdType);
-
-    const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, processorCfgPrefix);
-    const QString &s2L8TilesStr = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "s2_l8_tiles", processorCfgPrefix);
-    const QStringList &s2L8Tiles = s2L8TilesStr.split(',',  QString::SkipEmptyParts);
 
     QStringList listProducts;
 
@@ -133,42 +150,21 @@ QStringList S4CUtils::GetInputProducts(EventProcessingContext &ctx,
 
             ProductList productsList = ctx.GetProducts(event.siteId, (int)prdType, startDate, endDate);
             for(const auto &product: productsList) {
-                if (bExtractTiffFiles && prdType == ProductType::L3BProductTypeId) {
-                    const QStringList &tiffFiles = FindL3BProductTiffFiles(ctx, event.siteId, product.fullPath, s2L8Tiles);
-                    if (tiffFiles.size() > 0) {
-                        listProducts.append(tiffFiles);
-                    }
-                } else {
-                    listProducts.append(product.fullPath);
-                }
+                listProducts.append(product.fullPath);
             }
         }
     } else {
         for (const auto &inputProduct : inputProducts) {
-            // if the product is an LAI, we need to extract the TIFF file for the NDVI
-            if (prdType == ProductType::L3BProductTypeId) {
-                QDateTime prdTime;
-                const QString &prdPath = ctx.GetProductAbsolutePath(event.siteId, inputProduct.toString());
-                if (ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prdPath, prdTime, prdTime)) {
-                    ProcessorHandlerHelper::UpdateMinMaxTimes(prdTime, minDate, maxDate);
-                    if (bExtractTiffFiles) {
-                        const QStringList &tiffFiles = FindL3BProductTiffFiles(ctx, event.siteId, inputProduct.toString(), s2L8Tiles);
-                        listProducts.append(tiffFiles);
-                    }
+            const QString &prdPath = ctx.GetProductAbsolutePath(event.siteId, inputProduct.toString());
+            if (prdPath.size() > 0) {
+                listProducts.append(prdPath);
+                QDateTime tmpMinTime, tmpMaxTime;
+                if (ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prdPath, tmpMinTime, tmpMaxTime)) {
+                    ProcessorHandlerHelper::UpdateMinMaxTimes(tmpMaxTime, minDate, maxDate);
                 }
             } else {
-                // the S1 AMP and COHE products have directly the path of the tiff in the product table
-                const QString &prdPath = ctx.GetProductAbsolutePath(event.siteId, inputProduct.toString());
-                if (prdPath.size() > 0) {
-                    listProducts.append(prdPath);
-                    QDateTime s1MinTime, s1MaxTime;
-                    if (ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prdPath, s1MinTime, s1MaxTime)) {
-                        ProcessorHandlerHelper::UpdateMinMaxTimes(s1MaxTime, minDate, maxDate);
-                    }
-                } else {
-                    Logger::error(QStringLiteral("The product path does not exists %1.").arg(inputProduct.toString()));
-                    return QStringList();
-                }
+                Logger::error(QStringLiteral("The product path does not exists %1.").arg(inputProduct.toString()));
+                return QStringList();
             }
         }
     }

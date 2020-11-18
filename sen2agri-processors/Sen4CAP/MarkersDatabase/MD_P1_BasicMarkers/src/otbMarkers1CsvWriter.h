@@ -18,8 +18,8 @@
  * limitations under the License.
  */
 
-#ifndef otbAgricPractDataExtrFileWriter2_h
-#define otbAgricPractDataExtrFileWriter2_h
+#ifndef otbMarkers1CsvWriter_h
+#define otbMarkers1CsvWriter_h
 
 #include "itkProcessObject.h"
 #include <utility>
@@ -27,7 +27,7 @@
 
 namespace otb {
 
-/** \class AgricPractDataExtrFileWriter2
+/** \class Markers1CsvWriter
  *  \brief Write in a text file the values stored in a MeasurementVector set as
  *  input
  *
@@ -40,57 +40,42 @@ namespace otb {
  * \ingroup OTBIOXML
  */
 template < class TMeasurementVector>
-class  AgricPractDataExtrFileWriter2 :
+class  Markers1CsvWriter :
     public itk::Object
 {
 public:
   /** Standard class typedefs */
-  typedef AgricPractDataExtrFileWriter2          Self;
+  typedef Markers1CsvWriter          Self;
   typedef itk::Object                      Superclass;
   typedef itk::SmartPointer< Self >        Pointer;
   typedef itk::SmartPointer<const Self>    ConstPointer;
 
   /** Run-time type information (and related methods). */
-  itkTypeMacro(AgricPractDataExtrFileWriter2, itk::Object);
+  itkTypeMacro(Markers1CsvWriter, itk::Object);
 
   /** Method for creation through the object factory. */
   itkNewMacro(Self);
 
   typedef struct {
-     time_t date;
-     time_t additionalFileDate;
      std::vector<double> values;
   } FieldEntriesType;
 
   typedef struct {
-      std::string fileName;
       std::string fid;
-      //std::map<time_t, FieldEntriesType> fieldsEntries;
       std::vector<FieldEntriesType> fieldsEntries;
 
   } FileFieldsInfoType;
 
-  typedef std::map<std::string, FileFieldsInfoType>         FileFieldsContainer;
-
-  /** Method to add mean and stdev maps with a given type */
-//  template <typename MapType>
-//  void AddInputMaps(const std::string &fileName, const MapType& mapMeans,  const MapType& mapStdDev);
-
-  /** Method to add a map statistic with a given type */
-//  template <typename MapType>
-//  void AddInputMap(const std::string &fileName, const MapType& map );
+  typedef std::vector<FileFieldsInfoType>         FileFieldsContainer;
 
   /** Method to add a map statistic with a given type */
   template <typename MapType, typename MapMinMaxType>
   void AddInputMap(const std::string &fileName, const MapType& map, const MapMinMaxType& mapMins, const MapMinMaxType& mapMax,
                    const MapMinMaxType& mapValidPixels, const MapMinMaxType& mapInvalidPixels);
 
-  void WriteOutputXmlFile();
-  void WriteEntriesToXmlOutputFile(std::ofstream &outStream, FileFieldsInfoType &fileFieldsInfos);
-
   void WriteOutputCsvFormat();
-  void WriteCsvHeader(std::ofstream &fileStream, bool individualFieldFile);
-  void WriteEntriesToCsvOutputFile(std::ofstream &outStream, FileFieldsInfoType &fileFieldsInfos, bool writeSuffix);
+  void WriteCsvHeader(std::ofstream &fileStream);
+  void WriteEntriesToCsvOutputFile(std::ofstream &outStream, const FileFieldsInfoType &fileFieldsInfos);
   void RemoveDuplicates(std::vector<FieldEntriesType> &fieldsEntries);
 
   /** Remove previously added inputs (vectors and maps) */
@@ -109,85 +94,69 @@ public:
   itkGetStringMacro(TargetFileName);
 
   /** Set the header fields */
-  inline void SetHeaderFields(const StringVectorType &vec) {
-      this->m_HeaderFields = vec;
-      m_MeanPosInHeader = GetPositionInHeader("mean");
-      m_StdevPosInHeader = GetPositionInHeader("stdev");
-      m_MinPosInHeader = GetPositionInHeader("min");
-      m_MaxPosInHeader = GetPositionInHeader("max");
-      m_ValidPixelsPosInHeader = GetPositionInHeader("valid_pixels_cnt");
-      m_InvalidPixelsPosInHeader = GetPositionInHeader("invalid_pixels_cnt");
-  }
+  void SetHeaderFields(const std::string &fileName, const StringVectorType &vec,
+                       const std::string &idFieldName, bool bIsInteger);
   inline StringVectorType GetHeaderFields() {return this->m_HeaderFields;}
-
-  inline void SetOutputCsvFormat(bool bOutCsv) {
-      m_bOutputCsvFormat = bOutCsv;
-  }
-
-  inline void SetUseMultiFileMode(bool bMultiFileMode) {
-      m_bMultiFileMode = bMultiFileMode;
-  }
-
-  inline void SetCsvCompactMode(bool bCsvCompactMode) {
-      m_bCsvCompactMode = bCsvCompactMode;
-  }
 
   inline void SetUseMinMax(bool bUseMinMax) {
       m_bUseMinMax = bUseMinMax;
+  }
+
+  inline void SetCsvSeparator(char sep) {
+      m_csvSeparator = sep;
   }
 
 protected:
 
   virtual void GenerateData();
 
-  AgricPractDataExtrFileWriter2();
-  ~AgricPractDataExtrFileWriter2() override {}
+  Markers1CsvWriter();
+  ~Markers1CsvWriter() override {}
   void PrintSelf(std::ostream& os, itk::Indent indent) const override;
 
 private:
 
+  std::string BuildHeaderItem(const std::string &dateStr, const std::string &hdrItem, const std::string &fileType,
+                    const std::string &polarisation, const std::string &orbit);
   int GetPositionInHeader(const std::string &name);
   typedef struct {
-        void SetVectComparisonIndex(int idx) {this->m_index = idx;}
-        bool operator() (const FieldEntriesType &i, const FieldEntriesType &j) {
-            // return ((i.date.compare(j.date)) < 0);
-            return (i.date < j.date);
+        void SetIsInt(bool isInt) {m_bIsInt = isInt;}
+        bool operator() (const FileFieldsInfoType &i, const FileFieldsInfoType &j) {
+            return m_bIsInt ? (atoi(i.fid.c_str()) < atoi(j.fid.c_str())) : (i.fid < j.fid);
         }
 
         private:
-            int m_index;
-  } LinesComparator;
+            bool m_bIsInt;
+  } FieldsComparator;
 
-  LinesComparator m_LinesComparator;
-  AgricPractDataExtrFileWriter2(const Self&) = delete;
+  FieldsComparator m_FieldsComparator;
+  Markers1CsvWriter(const Self&) = delete;
   void operator=(const Self&) = delete;
 
   std::string                 m_TargetFileName;
 
   std::vector<std::string>      m_HeaderFields;
-  int                           m_HdrSortingIdx;
+  std::string m_idFieldName;
+  bool m_bIdIsInteger;
 
   FileFieldsContainer           m_FileFieldsContainer;
-
-  bool                          m_bOutputCsvFormat;
-  bool                          m_bCsvCompactMode;
-  bool                          m_bMultiFileMode;
-  bool                          m_bUseDate2;
   bool                          m_bUseMinMax;
 
 private:
+    int m_IdPosInHeader;
     int m_MeanPosInHeader;
     int m_StdevPosInHeader;
     int m_MinPosInHeader;
     int m_MaxPosInHeader;
     int m_ValidPixelsPosInHeader;
     int m_InvalidPixelsPosInHeader;
-}; // end of class AgricPractDataExtrFileWriter2
+    char m_csvSeparator;
+}; // end of class Markers1CsvWriter
 
 } // end of namespace otb
 
 #ifndef OTB_MANUAL_INSTANTIATION
-#include "otbAgricPractDataExtrFileWriter2.txx"
+#include "otbMarkers1CsvWriter.txx"
 #endif
 
 #endif

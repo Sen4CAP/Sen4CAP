@@ -29,43 +29,31 @@
 
 #define SEC_IN_DAY                   86400          // seconds in day = 24 * 3600
 
-#define NDVI_STR    "_SNDVI_"
-#define VV_STR      "_VV_"
-#define VH_STR      "_VH_"
-#define LAI_STR     "_SLAI_"
-
-#define AMP_STR      "_AMP"
-#define COHE_STR     "_COHE"
-
-
-#define NDVI_REGEX          R"(S2AGRI_L3B_SNDVI_A(\d{8})T.*\.TIF)"
-#define LAI_REGEX           R"(S2AGRI_L3B_SLAI_A(\d{8})T.*\.TIF)"
-
+// Optical L3B product regex
+#define L3B_REGEX          R"(S2AGRI_L3B_S(NDVI|LAI|FAPAR|FCOVER)(?:MONO)?_A(\d{8})T.*\.TIF)"
 // 2017 naming format for coherence and amplitude
-#define COHE_VV_REGEX_OLD       R"((\d{8})-(\d{8})_.*_(\d{3})_VV_.*\.tiff)"
-#define COHE_VH_REGEX_OLD       R"((\d{8})-(\d{8})_.*_(\d{3})_VH_.*\.tiff)"
-#define AMP_VV_REGEX_OLD        R"((\d{8})_.*_VV_.*\.tiff)"
-#define AMP_VH_REGEX_OLD        R"((\d{8})_.*_VH_.*\.tiff)"
-
+#define S1_REGEX_OLD        R"((\d{8})(-(\d{8}))?_.*(cohe|amp).*_(\d{3})_(VH|VV)_.*\.tiff)"
 // 2018 naming format for coherence and amplitude
-#define COHE_VV_REGEX       R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_VV_(\d{3})_(?:.+)?COHE\.tif)"
-#define COHE_VH_REGEX       R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_VH_(\d{3})_(?:.+)?COHE\.tif)"
-#define AMP_VV_REGEX        R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_VV_\d{3}_(?:.+)?AMP\.tif)"
-#define AMP_VH_REGEX        R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_VH_\d{3}_(?:.+)?AMP\.tif)"
+#define S1_REGEX        R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)\.tif)"
 
-#define NDVI_REGEX_DATE_IDX         1
+#define L3B_REGEX_TYPE_IDX          1
+#define L3B_REGEX_DATE_IDX          2
 
-#define COHE_REGEX_DATE_IDX         1           // this is the same for 2017 and 2018 formats
-#define COHE_REGEX_DATE2_IDX        2           // this is the same for 2017 and 2018 formats
+#define S1_REGEX_DATE_IDX         1           // this is the same for 2017 and 2018 formats
+#define S1_REGEX_DATE2_IDX        2           // 2018
+#define S1_REGEX_POLARISATION_IDX 3           // 2018
+#define S1_REGEX_ORBIT_IDX        4           // 2018
+#define S1_REGEX_TYPE_IDX         5           // 2018
 
-#define AMP_REGEX_DATE_IDX          1
-#define AMP_REGEX_DATE2_IDX         2           // this does not exists for 2017
-
-#define COHE_REGEX_ORBIT_IDX        3           // this is the same for 2017 and 2018 formats
-
-#define LAI_REGEX_DATE_IDX          1
+#define S1_REGEX_DATE2_OLD_IDX    3           // this is different for 2017
+#define S1_REGEX_TYPE_OLD_IDX     4           // this is different for 2017
+#define S1_REGEX_ORBIT_OLD_IDX    5           // this is different for 2017
+#define S1_REGEX_POLAR_OLD_IDX    6           // this is different for 2017
 
 #define NDVI_FT         "NDVI"
+#define LAI_FT          "LAI"
+#define FAPAR_FT        "FAPAR"
+#define FCOVER_FT       "FCOVER"
 #define AMP_FT          "AMP"
 #define COHE_FT         "COHE"
 

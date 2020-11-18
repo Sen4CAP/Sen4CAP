@@ -132,7 +132,7 @@ bool ProcessorHandler::RemoveJobFolder(EventProcessingContext &ctx, int jobId, c
 
 QString ProcessorHandler::GetProductFormatterOutputProductPath(EventProcessingContext &ctx,
                                                         const TaskFinishedEvent &event) {
-    QString prodFolderOutPath = ctx.GetOutputPath(event.jobId, event.taskId, event.module, processorDescr.shortName) +
+    const QString &prodFolderOutPath = ctx.GetOutputPath(event.jobId, event.taskId, event.module, processorDescr.shortName) +
             "/" + PRODUCT_FORMATTER_OUT_PROPS_FILE;
     QStringList fileLines = ProcessorHandlerHelper::GetTextFileLines(prodFolderOutPath);
     if(fileLines.size() > 0) {
@@ -143,7 +143,7 @@ QString ProcessorHandler::GetProductFormatterOutputProductPath(EventProcessingCo
 
 QString ProcessorHandler::GetProductFormatterProductName(EventProcessingContext &ctx,
                                                         const TaskFinishedEvent &event) {
-    QString productPath = GetProductFormatterOutputProductPath(ctx, event);
+    const QString &productPath = GetProductFormatterOutputProductPath(ctx, event);
     if(productPath.length() > 0) {
         QString name = ProcessorHandlerHelper::GetFileNameFromPath(productPath);
         if(name.trimmed() != "") {

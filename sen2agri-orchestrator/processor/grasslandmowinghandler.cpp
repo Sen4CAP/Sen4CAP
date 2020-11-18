@@ -351,19 +351,20 @@ ProcessorJobDefinitionParams GrasslandMowingHandler::GetProcessingDefinitionImpl
 QStringList GrasslandMowingHandler::ExtractL3BProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                                     QDateTime &minDate, QDateTime &maxDate)
 {
-    return S4CUtils::GetInputProducts(ctx, event, ProductType::L3BProductTypeId, minDate, maxDate, L4B_GM_CFG_PREFIX);
+    const QStringList &l3bPrds = S4CUtils::GetInputProducts(ctx, event, ProductType::L3BProductTypeId, minDate, maxDate);
+    return S4CUtils::FindL3BProductTiffFiles(ctx, event, l3bPrds, L4B_GM_CFG_PREFIX, "SNDVI");
 }
 
 QStringList GrasslandMowingHandler::ExtractAmpProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                                    QDateTime &minDate, QDateTime &maxDate)
 {
-    return S4CUtils::GetInputProducts(ctx, event, ProductType::S4CS1L2AmpProductTypeId, minDate, maxDate, L4B_GM_CFG_PREFIX);
+    return S4CUtils::GetInputProducts(ctx, event, ProductType::S4CS1L2AmpProductTypeId, minDate, maxDate);
 }
 
 QStringList GrasslandMowingHandler::ExtractCoheProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                                     QDateTime &minDate, QDateTime &maxDate)
 {
-    return S4CUtils::GetInputProducts(ctx, event, ProductType::S4CS1L2CoheProductTypeId, minDate, maxDate, L4B_GM_CFG_PREFIX);
+    return S4CUtils::GetInputProducts(ctx, event, ProductType::S4CS1L2CoheProductTypeId, minDate, maxDate);
 }
 
 QStringList GrasslandMowingHandler::GetInputShpGeneratorArgs(GrasslandMowingExecConfig &cfg,

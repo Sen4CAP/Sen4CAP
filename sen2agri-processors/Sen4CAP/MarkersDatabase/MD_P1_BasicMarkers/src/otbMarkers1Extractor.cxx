@@ -25,7 +25,7 @@
 #include "otbBandMathImageFilter.h"
 #include "otbVectorImageToImageListFilter.h"
 #include <boost/filesystem.hpp>
-#include "otbAgricPractDataExtrFileWriter2.h"
+#include "otbMarkers1CsvWriter.h"
 
 #include "ImageResampler.h"
 #include "GenericRSImageResampler.h"
@@ -45,7 +45,7 @@ bool IsNotAlphaNum(char c)
     return !std::isalnum(c);
 }
 
-class AgricPractDataExtraction : public Application
+class Markers1Extractor : public Application
 {
     template< class TInput, class TOutput>
     class IntensityToDecibelsFunctor
@@ -74,7 +74,7 @@ class AgricPractDataExtraction : public Application
 
 public:
     /** Standard class typedefs. */
-    typedef AgricPractDataExtraction        Self;
+    typedef Markers1Extractor        Self;
     typedef Application                   Superclass;
     typedef itk::SmartPointer<Self>       Pointer;
     typedef itk::SmartPointer<const Self> ConstPointer;
@@ -82,7 +82,7 @@ public:
     /** Standard macro */
     itkNewMacro(Self);
 
-    itkTypeMacro(AgricPractDataExtraction, otb::Application);
+    itkTypeMacro(Markers1Extractor, otb::Application);
 
     /** Filters typedef */
     typedef float                                           PixelType;
@@ -93,7 +93,7 @@ public:
 
     typedef otb::OGRDataToClassStatisticsFilter<ImageType,UInt8ImageType> FilterType;
 
-    typedef otb::AgricPractDataExtrFileWriter2<ImageType::PixelType> AgricPracticesWriterType2;
+    typedef otb::Markers1CsvWriter<ImageType::PixelType> Markers1CsvWriterType;
 
     typedef otb::GeometriesSet GeometriesType;
 
@@ -123,37 +123,29 @@ public:
     } InputFileInfoType;
 
 private:
-    AgricPractDataExtraction()
+    Markers1Extractor()
     {
-        m_concatenateImagesFilter = ConcatenateImagesFilterType::New();
-        //m_Readers = ReadersListType::New();
-        m_bOutputMinMax = false;
-        m_bIndividualOutFilesForInputs = true;
-        m_bUseS2RasterMasks = false;
         m_fieldName = SEQ_UNIQUE_ID;
+        m_header = {m_fieldName, "mean", "stdev"};
+        m_minMaxHeader = {"min", "max", "valid_pixels_cnt", "invalid_pixels_cnt"};
+        m_bFieldNameIsInteger = true;
+
+        m_concatenateImagesFilter = ConcatenateImagesFilterType::New();
+        m_bOutputMinMax = false;
+        m_bUseS2RasterMasks = false;
         m_bConvToDb = false;
         m_noDataValue = 0;
+        m_csvWriterSeparator = ',';
     }
 
     void DoInit() override
     {
-        SetName("AgricPractDataExtraction");
-        SetDescription("Computes statistics on a training polygon set.");
+        SetName("Markers1Extractor");
+        SetDescription("Markers 1 set extractor.");
 
         // Documentation
-        SetDocName("Polygon Class Statistics");
-        SetDocLongDescription("The application processes a set of geometries "
-        "intended for training (they should have a field giving the associated "
-        "class). The geometries are analyzed against a support image to compute "
-        "statistics : \n"
-        "  - number of samples per class\n"
-        "  - number of samples per geometry\n"
-        "An optional raster mask can be used to discard samples. Different types"
-        " of geometry are supported : polygons, lines, points. The behaviour is "
-        "different for each type of geometry :\n"
-        "  - polygon: select pixels whose center is inside the polygon\n"
-        "  - lines  : select pixels intersecting the line\n"
-        "  - points : select closest pixel to the point");
+        SetDocName("Markers 1 set extractor");
+        SetDocLongDescription("Markers 1 set extractor");
         SetDocLimitations("None");
         SetDocAuthors("OTB-Team");
         SetDocSeeAlso(" ");
@@ -167,37 +159,9 @@ private:
         SetParameterDescription("vec","Input geometries to analyze");
         MandatoryOff("vec");
 
-        AddParameter(ParameterType_InputFilename, "altvec", "Alternative input vectors");
-        SetParameterDescription("altvec","Alternative input geometries to analyze containing the same parcels but in another projection");
-        MandatoryOff("altvec");
-
         AddParameter(ParameterType_InputFilename, "filterids", "File containing ids to be filtered");
         SetParameterDescription("filterids","File containing ids to be filtered i.e. the monitorable parcels ids");
         MandatoryOff("filterids");
-
-        // TODO: this parameters would allow extraction of filter IDs from the declarations and
-        // the input practices tables but unfortunately bring a significant delay in the execution
-        // as the filter ids are generated on the fly.
-
-//        AddParameter(ParameterType_InputFilename, "decls", "Declarations file to be used to create a list of filtered ids");
-//        SetParameterDescription("decls","Declarations file to be used to create a list of filtered ids");
-//        MandatoryOff("decls");
-
-//        AddParameter(ParameterType_InputFilename, "ccpract", "Input tables for the CC practices");
-//        SetParameterDescription("ccpract","Input tables for the CC practices. Used for filtering parcel ids");
-//        MandatoryOff("ccpract");
-
-//        AddParameter(ParameterType_InputFilename, "flpract", "Input tables for the FL practices");
-//        SetParameterDescription("flpract","Input tables for the FL practices. Used for filtering parcel ids");
-//        MandatoryOff("flpract");
-
-//        AddParameter(ParameterType_InputFilename, "nfcpract", "Input tables for the NFC practices");
-//        SetParameterDescription("nfcpract","Input tables for the NFC practices. Used for filtering parcel ids");
-//        MandatoryOff("nfcpract");
-
-//        AddParameter(ParameterType_InputFilename, "napract", "Input tables for the NA practices");
-//        SetParameterDescription("napract","Input tables for the NA practices. Used for filtering parcel ids");
-//        MandatoryOff("napract");
 
         AddParameter(ParameterType_String, "outdir", "Output directory for writing agricultural practices data extractin files");
         SetParameterDescription("outdir","Output directory to store agricultural practices data extractin files (txt format)");
@@ -211,37 +175,13 @@ private:
         MandatoryOff("layer");
         SetDefaultParameterInt("layer",0);
 
-//        AddParameter(ParameterType_StringList, "s2il", "S2 tiles parcels masks images");
-//        SetParameterDescription("s2il", "S2 tiles parcels masks images");
-//        MandatoryOff("s2il");
-
-//        AddParameter(ParameterType_StringList, "s2ilcnts", "Number of S2 tiles parcels masks images for each input image");
-//        SetParameterDescription("s2ilcnts", "Number of S2 tiles parcels masks images for each input image");
-//        MandatoryOff("s2ilcnts");
-
-        AddParameter(ParameterType_String, "prdtype", "Input product type (AMP/COHE/NDVI)");
-        SetParameterDescription("prdtype", "Input product type (AMP/COHE/NDVI)");
-
-        AddParameter(ParameterType_Int, "outcsv", "Output the files into CSV format.");
-        SetParameterDescription("outcsv", "Output the files into CSV format. If set to 0, outputs the files as XML");
-        MandatoryOff("outcsv");
-        SetDefaultParameterInt("outcsv",1);
-
-        AddParameter(ParameterType_Int, "csvcompact", "Wite the CSV file compacted.");
-        SetParameterDescription("csvcompact", "The entries for a field are written on the same line "
-                                              "separated by |, without duplicating fid and suffix.");
-        MandatoryOff("csvcompact");
-        SetDefaultParameterInt("csvcompact",1);
+        AddParameter(ParameterType_String, "prdtype", "Input product type (AMP/COHE/NDVI/LAI/FAPAR/FCOVER)");
+        SetParameterDescription("prdtype", "Input product type (AMP/COHE/NDVI/LAI/FAPAR/FCOVER)");
 
         AddParameter(ParameterType_Int, "ifiles", "Output individual CVS files for input image");
         SetParameterDescription("ifiles", "Output individual CVS files for input image.");
         MandatoryOff("ifiles");
-        SetDefaultParameterInt("ifiles",1);
-
-        AddParameter(ParameterType_Int, "mfiles", "Output individual CVS files for each polygon");
-        SetParameterDescription("mfiles", "If CSV format is used, then setting to true will produce individual files for each polygon.");
-        MandatoryOff("mfiles");
-        SetDefaultParameterInt("mfiles",0);
+        SetDefaultParameterInt("ifiles",0);
 
         AddParameter(ParameterType_InputImage,  "mask",   "Input validity mask");
         SetParameterDescription("mask", "Validity mask (only pixels corresponding to a mask value greater than 0 will be used for statistics)");
@@ -252,10 +192,9 @@ private:
         MandatoryOff("minmax");
         SetDefaultParameterInt("minmax",0);
 
-        AddParameter(ParameterType_Int, "overwrite", "Overwrites the output if it exists otherwise do not process the input.");
-        SetParameterDescription("overwrite", "Overwrites the output if it exists otherwise do not process the input");
-        MandatoryOff("overwrite");
-        SetDefaultParameterInt("overwrite",1);
+        AddParameter(ParameterType_Int, "sep", "Output CSV separator.");
+        SetParameterDescription("sep", "Output CSV separator");
+        MandatoryOff("sep");
 
         //ElevationParametersHandler::AddElevationParameters(this, "elev");
 
@@ -301,11 +240,22 @@ private:
 
     void DoExecute() override
     {
+        if (HasValue("sep")) {
+            const std::string &sep = GetParameterAsString("sep");
+            if (sep.length() > 0) {
+                m_csvWriterSeparator = sep[0];
+            }
+        }
+
         m_bOutputMinMax = (GetParameterInt("minmax") != 0);
         const std::string &prdType = GetParameterAsString("prdtype");
+        // TODO: This should be moved inside the loop and extracted dynamically the product type
+        // (to not force outside app to determine it as we can do this here)
+        // => See if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate))
+
         if (prdType == "AMP" && !m_bOutputMinMax) {
             m_bConvToDb = true;
-        } else if (prdType == "NDVI") {
+        } else if (prdType == "NDVI" || prdType == "LAI" || prdType == "FAPAR" || prdType == "FCOVER") {
             m_noDataValue = NO_DATA_VALUE;
         }
 
@@ -318,6 +268,7 @@ private:
             } else {
                 const std::vector<std::string> &cFieldNames = GetChoiceNames("field");
                 m_fieldName = cFieldNames[selectedCFieldIdx.front()];
+                //m_bFieldNameIsInteger = false;
             }
         }
 
@@ -360,13 +311,6 @@ private:
             otbAppLogINFO("Loading vectors from file " << vectFile);
             m_vectors = otb::ogr::DataSource::New(vectFile);
         }
-        const std::string &altVectFile = this->GetParameterString("altvec");
-        if (altVectFile.size() > 0) {
-            otbAppLogINFO("Loading alternative vectors from file " << altVectFile);
-            m_altVectors = otb::ogr::DataSource::New(altVectFile);
-        }
-        int overwriteOut = this->GetParameterInt("overwrite");
-
         otb::ogr::DataSource::Pointer reprojVector = m_vectors;
 
         for (std::vector<InputFileInfoType>::const_iterator itInfos = m_InputFilesInfos.begin();
@@ -376,19 +320,17 @@ private:
                 otbAppLogWARNING("File " << itInfos->inputImage << " does not exist on disk!");
                 continue;
             }
-            // if individual files for each input file, create a new writer for this image
-            if (m_bIndividualOutFilesForInputs) {
-                // if the output should not be overwritten and the out file exists, ignore the input image
-                if ((overwriteOut == 0) && CheckIfOutputExists(itInfos->inputImage, outDir)) {
-                    otbAppLogINFO("Ignoring the input file : " << itInfos->inputImage << ". An output already exists for it ...");
-                    continue;
-                }
-                const std::vector<std::string> &imgPaths = {itInfos->inputImage};
-                InitializeWriter(imgPaths);
-            }
+            boost::filesystem::path pRefFile(itInfos->inputImage);
+            std::string fileName = pRefFile.filename().string();
 
             FloatVectorImageType::Pointer inputImage = GetInputImage(itInfos->inputImage);
             otbAppLogINFO("Handling file " << itInfos->inputImage);
+
+            // if individual files for each input file, create a new writer for this image
+            if (m_bIndividualOutFilesForInputs) {
+                const std::vector<std::string> &imgPaths = {itInfos->inputImage};
+                InitializeWriter(imgPaths);
+            }
 
             if (itInfos->s2MsksFiles.size() == 0) {
                 HandleImageUsingShapefile(inputImage, itInfos->inputImage, reprojVector);
@@ -419,19 +361,8 @@ private:
     void HandleImageUsingShapefile(const FloatVectorImageType::Pointer &inputImage, const std::string &imgPath,
                                    otb::ogr::DataSource::Pointer &reprojVector) {
         if (NeedsReprojection(reprojVector, inputImage)) {
-            // if we have the alternative vectors in another projection, check also this ones
-            if (m_altVectors.IsNotNull() && !NeedsReprojection(m_altVectors, inputImage)) {
-                otbAppLogINFO("Using alternate vectors for " << imgPath);
-                reprojVector = m_altVectors;
-            } else {
-                otbAppLogINFO("Checking if reprojecting of vectors is needed for file " << imgPath);
-                reprojVector = GetVector(m_vectors, inputImage);
-                if (reprojVector == m_vectors) {
-                    otbAppLogINFO("Original vectors used - No need to reproject vectors for " << imgPath);
-                } else {
-                    otbAppLogINFO("Reprojected vectors for " << imgPath);
-                }
-            }
+            otbAppLogINFO("Reprojecting vectors needed for file " << imgPath);
+            reprojVector = GetVector(m_vectors, inputImage);
         } else {
             otbAppLogINFO("No need to reproject vectors for " << imgPath);
         }
@@ -593,25 +524,16 @@ private:
 
     void InitializeWriter(const std::vector<std::string> &imagesPaths) {
         const std::string &outDir = this->GetParameterString("outdir");
-        m_agricPracticesDataWriter = AgricPracticesWriterType2::New();
+        m_agricPracticesDataWriter = Markers1CsvWriterType::New();
         m_agricPracticesDataWriter->SetTargetFileName(BuildUniqueFileName(outDir, imagesPaths[0]));
-        std::vector<std::string> header = {"NewID", "date", "mean", "stdev"};
+        std::vector<std::string> header = m_header;
         if (m_bOutputMinMax) {
-            header.push_back("min");
-            header.push_back("max");
-            header.push_back("valid_pixels_cnt");
-            header.push_back("invalid_pixels_cnt");
-
+            header.insert(std::end(header), std::begin(m_minMaxHeader), std::end(m_minMaxHeader));
             m_agricPracticesDataWriter->SetUseMinMax(true);
         }
-        m_agricPracticesDataWriter->SetHeaderFields(header);
-
-        bool bOutputCsv = (GetParameterInt("outcsv") != 0);
-        m_agricPracticesDataWriter->SetOutputCsvFormat(bOutputCsv);
-        bool bCsvCompactMode = (GetParameterInt("csvcompact") != 0);
-        m_agricPracticesDataWriter->SetCsvCompactMode(bCsvCompactMode);
-        bool bMultiFileMode = (GetParameterInt("mfiles") != 0);
-        m_agricPracticesDataWriter->SetUseMultiFileMode(bMultiFileMode);
+        m_agricPracticesDataWriter->SetCsvSeparator(m_csvWriterSeparator);
+        m_agricPracticesDataWriter->SetHeaderFields(imagesPaths[0], header, m_fieldName,
+                m_bFieldNameIsInteger);
     }
 
     void InitializeInputImageInfos(const std::vector<std::string> &imagesPaths) {
@@ -685,8 +607,6 @@ private:
         {
             inputGeomSet = GeometriesType::New(vectors);
             otb::ogr::DataSource::Pointer reprojVector = otb::ogr::DataSource::New();
-//            otb::ogr::DataSource::Pointer reprojVector = otb::ogr::DataSource::New(this->GetParameterString("vec"),
-//                                                                                   otb::ogr::DataSource::Modes::Update_LayerOverwrite);
             outputGeomSet = GeometriesType::New(reprojVector);
             // Filter instantiation
             geometriesProjFilter = ProjectionFilterType::New();
@@ -713,15 +633,11 @@ private:
         const std::string &vectorProjectionRef = vectors->GetLayer(GetParameterInt("layer")).GetProjectionRef();
 
         const OGRSpatialReference imgOGRSref = OGRSpatialReference( imageProjectionRef.c_str() );
-        OGRSpatialReference vectorOGRSref = OGRSpatialReference( vectorProjectionRef.c_str() );
+        const OGRSpatialReference vectorOGRSref = OGRSpatialReference( vectorProjectionRef.c_str() );
         bool doReproj = true;
         // don't reproject for these cases
         if (  vectorProjectionRef.empty() || imgOGRSref.IsSame( &vectorOGRSref )
             || ( imageProjectionRef.empty() && imageKwl.GetSize() == 0) ) {
-            doReproj = false;
-        }
-        if (doReproj && imageProjectionRef.find("LAEA") != std::string::npos
-                && vectorProjectionRef.find("LAEA") != std::string::npos) {
             doReproj = false;
         }
 
@@ -729,10 +645,10 @@ private:
     }
 
     std::string BuildUniqueFileName(const std::string &targetDir, const std::string &refFileName) {
-        bool bOutputCsv = (GetParameterInt("outcsv") != 0);
+        bool bOutputCsv = true; // TODO : Here we can have an adapter for .ipc?
         boost::filesystem::path rootFolder(targetDir);
         boost::filesystem::path pRefFile(refFileName);
-        std::string fileName = pRefFile.stem().string() + (bOutputCsv ? ".csv" : ".xml");
+        std::string fileName = pRefFile.stem().string() + (bOutputCsv ? ".csv" : ".ipc");
         return (rootFolder / fileName).string();
     }
 
@@ -891,19 +807,16 @@ private:
         return results;
     }
 
-    bool CheckIfOutputExists(const std::string &imgPath, const std::string &outDir) {
-        const std::string &outFilePath = BuildUniqueFileName(outDir, imgPath);
-        return boost::filesystem::exists(outFilePath);
-
-    }
-
     private:
+        std::vector<std::string> m_header;
+        std::vector<std::string> m_minMaxHeader;
+        bool m_bFieldNameIsInteger;
+
         bool m_bConvToDb;
         int m_noDataValue;
         bool m_bOutputMinMax;
         std::string m_fieldName;
         otb::ogr::DataSource::Pointer m_vectors;
-        otb::ogr::DataSource::Pointer m_altVectors;
         bool m_bUseS2RasterMasks;
         ConcatenateImagesFilterType::Pointer m_concatenateImagesFilter;
         //ReadersListType::Pointer m_Readers;
@@ -911,7 +824,7 @@ private:
         ClassImageReaderType::Pointer m_classImageReader;
         GenericMapContainer         m_GenericMapContainer;
 
-        AgricPracticesWriterType2::Pointer m_agricPracticesDataWriter;
+        Markers1CsvWriterType::Pointer m_agricPracticesDataWriter;
 
         std::vector<InputFileInfoType> m_InputFilesInfos;
         IntensityToDbFilterType::Pointer        m_IntensityToDbFunctor;
@@ -923,6 +836,7 @@ private:
 
         typedef std::map<std::string, int> FilterIdsMapType;
         FilterIdsMapType m_FilterIdsMap;
+        char m_csvWriterSeparator;
 
 //        bool m_bFirstDeclarationsEntry;
 //        std::unique_ptr<GSAAAttributesTablesReaderBase> m_pGSAAAttrsTablesReader;
@@ -932,4 +846,4 @@ private:
 } // end of namespace Wrapper
 } // end of namespace otb
 
-OTB_APPLICATION_EXPORT(otb::Wrapper::AgricPractDataExtraction)
+OTB_APPLICATION_EXPORT(otb::Wrapper::Markers1Extractor)
