@@ -246,7 +246,7 @@ QStringList EventProcessingContext::findProductFiles(const QString &absPath) {
         QDirIterator it(absPath, QDir::Dirs | QDir::NoDot | QDir::NoDotDot, QDirIterator::Subdirectories);
         while(it.hasNext()) {
             const QString &subDirName = it.fileName();
-            if (subDirName.startsWith("SENTINEL2")) {
+            if (subDirName.startsWith("SENTINEL2") || subDirName.startsWith("LANDSAT8")) {
                 const QString &metaFileName = subDirName + "_MTD_ALL.xml";
                 const QString &metaFilePath = QDir(it.filePath()).filePath(metaFileName);
                 if(QFileInfo(metaFilePath).exists()) {

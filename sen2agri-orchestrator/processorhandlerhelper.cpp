@@ -26,6 +26,7 @@ QMap<QString, ProcessorHandlerHelper::L2MetaTileNameInfos> ProcessorHandlerHelpe
      {"MTD_MSIL2A", {ProcessorHandlerHelper::L2_PRODUCT_TYPE_S2, ProcessorHandlerHelper::SATELLITE_ID_TYPE_S2, "xml", R"(S2[A-D]_MSIL2A_(\d{8})T\d{6}_.*T(\d{2}[A-Z]{3})_.*\.SAFE)", true, 2, 1}},
      // L8 (MACCS and MAJA) product name ex. L8_TEST_L8C_L2VALD_196030_20191003.HDR
      {"L8", {ProcessorHandlerHelper::L2_PRODUCT_TYPE_L8, ProcessorHandlerHelper::SATELLITE_ID_TYPE_L8, "hdr", R"(L8_.*_L8C_L2VALD_(\d{6})_(\d{8}).HDR)", false, 1, 2}},
+     {"LANDSAT8", {ProcessorHandlerHelper::L2_PRODUCT_TYPE_L8, ProcessorHandlerHelper::SATELLITE_ID_TYPE_L8, "xml", R"(LANDSAT8-.*_(\d{8})-.*_L2A_((\d{3})-(\d{3}))_.*_MTD_ALL.xml)", false, 2, 1}},
      {"SPOT4", {ProcessorHandlerHelper::L2_PRODUCT_TYPE_SPOT4, ProcessorHandlerHelper::SATELLITE_ID_TYPE_SPOT4, "xml", "", false, -1, 3}}, //SPOT4_*_*_<DATE>_*_*.xml
      {"SPOT5", {ProcessorHandlerHelper::L2_PRODUCT_TYPE_SPOT5, ProcessorHandlerHelper::SATELLITE_ID_TYPE_SPOT5, "xml", "", false, -1, 3}}, //SPOT5_*_*_<DATE>_*_*.xml
      // this prefix is impossible to occur in the file name
@@ -729,6 +730,10 @@ QString ProcessorHandlerHelper::GetL2AFieldFromPath(const QString &path, Process
             extractedStr = nameWords[fieldIdxInName];
         }
     }
+    // if a tile is requested, we might have a separator between path and row
+    if(regexIdx == L2MetaTileNameInfos::TILE_IDX) {
+        extractedStr.remove('-');
+    }
     return extractedStr;
 }
 
@@ -774,7 +779,9 @@ bool ProcessorHandlerHelper::IsValidL2AMetadataFileName(const QString &path) {
             }
             break;
         case L2_PRODUCT_TYPE_L8:
-            if((listComponents.size() < 4) || (listComponents[2] != "L8C") || (listComponents[3] != "L2VALD")) {
+            if((listComponents.size() < 4) || (((listComponents[2] != "L8C") || (listComponents[3] != "L2VALD")) &&
+                                                ((listComponents[2] != "L2A") || (listComponents[6] != "MTD") || (listComponents[7] != "ALL"))))
+            {
                 return false;
             }
             break;
