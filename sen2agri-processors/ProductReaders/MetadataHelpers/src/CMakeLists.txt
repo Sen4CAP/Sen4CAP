@@ -5,10 +5,13 @@ set(Sen2AgriProductReaders_HEADERS
     MACCSMetadataHelperBase.h
     MACCSS2MetadataHelper.h
     MACCSL8MetadataHelper.h
+    ../include/MetadataHelperDefs.h
     ../include/MetadataHelperFactory.h
     ../include/MetadataHelper.h
     Spot4MetadataHelper.h
+    MAJAMaskHandlerFunctor.h
     MAJAMetadataHelper.h
+    MAJAL8MetadataHelper.h
     SEN2CORMetadataHelper.h
     )
 

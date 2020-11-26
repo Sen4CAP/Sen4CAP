@@ -117,7 +117,8 @@ MAJAProductCharacteristics ReadMAJAProductCharacteristics(const TiXmlElement *pr
              groupEl = groupEl->NextSiblingElement("Group")) {
             CommonResolution groupRes;
             groupRes.Id = GetAttribute(groupEl, "group_id");
-            if (groupRes.Id.compare("R1") != 0 && groupRes.Id.compare("R2")) {
+            // TODO: Not sure why this comparison here ...
+            if (groupRes.Id.compare("R1") != 0 && groupRes.Id.compare("R2") && groupRes.Id.compare("XS") != 0) {
                 continue;
             }
             if (auto bandList = groupEl->FirstChildElement("Band_List")) {
@@ -131,15 +132,17 @@ MAJAProductCharacteristics ReadMAJAProductCharacteristics(const TiXmlElement *pr
                 }
             }
             bool geopositioningFound = false;
+            std::string lineColVal;
             for (auto groupGeopositiongEl = groupGeopositioningListEl->FirstChildElement("Group_Geopositioning"); groupGeopositiongEl;
                  groupGeopositiongEl = groupGeopositiongEl->NextSiblingElement("Group_Geopositioning")) {
                 if(groupRes.Id.compare(GetAttribute(groupGeopositiongEl, "group_id")) == 0) {
                     groupRes.GeoPosition = ReadGeoPosition(groupGeopositiongEl);
+                    lineColVal = (groupRes.Id.compare("R1") == 0 ? "10" : (groupRes.Id.compare("R2") == 0 ? "20" : "30"));
                     //can't find product sampling for MAJA processor, so hardcode one:
                     groupRes.ProductSampling.ByLineUnit = "m";
-                    groupRes.ProductSampling.ByLineValue = (groupRes.Id.compare("R1") == 0 ? "10" : "20");
+                    groupRes.ProductSampling.ByLineValue = lineColVal;
                     groupRes.ProductSampling.ByColumnUnit = "m";
-                    groupRes.ProductSampling.ByColumnValue = (groupRes.Id.compare("R1") == 0 ? "10" : "20");
+                    groupRes.ProductSampling.ByColumnValue = lineColVal;
                     groupRes.Size = ReadMAJASize(groupGeopositiongEl);
                     groupRes.Size.Bands = std::to_string(groupRes.Bands.size());
                     geopositioningFound = true;

@@ -13,10 +13,10 @@
 
  =========================================================================*/
 
-#ifndef MAJAMETADATAHELPER_H
-#define MAJAMETADATAHELPER_H
+#ifndef MAJAL8METADATAHELPER_H
+#define MAJAL8METADATAHELPER_H
 
-#include "MACCSS2MetadataHelper.h"
+#include "MACCSL8MetadataHelper.h"
 #include <vector>
 
 #include "ResamplingBandExtractor.h"
@@ -25,8 +25,9 @@
 #include "MAJAMaskHandlerFunctor.h"
 
 template <typename PixelType, typename MasksPixelType>
-class MAJAMetadataHelper : public MACCSS2MetadataHelper<PixelType, MasksPixelType>
+class MAJAL8MetadataHelper : public MACCSL8MetadataHelper<PixelType, MasksPixelType>
 {
+
 public:
     typedef MAJAMaskHandlerFunctor<typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::PixelType,
                                         typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::PixelType>    MAJAMaskHandlerFunctorType;
@@ -39,9 +40,9 @@ public:
                                         MAJAMaskHandlerFunctorType>                             MAJAUnaryFunctorImageFilterType;
 
 public:
-    MAJAMetadataHelper();
+    MAJAL8MetadataHelper();
 
-    const char * GetNameOfClass() { return "MAJAMetadataHelper"; }
+    const char * GetNameOfClass() { return "MAJAL8MetadataHelper"; }
 
     virtual typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer GetImage(const std::vector<std::string> &bandNames, int outRes = -1);
     virtual typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer GetImage(const std::vector<std::string> &bandNames,
@@ -49,7 +50,6 @@ public:
     virtual typename MetadataHelper<PixelType, MasksPixelType>::ImageListType::Pointer GetImageList(const std::vector<std::string> &bandNames,
                                                 typename MetadataHelper<PixelType, MasksPixelType>::ImageListType::Pointer outImgList, int outRes = -1);
 
-    virtual std::string GetAotImageFileName(int res);
     virtual float GetAotQuantificationValue(int res);
     virtual float GetAotNoDataValue(int res);
     virtual int GetAotBandIndex(int res);
@@ -72,8 +72,6 @@ private:
     bool HasBandName(const std::vector<std::string> &bandNames, const std::string &bandName);
     bool GetValidBandNames(const std::vector<std::string> &bandNames, std::vector<std::string> &validBandNames,
                            std::vector<int> &relBandIndexes, int &outRes);
-    float m_AotQuantifVal;
-    float m_AotNoDataVal;
 
     MAJAMaskHandlerFunctorType m_majaMaskHandlerFunctor;
     // We are using 2 filters here as Nary functor needs at least two inputs while
@@ -82,6 +80,6 @@ private:
     typename MAJANaryFunctorImageFilterType::Pointer m_majaNMaskHandlerFilter;
 };
 
-#include "MAJAMetadataHelper.cpp"
+#include "MAJAL8MetadataHelper.cpp"
 
-#endif // MACCSMETADATAHELPERNEW_H
+#endif // MAJAL8METADATAHELPER_H

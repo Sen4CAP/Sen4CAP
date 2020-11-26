@@ -16,6 +16,7 @@
 #include "MetadataHelperFactory.h"
 #include "Spot4MetadataHelper.h"
 #include "MAJAMetadataHelper.h"
+#include "MAJAL8MetadataHelper.h"
 #include "MACCSS2MetadataHelper.h"
 #include "MACCSL8MetadataHelper.h"
 #include "SEN2CORMetadataHelper.h"
@@ -28,6 +29,10 @@ std::unique_ptr<MetadataHelper<PixelType, MasksPixelType>> METADATA_HELPER_FACTO
     std::unique_ptr<MetadataHelper<PixelType, MasksPixelType>> majaMetadataHelper(new MAJAMetadataHelper<PixelType, MasksPixelType>);
     if (majaMetadataHelper->LoadMetadataFile(metadataFileName))
         return majaMetadataHelper;
+
+    std::unique_ptr<MetadataHelper<PixelType, MasksPixelType>> majaL8MetadataHelper(new MAJAL8MetadataHelper<PixelType, MasksPixelType>);
+    if (majaL8MetadataHelper->LoadMetadataFile(metadataFileName))
+        return majaL8MetadataHelper;
 
     std::unique_ptr<MetadataHelper<PixelType, MasksPixelType>> maccsS2MetadataHelper(new MACCSS2MetadataHelper<PixelType, MasksPixelType>);
     if (maccsS2MetadataHelper->LoadMetadataFile(metadataFileName))

@@ -29,52 +29,43 @@ MACCSL8MetadataHelper<PixelType, MasksPixelType>::MACCSL8MetadataHelper()
 template <typename PixelType, typename MasksPixelType>
 bool MACCSL8MetadataHelper<PixelType, MasksPixelType>::LoadAndUpdateMetadataValues(const std::string &file)
 {
-    MACCSMetadataReaderType::Pointer maccsMetadataReader = MACCSMetadataReaderType::New();
-    // just check if the file is Spot4 metadata file. In this case
-    // the helper will return the hardcoded values from the constructor as these are not
-    // present in the metadata
-    if (this->m_metadata = maccsMetadataReader->ReadMetadata(file)) {
-        if (this->m_metadata->Header.FixedHeader.Mission.find(LANDSAT_MISSION_STR) == std::string::npos) {
-            return false;
-        }
-
-        //std::cout << "Using mission L8" << std::endl;
-
-        this->m_MissionShortName = "LANDSAT";
-        this->m_nTotalBandsNo = this->m_metadata->ImageInformation.Bands.size();
-        // Add the resolution of 30 m
-        this->m_vectResolutions.push_back(30);
-        // we have the same values for relative and absolute bands indexes as we have only one raster
-        this->m_nBlueBandName = "B2";
-        this->m_nGreenBandName = "B3";
-        this->m_nRedBandName = "B4";
-        this->m_nNirBandName = "B5";
-        this->m_nSwirBandName = "B6";
-
-        this->m_bHasGlobalMeanAngles = true;
-        this->m_bHasBandMeanAngles = false;
-
-        m_aotFileName = this->GetMACCSImageFileName(this->m_metadata->ProductOrganization.AnnexFiles, "_ATB");
-
-        // update the solar mean angle
-        this->m_solarMeanAngles.azimuth = this->m_metadata->ProductInformation.MeanSunAngle.AzimuthValue;
-        this->m_solarMeanAngles.zenith = this->m_metadata->ProductInformation.MeanSunAngle.ZenithValue;
-
-        // update the solar mean angle
-        MeanAngles_Type sensorAngle = {0,0};
-        // TODO: Here we should get this from the Mean_Viewing_Angle. Most probably if we get here it will crash
-        // if the MACCS Metadata Reader will not be updated to read this element for LANDSAT8
-        if(this->m_metadata->ProductInformation.MeanViewingIncidenceAngles.size() > 0) {
-            sensorAngle.azimuth = this->m_metadata->ProductInformation.MeanViewingIncidenceAngles.at(0).Angles.AzimuthValue;
-            sensorAngle.zenith = this->m_metadata->ProductInformation.MeanViewingIncidenceAngles.at(0).Angles.ZenithValue;
-        }
-        this->m_sensorBandsMeanAngles.push_back(sensorAngle);
-
-        // TODO: Add here other initializations for LANDSAT if needed
-
-        return true;
+    if (!this->LoadAndCheckMetadata(file)) {
+        return false;
     }
-    return false;
+
+    //std::cout << "Using mission L8" << std::endl;
+
+    this->m_MissionShortName = "LANDSAT";
+    this->m_nTotalBandsNo = this->m_metadata->ImageInformation.Bands.size();
+    // Add the resolution of 30 m
+    this->m_vectResolutions.push_back(30);
+    // we have the same values for relative and absolute bands indexes as we have only one raster
+    this->m_nBlueBandName = "B2";
+    this->m_nGreenBandName = "B3";
+    this->m_nRedBandName = "B4";
+    this->m_nNirBandName = "B5";
+    this->m_nSwirBandName = "B6";
+
+    this->m_bHasGlobalMeanAngles = true;
+    this->m_bHasBandMeanAngles = false;
+
+    // update the solar mean angle
+    this->m_solarMeanAngles.azimuth = this->m_metadata->ProductInformation.MeanSunAngle.AzimuthValue;
+    this->m_solarMeanAngles.zenith = this->m_metadata->ProductInformation.MeanSunAngle.ZenithValue;
+
+    // update the solar mean angle
+    MeanAngles_Type sensorAngle = {0,0};
+    // TODO: Here we should get this from the Mean_Viewing_Angle. Most probably if we get here it will crash
+    // if the MACCS Metadata Reader will not be updated to read this element for LANDSAT8
+    if(this->m_metadata->ProductInformation.MeanViewingIncidenceAngles.size() > 0) {
+        sensorAngle.azimuth = this->m_metadata->ProductInformation.MeanViewingIncidenceAngles.at(0).Angles.AzimuthValue;
+        sensorAngle.zenith = this->m_metadata->ProductInformation.MeanViewingIncidenceAngles.at(0).Angles.ZenithValue;
+    }
+    this->m_sensorBandsMeanAngles.push_back(sensorAngle);
+
+    // TODO: Add here other initializations for LANDSAT if needed
+
+    return true;
 }
 
 template <typename PixelType, typename MasksPixelType>
@@ -141,6 +132,24 @@ typename MetadataHelper<PixelType, MasksPixelType>::ImageListType::Pointer MACCS
     }
     this->m_bandsExtractor.ExtractImageBands(reader->GetOutput(), imageList, bandIdxs, Interpolator_NNeighbor, curRes, outRes);
     return imageList;
+}
+
+template <typename PixelType, typename MasksPixelType>
+bool MACCSL8MetadataHelper<PixelType, MasksPixelType>::LoadAndCheckMetadata(const std::string &file)
+{
+    MACCSMetadataReaderType::Pointer maccsMetadataReader = MACCSMetadataReaderType::New();
+    // just check if the file is Spot4 metadata file. In this case
+    // the helper will return the hardcoded values from the constructor as these are not
+    // present in the metadata
+    if (this->m_metadata = maccsMetadataReader->ReadMetadata(file)) {
+        if (this->m_metadata->Header.FixedHeader.Mission.find(LANDSAT_MISSION_STR) == std::string::npos) {
+            return false;
+        }
+        // this is specific to MACCS
+        this->m_aotFileName = this->GetMACCSImageFileName(this->m_metadata->ProductOrganization.AnnexFiles, "_ATB");
+        return true;
+    }
+    return false;
 }
 
 template <typename PixelType, typename MasksPixelType>

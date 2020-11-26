@@ -48,33 +48,32 @@ public:
 protected:
 
     virtual bool LoadAndUpdateMetadataValues(const std::string &file);
+    virtual bool LoadAndCheckMetadata(const std::string &file);
 
     std::string getCloudFileName(int res);
     std::string getWaterFileName(int res);
     std::string getSnowFileName(int res);
     std::string getQualityFileName(int res);
 
-//    void ReadSpecificMACCSImgHdrFile();
+protected:
+    float m_fAotQuantificationValue;
+    float m_fAotNoDataVal;
+    std::string m_aotFileName;
+
+private:
     void ReadSpecificMACCSAotHdrFile();
-//    void ReadSpecificMACCSCldHdrFile();
     void ReadSpecificMACCSMskHdrFile();
 
     bool BandAvailableForCurrentResolution(unsigned int nBand);
     std::vector<CommonBand> GetAllMACCSBandsInfos();
 
-private:
     int GetRelativeBandIdx(const std::string &bandName);
     std::unique_ptr<MACCSFileMetadata> m_specificAotMetadata;
     std::unique_ptr<MACCSFileMetadata> m_specificImgMetadata;
     std::unique_ptr<MACCSFileMetadata> m_specificCldMetadata;
     std::unique_ptr<MACCSFileMetadata> m_specificMskMetadata;
 
-    float m_fAotQuantificationValue;
-    float m_fAotNoDataVal;
     int m_nAotBandIndex;
-
-    std::string m_aotFileName;
-
 };
 
 #include "MACCSL8MetadataHelper.cpp"
