@@ -33,7 +33,7 @@ bool RouCountryInfo::GetHasPractice(const AttributeEntry &ogrFeat, const std::st
 
 std::string RouCountryInfo::GetPStart(const AttributeEntry &ogrFeat) {
     if (m_practice == CATCH_CROP_VAL) {
-        if (m_year == "2019") {
+        if (m_year != "2018") {
             const std::string &uid = GetOriId(ogrFeat);
             std::map<std::string, GsaaInfoType> ::iterator gsaaMapIt = m_ccGsaaIdsMap.find(uid);
             if (gsaaMapIt != m_ccGsaaIdsMap.end()) {
@@ -58,7 +58,7 @@ std::string RouCountryInfo::GetPStart(const AttributeEntry &ogrFeat) {
 
 std::string RouCountryInfo::GetPEnd(const AttributeEntry &ogrFeat) {
     if (m_practice == CATCH_CROP_VAL) {
-        if (m_year == "2019") {
+        if (m_year != "2018") {
             const std::string &uid = GetOriId(ogrFeat);
             std::map<std::string, GsaaInfoType> ::iterator gsaaMapIt = m_ccGsaaIdsMap.find(uid);
             if (gsaaMapIt != m_ccGsaaIdsMap.end()) {
@@ -76,9 +76,9 @@ std::string RouCountryInfo::GetPEnd(const AttributeEntry &ogrFeat) {
             case 1591:
             {
                 if (m_year == "2018") {
-                    return "2018-06-03";
-                } else if (m_year == "2019") {
-                    return "2019-06-02";
+                    return m_year + "-06-03";
+                } else {
+                    return m_year + "-06-02";
                 }
             }
             case 1281:
@@ -86,9 +86,9 @@ std::string RouCountryInfo::GetPEnd(const AttributeEntry &ogrFeat) {
             case 1301:
             {
                 if (m_year == "2018") {
-                    return "2018-08-26";
-                } else if (m_year == "2019") {
-                    return "2019-09-01";
+                    return m_year + "-08-26";
+                } else {
+                    return m_year + "-09-01";
                 }
             }
             case 9731:
@@ -102,9 +102,9 @@ std::string RouCountryInfo::GetPEnd(const AttributeEntry &ogrFeat) {
             case 97481:
             {
                 if (m_year == "2018") {
-                    return "2018-05-06";
-                } else if (m_year == "2019") {
-                    return "2019-05-05";
+                    return m_year + "-05-06";
+                } else {
+                    return m_year + "-05-05";
                 }
             }
         }
@@ -153,16 +153,25 @@ std::string RouCountryInfo::GetUidFromCCParcelDescrFile(const MapHdrIdx &header,
     MapHdrIdx::const_iterator itIdMap = header.find("id_unic");
     MapHdrIdx::const_iterator itFbIdMap = header.find("fbid");
     MapHdrIdx::const_iterator itNrParcelaMap = header.find("nr_parcela");
+    MapHdrIdx::const_iterator itCropNrMap = header.find("crop_nr");
+    if (itNrParcelaMap == header.end()) {
+        itNrParcelaMap = header.find("parcel_nr");
+    }
 
     if (itIdMap != header.end() && itIdMap->second < line.size() &&
         itFbIdMap != header.end() && itFbIdMap->second < line.size() &&
         itNrParcelaMap != header.end() && itNrParcelaMap->second < line.size()) {
 
         const std::string &nrParcela = line[itNrParcelaMap->second];
-        return line[itIdMap->second] + "-" +
-                       line[itFbIdMap->second] + "-" +
-                        nrParcela.substr(0, nrParcela.size() - 1) + "-" +
-                        nrParcela.substr(nrParcela.size() - 1);
+        if (m_year == "2018" || m_year == "2019") {
+            return line[itIdMap->second] + "-" +
+                           line[itFbIdMap->second] + "-" +
+                            nrParcela.substr(0, nrParcela.size() - 1) + "-" +
+                            nrParcela.substr(nrParcela.size() - 1);
+        } else {
+            return line[itFbIdMap->second] + "-" + nrParcela + "-" +
+                    line[itCropNrMap->second] + "-" + line[itIdMap->second];
+        }
     }
     return "";
 }
@@ -181,12 +190,22 @@ std::string RouCountryInfo::GetGSAAUniqueId(T &ogrFeat) {
 
         return gsaaId;
     } else {
-        const std::string &idUnic = std::to_string(ogrFeat.GetFieldAsInteger(ogrFeat.GetFieldIndex("old_id")));
+        int idUnicFieldIdx = ogrFeat.GetFieldIndex("old_id");
+        std::string idUnic;
+        if (idUnicFieldIdx != -1) {
+            idUnic = std::to_string(ogrFeat.GetFieldAsInteger(idUnicFieldIdx));
+        } else {
+            idUnic = std::to_string(ogrFeat.GetFieldAsInteger(ogrFeat.GetFieldIndex("id_unic")));
+        }
         const std::string &sirsupCod = std::to_string(ogrFeat.GetFieldAsInteger(ogrFeat.GetFieldIndex("sirsup_cod")));
         const std::string &blocNo = std::to_string(ogrFeat.GetFieldAsInteger(ogrFeat.GetFieldIndex("bloc_nr")));
         const std::string &parcelNo = std::to_string(ogrFeat.GetFieldAsInteger(ogrFeat.GetFieldIndex("parcel_nr")));
         const std::string &cropNo = ogrFeat.GetFieldAsString(ogrFeat.GetFieldIndex("crop_nr"));
-        return (idUnic + "-" + sirsupCod + "-" + blocNo + "-" + parcelNo + "-" + cropNo);
+        if (m_year == "2019") {
+            return (idUnic + "-" + sirsupCod + "-" + blocNo + "-" + parcelNo + "-" + cropNo);
+        } else {
+            return (sirsupCod + "-" + blocNo + "-" + parcelNo + "-" + cropNo + "-" + idUnic);
+        }
     }
 }
 
