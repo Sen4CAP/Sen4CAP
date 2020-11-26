@@ -282,24 +282,10 @@ private:
         using namespace std::placeholders;
         std::function<void(const AttributeEntry&)> f = std::bind(&LPISDataSelection::ProcessFeature, this, _1);
         m_bFirstFeature = true;
-        m_pGSAAAttrsTablesReader->ExtractAttributes(f);
-/*
-        otb::ogr::DataSource::Pointer source = otb::ogr::DataSource::New(
-            inShpFile, otb::ogr::DataSource::Modes::Read);
-        for (otb::ogr::DataSource::const_iterator lb=source->begin(), le=source->end(); lb != le; ++lb)
-        {
-            otb::ogr::Layer const& inputLayer = *lb;
-            otb::ogr::Layer::const_iterator featIt = inputLayer.begin();
-
-            // Initialize any indexes from the first feature
-            m_pCountryInfos->InitializeIndexes(featIt->ogr());
-
-            for(; featIt!=inputLayer.end(); ++featIt)
-            {
-                ProcessFeature(*featIt);
-            }
+        if (!m_pGSAAAttrsTablesReader->ExtractAttributes(f)) {
+            otbAppLogFATAL(<<"Cannot extract attributes from provided input file " << inShpFile);
         }
-*/
+
         otbAppLogINFO("Extraction DONE!");
 
         CopyToTargetFolder(outFileName);
