@@ -409,16 +409,17 @@ void LaiRetrievalHandlerL3BNew::SubmitEndOfLaiTask(EventProcessingContext &ctx,
                                                 const JobSubmittedEvent &event,
                                                 const QList<TaskToSubmit> &allTasksList) {
     // add the end of lai job that will perform the cleanup
-    QList<std::reference_wrapper<const TaskToSubmit>> prdFormatterTasksListRef;
+    QList<std::reference_wrapper<const TaskToSubmit>> endOfJobParents;
     for(const TaskToSubmit &task: allTasksList) {
-        if(task.moduleName == "lai-processor-product-formatter") {
-            prdFormatterTasksListRef.append(task);
+        if(task.moduleName == "lai-processor-product-formatter" ||
+                task.moduleName == "files-remover") {
+            endOfJobParents.append(task);
         }
     }
     // we add a task in order to wait for all product formatter to finish.
     // This will allow us to mark the job as finished and to remove the job folder
     TaskToSubmit endOfJobDummyTask{"end-of-job", {}};
-    endOfJobDummyTask.parentTasks.append(prdFormatterTasksListRef);
+    endOfJobDummyTask.parentTasks.append(endOfJobParents);
     SubmitTasks(ctx, event.jobId, {endOfJobDummyTask});
     ctx.SubmitSteps({endOfJobDummyTask.CreateStep("EndOfJob", QStringList())});
 
