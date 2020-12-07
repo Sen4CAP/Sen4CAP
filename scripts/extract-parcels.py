@@ -142,7 +142,7 @@ def extract_lut(config, args, lut_table):
         user=config.user,
         password=config.password,
     ) as conn:
-        q = 'select ctnuml4a as "CTnumL4A", ctl4a as "CTL4A" from {}'
+        q = 'select distinct ctnuml4a as "CTnumL4A", ctl4a as "CTL4A" from {}'
 
         with conn.cursor() as cursor:
             output = args.output_lut
