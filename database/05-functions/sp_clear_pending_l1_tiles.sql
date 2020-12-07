@@ -9,7 +9,10 @@ begin
 
     delete
     from l1_tile_history
-    where status_id = 1; -- processing
+    using downloader_history
+    where downloader_history.id = l1_tile_history.id
+      and l1_tile_history.status_id = 1 -- processing
+      and downloader_history.satellite_id in (1, 2); -- sentinel2, landsat8
 
     update downloader_history
     set status_id = 2 -- downloaded

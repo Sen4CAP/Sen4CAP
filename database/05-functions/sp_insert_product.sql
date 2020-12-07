@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION sp_insert_product(
     _created_timestamp timestamp with time zone,
     _name character varying,
     _quicklook_image character varying,
-    _footprint geography,
+    _geom geometry,
     _orbit_id integer,
     _tiles json,
     _orbit_type_id smallint DEFAULT NULL::smallint,
@@ -22,10 +22,7 @@ BEGIN
         full_path = _full_path,
         created_timestamp = _created_timestamp,
         quicklook_image = _quicklook_image,
-        footprint = (SELECT '(' || string_agg(REPLACE(replace(ST_AsText(geom) :: text, 'POINT', ''), ' ', ','), ',') || ')'
-                     from ST_DumpPoints(ST_Envelope(_footprint :: geometry))
-                     WHERE path[2] IN (1, 3)) :: POLYGON,
-        geog = _footprint,
+        geom = _geom,
         tiles = array(select tile :: character varying from json_array_elements_text(_tiles) tile),
         is_archived = FALSE
     WHERE product_type_id = _product_type_id
@@ -47,8 +44,7 @@ BEGIN
             created_timestamp,
             "name",
             quicklook_image,
-            footprint,
-            geog,
+            geom,
             orbit_id,
             tiles,
             orbit_type_id,
@@ -64,17 +60,14 @@ BEGIN
             COALESCE(_created_timestamp, now()),
             _name,
             _quicklook_image,
-            (SELECT '(' || string_agg(REPLACE(replace(ST_AsText(geom) :: text, 'POINT', ''), ' ', ','), ',') || ')'
-             from ST_DumpPoints(ST_Envelope(_footprint :: geometry))
-             WHERE path[2] IN (1, 3)) :: POLYGON,
-             _footprint,
-             _orbit_id,
+            _geom,
+            _orbit_id,
             array(select tile :: character varying from json_array_elements_text(_tiles) tile),
             _orbit_type_id,
             _downloader_history_id
         )
         RETURNING id INTO return_id;
-        
+
         INSERT INTO event(
             type_id,
             data,
@@ -90,6 +83,5 @@ BEGIN
 END;
 $BODY$
   LANGUAGE plpgsql VOLATILE;
-ALTER FUNCTION sp_insert_product(smallint, smallint, integer, smallint, integer, character varying, timestamp with time zone, character varying, character varying, geography, integer, json, smallint, integer)
-  OWNER TO admin;
+
 
