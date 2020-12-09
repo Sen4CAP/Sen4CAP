@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
 _____________________________________________________________________________
@@ -17,17 +17,17 @@ _____________________________________________________________________________
 
 """
 from __future__ import print_function
+from __future__ import absolute_import
 import argparse
 import re
-import os, errno
-from os.path import isfile, isdir, join
+import os
 import glob
 import sys
-import time, datetime
+import time
+import datetime
 import Queue
 from osgeo import ogr
-from sen2agri_common_db import *
-from threading import Thread
+#from sen2agri_common_db import *
 import threading
 from bs4 import BeautifulSoup as Soup
 import zipfile
@@ -37,31 +37,94 @@ import ntpath
 from lxml import etree
 import random
 import psycopg2
-import psycopg2.errorcodes
 from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
+import grp
+import shutil
+import subprocess
+from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, manage_log_file, remove_dir_content
+from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
+from l2a_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
+from l2a_commons import DEBUG, MAJA_LOG_DIR, MAJA_LOG_FILE_NAME, SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME
+from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 
 MIN_VALID_PIXELS_THRESHOLD = 10.0
 MAX_CLOUD_COVERAGE = 90.0
-SEN2COR_LOG_DIR = "/tmp/"
-SEN2COR_LOG_FILE_NAME = "sen2cor.log"
-MAJA_LOG_DIR = "/tmp/"
-MAJA_LOG_FILE_NAME = "maja.log"
 LAUCHER_LOG_DIR = "/tmp/"
 LAUCHER_LOG_FILE_NAME = "l2a_launcher.log"
 ARCHIVES_DIR_NAME = "archives"
 SQL_MAX_NB_RETRIES = 3
-LANDSAT_ID = int(2)
-MACCS_OUTPUT_FORMAT = int(1)
-THEIA_MUSCATE_OUTPUT_FORMAT = int(2)
-SEN2COR_OUTPUT_FORMAT = int(3)
 MAJA_CONFIGURATION_FILE_NAME = "UserConfiguration"
+
+class Database(object):
+    def __init__(self, log_file=None):
+        self.server_ip = ""
+        self.database_name = ""
+        self.user = ""
+        self.password = ""
+        self.is_connected = False;
+        self.log_file = log_file
+
+    def database_connect(self):
+        if self.is_connected:
+            print("{}: Database is already connected...".format(threading.currentThread().getName()))
+            return True
+        connectString = "dbname='{}' user='{}' host='{}' password='{}'".format(self.database_name, self.user, self.server_ip, self.password)
+        try:
+            self.conn = psycopg2.connect(connectString)
+            self.cursor = self.conn.cursor()
+            self.is_connected = True
+        except:
+            print("Unable to connect to the database")
+            exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
+            # Exit the script and print an error telling what happened.
+            print("Database connection failed!\n ->{}".format(exceptionValue))
+            self.is_connected = False
+            return False
+        return True
+
+    def database_disconnect(self):
+        if self.conn:
+            self.conn.close()
+            self.is_connected = False
+
+    def loadConfig(self, configFile):
+        try:
+            with open(configFile, 'r') as config:
+                found_section = False
+                for line in config:
+                    line = line.strip(" \n\t\r")
+                    if found_section and line.startswith('['):
+                        break
+                    elif found_section:
+                        elements = line.split('=')
+                        if len(elements) == 2:
+                            if elements[0].lower() == "hostname":
+                                self.host = elements[1]
+                            elif elements[0].lower() == "databasename":
+                                self.database_name = elements[1]
+                            elif elements[0].lower() == "username":
+                                self.user = elements[1]
+                            elif elements[0].lower() == "password":
+                                self.password = elements[1]
+                            else:
+                                print("Unkown key for [Database] section")
+                        else:
+                            print("Error in config file, found more than on keys, line: {}".format(line))
+                    elif line == "[Database]":
+                        found_section = True
+        except:
+            print("Error in opening the config file ".format(str(configFile)))
+            return False
+        if len(self.host) <= 0 or len(self.database_name) <= 0:
+            return False
+        return True
 
 
 class ProcessingContext(object):
     def __init__(self):
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.output_path = {"default": ""}
-        self.srtm_path = {"default": ""}
+        self.dem_path = {"default": ""}
         self.swbd_path = {"default": ""}
         self.maja_launcher = {"default": ""}
         self.working_dir = {"default": ""}
@@ -87,9 +150,9 @@ class ProcessingContext(object):
                     self.implementation["default"] = value
             elif parameter == "processor.l2a.srtm-path":
                 if site is not None:
-                    self.srtm_path[site] = value
+                    self.dem_path[site] = value
                 else:
-                    self.srtm_path["default"] = value
+                    self.dem_path["default"] = value
             elif parameter == "processor.l2a.swbd-path":
                 if site is not None:
                     self.swbd_path[site] = value
@@ -111,23 +174,23 @@ class ProcessingContext(object):
                 else:
                     self.num_workers["default"] = int(value)
             elif parameter == "processor.l2a.optical.cog-tiffs":
-                cogTiffs = value
-                if site is not None:
-                    self.cogTiffs[site] = cogTiffs == "1" or cogTiffs.lower() == "true"
+                if (value == "1") or (value.lower() == "true"): 
+                    cogTiffs = True
                 else:
-                    self.cogTiffs["default"] = (
-                        cogTiffs == "1" or cogTiffs.lower() == "true"
-                    )
+                    cogTiffs = False
+                if site is not None:
+                    self.cogTiffs[site] = cogTiffs 
+                else:
+                    self.cogTiffs["default"] = cogTiffs
             elif parameter == "processor.l2a.optical.compress-tiffs":
-                compressTiffs = value
-                if site is not None:
-                    self.cogTiffs[site] = (
-                        compressTiffs == "1" or compressTiffs.lower() == "true"
-                    )
+                if (value == "1") or (value.lower() == "true"): 
+                    compressTiffs = True
                 else:
-                    self.cogTiffs["default"] = (
-                        compressTiffs == "1" or compressTiffs.lower() == "true"
-                    )
+                    compressTiffs = False
+                if site is not None:
+                    self.compressTiffs[site] = compressTiffs
+                else:
+                    self.compressTiffs["default"] = compressTiffs
             elif parameter == "processor.l2a.maja.gipp-path":
                 if site is not None:
                     self.maja_gipp[site] = value
@@ -139,25 +202,23 @@ class ProcessingContext(object):
                 else:
                     self.maja_launcher["default"] = value
             elif parameter == "processor.l2a.maja.remove-fre":
-                removeFreFiles = value
-                if site is not None:
-                    self.removeFreFiles[site] = (
-                        removeFreFiles == "1" or removeFreFiles.lower() == "true"
-                    )
+                if (value == "1") or (value.lower() == "true"): 
+                    removeFreFiles = True
                 else:
-                    self.removeFreFiles["default"] = (
-                        removeFreFiles == "1" or removeFreFiles.lower() == "true"
-                    )
+                    removeFreFiles = False
+                if site is not None:
+                    self.removeFreFiles[site] = removeFreFiles
+                else:
+                    self.removeFreFiles["default"] = removeFreFiles
             elif parameter == "processor.l2a.maja.remove-sre":
-                removeSreFiles = value
-                if site is not None:
-                    self.removeSreFiles[site] = (
-                        removeSreFiles == "1" or removeSreFiles.lower() == "true"
-                    )
+                if (value == "1") or (value.lower() == "true"): 
+                    removeSreFiles = True
                 else:
-                    self.removeSreFiles["default"] = (
-                        removeSreFiles == "1" or removeSreFiles.lower() == "true"
-                    )
+                    removeSreFiles = False
+                if site is not None:
+                    self.removeSreFiles[site] = removeSreFiles
+                else:
+                    self.removeSreFiles["default"] = removeSreFiles
             elif parameter == "processor.l2a.sen2cor.gipp-path":
                 if site is not None:
                     self.sen2cor_gipp[site] = value
@@ -185,10 +246,10 @@ class ProcessingContext(object):
             site_context.base_output_path = site_context.output_path.replace(
                 "{processor}", "l2a"
             )
-        if site_id in self.srtm_path:
-            site_context.srtm_path = self.srtm_path[site_id]
+        if site_id in self.dem_path:
+            site_context.dem_path = self.dem_path[site_id]
         else:
-            site_context.srtm_path = self.srtm_path["default"]
+            site_context.dem_path = self.dem_path["default"]
         if site_id in self.swbd_path:
             site_context.swbd_path = self.swbd_path[site_id]
         else:
@@ -242,7 +303,7 @@ class SiteContext(object):
     def __init__(self):
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.output_path = ""
-        self.srtm_path = ""
+        self.dem_path = ""
         self.swbd_path = ""
         self.maja_launcher = ""
         self.working_dir = ""
@@ -258,21 +319,6 @@ class SiteContext(object):
         self.maja_conf = ""
 
     def is_valid(self):
-        if not os.path.isfile(self.maja_launcher):
-            print(
-                "(launcher err) Invalid processing context maja_launcher: {}".format(
-                    self.maja_launcher
-                )
-            )
-            log(
-                LAUCHER_LOG_DIR,
-                "(launcher err) Invalid processing context maja_launcher: {}".format(
-                    self.maja_launcher
-                ),
-                LAUCHER_LOG_FILE_NAME,
-            )
-            return False
-
         if len(self.output_path) == 0:
             print(
                 "(launcher err) Invalid processing context output_path: {}.".format(
@@ -318,16 +364,16 @@ class SiteContext(object):
             )
             return False
 
-        if not os.path.isdir(self.srtm_path):
+        if not os.path.isdir(self.dem_path):
             print(
-                "(launcher err) Invalid processing context srtm_path: {}".format(
-                    self.srtm_path
+                "(launcher err) Invalid processing context dem_path: {}".format(
+                    self.dem_path
                 )
             )
             log(
                 LAUCHER_LOG_DIR,
-                "(launcher err) Invalid processing context srtm_path: {}".format(
-                    self.srtm_path
+                "(launcher err) Invalid processing context dem_path: {}".format(
+                    self.dem_path
                 ),
                 LAUCHER_LOG_FILE_NAME,
             )
@@ -418,7 +464,7 @@ class SiteContext(object):
 
 class MajaContext(object):
     def __init__(self, site_context, worker_id):
-        self.dem_path = site_context.srtm_path
+        self.dem_path = site_context.dem_path
         self.working_dir = site_context.working_dir
         self.processor_launch_path = site_context.maja_launcher
         self.swbd_path = site_context.swbd_path
@@ -430,7 +476,6 @@ class MajaContext(object):
         self.removeSreFiles = site_context.removeSreFiles
         self.compressTiffs = site_context.compressTiffs
         self.cogTiffs = site_context.cogTiffs
-        self.srtm_path = site_context.srtm_path
         self.maja_launcher = site_context.maja_launcher
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.conf = site_context.maja_conf
@@ -438,7 +483,7 @@ class MajaContext(object):
 
 class Sen2CorContext(object):
     def __init__(self, processing_context, worker_id):
-        self.dem_path = processing_context.srtm_path
+        self.dem_path = processing_context.dem_path
         self.working_dir = processing_context.working_dir
         self.processor_launch_path = processing_context.maja_launcher
         self.gips_path = processing_context.sen2cor_gipp
@@ -447,7 +492,6 @@ class Sen2CorContext(object):
         self.processor_log_file = SEN2COR_LOG_FILE_NAME
         self.compressTiffs = processing_context.compressTiffs
         self.cogTiffs = processing_context.cogTiffs
-        self.srtm_path = processing_context.srtm_path
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -562,7 +606,7 @@ class MsgToWorker(object):
         self.site_context = site_context
 
 
-class L2aWorker(Thread):
+class L2aWorker(threading.Thread):
     def __init__(self, worker_id, master_q):
         super(L2aWorker, self).__init__()
         self.worker_id = worker_id
@@ -652,7 +696,7 @@ class L2aWorker(Thread):
             )
         )
 
-        if tile.satellite_id == LANDSAT_ID:
+        if tile.satellite_id == LANDSAT8_SATELLITE_ID:
             # only MAJA can process L8 images
             maja_context = MajaContext(site_context, self.worker_id)
             maja = Maja(maja_context, tile)
@@ -1104,7 +1148,7 @@ class L2aProcessor(object):
                 create_recursive_dirs(dst)
             os.rename(self.l2a.output_path, self.l2a.destination_path)
         except Exception as e:
-            self.update_rejection_reason(" Could not copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e))
+            self.update_rejection_reason(" Can NOT copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e))
 
 class Maja(L2aProcessor):
     def __init__(self, processor_context, input_context):
@@ -1116,11 +1160,11 @@ class Maja(L2aProcessor):
         wgs84_extent_list = []
         tile_img = ""
 
-        if self.l2a.output_format == MACCS_OUTPUT_FORMAT:
+        if self.l2a.output_format == MACCS_PROCESSOR_OUTPUT_FORMAT:
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
-                fre_tif_pattern = "/**/*_FRE_R1.DBL.TIF"
+                footprint_tif_pattern = "**/*_R1.DBL.TIF"
             elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
-                fre_tif_pattern = "/**/*_FRE.DBL.TIF"
+                footprint_tif_pattern = "**/*.DBL.TIF"
             else:
                 self.update_rejection_reason(
                     "Can NOT create the footprint, invalid satelite id."
@@ -1128,7 +1172,7 @@ class Maja(L2aProcessor):
                 self.l2a_log("Can NOT create the footprint, invalid satelite id.")
                 return False
         elif self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
-            fre_tif_pattern = "/**/*_FRE_B2.tif"
+            footprint_tif_pattern = "**/*_B2.tif"
         else:
             self.update_rejection_reason(
                     "Can NOT create the footprint, invalid output format."
@@ -1136,11 +1180,8 @@ class Maja(L2aProcessor):
             self.l2a_log("Can NOT create the footprint, invalid output format.")
             return False
 
-        if self.l2a.output_path.endswith("/"):
-            fre_tif_path = self.l2a.output_path[:-1] + fre_tif_pattern
-        else:
-            fre_tif_path = self.l2a.output_path + fre_tif_pattern
-        tile_img = glob.glob(fre_tif_path)
+        footprint_tif_path = os.path.join(self.l2a.output_path, footprint_tif_pattern)
+        tile_img = glob.glob(footprint_tif_path)
 
         if len(tile_img) > 0:
             wgs84_extent_list.append(get_footprint(tile_img[0])[0])
@@ -1205,8 +1246,7 @@ class Maja(L2aProcessor):
             maja_log_path = os.path.join(self.l2a.output_path,"maja.log")
             if os.path.isfile(maja_log_path):
                 with open(maja_log_path) as log_file:
-                    log_contents = log_file.readlines()
-                    for line in log_contents:
+                    for line in log_file:
                         res = re.findall(r"Cloud Rate on the Product : (\d*[.]?\d+)",line)
                         if len(res) == 1:
                             self.l2a.cloud_coverage_assessment = float(res[0])
@@ -1298,7 +1338,7 @@ class Maja(L2aProcessor):
 
     def create_mosaic(self):
         mosaic = ""
-        if self.l2a.output_format == MACCS_OUTPUT_FORMAT:
+        if self.l2a.output_format == MACCS_PROCESSOR_OUTPUT_FORMAT:
             qkl_pattern = "*DBL.JPG"
         elif self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
             qkl_pattern = "*QKL*.jpg"
@@ -1398,11 +1438,11 @@ class Maja(L2aProcessor):
             self.update_rejection_reason("Can NOT find ATB files.")
             self.l2a_log("Can NOT find ATB files.")
             return False
-        if fre_files_count == 0:
+        if (fre_files_count == 0) and (self.context.removeFreFiles == False):
             self.update_rejection_reason("Can NOT find FRE files.")
             self.l2a_log("Can NOT find FRE files.")
             return False
-        if sre_files_count == 0:
+        if (sre_files_count == 0) and (self.context.removeSreFiles == False):
             self.update_rejection_reason("Can NOT find SRE files.")
             self.l2a_log("Can NOT find SRE files.")
             return False
@@ -1439,7 +1479,7 @@ class Maja(L2aProcessor):
         maccs_hdr_file_path = os.path.join(self.l2a.output_path, maccs_hdr_file_pattern)
         maccs_hdr_file = glob.glob(maccs_hdr_file_path)
         if len(maccs_dbl_dir) >= 1 and len(maccs_hdr_file) >= 1:
-            self.l2a.output_format = MACCS_OUTPUT_FORMAT
+            self.l2a.output_format = MACCS_PROCESSOR_OUTPUT_FORMAT
 
         # check for THEIA/MUSCATE format
         theia_muscate_dir_pattern = "*_L2A_*"
@@ -1475,7 +1515,7 @@ class Maja(L2aProcessor):
         #determine the l2a product format
         self.get_output_format()
         #based on the output format determine l2a product name, product_path and tile
-        if self.l2a.output_format == MACCS_OUTPUT_FORMAT:
+        if self.l2a.output_format == MACCS_PROCESSOR_OUTPUT_FORMAT:
             tile_dir_list_pattern = "*.DBL.DIR"
             tile_dir_list_path = os.path.join(
                 self.l2a.output_path, tile_dir_list_pattern
@@ -1534,31 +1574,69 @@ class Maja(L2aProcessor):
             prev_l2a_tiles.append(self.lin.tile_id)
             prev_l2a_tiles_paths.append(self.lin.previous_l2a_path)
 
+        script_command = []
+        #docker run
+        script_command.append("docker")
+        script_command.append("run")
+        script_command.append("-v")
+        script_command.append("/var/run/docker.sock:/var/run/docker.sock")
+        script_command.append("--rm")
+        #tmp not commented it
+        script_command.append("-it")
+        script_command.append("-u")
+        script_command.append("{}:{}".format(os.getuid(), os.getgid()))
+        script_command.append("--group-add")
+        script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
+        maja_general_log_path = os.path.join(MAJA_LOG_DIR, MAJA_LOG_FILE_NAME)
+        script_command.append("-v")
+        script_command.append("{}:{}".format(maja_general_log_path, maja_general_log_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.context.swbd_path, self.context.swbd_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.context.conf, self.context.conf))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.context.gips_path, self.context.gips_path))
+        if len(prev_l2a_tiles_paths) > 0:
+            for path in prev_l2a_tiles_paths:
+                script_command.append("-v")
+                script_command.append("{}:{}".format(path, path))  
+
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.lin.path, self.lin.path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
+        script_command.append("--name")
+        script_command.append("l2a_processors_{}".format(self.lin.product_id))
+        script_command.append("l2a_processors")
+
         script_name = "maja.py"
-        script_path = os.path.join(self.context.base_abs_path, script_name)
-        script_command = [
-            script_path,
-            "--srtm",
-            self.context.srtm_path,
-            "--swbd",
-            self.context.swbd_path,
-            "--conf",
-            self.context.conf,
-            "--processes-number-dem",
-            "1",
-            "--processes-number-maccs",
-            "1",
-            "--gipp-dir",
-            self.context.gips_path,
-            "--working-dir",
-            self.context.working_dir,
-            "--maccs-launcher",
-            self.context.maja_launcher,
-            "--delete-temp",
-            "True",
-            self.lin.path,
-            self.l2a.output_path,
-        ]
+        script_path = os.path.join("/usr/share/l2a_processors/", script_name)
+        script_command.append(script_path)
+        script_command.append("--dem")
+        script_command.append(self.context.dem_path)
+        script_command.append("--swbd")
+        script_command.append(self.context.swbd_path)
+        script_command.append("--conf")
+        script_command.append(self.context.conf)
+        script_command.append("--processes-number-dem")
+        script_command.append("1")
+        script_command.append("--processes-number-maccs")
+        script_command.append("1")
+        script_command.append("--gipp-dir")
+        script_command.append(self.context.gips_path)
+        script_command.append("--working-dir")
+        script_command.append(self.context.working_dir)
+        script_command.append("--maccs-launcher")
+        script_command.append(self.context.maja_launcher)
+        script_command.append("--delete-temp")
+        script_command.append("--product-id")
+        script_command.append("{}".format(self.lin.product_id))
+        script_command.append(self.lin.path)
+        script_command.append(self.l2a.output_path)
         if len(self.lin.tile_id) > 0:
             script_command.append("--tiles-to-process")
             tiles = []
@@ -1569,7 +1647,19 @@ class Maja(L2aProcessor):
             script_command.append("--prev-l2a-tiles")
             script_command += prev_l2a_tiles
             script_command.append("--prev-l2a-products-paths")
-            script_command += prev_l2a_tiles_paths  
+            script_command += prev_l2a_tiles_paths
+
+        if self.context.removeSreFiles:
+            script_command.append("--removeSreFiles")
+
+        if self.context.removeFreFiles:
+            script_command.append("--removeFreFiles")
+
+        if self.context.compressTiffs:
+            script_command.append("--compressTiffs")
+
+        if self.context.cogTiffs:
+            script_command.append("--cogTiffs")
 
         majalog_path = os.path.join(self.l2a.output_path,"maja.log")
         majalog_file = open(majalog_path, "w")
@@ -1579,6 +1669,7 @@ class Maja(L2aProcessor):
         self.l2a_log("Running command: {}".format(command_string))
         print("Running Maja, console output can be found at {}".format(majalog_path))
         command_return = subprocess.call(script_command, stdout = majalog_file, stderr = majalog_file)
+        #command_return = subprocess.call(script_command)
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -1591,65 +1682,9 @@ class Maja(L2aProcessor):
             )
             return False
 
-    def postprocess(self):
-        #remove and compress sre/fre and transform to cog/compressed tiffs
-        for root, dirnames, filenames in os.walk(self.l2a.output_path):
-            for filename in filenames:
-                if filename.endswith((".TIF", ".tif")):
-                    tifFilePath = os.path.join(root, filename)
-                    print("Post-processing {}".format(filename))
-                    if self.context.removeSreFiles:
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*SRE.*\.DBL\.TIF", "SRE"
-                        )
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*_SRE_B.*\.tif", "SRE"
-                        )
-                    elif self.context.removeFreFiles:
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*FRE.*\.DBL\.TIF", "FRE"
-                        )
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*_FRE_B.*\.tif", "FRE"
-                        )
-                    if self.context.compressTiffs or self.context.cogTiffs:
-                        optgtiffArgs = ""
-                        if self.context.compressTiffs:
-                            optgtiffArgs += " --compress"
-                            optgtiffArgs += " DEFLATE"
-                        else:
-                            optgtiffArgs += " --no-compress"
-
-                        if self.context.cogTiffs:
-                            isMask = re.match(r".*_((MSK)|(QLT))_*.\.DBL\.TIF", filename)
-                            if isMask is None:
-                                # check for MAJA mask rasters
-                                isMask = re.match(
-                                    r".*_(CLM|MG2|EDG|DFP)_.*\.tif", filename
-                                )
-                            if isMask is not None:
-                                optgtiffArgs += " --resampler"
-                                optgtiffArgs += " nearest"
-                            else:
-                                optgtiffArgs += " --resampler"
-                                optgtiffArgs += " average"
-                            optgtiffArgs += " --overviews"
-                            optgtiffArgs += " --tiled"
-                        else:
-                            optgtiffArgs += " --no-overviews"
-                            optgtiffArgs += " --strippped"
-                        optgtiffArgs += " "
-                        optgtiffArgs += tifFilePath
-                        print(
-                            "Running optimize_gtiff.py with params {}".format(
-                                optgtiffArgs
-                            )
-                        )
-                        os.system("optimize_gtiff.py" + optgtiffArgs)
 
     def manage_prods_status(
-        self, preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
-    ):
+        self, preprocess_succesful, process_succesful, l2a_ok):
         #if the following the messages are encountered within the rejection reasons the l2a product should not be processed again
         maja_text_to_stop_retrying = [
             "The number of cloudy pixel is too high",
@@ -1663,7 +1698,6 @@ class Maja(L2aProcessor):
             (preprocess_succesful == True)
             and (process_succesful == True)
             and (l2a_ok == True)
-            and (postprocess_succesful == True)
         ):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
             self.move_to_destination()
@@ -1712,20 +1746,15 @@ class Maja(L2aProcessor):
         )
         self.l2a_log("Valid L2a product = {}".format(l2a_ok))
 
-        # postprocessing
-        if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
-            self.postprocess()
-            postprocess_succesful = True
-        print(
-            "\n(launcher info) <worker {}>: Successful post-processing = {}".format(
-                self.context.worker_id, postprocess_succesful
-            )
-        )
-        self.l2a_log("Successful post-processing = {}".format(postprocess_succesful))
+        #post-processing
+        if l2a_ok and self.get_l2a_footprint():
+            print(
+                "\n(launcher info) <worker {}>: Footprint computed: {}".format(
+                    self.context.worker_id, self.l2a.footprint)
+                )
+            self.l2a_log("Footprint computed: {}".format(self.l2a.footprint))
 
-        self.manage_prods_status(
-            preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
-        )
+        self.manage_prods_status(preprocess_succesful, process_succesful, l2a_ok)
         return self.lin, self.l2a
 
 
@@ -1912,20 +1941,72 @@ class Sen2Cor(L2aProcessor):
         self.l2a.name = l2a_product_name
         self.l2a.product_path = os.path.join(self.l2a.output_path, self.l2a.name)
         self.l2a.acquisition_date = acquisition_date
-        self.l2a.output_format = SEN2COR_OUTPUT_FORMAT
+        self.l2a.output_format = SEN2COR_PROCESSOR_OUTPUT_FORMAT
         self.l2a.processed_tiles.append(self.lin.tile_id)
         return True
 
     def run_script(self):
+        gipp_l2a_path = os.path.join(self.context.gips_path, "L2A_GIPP.xml")
+        lc_snow_cond_path = os.path.join(
+            self.context.gips_path, "ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
+        )
+        lc_lccs_map_path = os.path.join(
+            self.context.gips_path, "ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
+        )
+        lc_wb_map_path = os.path.join(
+            self.context.gips_path, "ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
+        )
+        wrk_dir = os.path.join(self.context.working_dir, self.l2a.basename)
+        if not os.path.exists(wrk_dir):
+            if create_recursive_dirs(wrk_dir) == False:
+                self.update_rejection_reason(
+                    "Can NOT create wrk dir {}".format(wrk_dir)
+                )
+                self.l2a_log("Can NOT create wrk dir {}".format(wrk_dir))
+                return False
 
         script_command = []
+        #docker run
+        script_command.append("docker")
+        script_command.append("run")
+        script_command.append("-v")
+        script_command.append("/var/run/docker.sock:/var/run/docker.sock")
+        script_command.append("--rm")
+        #tmp not commented it
+        script_command.append("-it")
+        script_command.append("-u")
+        script_command.append("{}:{}".format(os.getuid(), os.getgid()))
+        script_command.append("--group-add")
+        script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
+        sen2cor_general_log_path = os.path.join(SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME)
+        script_command.append("-v")
+        script_command.append("{}:{}".format(sen2cor_general_log_path, sen2cor_general_log_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(gipp_l2a_path, gipp_l2a_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(lc_snow_cond_path, lc_snow_cond_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(lc_lccs_map_path, lc_lccs_map_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(lc_wb_map_path, lc_wb_map_path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(wrk_dir, wrk_dir))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.lin.path, self.lin.path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
+        script_command.append("--name")
+        script_command.append("l2a_processors_{}".format(self.lin.product_id))
+        script_command.append("l2a_processors")
+        #actual script command
         script_name = "sen2cor.py"
-        script_path = os.path.join(self.context.base_abs_path, script_name)
+        script_path = os.path.join("/usr/share/l2a_processors", script_name)
         script_command.append(script_path)
         script_command.append("--dem_path")
         script_command.append(self.context.dem_path)
 
-        gipp_l2a_path = os.path.join(self.context.gips_path, "L2A_GIPP.xml")
         if os.path.isfile(gipp_l2a_path):
             script_command.append("--GIP_L2A")
             script_command.append(gipp_l2a_path)
@@ -1936,9 +2017,6 @@ class Sen2Cor(L2aProcessor):
                 )
             )
 
-        lc_snow_cond_path = os.path.join(
-            self.context.gips_path, "ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
-        )
         if os.path.isdir(lc_snow_cond_path):
             script_command.append("--lc_snow_cond_path")
             script_command.append(lc_snow_cond_path)
@@ -1949,9 +2027,6 @@ class Sen2Cor(L2aProcessor):
                 )
             )
 
-        lc_lccs_map_path = os.path.join(
-            self.context.gips_path, "ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
-        )
         if os.path.isfile(lc_lccs_map_path):
             script_command.append("--lc_lccs_map_path")
             script_command.append(lc_lccs_map_path)
@@ -1962,9 +2037,6 @@ class Sen2Cor(L2aProcessor):
                 )
             )
 
-        lc_wb_map_path = os.path.join(
-            self.context.gips_path, "ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
-        )
         if os.path.isfile(lc_wb_map_path):
             script_command.append("--lc_wb_map_path")
             script_command.append(lc_wb_map_path)
@@ -1975,14 +2047,6 @@ class Sen2Cor(L2aProcessor):
                 )
             )
 
-        wrk_dir = os.path.join(self.context.working_dir, self.l2a.basename)
-        if not os.path.exists(wrk_dir):
-            if create_recursive_dirs(wrk_dir) == False:
-                self.update_rejection_reason(
-                    "Can NOT create wrk dir {}".format(wrk_dir)
-                )
-                self.l2a_log("Can NOT create wrk dir {}".format(wrk_dir))
-                return False
         script_command.append("--working_dir")
         script_command.append(wrk_dir)
         script_command.append("--input_dir")
@@ -2004,7 +2068,10 @@ class Sen2Cor(L2aProcessor):
 
         sen2corlog_path = os.path.join(self.l2a.output_path,"sen2cor.log")
         sen2corlog_file = open(sen2corlog_path, "w")
-        self.l2a_log("Running command: {}".format(script_command))
+        cmd_str =""
+        for elem in script_command:
+            cmd_str = cmd_str + " " + elem
+        self.l2a_log("Running command: {}".format(cmd_str))
         print("Running Sen2Cor, console output can be found at {}".format(sen2corlog_path))
         command_return = subprocess.call(script_command, stdout = sen2corlog_file, stderr = sen2corlog_file)
 
@@ -2273,6 +2340,8 @@ def db_postrun_update(input_prod, l2a_prod):
     full_path = l2a_prod.destination_path
     product_name = l2a_prod.name
     footprint = l2a_prod.footprint
+    #tmp
+    print("<<<<<< footprint catre bd {}".format(footprint))
     sat_id = l2a_prod.satellite_id
     acquisition_date = l2a_prod.acquisition_date
     orbit_id = l2a_prod.orbit_id
@@ -2418,16 +2487,6 @@ def db_get_site_short_name(site_id):
 
 @db_fetch
 def db_get_processing_context():
-    output_path = ""
-    gips_path = ""
-    srtm_path = ""
-    swbd_path = ""
-    maja_launcher = ""
-    working_dir = ""
-    compressTiffs = ""
-    cogTiffs = ""
-    removeSreFiles = ""
-    removeFreFiles = ""
 
     processing_context = ProcessingContext()
     products_db.cursor.execute("select * from sp_get_parameters('processor.l2a.')")
@@ -2450,31 +2509,43 @@ parser.add_argument(
     "-c", "--config", default="/etc/sen2agri/sen2agri.conf", help="configuration file"
 )
 args = parser.parse_args()
+
+#Create and manage log files
 manage_log_file(LAUCHER_LOG_DIR, LAUCHER_LOG_FILE_NAME)
+sen2corlog_path = os.path.join(SEN2COR_LOG_DIR,SEN2COR_LOG_FILE_NAME)
+if os.path.isfile(sen2corlog_path) == False:
+    with open(sen2corlog_path, "w") as log_file:
+        log_file.write("#### Creation of sen2cor log file ####")
+else:
+    manage_log_file(SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME)
+majalog_path = os.path.join(MAJA_LOG_DIR,MAJA_LOG_FILE_NAME)
+if os.path.isfile(majalog_path) == False:
+    with open(majalog_path, "w") as log_file:
+        log_file.write("#### Creation of maja log file ####")
+else:
+    manage_log_file(MAJA_LOG_DIR, MAJA_LOG_FILE_NAME)
 
 # get the db configuration from cfg file
-config = Config()
-if not config.loadConfig(args.config):
+products_db = Database()
+if not products_db.loadConfig(args.config):
     log(
         LAUCHER_LOG_DIR,
         "Could not load the config from configuration file",
         LAUCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
-# load configuration from db for maja/sen2cor processor
-products_db = L1CInfo(config.host, config.database, config.user, config.password)
 
 # get the processing context
-processing_context = db_get_processing_context()
-if processing_context is None:
+default_processing_context = db_get_processing_context()
+if default_processing_context is None:
     log(
         LAUCHER_LOG_DIR,
-        "Could not load the config from database",
+        "Could not load the processing context from database",
         LAUCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
 
-default_site_context = processing_context.get_site_context("default")
+default_site_context = default_processing_context.get_site_context("default")
 if default_site_context.is_valid() == False:
     log(LAUCHER_LOG_DIR, "Invalid processing context", LAUCHER_LOG_FILE_NAME)
     sys.exit(1)
