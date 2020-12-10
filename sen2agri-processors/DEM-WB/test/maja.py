@@ -26,19 +26,12 @@ import re
 import time, datetime
 import shutil
 from multiprocessing import Pool
-from l2a_commons import run_command, log, create_recursive_dirs, delete_file_if_match, remove_dir
+from l2a_commons import run_command, log, create_recursive_dirs, remove_dir
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT, UNKNOWN_PROCESSOR_OUTPUT_FORMAT
-from l2a_commons import default_gdal_image_name, MAJA_LOG_DIR, MAJA_LOG_FILE_NAME
+from l2a_commons import MAJA_LOG_DIR, MAJA_LOG_FILE_NAME
 import tempfile
 from bs4 import BeautifulSoup as Soup
-
-general_log_path = "/tmp/"
-general_log_filename = "maja.log"
-default_dem_image_name = "lnicola/sen2agri-dem"
-default_maja3_image_name = "lnicola/maja:3.2.2-centos-7"
-default_maja4_image_name = "lnicola/maja:4.2.1-centos-7"
-default_l8align_image_name = "lnicola/sen2agri-l8-alignment"
 
 def get_product_info(product_name):
     acquisition_date = None
@@ -435,9 +428,9 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     eucmn00_file_path = os.path.join(demmaccs_context.gipp_base_dir, "LANDSAT8/*EUCMN00*")
     eucmn00_file = glob.glob(eucmn00_file_path)
     if len(eucmn00_file) > 0:
-        cmd_array.append(default_maja3_image_name)
+        cmd_array.append(args.docker_image_maja3)
     else:
-        cmd_array.append(default_maja4_image_name)
+        cmd_array.append(args.docker_image_maja4)
 
     #actual maja command
     if demmaccs_context.maccs_address is not None:
@@ -574,7 +567,7 @@ def postprocess(working_dir):
         TIF_path = os.path.join(working_dir, "**/*.TIF")
         tif_files.extend(glob.glob(TIF_path))
         for tif in tif_files:
-            cog = tif + "_tmp"     
+            cog = tif[:-4] + "_tmp" + tif[-4:]     
             cmd = []               
             #docker run
             cmd.append("docker")
@@ -587,7 +580,7 @@ def postprocess(working_dir):
             if args.product_id:
                 cmd.append("--name")
                 cmd.append("gdal_{}".format(args.product_id))
-            cmd.append(default_gdal_image_name)
+            cmd.append(args.docker_image_gdal)
 
             #actual gdal translate command
             cmd.append("gdal_translate")
@@ -665,6 +658,31 @@ parser.add_argument("--compressTiffs", required=False, action="store_true",
                         help = "Compresses TIFF files")
 parser.add_argument("--cogTiffs", required=False, action="store_true",
                         help = "Translastes TIFF to COF")
+parser.add_argument(
+    "--docker-image-l8align",
+    required=True,
+    help="Name of the l8 align docker image.",
+)
+parser.add_argument(
+    "--docker-image-dem",
+    required=True,
+    help="Name of the dem docker image.",
+)
+parser.add_argument(
+    "--docker-image-maja3",
+    required=True,
+    help="Name of the maja docker image 3.",
+)
+parser.add_argument(
+    "--docker-image-maja4",
+    required=True,
+    help="Name of the maja docker image 4.",
+)
+parser.add_argument(
+    "--docker-image-gdal",
+    required=True,
+    help="Name of the gdal docker image.",
+)
 
 args = parser.parse_args()
 log_filename = "demmaccs.log"
@@ -674,23 +692,23 @@ if args.suffix_log_name is not None:
     suffix_log_name = args.suffix_log_name
     log_filename = "demmaccs_{}.log".format(args.suffix_log_name)
 if not create_recursive_dirs(args.output):
-    log(general_log_path, "Could not create the output directory", log_filename)
+    log(MAJA_LOG_DIR, "Could not create the output directory", log_filename)
     sys.exit(-1)
 
 if len(args.prev_l2a_tiles) != len(args.prev_l2a_products_paths):
-    log(general_log_path, "The number of previous l2a tiles is not the same as for paths for these tiles. Check args: --prev-l2-tiles and --prev-l2a-products-paths, the length should be equal", log_filename)
+    log(MAJA_LOG_DIR, "The number of previous l2a tiles is not the same as for paths for these tiles. Check args: --prev-l2-tiles and --prev-l2a-products-paths, the length should be equal", log_filename)
     sys.exit(-1)
 
-general_log_path = args.output
+MAJA_LOG_DIR = args.output
 
 if args.product_id:
     working_dir_name =  "tmp_" + args.product_id
     working_dir = os.path.join(args.working_dir, working_dir_name)
     if not create_recursive_dirs(working_dir):
-        log(general_log_path, "Could not create the temporary directory", log_filename)
+        log(MAJA_LOG_DIR, "Could not create the temporary directory", log_filename)
         sys.exit(-1)
     else:
-        log(general_log_path, "Created the working dir", log_filename)
+        log(MAJA_LOG_DIR, "Created the working dir", log_filename)
 else:
     working_dir = tempfile.mkdtemp(dir = args.working_dir)
 if working_dir.endswith("/"):
@@ -699,20 +717,20 @@ dem_working_dir = "{}_DEM_TMP".format(working_dir)
 dem_output_dir = "{}_DEM_OUT".format(working_dir)
 
 if not create_recursive_dirs(dem_output_dir):
-    log(general_log_path, "Could NOT create the output directory for DEM", log_filename)
+    log(MAJA_LOG_DIR, "Could NOT create the output directory for DEM", log_filename)
     if not remove_dir(working_dir):
-        log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
     sys.exit(-1)
 
 if not create_recursive_dirs(dem_working_dir):
-    log(general_log_path, "Could not create the working directory for DEM", log_filename)
+    log(MAJA_LOG_DIR, "Could not create the working directory for DEM", log_filename)
     if not remove_dir(working_dir):
-        log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
     sys.exit(-1)
 
-log(general_log_path,"working_dir = {}".format(working_dir), log_filename)
-log(general_log_path,"dem_working_dir = {}".format(dem_working_dir), log_filename)
-log(general_log_path,"dem_output_dir = {}".format(dem_output_dir), log_filename)
+log(MAJA_LOG_DIR,"working_dir = {}".format(working_dir), log_filename)
+log(MAJA_LOG_DIR,"dem_working_dir = {}".format(dem_working_dir), log_filename)
+log(MAJA_LOG_DIR,"dem_output_dir = {}".format(dem_output_dir), log_filename)
 
 
 general_start = time.time()
@@ -726,9 +744,9 @@ if sat_id == LANDSAT8_SATELLITE_ID:
 
     l8_align_wrk_dir = os.path.join(working_dir, "l8_align_tmp")
     if not create_recursive_dirs(l8_align_wrk_dir):
-        log(general_log_path, "Could not create the l8 align working directory.", log_filename)
+        log(MAJA_LOG_DIR, "Could not create the l8 align working directory.", log_filename)
         if not remove_dir(working_dir):
-            log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+            log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
         sys.exit(-1)
 
     cmd_array = []
@@ -747,7 +765,7 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     if args.product_id:
         cmd_array.append("--name")
         cmd_array.append("l8align_{}".format(args.product_id))
-    cmd_array.append(default_l8align_image_name)
+    cmd_array.append(args.docker_image_l8align)
 
     #actual align command
     base_l8align_path = "/usr/share/sen2agri"
@@ -764,14 +782,14 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     cmd_array.append(l8_align_wrk_dir)
     cmd_array.append("-t")
     cmd_array.append(product_name)
-    if run_command(cmd_array, general_log_path, log_filename) != 0:
-        log(general_log_path, "The LANDSAT8 product could not be aligned {}".format(args.input), log_filename)
+    if run_command(cmd_array, MAJA_LOG_DIR, log_filename) != 0:
+        log(MAJA_LOG_DIR, "The LANDSAT8 product could not be aligned {}".format(args.input), log_filename)
         if not remove_dir(working_dir):
-            log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+            log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
         sys.exit(-1)
     #the l8.align.py outputs in the working_dir directory where creates a directory which has the product name
     args.input = working_dir + "/" + product_name
-    log(general_log_path, "The LANDSAT8 product was aligned here: {}".format(args.input), log_filename)
+    log(MAJA_LOG_DIR, "The LANDSAT8 product was aligned here: {}".format(args.input), log_filename)
 
 tiles_to_process = []
 print("Creating DEMs for {}".format(args.input))
@@ -802,7 +820,7 @@ dem_command.append("{}:{}".format(dem_output_dir, dem_output_dir))
 if args.product_id:
     dem_command.append("--name")
     dem_command.append("dem_{}".format(args.product_id))
-dem_command.append(default_dem_image_name)
+dem_command.append(args.docker_image_dem)
 #dem_command.append("/bin/bash")
 dem_command.append("/usr/bin/dem.py")
 dem_command.append("--dem")
@@ -819,30 +837,30 @@ if len(tiles_to_process) > 0:
     dem_command.append("-l")
     dem_command += tiles_to_process
 
-if run_command(dem_command , general_log_path, log_filename) != 0:
-    log(general_log_path, "DEM failed", log_filename)
+if run_command(dem_command , MAJA_LOG_DIR, log_filename) != 0:
+    log(MAJA_LOG_DIR, "DEM failed", log_filename)
     if not remove_dir(working_dir):
-        log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
     sys.exit(-1)
 
-log(general_log_path, "DEM finished in: {}".format(datetime.timedelta(seconds=(time.time() - start))), log_filename)
+log(MAJA_LOG_DIR, "DEM finished in: {}".format(datetime.timedelta(seconds=(time.time() - start))), log_filename)
 
 dem_hdr_path = os.path.join(dem_output_dir, "*.HDR")
 dem_hdrs = glob.glob(dem_hdr_path)
-log(general_log_path, "DEM output directory {} has DEM hdrs = {}".format(dem_output_dir, dem_hdrs), log_filename)
+log(MAJA_LOG_DIR, "DEM output directory {} has DEM hdrs = {}".format(dem_output_dir, dem_hdrs), log_filename)
 if len(dem_hdrs) == 0:
-    log(general_log_path, "There are no hdr DEM files in {}".format(dem_output_dir), log_filename)
+    log(MAJA_LOG_DIR, "There are no hdr DEM files in {}".format(dem_output_dir), log_filename)
     if args.delete_temp:
         if not remove_dir(dem_working_dir):
-            log(general_log_path, "Couldn't remove the temp dir {}".format(dem_working_dir), log_filename)
+            log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(dem_working_dir), log_filename)
         if not remove_dir(dem_output_dir):
-            log(general_log_path, "Couldn't remove the temp dir {}".format(dem_output_dir), log_filename)
+            log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(dem_output_dir), log_filename)
         if not remove_dir(working_dir):
-            log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+            log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
     sys.exit(-1)
 
 if len(tiles_to_process) > 0 and len(tiles_to_process) != len(dem_hdrs):
-    log(general_log_path, "The number of hdr DEM files in {} is not equal with the number of the received tiles to process !!".format(dem_output_dir), log_filename)
+    log(MAJA_LOG_DIR, "The number of hdr DEM files in {} is not equal with the number of the received tiles to process !!".format(dem_output_dir), log_filename)
 demmaccs_contexts = []
 print("Creating demmaccs contexts with: input: {} | output {}".format(args.input, args.output))
 for dem_hdr in dem_hdrs:
@@ -873,22 +891,22 @@ else:
 
 ret = 0
 if len(processed_tiles) == 0:
-    log(general_log_path, "MACCS/MAJA did not processed any tiles for L1C product {}".format(args.input), log_filename)
+    log(MAJA_LOG_DIR, "MACCS/MAJA did not processed any tiles for L1C product {}".format(args.input), log_filename)
     ret = 1
 else:
-    log(general_log_path, "MACCS/MAJA processed the following tiles for L1C product {} :".format(args.input), log_filename)
-    log(general_log_path, "{}".format(processed_tiles), log_filename)
+    log(MAJA_LOG_DIR, "MACCS/MAJA processed the following tiles for L1C product {} :".format(args.input), log_filename)
+    log(MAJA_LOG_DIR, "{}".format(processed_tiles), log_filename)
 
 if args.delete_temp:
-    log(general_log_path, "Remove all the temporary files and directory", log_filename)
+    log(MAJA_LOG_DIR, "Remove all the temporary files and directory", log_filename)
     if not remove_dir(dem_working_dir):
-        log(general_log_path, "Couldn't remove the temp dir {}".format(dem_working_dir), log_filename)
+        log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(dem_working_dir), log_filename)
     if not remove_dir(dem_output_dir):
-        log(general_log_path, "Couldn't remove the temp dir {}".format(dem_output_dir), log_filename)
+        log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(dem_output_dir), log_filename)
     if not remove_dir(working_dir):
-        log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
 
-log(general_log_path, "Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), log_filename)
+log(MAJA_LOG_DIR, "Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), log_filename)
 
 sys.exit(ret)
 

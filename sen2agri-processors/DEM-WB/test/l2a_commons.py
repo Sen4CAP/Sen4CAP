@@ -53,9 +53,6 @@ DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE = 6
 MAX_LOG_FILE_SIZE = 419430400 #bytes -> 400 MB
 MAX_NUMBER_OF_KEPT_LOG_FILES = 4 #number of maximum logfiles to be kept
 
-
-default_gdal_image_name = "osgeo/gdal:ubuntu-small-3.1.2"
-
 ### OS related operations
 
 def remove_dir_content(directory):
@@ -177,12 +174,7 @@ def copy_directory(src, dest):
         print("Directory not copied. Error: {}".format(e))
         return False
     return True
-
-def delete_file_if_match(fullFilePath, fileName, regex, fileType) :
-    isMatch = re.match(regex, fileName)
-    if isMatch is not None:
-        print("Deleting {} file {}".format(fileType, fullFilePath))
-        os.remove(fullFilePath)
+    
 
 ### IMG related operations
 

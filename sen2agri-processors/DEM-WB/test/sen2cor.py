@@ -40,7 +40,6 @@ docker_lc_lccs_map_path = "/opt/Sen2Cor-02.08.00-Linux64/lib/python2.7/site-pack
 docker_lc_wb_map_path = "/opt/Sen2Cor-02.08.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
 docker_output_path = "/sen2cor/2.8/out"
 docker_wrk_path = "/sen2cor/2.8/wrk"
-default_sen2cor_image_name = "sen2cor"
 docker_L2A_path = "/sen2cor/2.8/gipp/L2A_GIPP.xml"
 docker_L2A_SC_path = "/sen2cor/2.8/gipp/L2A_CAL_SC_GIPP.xml"
 docker_L2A_AC_path = "/sen2cor/2.8/gipp/L2A_CAL_AC_GIPP.xml"
@@ -57,8 +56,6 @@ docker_of_path = "/tmp/of/"  # output files path
 def CheckInput():
     global default_wrk_dir_path
     global docker_input_path
-    global default_sen2cor_image_name
-    global default_gdal_image_name
     global default_dem_path
 
     # input_dir checks
@@ -305,14 +302,23 @@ def CheckInput():
             SEN2COR_LOG_FILE_NAME,
         )
         return False
-    else:
-        if args.gdal_img_name and (args.tif or args.cog):
-            default_gdal_image_name = args.gdal_img_name
 
     if args.local_run is False:
-        # --default_sen2cor_image_name
-        if args.s2c_img_name:
-            default_sen2cor_image_name = args.s2c_img_name
+        if args.docker_image_sen2cor is None:
+            log(
+                SEN2COR_LOG_DIR,
+                "(sen2cor err) Sen2cor docker image must be provided.",
+                SEN2COR_LOG_FILE_NAME,
+            )
+            return False
+
+        if args.docker_image_gdal is None:
+            log(
+                SEN2COR_LOG_DIR,
+                "(sen2cor err) Gdal docker image must be provided.",
+                SEN2COR_LOG_FILE_NAME,
+            )
+            return False
 
         # --dem_path checks
         if args.dem_path:
@@ -438,7 +444,6 @@ def CopyOutput(L2A_product_name):
 def RunSen2Cor():
     global default_wrk_dir_path
     global docker_input_path
-    global default_sen2cor_image_name
 
     if args.working_dir:
         wrk_dir = args.working_dir
@@ -507,6 +512,9 @@ def RunSen2Cor():
         cmd.append("--rm")
         cmd.append("-u")
         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+        sen2cor_log_path = os.path.join(SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME)
+        cmd.append("-v")
+        cmd.append("{}:{}".format(sen2cor_log_path, sen2cor_log_path))
         cmd.append("-v")
         cmd.append("{}:{}".format(os.path.abspath(default_dem_path), docker_dem_path))
         if args.lc_snow_cond_path:
@@ -577,7 +585,7 @@ def RunSen2Cor():
         if args.product_id:
             cmd.append("--name")
             cmd.append("sen2cor_{}".format(args.product_id))
-        cmd.append(default_sen2cor_image_name)
+        cmd.append(args.docker_image_sen2cor)
 
         # actual sen2cor commands
         cmd.append(docker_sen2cor_exec_path)
@@ -650,7 +658,6 @@ def RunSen2Cor():
 
 def TranslateToTif(L2A_product_name):
     global default_wrk_dir_path
-    global default_gdal_image_name
 
     if args.working_dir:
         wrk_dir = args.working_dir
@@ -682,19 +689,20 @@ def TranslateToTif(L2A_product_name):
             docker_tif_file_name = os.path.basename(jp2)[:-3] + "tif"
             docker_tif_file_path = os.path.join(docker_of_path, docker_tif_file_name)
             local_jp2_dir = os.path.dirname(jp2)
-            cmd.append("docker")
-            cmd.append("run")
-            cmd.append("--rm")
-            cmd.append("-u")
-            cmd.append("{}:{}".format(os.getuid(), os.getgid()))
-            cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(jp2), docker_jp2_file_path))
-            cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(local_jp2_dir), docker_of_path))
-            if args.product_id:
-                cmd.append("--name")
-                cmd.append("gdal_{}".format(args.product_id))
-            cmd.append(default_gdal_image_name)
+            if args.local_run == False:
+                cmd.append("docker")
+                cmd.append("run")
+                cmd.append("--rm")
+                cmd.append("-u")
+                cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+                cmd.append("-v")
+                cmd.append("{}:{}".format(os.path.abspath(jp2), docker_jp2_file_path))
+                cmd.append("-v")
+                cmd.append("{}:{}".format(os.path.abspath(local_jp2_dir), docker_of_path))
+                if args.product_id:
+                    cmd.append("--name")
+                    cmd.append("gdal_{}".format(args.product_id))
+                cmd.append(args.docker_image_gdal)
             # gdal command
             cmd.append("gdal_translate")
             if args.cog:
@@ -709,7 +717,7 @@ def TranslateToTif(L2A_product_name):
                 cmd.append("-co")
                 cmd.append("COMPRESS=DEFLATE")
             cmd.append("-co")
-            cmd.append("PREDICTOR=YES")
+            cmd.append("PREDICTOR=2")
             cmd.append(docker_jp2_file_path)
             cmd.append(docker_tif_file_path)
 
@@ -892,19 +900,20 @@ def ConvertPreviews(L2A_product_name):
             docker_jpeg_file_name = os.path.basename(jp2)[:-3] + "jpg"
             docker_jpeg_file_path = os.path.join(docker_of_path, docker_jpeg_file_name)
             local_jp2_dir = os.path.dirname(jp2)
-            cmd.append("docker")
-            cmd.append("run")
-            cmd.append("--rm")
-            cmd.append("-u")
-            cmd.append("{}:{}".format(os.getuid(), os.getgid()))
-            cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(jp2), docker_jp2_file_path))
-            cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(local_jp2_dir), docker_of_path))
-            if args.product_id:
-                cmd.append("--name")
-                cmd.append("gdal_{}".format(args.product_id))
-            cmd.append(default_gdal_image_name)
+            if args.local_run == False:
+                cmd.append("docker")
+                cmd.append("run")
+                cmd.append("--rm")
+                cmd.append("-u")
+                cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+                cmd.append("-v")
+                cmd.append("{}:{}".format(os.path.abspath(jp2), docker_jp2_file_path))
+                cmd.append("-v")
+                cmd.append("{}:{}".format(os.path.abspath(local_jp2_dir), docker_of_path))
+                if args.product_id:
+                    cmd.append("--name")
+                    cmd.append("gdal_{}".format(args.product_id))
+                cmd.append(args.docker_image_gdal)
             # gdal command
             cmd.append("gdal_translate")
             cmd.append("-of")
@@ -1199,15 +1208,15 @@ parser.add_argument(
 # docker related flags
 parser.add_argument(
     "-si",
-    "--s2c_img_name",
+    "--docker-image-sen2cor",
     required=False,
     help="Name of the sen2cor docker image (only available when -lr is False).",
 )
 parser.add_argument(
     "-gi",
-    "--gdal_img_name",
+    "--docker-image-gdal",
     required=False,
-    help="Name of the gdal docker image (only available when --tif or --cog is True).",
+    help="Name of the gdal docker image (only available when -lr is False).",
 )
 parser.add_argument(
     "-pi",

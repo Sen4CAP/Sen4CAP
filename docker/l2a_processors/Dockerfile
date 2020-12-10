@@ -31,6 +31,6 @@ RUN apt-get install -y docker-ce docker-ce-cli containerd.io
 RUN apt-get clean
 
 WORKDIR /usr/share/l2a_processors
-COPY ../../sen2agri-processors/DEM-WB/test/maja.py ./
-COPY ../../sen2agri-processors/DEM-WB/test/sen2cor.py ./
-COPY ../../sen2agri-processors/DEM-WB/test/l2a_commons.py ./
+COPY maja.py ./
+COPY sen2cor.py ./
+COPY l2a_commons.py ./

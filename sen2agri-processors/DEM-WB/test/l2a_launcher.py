@@ -54,6 +54,17 @@ LAUCHER_LOG_FILE_NAME = "l2a_launcher.log"
 ARCHIVES_DIR_NAME = "archives"
 SQL_MAX_NB_RETRIES = 3
 MAJA_CONFIGURATION_FILE_NAME = "UserConfiguration"
+DEFAULT_GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-small-3.1.2"
+DEFAULT_DEM_IMAGE_NAME = "lnicola/sen2agri-dem"
+DEFAULT_MAJA3_IMAGE_NAME = "lnicola/maja:3.2.2-centos-7"
+DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
+DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
+#tmp
+#DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor"
+DEFAULT_SEN2COR_IMAGE_NAME = "sen2cor"
+#tmp
+DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/l2a_processors"
+
 
 class Database(object):
     def __init__(self, log_file=None):
@@ -1611,7 +1622,7 @@ class Maja(L2aProcessor):
         script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
         script_command.append("--name")
         script_command.append("l2a_processors_{}".format(self.lin.product_id))
-        script_command.append("l2a_processors")
+        script_command.append(DEFAULT_L2APROCESSORS_IMAGE_NAME)
 
         script_name = "maja.py"
         script_path = os.path.join("/usr/share/l2a_processors/", script_name)
@@ -1661,6 +1672,17 @@ class Maja(L2aProcessor):
         if self.context.cogTiffs:
             script_command.append("--cogTiffs")
 
+        script_command.append("--docker-image-l8align")
+        script_command.append(DEFAULT_L8ALIGN_IMAGE_NAME)
+        script_command.append("--docker-image-dem")
+        script_command.append(DEFAULT_DEM_IMAGE_NAME)
+        script_command.append("--docker-image-maja3")
+        script_command.append(DEFAULT_MAJA3_IMAGE_NAME)
+        script_command.append("--docker-image-maja4")
+        script_command.append(DEFAULT_MAJA4_IMAGE_NAME)
+        script_command.append("--docker-image-gdal")
+        script_command.append(DEFAULT_GDAL_IMAGE_NAME)
+
         majalog_path = os.path.join(self.l2a.output_path,"maja.log")
         majalog_file = open(majalog_path, "w")
         command_string =""
@@ -1669,7 +1691,6 @@ class Maja(L2aProcessor):
         self.l2a_log("Running command: {}".format(command_string))
         print("Running Maja, console output can be found at {}".format(majalog_path))
         command_return = subprocess.call(script_command, stdout = majalog_file, stderr = majalog_file)
-        #command_return = subprocess.call(script_command)
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -1999,7 +2020,7 @@ class Sen2Cor(L2aProcessor):
         script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
         script_command.append("--name")
         script_command.append("l2a_processors_{}".format(self.lin.product_id))
-        script_command.append("l2a_processors")
+        script_command.append(DEFAULT_L2APROCESSORS_IMAGE_NAME)
         #actual script command
         script_name = "sen2cor.py"
         script_path = os.path.join("/usr/share/l2a_processors", script_name)
@@ -2061,9 +2082,13 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--tif")
         if self.context.compressTiffs:
             script_command.append("--compressTiffs")
+        script_command.append("--docker-image-sen2cor")
+        script_command.append(DEFAULT_SEN2COR_IMAGE_NAME)
+        script_command.append("--docker-image-gdal")
+        script_command.append(DEFAULT_GDAL_IMAGE_NAME)
         # tmp only for testing purposes
-        #script_command.append("--resolution")
-        #script_command.append(str(60))
+        script_command.append("--resolution")
+        script_command.append(str(60))
         # tmp
 
         sen2corlog_path = os.path.join(self.l2a.output_path,"sen2cor.log")
@@ -2340,8 +2365,6 @@ def db_postrun_update(input_prod, l2a_prod):
     full_path = l2a_prod.destination_path
     product_name = l2a_prod.name
     footprint = l2a_prod.footprint
-    #tmp
-    print("<<<<<< footprint catre bd {}".format(footprint))
     sat_id = l2a_prod.satellite_id
     acquisition_date = l2a_prod.acquisition_date
     orbit_id = l2a_prod.orbit_id
