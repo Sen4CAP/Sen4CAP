@@ -19,7 +19,7 @@ $BODY$
 				select id, name, description, row_number() over (order by description)
 				from product_type
 			    ),
-			    data(id, satellite_id, product, product_type_id, product_type,product_type_description,processor,site,full_path,quicklook_image,created_timestamp, site_coord) AS (
+			    data(id, satellite_id, product, product_type_id, product_type,product_type_description,processor,site,full_path,quicklook_image,footprint,created_timestamp, site_coord) AS (
 			    SELECT
 				P.id,
 				P.satellite_id,
@@ -31,6 +31,7 @@ $BODY$
 				S.name,
 				P.full_path,
 				P.quicklook_image,
+				P.footprint,
 				P.created_timestamp,
 				S.geog
 			    FROM product P

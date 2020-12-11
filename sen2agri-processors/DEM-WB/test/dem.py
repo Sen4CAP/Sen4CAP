@@ -16,73 +16,46 @@ _____________________________________________________________________________
 _____________________________________________________________________________
 
 """
-try:
-    import argparse
-    import datetime
-    import re
-    import glob
-    from osgeo import gdal, osr
-    import logging
-    import lxml.etree
-    from lxml.builder import E
-    import math
-    import os
-    from os.path import isdir, join
-    import pipes
-    import subprocess
-    import sys
-    from signal import signal, SIGINT, SIG_IGN
-    import time
-    from multiprocessing import Pool, TimeoutError
-except Exception as e:
-    print(e)
-
-print("Starting DEM script")
-
+from __future__ import print_function
+import argparse
+import re
+import glob
+import gdal
+import osr
+import lxml.etree
+from lxml.builder import E
+import math
+import os
+from os.path import isdir, join
+import sys
+from signal import signal, SIGINT, SIG_IGN
+from multiprocessing import Pool, TimeoutError
+from sen2agri_common_db import (
+    GetExtent,
+    ReprojectCoords,
+    create_recursive_dirs,
+    log,
+    run_command,
+)
 
 try:
     from typing import List
-except ModuleNotFoundError:
+except:
     pass
 
 
-def GetExtent(gt, cols, rows):
-    ext = []
-    xarr = [0, cols]
-    yarr = [0, rows]
-
-    for px in xarr:
-        for py in yarr:
-            x = gt[0] + px * gt[1] + py * gt[2]
-            y = gt[3] + px * gt[4] + py * gt[5]
-            ext.append([x, y])
-        yarr.reverse()
-    return ext
-
-
-def run_command(cmd_array, log_path="", log_filename="", fake_command=False):
-    start = time.time()
-    cmd_array = list(map(str, cmd_array))
-    cmd_str = " ".join(map(pipes.quote, cmd_array))
-    logging.debug("Running command: {}".format(cmd_str))
-    res = 0
-    if not fake_command:
-        try:
-            res = subprocess.call(cmd_array, shell=False)
-        except Exception as e:
-            logging.error(e)
-            return 1
-    ok = "OK"
-    nok = "NOK"
-    logging.debug("Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str))
-    return res
-
-
 def resample_dataset(src_file_name, dst_file_name, dst_spacing_x, dst_spacing_y):
+    print(
+        "{}|{}|{}|{}".format(src_file_name, dst_file_name, dst_spacing_x, dst_spacing_y)
+    )
     dataset = gdal.Open(src_file_name, gdal.gdalconst.GA_ReadOnly)
 
     src_x_size = dataset.RasterXSize
     src_y_size = dataset.RasterYSize
+
+    print(
+        "Source dataset {} of size {}x{}".format(src_file_name, src_x_size, src_y_size)
+    )
 
     src_geo_transform = dataset.GetGeoTransform()
     (ulx, uly) = (src_geo_transform[0], src_geo_transform[3])
@@ -91,8 +64,16 @@ def resample_dataset(src_file_name, dst_file_name, dst_spacing_x, dst_spacing_y)
         src_geo_transform[3] + src_geo_transform[5] * src_y_size,
     )
 
+    print("Source coordinates ({}, {})-({},{})".format(ulx, uly, lrx, lry))
+
     dst_x_size = int(round((lrx - ulx) / dst_spacing_x))
     dst_y_size = int(round((lry - uly) / dst_spacing_y))
+
+    print(
+        "Destination dataset {} of size {}x{}".format(
+            dst_file_name, dst_x_size, dst_y_size
+        )
+    )
 
     dst_geo_transform = (
         ulx,
@@ -108,6 +89,7 @@ def resample_dataset(src_file_name, dst_file_name, dst_spacing_x, dst_spacing_y)
         dst_geo_transform[0] + dst_geo_transform[1] * dst_x_size,
         dst_geo_transform[3] + dst_geo_transform[5] * dst_y_size,
     )
+    print("Destination coordinates ({}, {})-({},{})".format(ulx, uly, lrx, lry))
 
     drv = gdal.GetDriverByName("GTiff")
     dest = drv.Create(dst_file_name, dst_x_size, dst_y_size, 1, gdal.GDT_Float32)
@@ -173,6 +155,8 @@ class DemSrtm3ArcSec(DemBase):
             b_bb_x = int(math.floor((b_x + 5) / 5) * 5)
             b_bb_y = int(math.floor(b_y / 5) * 5)
 
+            print("bounding box {} {} {} {}".format(a_bb_x, a_bb_y, b_bb_x, b_bb_y))
+
             x_numbers_list = [
                 (x + 180) / 5 + 1
                 for x in range(min(a_bb_x, b_bb_x), max(a_bb_x, b_bb_x), 5)
@@ -228,6 +212,8 @@ class DemSrtm1ArcSec(DemBase):
         # type: (List[float]) -> List[str]
 
         a_x, a_y, b_x, b_y = points
+        wgs84_srs = osr.SpatialReference()
+        wgs84_srs.ImportFromEPSG(4326)
         x_l = int(math.floor(a_x))
         x_r = int(math.floor(b_x))
         y_b = int(math.floor(b_y))
@@ -291,6 +277,8 @@ class DemAsterV3(DemBase):
         # type: (List[float]) -> List[str]
 
         a_x, a_y, b_x, b_y = points
+        wgs84_srs = osr.SpatialReference()
+        wgs84_srs.ImportFromEPSG(4326)
         x_l = int(math.floor(a_x))
         x_r = int(math.floor(b_x))
         y_b = int(math.floor(b_y))
@@ -355,9 +343,7 @@ class DemEuDem(DemBase):
 
         a_x, a_y, b_x, b_y = points
         wgs84_srs = osr.SpatialReference()
-        wgs84_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
         wgs84_srs.ImportFromEPSG(4326)
-        wgs84_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
         laea_srs = osr.SpatialReference()
         laea_srs.ImportFromEPSG(3035)
         transform = osr.CoordinateTransformation(wgs84_srs, laea_srs)
@@ -399,6 +385,11 @@ def get_dem_type(path):
         or DemAsterV3.detect(path)
         or DemEuDem.detect(path)
     )
+
+
+# def run_command(args):
+#    print(" ".join(map(pipes.quote, args)))
+#    subprocess.call(args)
 
 
 def get_landsat_tile_id(image):
@@ -452,13 +443,16 @@ def format_filename(mode, output_directory, tile_id, suffix):
 def create_context(args):
     dir_base = args.input
     if not os.path.exists(dir_base) or not os.path.isdir(dir_base):
-        logging.error("The path does not exist: {}".format(dir_base))
-        sys.exit(1)
-
+        print("The path does not exist ! {}".format(dir_base))
+        return []
+    log_path = dir_base
     if dir_base.rfind("/") + 1 == len(dir_base):
         dir_base = dir_base[0 : len(dir_base) - 1]
     mode, date = get_dir_info(dir_base)
     context_array = []
+    # if mode == None:
+    # print("Error in reading directory, is not in S2 neither L8 format")
+    # return context_array
 
     images = []
     tiles_to_process = []
@@ -469,9 +463,13 @@ def create_context(args):
     elif mode == "S2":
         dir_base += "/GRANULE/"
         if not os.path.exists(dir_base) or not os.path.isdir(dir_base):
-            logging.error("The path for Sentinel 2 (with GRANULE) does not exist ! {}".format(
+            log(
+                log_path,
+                "The path for Sentinel 2 (with GRANULE) does not exist ! {}".format(
                     dir_base
-                ))
+                ),
+                "dem.log",
+            )
             return []
         tile_dirs = [
             "{}{}".format(dir_base, f)
@@ -506,28 +504,21 @@ def create_context(args):
         extent = GetExtent(geo_transform, size_x, size_y)
 
         source_srs = osr.SpatialReference()
-        source_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
         source_srs.ImportFromWkt(dataset.GetProjection())
         epsg_code = source_srs.GetAttrValue("AUTHORITY", 1)
         target_srs = osr.SpatialReference()
-        target_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
         target_srs.ImportFromEPSG(4326)
 
-        transform = osr.CoordinateTransformation(source_srs, target_srs)
-        wgs84_extent = transform.TransformPoints(extent)
+        wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
 
         directory_template = "{0}_TEST_AUX_REFDE2_{1}_{2}_0001.DBL.DIR"
-        try:
-            os.makedirs(args.output)
-        except FileExistsError:
-            pass
+        if not create_recursive_dirs(args.output):
+            return context_array
         image_directory = os.path.join(
             args.output, directory_template.format(mode, tile_id, date)
         )
-        try:
-            os.makedirs(args.working_dir)
-        except FileExistsError:
-            pass
+        if not create_recursive_dirs(args.working_dir):
+            return context_array
         temp_directory = os.path.join(
             args.working_dir, directory_template.format(mode, tile_id, date)
         )
@@ -561,7 +552,8 @@ def create_context(args):
             aspect_coarse=os.path.join(
                 image_directory, format_filename(mode, image_directory, tile_id, "ASC")
             ),
-            wb=os.path.join(temp_directory, "wb.vrt"),
+            wb=os.path.join(temp_directory, "wb.shp"),
+            wb_reprojected=os.path.join(temp_directory, "wb_reprojected.shp"),
             water_mask=os.path.join(
                 image_directory, format_filename(mode, image_directory, tile_id, "MSK")
             ),
@@ -712,11 +704,11 @@ def process_DTM(context):
         dtm_tiles_nodata.append(tile_nodata)
 
     if missing_tiles:
-        logging.warning("The following DEM tiles are missing: {}".format(missing_tiles))
+        print("The following DEM tiles are missing: {}".format(missing_tiles))
 
     run_command(
         [
-            "gdalbuildvrt",
+            "/usr/local/bin/gdalbuildvrt",
             "-q",
             "-overwrite",
             "-r",
@@ -757,12 +749,19 @@ def process_DTM(context):
         #              context.dem_r1,
         #              context.dem_r2])
         resample_dataset(context.dem_r1, context.dem_r2, 20, -20)
+        # run_command(["otbcli_RigidTransformResample",
+        #              "-in", context.dem_r1,
+        #              "-out", context.dem_r2,
+        #              "-transform.type.id.scalex", "0.5",
+        #              "-transform.type.id.scaley", "0.5"])
 
-    # if context.mode == "L8":
-    #     inv_scale = 8.0
-    # else:
-    #     # scale = 1.0 / 23.9737991266  # almost 1/24
-    #     inv_scale = 24.0
+    if context.mode == "L8":
+        scale = 1.0 / 8
+        inv_scale = 8.0
+    else:
+        # scale = 1.0 / 23.9737991266  # almost 1/24
+        scale = 1.0 / 24
+        inv_scale = 24.0
 
     # run_command(["gdal_translate",
     #              "-outsize", str(int(round(context.size_x / inv_scale))), str(int(round(context.size_y /
@@ -770,6 +769,11 @@ def process_DTM(context):
     #              context.dem_r1,
     #              context.dem_coarse])
     resample_dataset(context.dem_r1, context.dem_coarse, 240, -240)
+    # run_command(["otbcli_RigidTransformResample",
+    #              "-in", context.dem_r1,
+    #              "-out", context.dem_coarse,
+    #              "-transform.type.id.scalex", str(scale),
+    #              "-transform.type.id.scaley", str(scale)])
 
     run_command(
         [
@@ -828,7 +832,6 @@ def process_DTM(context):
             [
                 "gdalwarp",
                 "-q",
-                "-overwrite",
                 "-r",
                 "cubic",
                 "-tr",
@@ -844,7 +847,6 @@ def process_DTM(context):
             [
                 "gdalwarp",
                 "-q",
-                "-overwrite",
                 "-r",
                 "cubic",
                 "-tr",
@@ -859,7 +861,6 @@ def process_DTM(context):
         [
             "gdalwarp",
             "-q",
-            "-overwrite",
             "-r",
             "cubic",
             "-tr",
@@ -874,7 +875,6 @@ def process_DTM(context):
         [
             "gdalwarp",
             "-q",
-            "-overwrite",
             "-r",
             "cubic",
             "-tr",
@@ -889,61 +889,70 @@ def process_DTM(context):
 
 
 def process_WB(context):
-    x_l = int(math.floor(context.wgs84_extent[0][0]))
-    x_r = int(math.floor(context.wgs84_extent[2][0]))
-    y_b = int(math.floor(context.wgs84_extent[2][1]))
-    y_t = int(math.floor(context.wgs84_extent[0][1]))
-    continents = ["n", "s", "a", "e", "f", "i"]
-    swbd_tiles = []
-    for x in range(x_l, x_r + 1):
-        for y in range(y_b, y_t + 1):
-            if y > 0:
-                yp = y
-                lat = "n"
-            else:
-                yp = -y
-                lat = "s"
-            if x > 0:
-                xp = x
-                lon = "e"
-            else:
-                xp = -x
-                lon = "w"
-            tile = "{}{}{}{}".format(
-                lon, str(xp).zfill(3), lat, str(yp).zfill(2)
-            )
-            for continent in continents:
-                tile_path = os.path.join(context.swbd_directory, tile + continent + ".shp")
-                if os.path.exists(tile_path):
-                    swbd_tiles.append(tile_path)
-                    break
+    run_command(
+        [
+            "otbcli",
+            "DownloadSWBDTiles",
+            "-il",
+            context.dem_r1,
+            "-mode",
+            "list",
+            "-mode.list.indir",
+            context.swbd_directory,
+            "-mode.list.outlist",
+            context.swbd_list,
+            "-progress",
+            "false",
+        ]
+    )
+
+    with open(context.swbd_list) as f:
+        swbd_tiles = f.read().splitlines()
 
     if len(swbd_tiles) == 0:
         empty_shp = os.path.join(context.swbd_directory, "empty.shp")
-        swbd_tiles.append(empty_shp)
+        run_command(["ogr2ogr", context.wb, empty_shp])
+    elif len(swbd_tiles) == 1:
+        run_command(["ogr2ogr", context.wb, swbd_tiles[0]])
+    else:
+        run_command(
+            [
+                "otbcli_ConcatenateVectorData",
+                "-progress",
+                "false",
+                "-out",
+                context.wb,
+                "-vd",
+            ]
+            + swbd_tiles
+        )
 
     run_command(
         [
-            "ogrmerge.py",
-            "-overwrite_ds",
-            "-single",
-            "-a_srs", "EPSG:4326",
-            "-t_srs", "EPSG:{}".format(context.epsg_code),
-            "-o",
+            "ogr2ogr",
+            "-s_srs",
+            "EPSG:4326",
+            "-t_srs",
+            "EPSG:" + context.epsg_code,
+            context.wb_reprojected,
             context.wb,
         ]
-        + swbd_tiles
     )
 
     run_command(
         [
-            "gdal_rasterize",
-            "-ot", "Byte",
-            "-burn", 1,
-            "-te", context.extent[1][0], context.extent[1][1], context.extent[3][0], context.extent[3][1],
-            "-tr", 240, 240,
-            context.wb,
+            "otbcli_Rasterization",
+            "-in",
+            context.wb_reprojected,
+            "-out",
             context.water_mask,
+            "uint8",
+            "-im",
+            context.dem_coarse,
+            "-mode.binary.foreground",
+            "1",
+            "-progress",
+            "false",
         ]
     )
 
@@ -954,45 +963,45 @@ def change_extension(file, new_extension):
 
 def process_context(context):
     try:
+        os.makedirs(context.image_directory)
+    except:
+        pass
+    try:
+        os.makedirs(context.temp_directory)
+    except:
+        pass
+    metadata = create_metadata(context)
+    with open(context.metadata_file, "w") as f:
+        lxml.etree.ElementTree(metadata).write(f, pretty_print=True)
+
+    if not process_DTM(context):
+        return
+    process_WB(context)
+
+    files = [
+        context.swbd_list,
+        context.dem_vrt,
+        context.dem_nodata,
+        context.slope_degrees,
+        context.aspect_degrees,
+        context.wb,
+        context.wb_reprojected,
+    ]
+
+    for file in [context.wb, context.wb_reprojected]:
+        for extension in [".shx", ".prj", ".dbf"]:
+            files.append(change_extension(file, extension))
+
+    for file in files:
         try:
-            os.makedirs(context.image_directory)
-        except FileExistsError:
+            os.remove(file)
+        except:
             pass
-        try:
-            os.makedirs(context.temp_directory)
-        except FileExistsError:
-            pass
-        metadata = create_metadata(context)
-        with open(context.metadata_file, "wb") as f:
-            lxml.etree.ElementTree(metadata).write(f, pretty_print=True)
 
-        if not process_DTM(context):
-            logging.error("Failed to process DTM")
-            return
-        process_WB(context)
-
-        files = [
-            context.swbd_list,
-            context.dem_vrt,
-            context.dem_nodata,
-            context.slope_degrees,
-            context.aspect_degrees,
-            context.wb,
-        ]
-
-        for file in files:
-            try:
-                os.remove(file)
-            except FileNotFoundError:
-                pass
-
-        try:
-            os.rmdir(context.temp_directory)
-        except Exception as e:
-            logging.error("Couldn't remove the temp dir {}: {}".format(context.temp_directory, e))
-    except Exception as e:
-        logging.error(e)
-        os._exit(1)
+    try:
+        os.rmdir(context.temp_directory)
+    except:
+        print("Couldn't remove the temp dir {}".format(context.temp_directory))
 
 
 def parse_arguments():
@@ -1021,20 +1030,14 @@ def parse_arguments():
 
     args = parser.parse_args()
 
-    logging.info("Input directory")
-    run_command(["ls", "-al", args.input])
-    logging.info("Output directory")
-    run_command(["ls", "-al", args.output])
     return int(args.processes_number), create_context(args)
 
 
-logging.basicConfig(level=logging.DEBUG)
 proc_number, contexts = parse_arguments()
-logging.debug(contexts)
 
 if len(contexts) == 0:
-    logging.error("The context could not be created")
-    sys.exit(11)
+    print("No context could be created")
+    sys.exit(-1)
 
 p = None
 try:
