@@ -209,6 +209,6 @@ INSERT INTO config_metadata VALUES ('processor.l2a.maja.remove-sre', 'Remove SRE
 INSERT INTO config_metadata VALUES ('processor.l2a.maja.remove-fre', 'Remove FRE files from resulted L2A product', 'bool', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.sen2cor.gipp-path', 'Sen2Cor GIPP path', 'directory', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.optical.output-path', 'path for L2A products', 'directory', false, 2);
-INSERT INTO config_metadata VALUES ('processor.l2a.srtm-path', 'path where the SRTM files are to be found', 'directory', false, 2);
-INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'path where the SWBD files are to be found', 'directory', false, 2);
-INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'working directory', 'string', false, 2);
+INSERT INTO config_metadata VALUES ('processor.l2a.srtm-path', 'Path to the DEM dataset', 'directory', false, 2);
+INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'Path to the SWBD dataset', 'directory', false, 2);
+INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'Working directory', 'string', false, 2);

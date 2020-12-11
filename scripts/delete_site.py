@@ -95,7 +95,7 @@ def delete_site(siteId, siteName, keepDwn, keepL2A, keepL3A, keepL3B, keepL4A, k
         delete_dwn_product_files(siteName)
         
     if (not keepL2A) :
-        delete_product_files_by_type("demmaccs.output-path", siteName, "l2a")
+        delete_product_files_by_type("processor.l2a.optical.output-path", siteName, "l2a")
         
     if (not keepL3A) :
         delete_product_files_by_type("archiver.archive_path", siteName, "l3a")
