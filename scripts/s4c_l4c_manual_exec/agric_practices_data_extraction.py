@@ -69,7 +69,6 @@ class Config(object):
         self.inputs_file = args.inputs_file
         self.file_type = args.file_type
         self.polarisation = args.polarisation
-        self.nf_2017 = args.nf_2017
         self.use_shapefile_only = args.use_shapefile_only
         self.gen_minmax = args.gen_minmax
         self.csvcompact = args.csvcompact
@@ -468,8 +467,6 @@ def execute_data_extraction(config, products) :
         command += ["otbcli", "AgricPractDataExtraction", "./sen2agri-processors-build/"]
 #        if config.file_type == "AMP" and config.gen_minmax == 0:
 #            command += ["-convdb", 1]
-        if config.nf_2017 == 1 : 
-            command += ["-oldnf", 1]
         if config.gen_minmax == 1 : 
             command += ["-minmax", 1]
         if config.csvcompact == 1 : 
@@ -566,7 +563,6 @@ def main():
     parser.add_argument('--uid-field', help="Unique identifier string field")
     parser.add_argument('--seq-field', default="NewID", help="Unique identifier sequence integerr field")
     parser.add_argument('--pool-size', type=int, default=4, help="The number of parallel executions")
-    parser.add_argument('--nf-2017', default=0, type=int, help="Use the 2017 naming format")
     parser.add_argument('--gen-minmax', default=0, type=int, help="Generates also the minimum and maximum for each parcel")
     parser.add_argument('--csvcompact', default=1, type=int, help="Generates the output CSV file in a compact form (each parcel on one line in CSV)")
     parser.add_argument('--filter-ids', default='', help="File containing the parcel ids filters")

@@ -5,7 +5,7 @@ INSITU_ROOT="$WORKING_DIR_ROOT/insitu/"
 INPUTS_FILES_ROOT="/mnt/archive/agric_practices/Inputs/exec_cmds/"
 
 function usage() {
-    echo "Usage: ./agric_practices_data_extraction_2019.sh -c <COUNTRY_CODE - (NLD|CZE|LTU|ESP|ITA|ROU)> -t <PRODUCT_TYPE> [-p <POLARISATION>] -y <YEAR> -g <PRDS_PER_GROUP> -s <THREADS_POOL_SIZE>"
+    echo "Usage: ./agric_practices_data_extraction.sh -c <COUNTRY_CODE - (NLD|CZE|LTU|ESP|ITA|ROU)> -t <PRODUCT_TYPE> [-p <POLARISATION>] -y <YEAR> -g <PRDS_PER_GROUP> -s <THREADS_POOL_SIZE>"
     exit 1
 }
 
@@ -129,7 +129,7 @@ case "${PRODUCT_TYPE}" in
         else 
             INPUT_FILE_NAME="${YEAR}_prds_s1_amp_$COUNTRY_REGION"
         fi
-        if [ "$YEAR" == "2019" ] ; then
+        if [ "$YEAR" != "2018" ] ; then
             PROJ_TYPE="LAEA"
         fi
         ;;
@@ -141,7 +141,7 @@ case "${PRODUCT_TYPE}" in
         else 
             INPUT_FILE_NAME="${YEAR}_prds_s1_cohe_$COUNTRY_REGION"
         fi
-        if [ "$YEAR" == "2019" ] ; then
+        if [ "$YEAR" != "2018" ] ; then
             PROJ_TYPE="LAEA"
         fi
         ;;

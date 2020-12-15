@@ -335,9 +335,9 @@ execute_command "${SCRIPTS_DIR}/agric_practices_merge_files.sh -c ${COUNTRY_AND_
 execute_command "${SCRIPTS_DIR}/agric_practices_merge_files.sh -c ${COUNTRY_AND_REGION} -y ${YEAR} -p AMP --compact 0 ; ${SCRIPTS_DIR}/agric_practices_merge_files.sh -c ${COUNTRY_AND_REGION} -y ${YEAR} -p COHE --compact 0 ; ${SCRIPTS_DIR}/agric_practices_merge_files.sh -c ${COUNTRY_AND_REGION} -y ${YEAR} -p NDVI --compact 0" $SIMULATE_CMDS
 
 if [ -z "${PREV_PRODUCT_OPTION}" ] ; then 
-    execute_command "${SCRIPTS_DIR}/agric_practices_tsa.sh -c ${COUNTRY_AND_REGION} -y ${YEAR}" $SIMULATE_CMDS
+    execute_command "${SCRIPTS_DIR}/agric_practices_tsa.sh -c ${COUNTRY_AND_REGION} -y ${YEAR} -d ${PROD_DATE}" $SIMULATE_CMDS
 else
-    execute_command "${SCRIPTS_DIR}/agric_practices_tsa.sh -c ${COUNTRY_AND_REGION} -y ${YEAR} ${PREV_PRODUCT_OPTION}" $SIMULATE_CMDS
+    execute_command "${SCRIPTS_DIR}/agric_practices_tsa.sh -c ${COUNTRY_AND_REGION} -y ${YEAR} -d ${PROD_DATE} ${PREV_PRODUCT_OPTION}" $SIMULATE_CMDS
 fi
 
 # Create the product in the database

@@ -20,6 +20,11 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    -d|--prod-date)
+    PROD_DATE="$2"
+    shift # past argument
+    shift # past value
+    ;;
     -p|--prev-product)
     PREV_PRODUCT="$2"
     shift # past argument
@@ -46,6 +51,18 @@ if [ -z ${YEAR} ] ; then
     usage
 fi 
 
+if [ -z ${PROD_DATE} ] ; then
+    echo "No product date provided. End of year limit date will be considered for gaps!"
+    ACQ_DATE_LIMIT_OPT=""
+else 
+    #PROD_DATE=$(date -d "$PROD_DATE" '+%Y-%m-%d')
+    PROD_DATE=$(date -d "$PROD_DATE 7 days" '+%Y-%m-%d')
+    echo "Using product limit date : ${PROD_DATE}"
+    if [[ ! -z ${PROD_DATE} ]] ; then 
+        ACQ_DATE_LIMIT_OPT="-acqsdatelimit ${PROD_DATE}"    
+    fi
+fi 
+
 if [ -z ${PREV_PRODUCT} ] ; then
     echo "No previous product will be used!"
     PREV_PRODUCT_OPTION=""
@@ -60,10 +77,9 @@ fi
 
 COUNTRY="${COUNTRY_AND_REGION%%_*}"
 COUNTRY_REGION=""
-if [ "${COUNTRY_AND_REGION}" != "$COUNTRY" ] ; then
+if [ "$1" != "$COUNTRY" ] ; then
 
-    COUNTRY_REGION="${COUNTRY_AND_REGION##*_}"
-    echo "Using country region = $COUNTRY_REGION for country ${COUNTRY}"
+    COUNTRY_REGION="${1##*_}"
 fi    
 
 SHP_PATH=""
@@ -75,11 +91,7 @@ OUTPUTS_ROOT="${WORKING_DIR_ROOT}/Outputs/${COUNTRY_AND_REGION}/"
 INPUTS_EXTRACTED_DATA_ROOT="${OUTPUTS_ROOT}/DataExtractionResults/Compact/"
 OUT_DIR="$OUTPUTS_ROOT/TimeSeriesAnalysisResults/"
 
-if [ -z $COUNTRY_REGION ] ; then 
-    FILTER_IDS_FILE="${OUT_DIR}/Sen4CAP_L4C_${YEAR}_FilterIDs.csv"
-else 
-    FILTER_IDS_FILE="${OUT_DIR}/Sen4CAP_L4C_${YEAR}_${COUNTRY_REGION}_FilterIDs.csv"
-fi
+FILTER_IDS_FILE="${OUT_DIR}/Sen4CAP_L4C_${YEAR}_FilterIDs.csv"
 
 CC_INPUT_PRACTICES_TABLE="${INSITU_ROOT}/Sen4CAP_L4C_Catch_${COUNTRY_AND_REGION}_${YEAR}.csv"
 NFC_INPUT_PRACTICES_TABLE="${INSITU_ROOT}/Sen4CAP_L4C_NFC_${COUNTRY_AND_REGION}_${YEAR}.csv"
@@ -92,7 +104,6 @@ IN_NDVI_PATH="${INPUTS_EXTRACTED_DATA_ROOT}/${COUNTRY_AND_REGION}_${YEAR}_NDVI_E
 
 DEBUG_MODE=0
 ALLOW_GAPS=1
-FILL_GAPS=0
 PLOT_GRAPH=1
 RES_CONT_PRD=0
 MIN_ACQS=15
@@ -394,29 +405,6 @@ case "$COUNTRY" in
         NA_AMPTHRBREAKDEN=4
         NA_AMPTHRVALDEN=3
         ;;
-    FRA)
-        CC_CATCHMAIN="CatchCrop_2" 
-        CC_CATCHPERIODSTART="${YEAR}-07-15"
-        
-        CC_NDVIUP=500
-        CC_AMPTHRMIN=0.2
-        CC_COHTHRBASE=0.1
-        CC_COHTHRABS=0.7
-        CC_EFAAMPTHR=0.03
-        CC_AMPTHRBREAKDEN=3
-        CC_AMPTHRVALDEN=3
-        
-        NA_NDVIUP=500
-        NA_AMPTHRMIN=0.2
-        NA_COHTHRBASE=0.1
-        NA_COHTHRABS=0.7
-        NA_AMPTHRBREAKDEN=3
-        NA_AMPTHRVALDEN=3
-        
-        # we do not have CC, FL and NFC
-        EXECUTE_FL=""
-        EXECUTE_NFC=""
-        ;;
     *)
         echo $"Usage: $0 {NLD|CZE|LTU|ESP|ITA|ROU}"
         exit 1
@@ -612,7 +600,7 @@ mkdir -p "$OUT_DIR"
 
 # Execute CC
 if [ ! -z "$EXECUTE_CC" ] ; then
-    CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -gapsfill $FILL_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} -country $COUNTRY_AND_REGION -practice \"CatchCrop\" -year $YEAR $CC_OPTTHRVEGCYCLE $CC_NDVIDW $CC_NDVIUP $CC_NDVISTEP $CC_OPTTHRMIN $CC_COHTHRBASE $CC_COHTHRHIGH $CC_COHTHRABS $CC_AMPTHRMIN $CC_CATCHMAIN $CC_CATCHCROPISMAIN $CC_CATCHPERIOD $CC_CATCHPROPORTION $CC_CATCHPERIODSTART $CC_EFANDVITHR $CC_EFANDVIUP $CC_EFANDVIDW $CC_EFACOHCHANGE $CC_EFACOHVALUE $CC_EFANDVIMIN $CC_EFAAMPTHR $CC_STDDEVINAMPTHR $CC_OPTTHRBUFDEN $CC_AMPTHRBREAKDEN $CC_AMPTHRVALDEN -s1pixthr ${S1PIX} -harvestshp $CC_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
+    CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} ${ACQ_DATE_LIMIT_OPT} -country $COUNTRY -practice \"CatchCrop\" -year $YEAR $CC_OPTTHRVEGCYCLE $CC_NDVIDW $CC_NDVIUP $CC_NDVISTEP $CC_OPTTHRMIN $CC_COHTHRBASE $CC_COHTHRHIGH $CC_COHTHRABS $CC_AMPTHRMIN $CC_CATCHMAIN $CC_CATCHCROPISMAIN $CC_CATCHPERIOD $CC_CATCHPROPORTION $CC_CATCHPERIODSTART $CC_EFANDVITHR $CC_EFANDVIUP $CC_EFANDVIDW $CC_EFACOHCHANGE $CC_EFACOHVALUE $CC_EFANDVIMIN $CC_EFAAMPTHR $CC_STDDEVINAMPTHR $CC_OPTTHRBUFDEN $CC_AMPTHRBREAKDEN $CC_AMPTHRVALDEN -s1pixthr ${S1PIX} -harvestshp $CC_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
     echo "Executing ${CMD}"
     
     #Execute the command
@@ -620,7 +608,7 @@ if [ ! -z "$EXECUTE_CC" ] ; then
 fi 
 
 if [ ! -z "$EXECUTE_FL" ] ; then
-    CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build/ -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -gapsfill $FILL_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} -country $COUNTRY_AND_REGION -practice \"Fallow\" -year $YEAR $FL_OPTTHRVEGCYCLE $FL_NDVIDW $FL_NDVIUP $FL_NDVISTEP $FL_OPTTHRMIN $FL_COHTHRBASE $FL_COHTHRHIGH $FL_COHTHRABS $FL_AMPTHRMIN $FL_EFANDVITHR $FL_EFANDVIUP $FL_EFANDVIDW $FL_EFACOHCHANGE $FL_EFACOHVALUE $FL_EFANDVIMIN $FL_EFAAMPTHR $FL_STDDEVINAMPTHR $FL_OPTTHRBUFDEN $FL_AMPTHRBREAKDEN $FL_AMPTHRVALDEN $FL_FLMARKSTARTDATE $FL_FLMARKSTENDDATE -s1pixthr ${S1PIX} -harvestshp $FL_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
+    CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build/ -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} ${ACQ_DATE_LIMIT_OPT} -country $COUNTRY -practice \"Fallow\" -year $YEAR $FL_OPTTHRVEGCYCLE $FL_NDVIDW $FL_NDVIUP $FL_NDVISTEP $FL_OPTTHRMIN $FL_COHTHRBASE $FL_COHTHRHIGH $FL_COHTHRABS $FL_AMPTHRMIN $FL_EFANDVITHR $FL_EFANDVIUP $FL_EFANDVIDW $FL_EFACOHCHANGE $FL_EFACOHVALUE $FL_EFANDVIMIN $FL_EFAAMPTHR $FL_STDDEVINAMPTHR $FL_OPTTHRBUFDEN $FL_AMPTHRBREAKDEN $FL_AMPTHRVALDEN $FL_FLMARKSTARTDATE $FL_FLMARKSTENDDATE -s1pixthr ${S1PIX} -harvestshp $FL_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
     
     echo "Executing ${CMD}"
     
@@ -629,7 +617,7 @@ if [ ! -z "$EXECUTE_FL" ] ; then
 fi
 
 if [ ! -z "$EXECUTE_NFC" ] ; then
-    CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build/ -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -gapsfill $FILL_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} -country $COUNTRY_AND_REGION -practice \"NFC\" -year $YEAR $NFC_OPTTHRVEGCYCLE $NFC_NDVIDW $NFC_NDVIUP $NFC_NDVISTEP $NFC_OPTTHRMIN $NFC_COHTHRBASE $NFC_COHTHRHIGH $NFC_COHTHRABS $NFC_AMPTHRMIN $NFC_EFANDVITHR $NFC_EFANDVIUP $NFC_EFANDVIDW $NFC_EFACOHCHANGE $NFC_EFACOHVALUE $NFC_EFANDVIMIN $NFC_EFAAMPTHR $NFC_STDDEVINAMPTHR $NFC_OPTTHRBUFDEN $NFC_AMPTHRBREAKDEN $NFC_AMPTHRVALDEN -s1pixthr ${S1PIX} -harvestshp $NFC_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
+    CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build/ -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} ${ACQ_DATE_LIMIT_OPT} -country $COUNTRY -practice \"NFC\" -year $YEAR $NFC_OPTTHRVEGCYCLE $NFC_NDVIDW $NFC_NDVIUP $NFC_NDVISTEP $NFC_OPTTHRMIN $NFC_COHTHRBASE $NFC_COHTHRHIGH $NFC_COHTHRABS $NFC_AMPTHRMIN $NFC_EFANDVITHR $NFC_EFANDVIUP $NFC_EFANDVIDW $NFC_EFACOHCHANGE $NFC_EFACOHVALUE $NFC_EFANDVIMIN $NFC_EFAAMPTHR $NFC_STDDEVINAMPTHR $NFC_OPTTHRBUFDEN $NFC_AMPTHRBREAKDEN $NFC_AMPTHRVALDEN -s1pixthr ${S1PIX} -harvestshp $NFC_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
     
     echo "Executing ${CMD}"
     
@@ -639,7 +627,7 @@ fi
 
 
 # Executing for all parcels not EFA monitored
-CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -gapsfill $FILL_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} -country $COUNTRY_AND_REGION -year $YEAR $NA_OPTTHRVEGCYCLE $NA_NDVIDW $NA_NDVIUP $NA_NDVISTEP $NA_OPTTHRMIN $NA_COHTHRBASE $NA_COHTHRHIGH $NA_COHTHRABS $NA_AMPTHRMIN $NA_EFANDVITHR $NA_EFANDVIUP $NA_EFANDVIDW $NA_EFACOHCHANGE $NA_EFACOHVALUE $NA_EFANDVIMIN $NA_EFAAMPTHR $NA_STDDEVINAMPTHR $NA_OPTTHRBUFDEN $NA_AMPTHRBREAKDEN $NA_AMPTHRVALDEN -s1pixthr ${S1PIX} -harvestshp $NA_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
+CMD="otbcli TimeSeriesAnalysis sen2agri-processors-build -intype csv -debug $DEBUG_MODE -allowgaps $ALLOW_GAPS -plotgraph $PLOT_GRAPH -rescontprd $RES_CONT_PRD -minacqs $MIN_ACQS ${PREV_PRODUCT_OPTION} ${ACQ_DATE_LIMIT_OPT} -country $COUNTRY -year $YEAR $NA_OPTTHRVEGCYCLE $NA_NDVIDW $NA_NDVIUP $NA_NDVISTEP $NA_OPTTHRMIN $NA_COHTHRBASE $NA_COHTHRHIGH $NA_COHTHRABS $NA_AMPTHRMIN $NA_EFANDVITHR $NA_EFANDVIUP $NA_EFANDVIDW $NA_EFACOHCHANGE $NA_EFACOHVALUE $NA_EFANDVIMIN $NA_EFAAMPTHR $NA_STDDEVINAMPTHR $NA_OPTTHRBUFDEN $NA_AMPTHRBREAKDEN $NA_AMPTHRVALDEN -s1pixthr ${S1PIX} -harvestshp $NA_INPUT_PRACTICES_TABLE -diramp ${IN_AMP_PATH} -dircohe ${IN_COHE_PATH} -dirndvi ${IN_NDVI_PATH} -outdir ${OUT_DIR}"
 
 echo "Executing ${CMD}"
 

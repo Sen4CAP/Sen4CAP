@@ -233,11 +233,22 @@ case "$COUNTRY" in
         CC_HEND="${YEAR}-09-01"
         CC_PSTART="${YEAR}-09-01"
         CC_PEND="${YEAR}-10-15"
+        CC_PENDW="$CC_PEND"
         if [ "${YEAR}" == "2018" ] ; then
             CC_ADD_FILES="${INSITU_ROOT}/ApplicationsEFA_${YEAR}_Catch_crops_PO.csv ${INSITU_ROOT}/ApplicationsEFA_${YEAR}_Catch_crops_IS.csv"
             CC_IGNORED_IDS_FILE="${INSITU_ROOT}/CC_Ignored_Orig_IDs.csv"            
         else 
-            CC_ADD_FILES="${INSITU_ROOT}/ApplicationsEFA_${YEAR}_LT.csv ${INSITU_ROOT}/CC_IS_${YEAR}.csv ${INSITU_ROOT}/CC_PS_${YEAR}.csv"
+            if [ "${YEAR}" == "2020" ] ; then 
+                CC_PENDW="${YEAR}-10-01"
+            fi
+            
+            CC_ADD_FILES="${INSITU_ROOT}/ApplicationsEFA_${YEAR}_LT.csv"
+            if [ -f "${INSITU_ROOT}/CC_IS_${YEAR}.csv" ] ; then 
+                CC_ADD_FILES="${CC_ADD_FILES} ${INSITU_ROOT}/CC_IS_${YEAR}.csv"
+            fi
+            if [ -f "${INSITU_ROOT}/CC_PS_${YEAR}.csv" ] ; then 
+                CC_ADD_FILES="${CC_ADD_FILES} ${INSITU_ROOT}/CC_PS_${YEAR}.csv"
+            fi
         fi
 
         NFC_HSTART="${YEAR}-06-03"
@@ -248,6 +259,9 @@ case "$COUNTRY" in
         if [ "${YEAR}" == "2018" ] ; then
             NFC_ADD_FILES="${INSITU_ROOT}/ApplicationsEFA_${YEAR}_Nitrogen_fixing.csv"
         else 
+            if [ "${YEAR}" == "2020" ] ; then 
+                NFC_PEND="${YEAR}-11-01"
+            fi
             NFC_ADD_FILES="${INSITU_ROOT}/ApplicationsEFA_${YEAR}_LT.csv"
         fi
         
@@ -261,6 +275,9 @@ case "$COUNTRY" in
             FL_ADD_FILES="${INSITU_ROOT}/ApplicationsEFA_${YEAR}_Black_fallow.csv ${INSITU_ROOT}/ApplicationsEFA_${YEAR}_Green_fallow.csv"
             FL_IGNORED_IDS_FILE="${INSITU_ROOT}/FL_Ignored_Orig_IDs.csv"
         else 
+            if [ "${YEAR}" == "2020" ] ; then 
+                FL_PEND="${YEAR}-08-01"
+            fi
             FL_ADD_FILES="${INSITU_ROOT}/ApplicationsEFA_${YEAR}_LT.csv"
         fi
 
@@ -385,8 +402,8 @@ case "$COUNTRY" in
         IN_SHP_NAME="decl_${COUNTRY_REGION,,}_${YEAR}_${YEAR}.csv"
         VEG_START="${YEAR}-05-01"
         
-        CC_HSTART="2019-05-01"
-        CC_HEND="2019-11-10"
+        CC_HSTART="${YEAR}-05-01"
+        CC_HEND="${YEAR}-11-10"
         CC_PSTART="01:${YEAR}-08-20,14:${YEAR}-09-17,27:${YEAR}-08-20,50:${YEAR}-09-15,61:${YEAR}-08-20,76:${YEAR}-09-02"
         CC_PEND="${YEAR}-11-12"
 
