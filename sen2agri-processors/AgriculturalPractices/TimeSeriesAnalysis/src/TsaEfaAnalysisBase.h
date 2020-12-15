@@ -5,8 +5,9 @@
 #include "TimeSeriesAnalysisUtils.h"
 #include "TsaDebugPrinter.h"
 #include "TsaDataPreProcessor.h"
+#include "TsaHandlerBase.h"
 
-class TsaEfaAnalysisBase
+class TsaEfaAnalysisBase : public TsaHandlerBase
 {
 public:
     TsaEfaAnalysisBase(itk::Logger* logger);
@@ -31,6 +32,9 @@ public:
     bool ExtractEfaMarkers(time_t ttStartTime, time_t ttEndTime, const FieldInfoType &fieldInfos,
                            std::vector<EfaMarkersInfoType> &efaMarkers);
 
+    virtual bool PerformAnalysis(const FieldInfoType &fieldInfos, std::vector<MergedAllValInfosType> &retAllMergedValues,
+                                 HarvestEvaluationInfoType &harvestEvalInfos,
+                                 EfaEvaluationInfoType &efaHarvestEvalInfo) = 0;
 protected :
     int m_EfaNdviThr;
     int m_EfaNdviUp;

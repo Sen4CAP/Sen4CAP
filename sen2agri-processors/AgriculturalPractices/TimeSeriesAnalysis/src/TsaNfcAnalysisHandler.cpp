@@ -10,8 +10,8 @@ TsaNfcAnalysisHandler::TsaNfcAnalysisHandler(itk::Logger* logger)
 bool TsaNfcAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
                                             std::vector<MergedAllValInfosType> &retAllMergedValues,
                                             HarvestEvaluationInfoType &harvestInfos,
-                                            HarvestEvaluationInfoType &ncHarvestEvalInfos) {
-    ncHarvestEvalInfos = harvestInfos;
+                                            EfaEvaluationInfoType &ncHarvestEvalInfos) {
+    // ncHarvestEvalInfos = harvestInfos;
 
     ncHarvestEvalInfos.ndviPresence = NR;                        // M6
     ncHarvestEvalInfos.ndviGrowth = NR;                          // M7
@@ -55,7 +55,7 @@ bool TsaNfcAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
             } else {
                 ncHarvestEvalInfos.efaIndex = "WEAK";
             }
-        } else if(IsNA(ncHarvestEvalInfos.harvestConfirmWeek)) {
+        } else if(IsNA(harvestInfos.harvestConfirmWeek)) {
             // vegetation is present, harvest was not detected - NFC is considered ok - return MODERATE evaluation
             ncHarvestEvalInfos.efaIndex = "MODERATE";
         } else {

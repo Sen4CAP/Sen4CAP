@@ -10,14 +10,17 @@ TsaFallowAnalysisHandler::TsaFallowAnalysisHandler(itk::Logger* logger)
 bool TsaFallowAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
                                             std::vector<MergedAllValInfosType> &retAllMergedValues,
                                             HarvestEvaluationInfoType &harvestInfos,
-                                            HarvestEvaluationInfoType &flHarvestEvalInfos) {
-    flHarvestEvalInfos = harvestInfos;
+                                            EfaEvaluationInfoType &flHarvestEvalInfos) {
+    //flHarvestEvalInfos = harvestInfos;
 
     flHarvestEvalInfos.ndviPresence = NR;                        // M6
     flHarvestEvalInfos.ndviGrowth = NR;                          // M7
     flHarvestEvalInfos.ndviNoLoss = NR;                          // M8
     flHarvestEvalInfos.ampNoLoss = NR;                           // M9
     flHarvestEvalInfos.cohNoLoss = NR;                           // M10
+
+    short flHarvestConfirmWeek = harvestInfos.harvestConfirmWeek;
+    time_t flHarvestConfirmWeekStart = harvestInfos.ttHarvestConfirmWeekStart;
 
     time_t ttDateA = fieldInfos.ttPracticeStartTime;     // last possible start of catch-crop period
     time_t ttDateB = fieldInfos.ttPracticeEndTime;     // last possible end of catch-crop period
@@ -70,8 +73,8 @@ bool TsaFallowAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
                 // # harvest is not evaluated for the confirmed black fallow as it is not expected
                 harvestInfos.harvestConfirmWeek = NR;
                 harvestInfos.ttHarvestConfirmWeekStart = NR;
-                flHarvestEvalInfos.harvestConfirmWeek = NR;
-                flHarvestEvalInfos.ttHarvestConfirmWeekStart = NR;
+                flHarvestConfirmWeek = NR;
+                flHarvestConfirmWeekStart = NR;
             } else {
                 // # if there is no-loss of coherence in all the 9 subsequent
                 // weeks (if M10 is TRUE) - return WEAK evaluation for the black fallow practice
@@ -97,15 +100,15 @@ bool TsaFallowAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
                 // # green fallow shall be inserted to soil up to the end of the efa period - harvest shall be detected
                 // # if harvest is not detected - return WEAK evaluation
                 flHarvestEvalInfos.efaIndex = "WEAK";
-            } else if (IsNA(flHarvestEvalInfos.harvestConfirmWeek)) {
+            } else if (IsNA(flHarvestConfirmWeek)) {
                 flHarvestEvalInfos.efaIndex = "MODERATE";
             } else {
                 // # if harvest is detected
                 // # set the first day of the harvest week
-                if (flHarvestEvalInfos.ttHarvestConfirmWeekStart <= (weekB - 62 * SEC_IN_DAY)) {
+                if (flHarvestConfirmWeekStart <= (weekB - 62 * SEC_IN_DAY)) {
                     // # too early - return MODERATE evaluation
                     flHarvestEvalInfos.efaIndex = "MODERATE";
-                } else if (flHarvestEvalInfos.ttHarvestConfirmWeekStart <= (weekB + 7 * SEC_IN_DAY)) {
+                } else if (flHarvestConfirmWeekStart <= (weekB + 7 * SEC_IN_DAY)) {
                     // # before the end of the efa period - return STRONG evaluation
                     flHarvestEvalInfos.efaIndex = "STRONG";
                 } else {

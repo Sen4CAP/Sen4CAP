@@ -338,12 +338,11 @@ void TsaHarvestOnlyAnalysisHandler::UpdateMarker5Infos(const FieldInfoType &fiel
         CohThrAbs = fieldInfos.coheVVMaxValue - m_CohThrBase;
     }
 
+    bool coherenceBase, coherencePresence;
     for(size_t i = 0; i<retAllMergedValues.size(); i++) {
-        retAllMergedValues[i].coherenceBase = IsGreaterOrEqual(retAllMergedValues[i].cohChange, m_CohThrBase);
-        retAllMergedValues[i].coherenceHigh = IsGreaterOrEqual(retAllMergedValues[i].cohChange, m_CohThrHigh);
-        retAllMergedValues[i].coherencePresence = IsGreaterOrEqual(retAllMergedValues[i].cohMax, CohThrAbs);
-        retAllMergedValues[i].candidateCoherence =
-                (retAllMergedValues[i].coherenceBase || retAllMergedValues[i].coherencePresence);
+        coherenceBase = IsGreaterOrEqual(retAllMergedValues[i].cohChange, m_CohThrBase);
+        coherencePresence = IsGreaterOrEqual(retAllMergedValues[i].cohMax, CohThrAbs);
+        retAllMergedValues[i].candidateCoherence = (coherenceBase || coherencePresence);
     }
 }
 

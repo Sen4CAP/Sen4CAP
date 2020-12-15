@@ -73,9 +73,6 @@ void TsaDebugPrinter::PrintMergedValues(const std::vector<MergedAllValInfosType>
         const MergedAllValInfosType &val = mergedVals[i];
         std::cout << i + 1 << " " <<
                      ValueToString(val.candidateOptical, true) << " " <<
-                     ValueToString(val.coherenceBase, true) << " " <<
-                     ValueToString(val.coherenceHigh, true) << " " <<
-                     ValueToString(val.coherencePresence, true) << " " <<
                      ValueToString(val.candidateCoherence, true) << " " <<
                      ValueToString(val.candidateAmplitude, true) << " " <<
                      std::endl;

@@ -71,7 +71,9 @@ bool TsaDataExtractor::ExtractAmplitudeFilesInfos(FieldInfoType &fieldInfo)
 {
     std::map<std::string, std::vector<InputFileLineInfoType>> mapInfos;
     if (!m_pAmpReader->GetEntriesForField(fieldInfo.fieldSeqId, {"VV", "VH"}, mapInfos)) {
-        otbAppLogWARNING("Cannot extract amplitude infos for the field " << fieldInfo.fieldId);
+        if (m_bVerbose) {
+            otbAppLogWARNING("Cannot extract amplitude infos for the field " << fieldInfo.fieldId);
+        }
         return false;
     }
     std::map<std::string, std::vector<InputFileLineInfoType>>::const_iterator itVV;
@@ -122,7 +124,9 @@ bool TsaDataExtractor::ExtractCoherenceFilesInfos(FieldInfoType &fieldInfo)
 {
     std::map<std::string, std::vector<InputFileLineInfoType>> mapInfos;
     if (!m_pCoheReader->GetEntriesForField(fieldInfo.fieldSeqId, /*{"VV", "VH"}*/{"VV"}, mapInfos)) {
-        otbAppLogWARNING("Cannot extract coherence infos for the field " << fieldInfo.fieldId);
+        if (m_bVerbose) {
+            otbAppLogWARNING("Cannot extract coherence infos for the field " << fieldInfo.fieldId);
+        }
         return false;
     }
     std::map<std::string, std::vector<InputFileLineInfoType>>::const_iterator itVV;
@@ -177,7 +181,9 @@ bool TsaDataExtractor::ExtractNdviFilesInfos(FieldInfoType &fieldInfo)
 {
     //if (!m_pNdviReader->GetEntriesForField(fieldInfo.fieldId, fieldInfo.ndviLines)) {
     if (!m_pNdviReader->GetEntriesForField(fieldInfo.fieldSeqId, fieldInfo.ndviLines)) {
-        otbAppLogWARNING("Cannot extract NDVI infos for the field " << fieldInfo.fieldId);
+        if (m_bVerbose) {
+            otbAppLogWARNING("Cannot extract NDVI infos for the field " << fieldInfo.fieldId);
+        }
         return false;
     }
     if (fieldInfo.ndviLines.size() == 0) {

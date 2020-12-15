@@ -8,8 +8,9 @@
 #include "TimeSeriesAnalysisTypes.h"
 #include "TsaPrevPrdReader.h"
 #include "TsaDebugPrinter.h"
+#include "TsaHandlerBase.h"
 
-class TsaHarvestOnlyAnalysisHandler
+class TsaHarvestOnlyAnalysisHandler : public TsaHandlerBase
 {
 public:
     TsaHarvestOnlyAnalysisHandler(itk::Logger* logger);

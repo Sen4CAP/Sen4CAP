@@ -46,8 +46,7 @@
 #include "TsaCatchCropAnalysisHandler.h"
 #include "TsaFallowAnalysisHandler.h"
 #include "TsaNfcAnalysisHandler.h"
-
-//#define INPUT_SHP_DATE_PATTERN      "%4d-%2d-%2d"
+#include "TsaTillageAnalysisHandler.h"
 
 #define CATCH_CROP_VAL                  "CatchCrop"
 #define CATCH_CROP_IS_MAIN_VAL          "CatchCropIsMain"
@@ -84,55 +83,13 @@ public:
     /** Filters typedef */
 
 private:
-    TimeSeriesAnalysis() : m_tsaHarvestOnlyHandler(GetLogger()), m_tsaCCHandler(GetLogger()),
-        m_tsaFallowHandler(GetLogger()), m_tsaNfcHandler(GetLogger()),
+    TimeSeriesAnalysis() : m_tsaHarvestOnlyHandler(GetLogger()),
         m_tsaDataExtractor(GetLogger()), m_tsaDataExtrPreProc(GetLogger())
     {
         m_countryName = "UNKNOWN";
         m_practiceName = NA_STR;
         m_year = "UNKNOWN";
         m_nMinS1PixCnt = 8;
-
-        m_OpticalThrVegCycle = 550; //350;
-
-        // for MARKER 2 - NDVI loss
-        // expected value of harvest/clearance
-        m_NdviDown = 300;// 350;
-        // buffer value (helps in case of sparse ndvi time-series)
-        m_NdviUp = 400;//550;
-        // opt.thr.value is round up to ndvi.step
-        m_ndviStep = 5;
-        m_OpticalThresholdMinimum = 100;
-
-        // for MARKER 5 - COHERENCE increase
-        m_CohThrBase = 0.1; //0.05;
-        m_CohThrHigh = 0.2; //0.15;
-        m_CohThrAbs = 0.7;  //0.75;
-
-        // for MARKER 3 - BACKSCATTER loss
-        m_AmpThrMinimum = 0.1;
-
-        // INPUT THRESHOLDS - EFA PRACTICE evaluation
-        // TODO: Ask Gisat for CZE
-        m_CatchCropIsMain = CATCH_CROP_IS_MAIN_VAL;
-        m_CatchPeriod = 56;               // in days (e.g. 8 weeks == 56 days)
-        m_CatchProportion = 1./3;       // buffer threshold
-
-        m_EfaNdviThr = 400; // 325;
-        m_EfaNdviUp = 600; // 400;
-        m_EfaNdviDown = 600; // 300;
-
-        m_EfaCohChange = 0.2;
-        m_EfaCohValue = 0.7;
-
-        // TODO: ask Gisat about this value
-        m_EfaNdviMin = NOT_AVAILABLE;
-        m_EfaAmpThr = NOT_AVAILABLE;
-
-        m_UseStdDevInAmpThrValComp = false;
-        m_OpticalThrBufDenominator = 6;
-        m_AmpThrBreakDenominator = 6;
-        m_AmpThrValDenominator = 2;
 
         m_CatchCropVal = CATCH_CROP_VAL;
         m_FallowLandVal = FALLOW_LAND_VAL;
@@ -144,6 +101,8 @@ private:
 
         time(&m_ttLimitAcqDate);
         m_ttLimitAcqDate -= (SEC_IN_WEEK * 2);
+
+        m_bMonitorTillage = false;
     }
 
     void DoInit() override
@@ -197,6 +156,11 @@ private:
         SetParameterDescription("practice", "The year to be used in the output file name");
         MandatoryOff("year");
 
+        AddParameter(ParameterType_Int, "tillage", "Specifies if tillage should be monitored");
+        SetParameterDescription("tillage", "Specifies if tillage should be monitored. Boolean : 0 - do not monitor, 1 - monitor tillage");
+        SetDefaultParameterInt("tillage", 0);
+        MandatoryOff("tillage");
+
 
 // /////////////////////// CONFIGURABLE PARAMETERS PER SITE AND PRACTICE ////////////////////
         AddParameter(ParameterType_Float, "optthrvegcycle", "Optical threshold vegetation cycle");
@@ -224,6 +188,16 @@ private:
 
         AddParameter(ParameterType_Float, "cohthrabs", "Coherence threshold absolute");
         SetParameterDescription("cohthrabs", "for MARKER 5 - COHERENCE increase");
+
+        AddParameter(ParameterType_Float, "tlcohthrbase", "Tillage COHERENCE increase");
+        SetParameterDescription("tlcohthrbase", "Used in Marker 5 as the Basic increase in coherence threshold");
+        MandatoryOff("tlcohthrbase");
+        SetDefaultParameterFloat("tlcohthrbase", 0.05);
+
+        AddParameter(ParameterType_Float, "tlcohthrabs", "Tillage Coherence threshold absolute");
+        SetParameterDescription("tlcohthrabs", "Used in Marker 5 as the Absolute coherence threshold");
+        MandatoryOff("tlcohthrabs");
+        SetDefaultParameterFloat("tlcohthrabs", 0.75);
 
         AddParameter(ParameterType_Float, "ampthrmin", "BACKSCATTER loss");
         SetParameterDescription("ampthrmin", "for MARKER 3 - BACKSCATTER loss");
@@ -374,6 +348,7 @@ private:
         m_tsaDataExtractor.SetAllowGaps(GetParameterInt("allowgaps") != 0);
         m_debugPrinter.SetDebugMode(GetParameterInt("debug") != 0);
         m_nMinS1PixCnt = GetParameterInt("s1pixthr");
+        m_bMonitorTillage = GetParameterInt("tillage") != 0;
 
         if (HasValue("country")) {
             m_countryName = trim(GetParameterAsString("country"));
@@ -395,88 +370,6 @@ private:
         }
 
 //  ///////////////////////////////////////////////////////////////////
-        if (HasValue("optthrvegcycle")) {
-            m_OpticalThrVegCycle = GetParameterFloat("optthrvegcycle");
-        }
-        if (HasValue("ndvidw")) {
-            m_NdviDown = GetParameterFloat("ndvidw");
-        }
-        if (HasValue("ndviup")) {
-            m_NdviUp = GetParameterFloat("ndviup");
-        }
-        if (HasValue("ndvistep")) {
-            m_ndviStep = GetParameterFloat("ndvistep");
-        }
-        if (HasValue("optthrmin")) {
-            m_OpticalThresholdMinimum = GetParameterFloat("optthrmin");
-        }
-        if (HasValue("cohthrbase")) {
-            m_CohThrBase = GetParameterFloat("cohthrbase");
-        }
-        if (HasValue("cohthrhigh")) {
-            m_CohThrHigh = GetParameterFloat("cohthrhigh");
-        }
-        if (HasValue("cohthrabs")) {
-            m_CohThrAbs = GetParameterFloat("cohthrabs");
-        }
-        if (HasValue("ampthrmin")) {
-            m_AmpThrMinimum = GetParameterFloat("ampthrmin");
-        }
-        if (HasValue("catchmain")) {
-            m_CatchMain = GetParameterString("catchmain");
-        }
-        if (HasValue("catchcropismain")) {
-            m_CatchCropIsMain = GetParameterString("catchcropismain");
-        }
-
-        if (HasValue("catchperiod")) {
-            m_CatchPeriod = GetParameterInt("catchperiod");
-        }
-        if (HasValue("catchproportion")) {
-            m_CatchProportion = GetParameterFloat("catchproportion");
-        }
-        if (HasValue("catchperiodstart")) {
-            m_CatchPeriodStart = GetParameterString("catchperiodstart");
-        }
-        if (HasValue("efandvithr")) {
-            m_EfaNdviThr = GetParameterInt("efandvithr");
-        }
-        if (HasValue("efandviup")) {
-            m_EfaNdviUp = GetParameterInt("efandviup");
-        }
-        if (HasValue("efandvidw")) {
-            m_EfaNdviDown = GetParameterInt("efandvidw");
-        }
-        if (HasValue("efacohchange")) {
-            m_EfaCohChange = GetParameterFloat("efacohchange");
-        }
-        if (HasValue("efacohvalue")) {
-            m_EfaCohValue = GetParameterFloat("efacohvalue");
-        }
-        if (HasValue("efandvimin")) {
-            m_EfaNdviMin = GetParameterFloat("efandvimin");
-        }
-        if (HasValue("efaampthr")) {
-            m_EfaAmpThr = GetParameterFloat("efaampthr");
-        }
-        if (HasValue("stddevinampthr")) {
-            m_UseStdDevInAmpThrValComp = GetParameterInt("stddevinampthr");
-        }
-        if (HasValue("optthrbufden")) {
-            m_OpticalThrBufDenominator = GetParameterInt("optthrbufden");
-        }
-        if (HasValue("ampthrbreakden")) {
-            m_AmpThrBreakDenominator = GetParameterInt("ampthrbreakden");
-        }
-        if (HasValue("ampthrvalden")) {
-            m_AmpThrValDenominator = GetParameterInt("ampthrvalden");
-        }
-        if (HasValue("flmarkstartdate")) {
-            m_flMarkersStartDateStr = GetParameterString("flmarkstartdate");
-        }
-        if (HasValue("flmarkstenddate")) {
-            m_flMarkersEndDateStr = GetParameterString("flmarkstenddate");
-        }
         if (HasValue("plotgraph")) {
             m_plotsWriter.SetEnabled(GetParameterInt("plotgraph") != 0);
         }
@@ -503,22 +396,11 @@ private:
         // Initialize handler parameters
         InitializeHarvestEvaluationHandler();
 
-        // Efa parameters
-        if (m_practiceName == CATCH_CROP_VAL) {
-            InitializeEfaHandler(&m_tsaCCHandler);
-            m_tsaCCHandler.SetCatchMain(m_CatchMain);
-            m_tsaCCHandler.SetCatchCropIsMain(m_CatchCropIsMain);
-            m_tsaCCHandler.SetCatchPeriod(m_CatchPeriod);
-            m_tsaCCHandler.SetCatchProportion(m_CatchProportion);
-            m_tsaCCHandler.SetCatchPeriodStart(m_CatchPeriodStart);
-            m_tsaCCHandler.SetOpticalThrVegCycle(m_OpticalThrVegCycle);
-        } else if (m_practiceName == FALLOW_LAND_VAL) {
-            InitializeEfaHandler(&m_tsaFallowHandler);
-            m_tsaFallowHandler.SetMarkersStartDate(m_flMarkersStartDateStr);
-            m_tsaFallowHandler.SetMarkersEndDate(m_flMarkersEndDateStr);
-        } else if (m_practiceName == NITROGEN_FIXING_CROP_VAL) {
-            InitializeEfaHandler(&m_tsaNfcHandler);
-        }
+        // Initialize Efa handler, if needed
+        InitializeEfaHandler();
+
+        // Initialize tillage handler, if needed
+        InitializeTillageHandler();
     }
     void DoExecute() override
     {
@@ -553,7 +435,7 @@ private:
         m_pPracticeReader->SetSource(practicesInfoFile);
 
         // write first the CSV header
-        if (!m_csvWriter.WriteCSVHeader(m_outputDir, m_practiceName, m_countryName, curYear)) {
+        if (!m_csvWriter.WriteCSVHeader(m_outputDir, m_practiceName, m_countryName, curYear, m_bMonitorTillage)) {
             otbAppLogFATAL("Error opening output file for practice " << m_practiceName << " and year "
                            << curYear << " in the directory " << m_outputDir << ". Exiting...");
         }
@@ -585,15 +467,9 @@ private:
         const std::string &practiceStart = feature.GetPracticeStart();
         const std::string &practiceEnd = feature.GetPracticeEnd();
 
-        // TODO: Remove this after testing
-//        if (fieldId != "681116204" && fieldId != "680105602" && fieldId != "584109910/2" && fieldId != "655115201_1")
-//        {
+//        if (feature.GetFieldSeqId() != "883293") {
 //            return false;
 //        }
-//        if (feature.GetFieldSeqId() != "77321") {
-//            return false;
-//        }
-
         FieldInfoType fieldInfos(fieldId);
 
         fieldInfos.fieldSeqId = feature.GetFieldSeqId();
@@ -696,9 +572,11 @@ private:
 
             // in case an error occurred, write in the end the parcel but with invalid infos
             HarvestEvaluationInfoType harvestEvalInfos(harvestStatusInitVal);
-
+            EfaEvaluationInfoType efaEvalInfos(harvestStatusInitVal);
+            TillageEvaluationInfoType tillageInfos(harvestStatusInitVal);
             harvestEvalInfos.Initialize(fieldInfos);
-            m_csvWriter.WriteHarvestInfoToCsv(fieldInfos, harvestEvalInfos, harvestEvalInfos);
+            efaEvalInfos.Initialize(fieldInfos);
+            m_csvWriter.WriteHarvestInfoToCsv(fieldInfos, harvestEvalInfos, efaEvalInfos, tillageInfos);
         }
 
         return bOK;
@@ -730,27 +608,27 @@ private:
         }
 
         bool bShortenVegWeek = false;
-        if (fieldInfos.practiceName == CATCH_CROP_VAL && fieldInfos.ttPracticeStartTime != 0) {
-            // # if catch crop is second crop -> shorten the veg.weeks period
-            if (fieldInfos.practiceType != m_CatchMain && fieldInfos.practiceType != m_CatchCropIsMain) {
-                bShortenVegWeek = true;
-            }
+        if (m_efaHandler) {
+            bShortenVegWeek = m_efaHandler->IsShorteningHarvestInterval(fieldInfos);
+        }
+        if (m_tillageHandler) {
+            bShortenVegWeek = m_tillageHandler->IsShorteningHarvestInterval(fieldInfos);
         }
         // ### TIME SERIES ANALYSIS FOR HARVEST ###
         HarvestEvaluationInfoType harvestInfos;
         m_tsaHarvestOnlyHandler.SetShortenVegWeeks(bShortenVegWeek);
         m_tsaHarvestOnlyHandler.PerformHarvestEvaluation(fieldInfos, allMergedValues, harvestInfos);
 
-        HarvestEvaluationInfoType efaHarvestEvalInfos;
-        bool hasEfaInfos = false;
+        EfaEvaluationInfoType efaHarvestEvalInfos;
         // ### TIME SERIES ANALYSIS FOR EFA PRACTICES ###
-        if (fieldInfos.practiceName != NA_STR && fieldInfos.ttPracticeStartTime != 0) {
-            if (fieldInfos.practiceName.find(m_CatchCropVal) != std::string::npos) {
-                m_tsaCCHandler.PerformAnalysis(fieldInfos, allMergedValues, harvestInfos, efaHarvestEvalInfos);
-            } else if (fieldInfos.practiceName == m_FallowLandVal) {
-                m_tsaFallowHandler.PerformAnalysis(fieldInfos, allMergedValues, harvestInfos, efaHarvestEvalInfos);
-            } else if (fieldInfos.practiceName == m_NitrogenFixingCropVal) {
-                m_tsaNfcHandler.PerformAnalysis(fieldInfos, allMergedValues, harvestInfos, efaHarvestEvalInfos);
+        if (m_efaHandler && fieldInfos.practiceName != NA_STR && fieldInfos.ttPracticeStartTime != 0) {
+            efaHarvestEvalInfos.Initialize(fieldInfos);
+            efaHarvestEvalInfos.SetValid(true);
+
+            if (fieldInfos.practiceName.find(m_CatchCropVal) != std::string::npos ||
+                    fieldInfos.practiceName == m_FallowLandVal ||
+                    fieldInfos.practiceName == m_NitrogenFixingCropVal) {
+                m_efaHandler->PerformAnalysis(fieldInfos, allMergedValues, harvestInfos, efaHarvestEvalInfos);
             } else {
                 otbAppLogWARNING("Practice name " << fieldInfos.practiceName << " not supported!");
             }
@@ -758,17 +636,21 @@ private:
             if (efaHarvestEvalInfos.ttPracticeEndTime > ttMaxCohDate) {
                 efaHarvestEvalInfos.efaIndex = NR_STR;
             }
-            hasEfaInfos = true;
+        }
+
+        TillageEvaluationInfoType tillageEvalInfos;
+        if (m_tillageHandler) {
+            m_tillageHandler->PerformAnalysis(fieldInfos, allMergedValues, harvestInfos, tillageEvalInfos);
         }
 
         // write infos to be generated as plots
-        m_plotsWriter.WritePlotEntry(fieldInfos, harvestInfos, efaHarvestEvalInfos, hasEfaInfos);
+        m_plotsWriter.WritePlotEntry(fieldInfos, harvestInfos, efaHarvestEvalInfos);
+
+        // write the harvest information to the final file
+        m_csvWriter.WriteHarvestInfoToCsv(fieldInfos, harvestInfos, efaHarvestEvalInfos, tillageEvalInfos);
 
         // Write the continuous field infos into the file
         m_contFileWriter.WriteContinousToCsv(fieldInfos, allMergedValues);
-
-        // write the harvest information to the final file
-        m_csvWriter.WriteHarvestInfoToCsv(fieldInfos, harvestInfos, efaHarvestEvalInfos);
 
         return true;
     }
@@ -788,47 +670,289 @@ private:
                      feature.GetPracticeEnd() << std::endl;
     }
 
+    std::string GetCatchMain() {
+        if (HasValue("catchmain")) {
+            return GetParameterString("catchmain");
+        }
+        return "";
+    }
+    std::string GetCatchCropIsMain() {
+        std::string retVal = CATCH_CROP_IS_MAIN_VAL;
+        if (HasValue("catchcropismain")) {
+            retVal = GetParameterString("catchcropismain");
+        }
+        return retVal;
+    }
+    // in days (e.g. 8 weeks == 56 days)
+    int GetCatchPeriod() {
+        return GetParameterInt("catchperiod");
+    }
+
+    // buffer threshold
+    double GetCatchProportion() {
+        return GetParameterFloat("catchproportion");
+    }
+    std::string GetCatchPeriodStart() {
+        if (HasValue("catchperiodstart")) {
+            return GetParameterString("catchperiodstart");
+        }
+        return "";
+    }
+    double GetOpticalThrVegCycle() {
+        double OpticalThrVegCycle = 550; //350;
+        if (HasValue("optthrvegcycle")) {
+            OpticalThrVegCycle = GetParameterFloat("optthrvegcycle");
+        }
+        return OpticalThrVegCycle;
+    }
+    // for MARKER 2 - NDVI loss
+    // expected value of harvest/clearance
+    double GetNdviDown() {
+        double NdviDown = 300;// 350;
+        if (HasValue("ndvidw")) {
+            NdviDown = GetParameterFloat("ndvidw");
+        }
+        return NdviDown;
+    }
+    // buffer value (helps in case of sparse ndvi time-series)
+    double GetNdviUp() {
+        double NdviUp = 400;//550;
+        if (HasValue("ndviup")) {
+            NdviUp = GetParameterFloat("ndviup");
+        }
+        return NdviUp;
+    }
+    // opt.thr.value is round up to ndvi.step
+    double GetNdviStep( ) {
+        double NdviStep = 5;
+        if (HasValue("ndvistep")) {
+            NdviStep = GetParameterFloat("ndvistep");
+        }
+        return NdviStep;
+    }
+    double GetOpticalThresholdMinimum() {
+        double OpticalThresholdMinimum = 100;
+        if (HasValue("optthrmin")) {
+            OpticalThresholdMinimum = GetParameterFloat("optthrmin");
+        }
+        return OpticalThresholdMinimum;
+    }
+
+    // for MARKER 5 - COHERENCE increase
+    double GetCohThrBase() {
+        double CohThrBase = 0.1; //0.05;
+        if (HasValue("cohthrbase")) {
+            CohThrBase = GetParameterFloat("cohthrbase");
+        }
+        return CohThrBase;
+    }
+    double GetCohThrHigh() {
+        double CohThrHigh = 0.2; //0.15;
+        if (HasValue("cohthrhigh")) {
+            CohThrHigh = GetParameterFloat("cohthrhigh");
+        }
+        return CohThrHigh;
+    }
+    double GetCohThrAbs() {
+        double CohThrAbs = 0.7;  //0.75;
+        if (HasValue("cohthrabs")) {
+            CohThrAbs = GetParameterFloat("cohthrabs");
+        }
+        return CohThrAbs;
+    }
+
+    double GetTLCohThrBase() {
+        double CohThrBase = 0.05;
+        if (HasValue("cohthrbase")) {
+            CohThrBase = GetParameterFloat("tlcohthrbase");
+        }
+        return CohThrBase;
+    }
+    double GetTLCohThrAbs() {
+        double CohThrAbs = 0.75;
+        if (HasValue("tlcohthrabs")) {
+            CohThrAbs = GetParameterFloat("tlcohthrabs");
+        }
+        return CohThrAbs;
+    }
+
+    // for MARKER 3 - BACKSCATTER loss
+    double GetAmpThrMinimum() {
+        double AmpThrMinimum = 0.1;
+        if (HasValue("ampthrmin")) {
+            AmpThrMinimum = GetParameterFloat("ampthrmin");
+        }
+        return AmpThrMinimum;
+    }
+
+    // INPUT THRESHOLDS - EFA PRACTICE evaluation
+    int GetEfaNdviThr() {
+        int EfaNdviThr = 400; // 325;
+        if (HasValue("efandvithr")) {
+            EfaNdviThr = GetParameterInt("efandvithr");
+        }
+        return EfaNdviThr;
+    }
+    int GetEfaNdviUp() {
+        int EfaNdviUp = 600; // 400;
+        if (HasValue("efandviup")) {
+            EfaNdviUp = GetParameterInt("efandviup");
+        }
+        return EfaNdviUp;
+    }
+    int GetEfaNdviDown() {
+        int EfaNdviDown = 600; // 300;
+        if (HasValue("efandvidw")) {
+            EfaNdviDown = GetParameterInt("efandvidw");
+        }
+        return EfaNdviDown;
+    }
+    double GetEfaCohChange() {
+        double EfaCohChange = 0.2;
+        if (HasValue("efacohchange")) {
+            EfaCohChange = GetParameterFloat("efacohchange");
+        }
+        return EfaCohChange;
+    }
+    double GetEfaCohValue() {
+        double EfaCohValue = 0.7;
+        if (HasValue("efacohvalue")) {
+            EfaCohValue = GetParameterFloat("efacohvalue");
+        }
+        return EfaCohValue;
+    }
+    double GetEfaNdviMin() {
+        double EfaNdviMin = NOT_AVAILABLE;
+        if (HasValue("efandvimin")) {
+            EfaNdviMin = GetParameterFloat("efandvimin");
+        }
+        return EfaNdviMin;
+    }
+    double GetEfaAmpThr() {
+        double EfaAmpThr = NOT_AVAILABLE;
+        if (HasValue("efaampthr")) {
+            EfaAmpThr = GetParameterFloat("efaampthr");
+        }
+        return EfaAmpThr;
+    }
+    bool GetUseStdDevInAmpThrValComp() {
+        bool UseStdDevInAmpThrValComp = false;
+        if (HasValue("stddevinampthr")) {
+            UseStdDevInAmpThrValComp = GetParameterInt("stddevinampthr");
+        }
+        return UseStdDevInAmpThrValComp;
+    }
+    int GetOpticalThrBufDenominator() {
+        int OpticalThrBufDenominator = 6;
+        if (HasValue("optthrbufden")) {
+            OpticalThrBufDenominator = GetParameterInt("optthrbufden");
+        }
+        return OpticalThrBufDenominator;
+    }
+    int GetAmpThrBreakDenominator() {
+        int AmpThrBreakDenominator = 6;
+        if (HasValue("ampthrbreakden")) {
+            AmpThrBreakDenominator = GetParameterInt("ampthrbreakden");
+        }
+        return AmpThrBreakDenominator;
+    }
+    int GetAmpThrValDenominator() {
+        int AmpThrValDenominator = 2;
+        if (HasValue("ampthrvalden")) {
+            AmpThrValDenominator = GetParameterInt("ampthrvalden");
+        }
+        return AmpThrValDenominator;
+    }
+    std::string GetFlMarkersStartDateStr() {
+        if (HasValue("flmarkstartdate")) {
+            return GetParameterString("flmarkstartdate");
+        }
+        return "";
+    }
+    std::string GetFlMarkersEndDateStr() {
+        if (HasValue("flmarkstenddate")) {
+            return GetParameterString("flmarkstenddate");
+        }
+        return "";
+    }
+
+    void InitializeEfaHandler()
+    {
+        TsaEfaAnalysisBase *pHandler = NULL;
+        if (m_practiceName == CATCH_CROP_VAL) {
+            pHandler = new TsaCatchCropAnalysisHandler(GetLogger());
+            InitializeEfaHandler(pHandler);
+            ((TsaCatchCropAnalysisHandler*)pHandler)->SetCatchMain(GetCatchMain());
+            ((TsaCatchCropAnalysisHandler*)pHandler)->SetCatchCropIsMain(GetCatchCropIsMain());
+            ((TsaCatchCropAnalysisHandler*)pHandler)->SetCatchPeriod(GetCatchPeriod());
+            ((TsaCatchCropAnalysisHandler*)pHandler)->SetCatchProportion(GetCatchProportion());
+            ((TsaCatchCropAnalysisHandler*)pHandler)->SetCatchPeriodStart(GetCatchPeriodStart());
+            ((TsaCatchCropAnalysisHandler*)pHandler)->SetOpticalThrVegCycle(GetOpticalThrVegCycle());
+        } else if (m_practiceName == FALLOW_LAND_VAL) {
+            pHandler = new TsaFallowAnalysisHandler(GetLogger());
+            InitializeEfaHandler(pHandler);
+            ((TsaFallowAnalysisHandler*)pHandler)->SetMarkersStartDate(GetFlMarkersStartDateStr());
+            ((TsaFallowAnalysisHandler*)pHandler)->SetMarkersEndDate(GetFlMarkersEndDateStr());
+        } else if (m_practiceName == NITROGEN_FIXING_CROP_VAL) {
+            pHandler = new TsaNfcAnalysisHandler(GetLogger());
+            InitializeEfaHandler(pHandler);
+        }
+
+        if (pHandler != NULL) {
+            m_efaHandler = std::unique_ptr<TsaEfaAnalysisBase>(pHandler);
+        }
+    }
+
     void InitializeHarvestEvaluationHandler() {
-        m_tsaHarvestOnlyHandler.SetOpticalThrVegCycle(m_OpticalThrVegCycle);
-        m_tsaHarvestOnlyHandler.SetNdviDown(m_NdviDown);
-        m_tsaHarvestOnlyHandler.SetNdviUp(m_NdviUp);
-        m_tsaHarvestOnlyHandler.SetNdviStep(m_ndviStep);
-        m_tsaHarvestOnlyHandler.SetOpticalThresholdMinimum(m_OpticalThresholdMinimum);
+        m_tsaHarvestOnlyHandler.SetOpticalThrVegCycle(GetOpticalThrVegCycle());
+        m_tsaHarvestOnlyHandler.SetNdviDown(GetNdviDown());
+        m_tsaHarvestOnlyHandler.SetNdviUp(GetNdviUp());
+        m_tsaHarvestOnlyHandler.SetNdviStep(GetNdviStep());
+        m_tsaHarvestOnlyHandler.SetOpticalThresholdMinimum(GetOpticalThresholdMinimum());
 
-        m_tsaHarvestOnlyHandler.SetCohThrBase(m_CohThrBase);
-        m_tsaHarvestOnlyHandler.SetCohThrHigh(m_CohThrHigh);
-        m_tsaHarvestOnlyHandler.SetCohThrAbs(m_CohThrAbs);
+        m_tsaHarvestOnlyHandler.SetCohThrBase(GetCohThrBase());
+        m_tsaHarvestOnlyHandler.SetCohThrHigh(GetCohThrHigh());
+        m_tsaHarvestOnlyHandler.SetCohThrAbs(GetCohThrAbs());
 
-        m_tsaHarvestOnlyHandler.SetAmpThrMinimum(m_AmpThrMinimum);
+        m_tsaHarvestOnlyHandler.SetAmpThrMinimum(GetAmpThrMinimum());
 
-        m_tsaHarvestOnlyHandler.SetUseStdDevInAmpThrValComp(m_UseStdDevInAmpThrValComp);
-        m_tsaHarvestOnlyHandler.SetOpticalThrBufDenominator(m_OpticalThrBufDenominator);
-        m_tsaHarvestOnlyHandler.SetAmpThrBreakDenominator(m_AmpThrBreakDenominator);
-        m_tsaHarvestOnlyHandler.SetAmpThrValDenominator(m_AmpThrValDenominator);
+        m_tsaHarvestOnlyHandler.SetUseStdDevInAmpThrValComp(GetUseStdDevInAmpThrValComp());
+        m_tsaHarvestOnlyHandler.SetOpticalThrBufDenominator(GetOpticalThrBufDenominator());
+        m_tsaHarvestOnlyHandler.SetAmpThrBreakDenominator(GetAmpThrBreakDenominator());
+        m_tsaHarvestOnlyHandler.SetAmpThrValDenominator(GetAmpThrValDenominator());
 
         m_tsaHarvestOnlyHandler.SetLimitAcqDate(m_ttLimitAcqDate);
     }
 
     void InitializeEfaHandler(TsaEfaAnalysisBase *pHandler) {
-        pHandler->SetEfaNdviThr(m_EfaNdviThr);
-        pHandler->SetEfaNdviUp(m_EfaNdviUp);
-        pHandler->SetEfaNdviDown(m_EfaNdviDown);
+        pHandler->SetEfaNdviThr(GetEfaNdviThr());
+        pHandler->SetEfaNdviUp(GetEfaNdviUp());
+        pHandler->SetEfaNdviDown(GetEfaNdviDown());
 
-        pHandler->SetEfaCohChange(m_EfaCohChange);
-        pHandler->SetEfaCohValue(m_EfaCohValue);
+        pHandler->SetEfaCohChange(GetEfaCohChange());
+        pHandler->SetEfaCohValue(GetEfaCohValue());
 
-        pHandler->SetEfaNdviMin(m_EfaNdviMin);
-        pHandler->SetEfaAmpThr(m_EfaAmpThr);
+        pHandler->SetEfaNdviMin(GetEfaNdviMin());
+        pHandler->SetEfaAmpThr(GetEfaAmpThr());
 
-        pHandler->SetCohThrBase(m_CohThrBase);
-        pHandler->SetCohThrHigh(m_CohThrHigh);
-        pHandler->SetCohThrAbs(m_CohThrAbs);
+        pHandler->SetCohThrBase(GetCohThrBase());
+        pHandler->SetCohThrHigh(GetCohThrHigh());
+        pHandler->SetCohThrAbs(GetCohThrAbs());
 
-        pHandler->SetNdviDown(m_NdviDown);
-        pHandler->SetNdviUp(m_NdviUp);
-        pHandler->SetNdviStep(m_ndviStep);
+        pHandler->SetNdviDown(GetNdviDown());
+        pHandler->SetNdviUp(GetNdviUp());
+        pHandler->SetNdviStep(GetNdviStep());
     }
 
+    void InitializeTillageHandler() {
+        if (m_bMonitorTillage) {
+            TsaTillageAnalysisHandler *pHandler = new TsaTillageAnalysisHandler();
+            pHandler->SetOpticalThrVegCycle(GetOpticalThrVegCycle());
+            pHandler->SetCohThrBase(GetTLCohThrBase());
+            pHandler->SetCohThrAbs(GetTLCohThrAbs());
+            m_tillageHandler = std::unique_ptr<TsaTillageAnalysisHandler>(pHandler);
+        }
+    }
 private:
     std::unique_ptr<PracticeReaderBase> m_pPracticeReader;
 
@@ -836,50 +960,6 @@ private:
     std::string m_countryName;
     std::string m_practiceName;
     std::string m_year;
-
-    double m_OpticalThrVegCycle;
-    // for MARKER 2 - NDVI loss
-    // expected value of harvest/clearance
-    double m_NdviDown;
-    // buffer value (helps in case of sparse ndvi time-series)
-    double m_NdviUp;
-    // opt.thr.value is round up to ndvi.step
-    double m_ndviStep;
-    double m_OpticalThresholdMinimum;
-
-    // for MARKER 5 - COHERENCE increase
-    double m_CohThrBase;
-    double m_CohThrHigh;
-    double m_CohThrAbs;
-
-    // for MARKER 3 - BACKSCATTER loss
-    double m_AmpThrMinimum;
-
-    // INPUT THRESHOLDS - EFA PRACTICE evaluation
-    std::string m_CatchMain;
-    std::string m_CatchCropIsMain;
-    // TODO: Ask Gisat for CZE
-    int m_CatchPeriod;               // in days (e.g. 8 weeks == 56 days)
-    double m_CatchProportion;       // buffer threshold
-    std::string m_CatchPeriodStart;
-
-    int m_EfaNdviThr;
-    int m_EfaNdviUp;
-    int m_EfaNdviDown;
-
-    double m_EfaCohChange;
-    double m_EfaCohValue;
-
-    double m_EfaNdviMin;
-    double m_EfaAmpThr;
-
-    bool m_UseStdDevInAmpThrValComp;
-    int m_OpticalThrBufDenominator;
-    int m_AmpThrBreakDenominator;
-    int m_AmpThrValDenominator;
-
-    std::string m_flMarkersStartDateStr;
-    std::string m_flMarkersEndDateStr;
 
     std::string m_CatchCropVal;
     std::string m_FallowLandVal;
@@ -900,12 +980,18 @@ private:
     time_t m_ttLimitAcqDate;
 
     TsaHarvestOnlyAnalysisHandler m_tsaHarvestOnlyHandler;
-    TsaCatchCropAnalysisHandler m_tsaCCHandler;
-    TsaFallowAnalysisHandler m_tsaFallowHandler;
-    TsaNfcAnalysisHandler m_tsaNfcHandler;
+    std::unique_ptr<TsaEfaAnalysisBase> m_efaHandler;
+    std::unique_ptr<TsaTillageAnalysisHandler> m_tillageHandler;
 
     TsaDataExtractor m_tsaDataExtractor;
     TsaDataExtrPreProcessor m_tsaDataExtrPreProc;
+
+    HarvestEvaluationInfoType m_NAHarvestEvalInfos;
+    EfaEvaluationInfoType m_NAEfaEvalInfos;
+    TillageEvaluationInfoType m_NATillageEvalInfos;
+
+    bool m_bMonitorTillage;
+
 
 };
 

@@ -107,9 +107,6 @@ typedef struct MergedAllValInfosType {
         vegWeeks = NOT_AVAILABLE;
         candidateOptical = false;
 
-        coherenceBase = false;
-        coherenceHigh = false;
-        coherencePresence = false;
         candidateCoherence = false;
         candidateAmplitude = false;
         amplitudePresence = false;
@@ -136,9 +133,6 @@ typedef struct MergedAllValInfosType {
 
     bool candidateOptical;
 
-    bool coherenceBase;
-    bool coherenceHigh;
-    bool coherencePresence;
     bool candidateCoherence;
 
     bool candidateAmplitude;
@@ -239,24 +233,16 @@ typedef struct HarvestEvaluationInfoType {
         ttVegStartTime = 0;
         ttHarvestStartTime = 0;
         ttHarvestEndTime = 0;
-        ttPracticeStartTime = 0;
-        ttPracticeEndTime = 0;
 
-        ndviPresence = naInitVal;               // M1 / M6
+        ndviPresence = naInitVal;               // M1
         candidateOptical = naInitVal;           // M2
         candidateAmplitude = naInitVal;         // M3
         amplitudePresence = naInitVal;          // M4
         candidateCoherence = naInitVal;         // M5
         harvestConfirmWeek = naInitVal;         // WEEK
-        ttHarvestConfirmWeekStart = naInitVal;          //  WEEK start as date
+        ttHarvestConfirmWeekStart = naInitVal;  //  WEEK start as date
         ttS1HarvestWeekStart = naInitVal;
         ttLWeekStartTime = naInitVal;
-
-        efaIndex = ValueToString(NAInitVal); // C_INDEX
-        ndviGrowth = naInitVal;                 // M7
-        ndviNoLoss = naInitVal;                 // M8
-        ampNoLoss = naInitVal;                  // M9
-        cohNoLoss = naInitVal;                  // M10
     }
 
     void Initialize(const FieldInfoType &fieldInfos) {
@@ -265,8 +251,6 @@ typedef struct HarvestEvaluationInfoType {
         ttVegStartTime = fieldInfos.ttVegStartTime;
         ttHarvestStartTime = fieldInfos.ttHarvestStartTime;
         ttHarvestEndTime = fieldInfos.ttHarvestEndTime;
-        ttPracticeStartTime = fieldInfos.ttPracticeStartTime;
-        ttPracticeEndTime = fieldInfos.ttPracticeEndTime;
     }
 
     std::string fieldId;
@@ -275,10 +259,8 @@ typedef struct HarvestEvaluationInfoType {
     time_t ttVegStartTime;
     time_t ttHarvestStartTime;
     time_t ttHarvestEndTime;
-    time_t ttPracticeStartTime;
-    time_t ttPracticeEndTime;
 
-    short ndviPresence;             // M1 / M6
+    short ndviPresence;             // M1
     short candidateOptical;          // M2
     short candidateAmplitude;        // M3
     short amplitudePresence;         // M4
@@ -289,13 +271,53 @@ typedef struct HarvestEvaluationInfoType {
     time_t ttLWeekStartTime;
     time_t ttS1HarvestWeekStart;    // S1 Harvest Week Start
 
-    std::string efaIndex;           // C_INDEX
+} HarvestEvaluationInfoType;
+
+typedef struct EfaEvaluationInfoType {
+    EfaEvaluationInfoType(int naInitVal = NOT_AVAILABLE) {
+        isValid = false;
+        ttPracticeStartTime = 0;
+        ttPracticeEndTime = 0;
+
+        efaIndex = ValueToString(naInitVal); // C_INDEX
+        ndviPresence = naInitVal;               // M6
+        ndviGrowth = naInitVal;                 // M7
+        ndviNoLoss = naInitVal;                 // M8
+        ampNoLoss = naInitVal;                  // M9
+        cohNoLoss = naInitVal;                  // M10
+    }
+    void Initialize(const FieldInfoType &fieldInfos) {
+        ttPracticeStartTime = fieldInfos.ttPracticeStartTime;
+        ttPracticeEndTime = fieldInfos.ttPracticeEndTime;
+    }
+    void SetValid(bool valid) {isValid = valid;}
+
+    bool isValid;
+    short ndviPresence;             // M6
     short ndviGrowth;               // M7
     double ndviNoLoss;              // M8
     double ampNoLoss;               // M9
     double cohNoLoss;               // M10
+    std::string efaIndex;           // C_INDEX
 
-} HarvestEvaluationInfoType;
+    time_t ttPracticeStartTime;
+    time_t ttPracticeEndTime;
+
+} EfaEvaluationInfoType;
+
+typedef struct TillageEvaluationInfoType {
+    TillageEvaluationInfoType(int naInitVal = NOT_AVAILABLE) {
+        isValid = false;
+        tillageConfirmWeek = naInitVal;         // WEEK
+        ttTillageConfirmWeekStart = naInitVal;          //  WEEK start as date
+    }
+
+    void SetValid(bool valid) {isValid = valid;}
+
+    bool isValid;
+    short tillageConfirmWeek;       // WEEK
+    time_t ttTillageConfirmWeekStart; // WEEK start as date
+} TillageEvaluationInfoType;
 
 typedef struct {
     time_t ttDate;
@@ -304,9 +326,7 @@ typedef struct {
     double ndviMean;
     short ndviGrowth;
     short ndviNoLoss;
-
     short ampNoLoss;
-
     short cohNoLoss;
 
 } EfaMarkersInfoType;

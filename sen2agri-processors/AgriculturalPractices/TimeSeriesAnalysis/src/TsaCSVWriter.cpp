@@ -30,7 +30,7 @@ std::string TsaCSVWriter::BuildResultsCsvFileName(const std::string &practiceNam
 }
 
 bool TsaCSVWriter::WriteCSVHeader(const std::string &outDir, const std::string &practiceName, const std::string &countryCode,
-                    int year) {
+                    int year, bool addTillage) {
     if (m_OutFileStream.is_open()) {
         return true;
     }
@@ -44,13 +44,18 @@ bool TsaCSVWriter::WriteCSVHeader(const std::string &outDir, const std::string &
     // # create result csv file for harvest and EFA practice evaluation
     m_OutFileStream << "FIELD_ID;ORIG_ID;COUNTRY;YEAR;MAIN_CROP;VEG_START;H_START;H_END;"
                "PRACTICE;P_TYPE;P_START;P_END;L_WEEK;M1;M2;M3;M4;M5;H_WEEK;H_W_START;H_W_END;H_W_S1;M6;M7;M8;M9;M10;C_INDEX;"
-               "S1PIX;S1GAPS;H_S1GAPS;P_S1GAPS;H_W_S1GAPS;H_QUALITY;C_QUALITY\n";
+               "S1PIX;S1GAPS;H_S1GAPS;P_S1GAPS;H_W_S1GAPS;H_QUALITY;C_QUALITY";
+    m_bAddTillage = addTillage;
+    if (m_bAddTillage) {
+        m_OutFileStream << ";TL_WEEK;TL_W_START;TL_W_END";
+    }
+    m_OutFileStream << "\n";
 
     return true;
 }
 
 void TsaCSVWriter::WriteHarvestInfoToCsv(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo,
-                                         const HarvestEvaluationInfoType &efaHarvestEvalInfo) {
+                                         const EfaEvaluationInfoType &efaHarvestEvalInfo, const TillageEvaluationInfoType &tillageEvalInfo) {
     //"FIELD_ID;COUNTRY;YEAR;MAIN_CROP
     m_OutFileStream << fieldInfo.fieldSeqId << ";" << fieldInfo.fieldId << ";" << fieldInfo.countryCode << ";" << ValueToString(fieldInfo.year) << ";" << fieldInfo.mainCrop << ";" <<
                // VEG_START;H_START;H_END;"
@@ -86,10 +91,19 @@ void TsaCSVWriter::WriteHarvestInfoToCsv(const FieldInfoType &fieldInfo, const H
                fieldInfo.s1PixValue << ";" << ValueToString(fieldInfo.gapsInfos) <<  ";" <<
                // H_S1GAPS;P_S1GAPS
                ValueToString(fieldInfo.hS1GapsInfos) <<  ";"  << ValueToString(fieldInfo.pS1GapsInfos) << ";" <<
-               GetHWS1Gaps(fieldInfo, harvestEvalInfo, efaHarvestEvalInfo) << ";" <<
-               GetHQuality(fieldInfo, harvestEvalInfo, efaHarvestEvalInfo) << ";" <<
-               GetCQuality(fieldInfo, harvestEvalInfo, efaHarvestEvalInfo) <<
-              "\n";
+               GetHWS1Gaps(fieldInfo, harvestEvalInfo) << ";" <<
+               GetHQuality(fieldInfo, harvestEvalInfo) << ";" <<
+               GetCQuality(fieldInfo, harvestEvalInfo);
+    if (m_bAddTillage) {
+        m_OutFileStream << ";" << TranslateHWeekNrDate(ValueToString(tillageEvalInfo.tillageConfirmWeek)) << ";" <<
+                           // TL_W_START;
+                           TranslateHWeekNrDate(TimeToString(tillageEvalInfo.ttTillageConfirmWeekStart)) << ";" <<
+                           // TL_W_END;
+                           TranslateHWeekNrDate(TimeToString((IsNA(tillageEvalInfo.ttTillageConfirmWeekStart) || tillageEvalInfo.ttTillageConfirmWeekStart == 0) ?
+                                           tillageEvalInfo.ttTillageConfirmWeekStart :
+                                           tillageEvalInfo.ttTillageConfirmWeekStart + (6 * SEC_IN_DAY)));
+    }
+    m_OutFileStream << "\n";
     m_OutFileStream.flush();
 }
 
@@ -107,16 +121,14 @@ std::string TsaCSVWriter::TranslateHWeekNrDate(const std::string &strHDate) {
     return strHDate;
 }
 
-std::string TsaCSVWriter::GetHWS1Gaps(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo,
-                                         const HarvestEvaluationInfoType &efaHarvestEvalInfo) {
+std::string TsaCSVWriter::GetHWS1Gaps(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo) {
     if (!IsNA(harvestEvalInfo.harvestConfirmWeek) && harvestEvalInfo.harvestConfirmWeek > 0) {
         return ValueToString(fieldInfo.h_W_S1GapsInfos);
     }
     return ValueToString(harvestEvalInfo.harvestConfirmWeek);
 }
 
-std::string TsaCSVWriter::GetHQuality(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo,
-                                         const HarvestEvaluationInfoType &efaHarvestEvalInfo) {
+std::string TsaCSVWriter::GetHQuality(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo) {
     const std::string &s1HwStart = TimeToString(harvestEvalInfo.ttS1HarvestWeekStart);
     if (m_HWeekInvalidVals.find(s1HwStart) == m_HWeekInvalidVals.end()) {
         if (!IsNA(harvestEvalInfo.harvestConfirmWeek) && harvestEvalInfo.harvestConfirmWeek > 0) {
@@ -128,8 +140,7 @@ std::string TsaCSVWriter::GetHQuality(const FieldInfoType &fieldInfo, const Harv
     return "";
 }
 
-std::string TsaCSVWriter::GetCQuality(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo,
-                                         const HarvestEvaluationInfoType &efaHarvestEvalInfo) {
+std::string TsaCSVWriter::GetCQuality(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &) {
 
 //    if (m_IndexPossibleVals.find(efaHarvestInfo.efaIndex) != m_IndexPossibleVals.end()) {
     if (fieldInfo.pS1GapsInfos >= 2) {

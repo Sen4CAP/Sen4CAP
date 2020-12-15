@@ -10,6 +10,8 @@ public:
 
     const char * GetNameOfClass() { return "TsaCatchCropAnalysisHandler"; }
 
+    virtual bool IsShorteningHarvestInterval(const FieldInfoType &fieldInfos);
+
     void SetCatchMain(const std::string &val) {
         m_CatchMain= val;
         if (m_CatchMain.size() == 0) {
@@ -24,12 +26,12 @@ public:
 
     virtual bool PerformAnalysis(const FieldInfoType &fieldInfos, std::vector<MergedAllValInfosType> &retAllMergedValues,
                                  HarvestEvaluationInfoType &harvestEvalInfos,
-                                 HarvestEvaluationInfoType &efaHarvestEvalInfo);
+                                 EfaEvaluationInfoType &efaHarvestEvalInfo);
 
 private:
     bool CCEfaMarkersExtraction(time_t ttDateA, time_t ttDateB, time_t weekA,
                              const FieldInfoType &fieldInfos,
-                             HarvestEvaluationInfoType &ccHarvestEvalInfos);
+                             EfaEvaluationInfoType &ccHarvestEvalInfos);
 
 private:
     std::string m_CatchMain;

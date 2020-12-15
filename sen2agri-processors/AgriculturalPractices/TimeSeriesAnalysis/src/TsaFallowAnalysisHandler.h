@@ -13,7 +13,7 @@ public:
 
     virtual bool PerformAnalysis(const FieldInfoType &fieldInfos, std::vector<MergedAllValInfosType> &retAllMergedValues,
                                  HarvestEvaluationInfoType &harvestEvalInfos,
-                                 HarvestEvaluationInfoType &efaHarvestEvalInfo);
+                                 EfaEvaluationInfoType &efaHarvestEvalInfo);
 
 private:
     std::string m_flMarkersStartDateStr;

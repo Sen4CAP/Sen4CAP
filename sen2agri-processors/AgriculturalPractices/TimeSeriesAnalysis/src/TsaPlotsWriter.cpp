@@ -52,16 +52,16 @@ void TsaPlotsWriter::ClosePlotsFile() {
 }
 
 void TsaPlotsWriter::WritePlotEntry(const FieldInfoType &fieldInfos, const HarvestEvaluationInfoType &harvestEvalInfo,
-                                    const HarvestEvaluationInfoType &efaHarvestEvalInfo, bool hasEfaInfos) {
+                                    const EfaEvaluationInfoType &efaHarvestEvalInfo) {
     if (!m_bPlotOutputGraph) {
         return;
     }
 
     std::stringstream ss;
-    time_t ttPractStart = (hasEfaInfos ? efaHarvestEvalInfo.ttPracticeStartTime :
-                                        harvestEvalInfo.ttPracticeStartTime);
-    time_t ttPractEnd = (hasEfaInfos ? efaHarvestEvalInfo.ttPracticeEndTime :
-                                      harvestEvalInfo.ttPracticeEndTime);
+    time_t ttPractStart = (efaHarvestEvalInfo.isValid ? efaHarvestEvalInfo.ttPracticeStartTime :
+                                        fieldInfos.ttPracticeStartTime);
+    time_t ttPractEnd = (efaHarvestEvalInfo.isValid ? efaHarvestEvalInfo.ttPracticeEndTime :
+                                      fieldInfos.ttPracticeEndTime);
 
     ss << " <fid id=\"" << fieldInfos.fieldSeqId.c_str() << "\" orig_id=\"" << fieldInfos.fieldId.c_str() << "\">\n";
     ss << " <practice start=\"" << TimeToString(ttPractStart).c_str() <<

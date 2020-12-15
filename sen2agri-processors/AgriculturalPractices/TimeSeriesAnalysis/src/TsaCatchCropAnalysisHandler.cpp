@@ -7,10 +7,22 @@ TsaCatchCropAnalysisHandler::TsaCatchCropAnalysisHandler(itk::Logger* logger)
 {
 }
 
+bool TsaCatchCropAnalysisHandler::IsShorteningHarvestInterval(const FieldInfoType &fieldInfos)
+{
+    bool bShortenVegWeek = false;
+    if (fieldInfos.practiceName == CATCH_CROP_VAL && fieldInfos.ttPracticeStartTime != 0) {
+        // # if catch crop is second crop -> shorten the veg.weeks period
+        if (fieldInfos.practiceType != m_CatchMain && fieldInfos.practiceType != m_CatchCropIsMain) {
+            bShortenVegWeek = true;
+        }
+    }
+    return bShortenVegWeek;
+}
+
 bool TsaCatchCropAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
                                             std::vector<MergedAllValInfosType> &retAllMergedValues,
                                             HarvestEvaluationInfoType &harvestEvalInfos,
-                                            HarvestEvaluationInfoType &ccHarvestEvalInfos) {
+                                            EfaEvaluationInfoType &ccHarvestEvalInfos) {
     time_t ttDateA;     // last possible start of catch-crop period
     time_t ttDateB;     // last possible end of catch-crop period
     time_t ttDateC;
@@ -20,14 +32,14 @@ bool TsaCatchCropAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfo
     //time_t weekB;
     time_t catchStart;
 
-    ccHarvestEvalInfos = harvestEvalInfos;
+    // ccHarvestEvalInfos = harvestEvalInfos;
 
-    if (harvestEvalInfos.ttPracticeEndTime == 0) {
+    if (fieldInfos.ttPracticeEndTime == 0) {
         // # last possible start of catch-crop period
-        ttDateA = harvestEvalInfos.ttPracticeStartTime;
+        ttDateA = fieldInfos.ttPracticeStartTime;
         // # last possible end of catch-crop period
         ttDateB = ttDateA + (m_CatchPeriod - 1) * SEC_IN_DAY;
-        weekA = FloorDateToWeekStart(harvestEvalInfos.ttPracticeStartTime);
+        weekA = FloorDateToWeekStart(fieldInfos.ttPracticeStartTime);
         //weekB = FloorDateToWeekStart(ttDateB);
         if (IsNA(harvestEvalInfos.harvestConfirmWeek)) {
              // harvest is "NR", set the start of catch-crop period to the last possible start of
@@ -208,7 +220,7 @@ bool TsaCatchCropAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfo
     // is catch-crop grown in/under the main crop on the parcel
     bool catchInMaincrop = ((fieldInfos.practiceType == m_CatchMain) ||
             (fieldInfos.practiceType == m_CatchCropIsMain));
-    time_t ttVegSeasonStart = FloorDateToWeekStart(ccHarvestEvalInfos.ttVegStartTime);
+    time_t ttVegSeasonStart = FloorDateToWeekStart(harvestEvalInfos.ttVegStartTime);
 
 //      DEBUG
 //        std::cout << TimeToString(ttVegSeasonStart) << std::endl;
@@ -233,7 +245,7 @@ bool TsaCatchCropAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfo
         ccHarvestEvalInfos.cohNoLoss = NR;                           // M10
         return true;
 
-    } else if (IsNA(ccHarvestEvalInfos.harvestConfirmWeek)) {
+    } else if (IsNA(harvestEvalInfos.harvestConfirmWeek)) {
         if (!catchInMaincrop) {
             bool found = false;
             for (size_t i = 0; i<retAllMergedValues.size(); i++) {
@@ -259,7 +271,7 @@ bool TsaCatchCropAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfo
             // harvest was not detected but catch-crop was sown in/under the main crop - evaluate
         // }
     } else {
-        if (ccHarvestEvalInfos.ttHarvestConfirmWeekStart > weekA && !catchInMaincrop) {
+        if (harvestEvalInfos.ttHarvestConfirmWeekStart > weekA && !catchInMaincrop) {
             ccHarvestEvalInfos.efaIndex = "POOR";
             ccHarvestEvalInfos.ndviPresence = NR;                        // M6
             ccHarvestEvalInfos.ndviGrowth = NR;                          // M7
@@ -275,7 +287,7 @@ bool TsaCatchCropAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfo
 
 bool TsaCatchCropAnalysisHandler::CCEfaMarkersExtraction(time_t ttDateA, time_t ttDateB, time_t weekA,
                          const FieldInfoType &fieldInfos,
-                         HarvestEvaluationInfoType &ccHarvestEvalInfos) {
+                         EfaEvaluationInfoType &ccHarvestEvalInfos) {
     // get efa markers for the defined catch-crop period
     std::vector<EfaMarkersInfoType> efaMarkers;
     ExtractEfaMarkers(ttDateA, ttDateB, fieldInfos, efaMarkers);
