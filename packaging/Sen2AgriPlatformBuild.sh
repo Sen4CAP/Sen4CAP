@@ -113,7 +113,7 @@ function build_dir_tree()
 {
    ##set PATH env variable to /usr/bin to avoid
    # cmake finding /lib/cmake before /usr/lib/cmake
-   export PATH="/usr/bin:$PATH"
+   export PATH="/opt/rh/rh-ruby23/root/usr/local/bin:/usr/bin:$PATH"
 
    ##go to default dir
    cd ${DEFAULT_DIR}

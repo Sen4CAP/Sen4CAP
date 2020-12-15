@@ -20,8 +20,8 @@
 : ${INSTALL_DIR:="install"}
 : ${RPM_DIR:="rpm_binaries"}
 : ${BUILD_DIR:="build"}
-: ${PROC_VERSION:="2.1.36"}
-: ${DOWNL_DEM_VERSION:="2.1.36"}
+: ${PROC_VERSION:="2.1.65"}
+: ${DOWNL_DEM_VERSION:="2.1.65"}
 : ${WORKING_DIR_INSTALL:=${PLATFORM_NAME_DIR}/${INSTALL_DIR}}
 : ${WORKING_DIR_RPM:=${PLATFORM_NAME_DIR}/${RPM_DIR}}
 : ${WORKING_DIR_BUILD:=${PLATFORM_NAME_DIR}/${BUILD_DIR}}
@@ -162,7 +162,7 @@ function build_dir_tree()
 {
    ##set PATH env variable to /usr/bin to avoid
    # cmake finding /lib/cmake before /usr/lib/cmake
-   export PATH="/usr/bin:$PATH"
+   export PATH="/opt/rh/rh-ruby23/root/usr/local/bin:/usr/bin:$PATH"
 
    ##go to default dir
    cd ${DEFAULT_DIR}
