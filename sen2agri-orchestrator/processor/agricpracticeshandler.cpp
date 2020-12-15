@@ -68,7 +68,14 @@ void AgricPracticesHandler::CreateTasks(const AgricPracticesJobPayload &jobCfg, 
         for (int idx: practicesIdxs) {
             outAllTasksList[productFormatterIdx].parentTasks.append(outAllTasksList[idx]);
         }
-        outAllTasksList.append(TaskToSubmit{ "export-product-launcher", {outAllTasksList[productFormatterIdx]} });
+        int exportPrdLauncherParentIdx = productFormatterIdx;
+        if (jobCfg.isScheduledJob) {
+            // add task for generating also the l4c markers db product
+            outAllTasksList.append(TaskToSubmit{ "extract-l4c-markers", {outAllTasksList[productFormatterIdx]} });
+            exportPrdLauncherParentIdx = curTaskIdx++;
+        }
+        // task for exporting the product as shp
+        outAllTasksList.append(TaskToSubmit{ "export-product-launcher", {outAllTasksList[exportPrdLauncherParentIdx]} });
     }
 }
 
@@ -114,8 +121,11 @@ void AgricPracticesHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,
         steps.append(productFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
 
         const auto & productFormatterPrdFileIdFile = productFormatterTask.GetFilePath("prd_infos.txt");
-        TaskToSubmit &exportCsvToShpProductTask = allTasksList[curTaskIdx++];
 
+        if (jobCfg.isScheduledJob) {
+            CreateStepsForExportL4CMarkers(jobCfg, steps, allTasksList, curTaskIdx, productFormatterPrdFileIdFile);
+        }
+        TaskToSubmit &exportCsvToShpProductTask = allTasksList[curTaskIdx++];
         const QStringList &exportCsvToShpProductArgs = GetExportProductLauncherArgs(jobCfg, productFormatterPrdFileIdFile);
         steps.append(exportCsvToShpProductTask.CreateStep("export-product-launcher", exportCsvToShpProductArgs));
     }
@@ -172,8 +182,8 @@ void AgricPracticesHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
 {
     if (event.module == "product-formatter") {
 
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
+        const QString &prodName = GetProductFormatterProductName(ctx, event);
+        const QString &productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
         if(prodName != "") {
             QString quicklook = GetProductFormatterQuicklook(ctx, event);
             QString footPrint = GetProductFormatterFootprint(ctx, event);
@@ -196,7 +206,26 @@ void AgricPracticesHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));
         }
-    } else if ((event.module == "export-product-launcher") || (event.module.endsWith("-data-extraction-only"))) {
+    } else if (event.module == "extract-l4c-markers") {
+
+        const QString &productPath = GetProductFormatterOutputProductPath(ctx, event);
+        const QString &prodName = GetProductFormatterProductName(ctx, event);
+        QFileInfo fileInfo(prodName);
+        const QString &prdNameNoExt = fileInfo.baseName ();
+        if(QFileInfo::exists(productPath) && prdNameNoExt != "") {
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
+            // Insert the product into the database
+            QDateTime minDate, maxDate;
+            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prdNameNoExt, minDate, maxDate);
+            ProductType prdType = ProductType::S4MDB3ProductTypeId;
+            ctx.InsertProduct({ prdType, event.processorId, event.siteId,
+                                event.jobId, productPath, maxDate,
+                                prdNameNoExt, "", footPrint, std::experimental::nullopt, TileIdList() });
+        } else {
+            Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and path %2").arg(prdNameNoExt).arg(productPath));
+        }
+    }
+    else if ((event.module == "export-product-launcher") || (event.module.endsWith("-data-extraction-only"))) {
         ctx.MarkJobFinished(event.jobId);
         // Now remove the job folder containing temporary files
         RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
@@ -219,6 +248,38 @@ QStringList AgricPracticesHandler::GetExportProductLauncherArgs(const AgricPract
                                                      "-g", ogr2OgrPath
                                                 };
     return exportCsvToShpProductArgs;
+}
+
+QString AgricPracticesHandler::CreateStepsForExportL4CMarkers(const AgricPracticesJobPayload &jobCfg,
+                                                                  NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx,
+                                                                const QString &productFormatterPrdFileIdFile) {
+
+    TaskToSubmit &exportTask = allTasksList[curTaskIdx++];
+    const auto &targetFolder = GetFinalProductFolder(*jobCfg.pCtx, jobCfg.event.jobId, jobCfg.event.siteId);
+    const QString &strTimePeriod = QString("%1_%2").arg(jobCfg.minDate.toString("yyyyMMdd"),
+                                                        jobCfg.maxDate.toString("yyyyMMdd"));
+    const QString &creationDateStr = QDateTime::currentDateTime().toString("yyyyMMddTHHmmss");
+    const QString &prdName = QString("SEN4CAP_MDB3_S%1_V%2_%3").arg(QString::number(jobCfg.event.siteId), strTimePeriod,
+                                                                  creationDateStr);
+    const QString &exportedFile = QString("%1/%2/%3.ipc").arg(targetFolder, prdName, prdName);
+    const auto &outPropsPath = exportTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
+    std::ofstream executionInfosFile;
+    try {
+        executionInfosFile.open(outPropsPath.toStdString().c_str(), std::ofstream::out);
+        executionInfosFile << exportedFile.toStdString() << std::endl;
+        executionInfosFile.close();
+    } catch (...) {
+    }
+
+    const QString &schedPrdsHistFile = GetSchedL4CPrdsHistoryFile(jobCfg.parameters, jobCfg.configParameters, jobCfg.siteShortName, jobCfg.siteCfg.year);
+    const QStringList &exportL4CMarkersProductArgs = { "--site", QString::number(jobCfg.event.siteId),
+                                                     "--year", jobCfg.siteCfg.year,
+                                                     "--new-prd-info-file", productFormatterPrdFileIdFile,
+                                                     "--prds-history-files", schedPrdsHistFile,
+                                                     "-o", exportedFile
+                                                };
+    steps.append(exportTask.CreateStep("export-l4c-markers", exportL4CMarkersProductArgs));
+    return exportedFile;
 }
 
 QStringList AgricPracticesHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const AgricPracticesJobPayload &jobCfg,
@@ -416,7 +477,7 @@ QStringList AgricPracticesHandler::GetTimeSeriesAnalysisArgs(const AgricPractice
                             "-rescontprd", "0", "-country", jobCfg.siteCfg.country, "-practice", tsaExpectedPractice,
                             "-year", jobCfg.siteCfg.year, "-harvestshp", practicesFile,
                             "-diramp", inFiles["AMP"], "-dircohe", inFiles["COHE"], "-dirndvi", inFiles["NDVI"],
-                            "-outdir", outDir };
+                            "-tillage", QString::number(jobCfg.siteCfg.bTillageMonitoring), "-outdir", outDir };
     if (jobCfg.siteCfg.tsaMinAcqsNo.size() > 0) {
         retArgs += "-minacqs";
         retArgs += jobCfg.siteCfg.tsaMinAcqsNo;
@@ -731,6 +792,15 @@ QString AgricPracticesHandler::GetTsInputTablesDir(const QJsonObject &parameters
         return QDir(val).filePath(practice);
     }
     return val.replace("{practice}", practice);
+}
+
+QString AgricPracticesHandler::GetSchedL4CPrdsHistoryFile(const QJsonObject &parameters, const std::map<QString,
+                                                   QString> &configParameters, const QString &siteShortName,
+                                                   const QString &year) {
+
+    // we expect the value to be something like /mnt/archive/agric_practices_files/{site}/{year}/l4c_scheduled_prds_history.txt
+    return GetProcessorDirValue(parameters, configParameters, "sched_prds_hist_file", siteShortName, year,
+                                       QString(L4C_AP_DEF_TS_ROOT) + "l4c_scheduled_prds_history.txt");
 }
 
 QMap<QString, QString> AgricPracticesHandler::GetPracticeTableFiles(const QJsonObject &parameters,

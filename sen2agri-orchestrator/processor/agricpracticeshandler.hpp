@@ -9,7 +9,7 @@
 
 typedef struct AgricPracticesSiteCfg {
     AgricPracticesSiteCfg() {
-
+        bTillageMonitoring = false;
     }
     QString additionalFilesRootDir;
 
@@ -30,6 +30,9 @@ typedef struct AgricPracticesSiteCfg {
 
     // TSA minimum acquisitions
     QString tsaMinAcqsNo;
+
+    // Perform also tillage monitoring
+    bool bTillageMonitoring;
 
 } AgricPracticesSiteCfg;
 
@@ -56,6 +59,10 @@ typedef struct AgricPracticesJobPayload {
                                                                    "country", L4C_AP_CFG_PREFIX);
         siteCfg.tsaMinAcqsNo = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
                                                                         "tsa_min_acqs_no", L4C_AP_CFG_PREFIX);
+        siteCfg.tsaMinAcqsNo = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
+                                                                        "tsa_min_acqs_no", L4C_AP_CFG_PREFIX);
+        siteCfg.bTillageMonitoring = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
+                                                                        "tillage_monitoring", L4C_AP_CFG_PREFIX);
         siteCfg.year = GetYear(parameters, configParameters, siteShortName);
     }
     static AgricPractOperation GetExecutionOperation(const QJsonObject &parameters,
@@ -103,8 +110,9 @@ private:
                      const AgricPracticesJobPayload &siteCfg, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder, NewStepList &steps);
     void WriteExecutionInfosFile(const QString &executionInfosPath,
                                  const QStringList &listProducts);
-    QStringList GetExportProductLauncherArgs(const AgricPracticesJobPayload &jobCfg,
-                                            const QString &productFormatterPrdFileIdFile);
+    QStringList GetExportProductLauncherArgs(const AgricPracticesJobPayload &jobCfg, const QString &productFormatterPrdFileIdFile);
+    QString CreateStepsForExportL4CMarkers(const AgricPracticesJobPayload &jobCfg, NewStepList &steps, QList<TaskToSubmit> &allTasksList,
+                                               int &curTaskIdx, const QString &productFormatterPrdFileIdFile);
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const AgricPracticesJobPayload &jobCfg,
                                         const QStringList &listFiles);
 
@@ -160,6 +168,8 @@ private:
                                  const QString &key, const QString &siteShortName, const QString &year, const QString &defVal );
     QString GetTsInputTablesDir(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                                 const QString &siteShortName, const QString &year, const QString &practice);
+    QString GetSchedL4CPrdsHistoryFile(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
+                                       const QString &siteShortName, const QString &year);
 
     QMap<QString, QString> GetPracticeTableFiles(const QJsonObject &parameters,
                                                  const std::map<QString, QString> &configParameters,

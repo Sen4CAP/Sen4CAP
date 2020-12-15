@@ -9,6 +9,11 @@ conda_user="sen2agri-service"
 script_path="csv_to_ipc.py"
 input_file=""
 output_file=""
+int32_columns=""
+float32_columns=""
+bool_columns=""
+text_columns=""
+nullable_columns=""
 
 POSITIONAL=()
 while [[ $# -gt 0 ]]
@@ -36,6 +41,37 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+
+    -g|--int32-columns)
+    int32_columns="$2"
+    shift # past argument
+    shift # past value
+    ;;
+
+    -f|--float-columns)
+    float32_columns="$2"
+    shift # past argument
+    shift # past value
+    ;;
+
+    -b|--bool-columns)
+    bool_columns="$2"
+    shift # past argument
+    shift # past value
+    ;;
+
+    -n|--nullable-columns)
+    nullable_columns="$2"
+    shift # past argument
+    shift # past value
+    ;;
+
+    -t|--text-columns)
+    text_columns="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    
     *)    # unknown option
     POSITIONAL+=("$1") # save it in an array for later
     shift # past argument
@@ -76,6 +112,32 @@ if [ -z ${output_file} ] ; then
     echo "No output file provided!" && usage
 fi
 
+INT32_COLS=""
+FLOAT32_COLS=""
+BOOL_COLS=""
+NULLABLE_COLS=""
+TEXT_COLS=""
+
+if [ ! -z ${int32_columns} ] ; then
+    INT32_COLS="--float-columns \"${int32_columns}\""
+fi
+
+if [ ! -z ${float32_columns} ] ; then
+    FLOAT32_COLS="--int32-columns \"${float32_columns}\""
+fi
+
+if [ ! -z ${bool_columns} ] ; then
+    BOOL_COLS="--bool-columns \"${bool_columns}\""
+fi
+
+if [ ! -z ${text_columns} ] ; then
+    TEXT_COLS="--text-columns \"${text_columns}\""
+fi
+
+if [ ! -z ${nullable_columns} ] ; then
+    NULLABLE_COLS="--nullable-columns \"${nullable_columns}\""
+fi
+
 if [ $USER == ${conda_user} ] ; then
     echo "Activating conda sen4cap for user $USER"
     CONDA_CMD="source ~/.bashrc && conda activate sen4cap"
@@ -87,7 +149,7 @@ else
 fi    
 
 
-PY_CMD="python ${script_path} --input ${input_file} --output ${output_file}"
+PY_CMD="python ${script_path} --input ${input_file} --output ${output_file} ${INT32_COLS} ${FLOAT32_COLS} ${BOOL_COLS} ${TEXT_COLS} ${NULLABLE_COLS}"
 
 CMD="${CONDA_CMD} && ${PY_CMD}"
 CMD="${CMD}${CMD_TERM}"
