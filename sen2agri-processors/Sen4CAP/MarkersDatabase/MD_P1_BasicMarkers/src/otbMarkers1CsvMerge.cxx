@@ -197,21 +197,25 @@ private:
             }
         }
 
-        const std::vector<std::string> &imagesPaths = GetInputFilePaths();
-        if(imagesPaths.size() == 0) {
+        const std::vector<std::string> &inputFilePaths = GetInputFilePaths();
+        if(inputFilePaths.size() == 0) {
             otbAppLogFATAL(<<"No image was given as input!");
         }
         auto start = std::chrono::system_clock::now();
 
-        const std::string &outFilePath = this->GetParameterString("out");
+        // Initialize file infos
+        std::vector<FileInfo> infoFiles = InitializeFileInfos(inputFilePaths);
+        const OutputHeader &header = BuildOutputHeader(infoFiles);
+        if (header.header.size() == 0) {
+            // do not create the file if header cannot be created
+            otbAppLogFATAL(<<"No header was possible to be buid from the provided input files!");
+        }
 
         std::ofstream outFileStream;
         std::ofstream indexFileStream;
-        CreateOutputStreams(outFilePath, outFileStream, indexFileStream);
+        const std::string &outFilePath = this->GetParameterString("out");
 
-        // Initialize file infos
-        std::vector<FileInfo> infoFiles = InitializeFileInfos(imagesPaths);
-        const OutputHeader &header = BuildOutputHeader(infoFiles);
+        CreateOutputStreams(outFilePath, outFileStream, indexFileStream);
 
         // Write the header to the output file
         uintmax_t curFileIdx = WriteHeader(outFileStream, header);
