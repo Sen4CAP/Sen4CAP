@@ -62,6 +62,8 @@ otb_create_application(
                  TsaDataExtractor.h
                  TsaDataExtractor.cpp
                  TsaHelperFunctions.h
+                 TsaHandlerBase.h
+                 TsaHandlerBase.cpp
                  TsaCatchCropAnalysisHandler.h
                  TsaCatchCropAnalysisHandler.cpp
                  TsaFallowAnalysisHandler.cpp
@@ -70,6 +72,9 @@ otb_create_application(
                  TsaNfcAnalysisHandler.cpp
                  TsaHarvestOnlyAnalysisHandler.cpp
                  TsaHarvestOnlyAnalysisHandler.h
+                 TsaTillageAnalysisHandler.cpp
+                 TsaTillageAnalysisHandler.h
+
 
   LINK_LIBRARIES ${OTBExtensions} ${OTB_LIBRARIES} ${OTBCommon_LIBRARIES} ${OTBITK_LIBRARIES} MACCSMetadata Sen2AgriPrdMetaWriters ${Boost_LIBRARIES} gsl)
 
