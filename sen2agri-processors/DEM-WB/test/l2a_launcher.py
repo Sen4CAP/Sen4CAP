@@ -27,7 +27,6 @@ import time
 import datetime
 import Queue
 from osgeo import ogr
-#from sen2agri_common_db import *
 import threading
 from bs4 import BeautifulSoup as Soup
 import zipfile
@@ -59,10 +58,7 @@ DEFAULT_DEM_IMAGE_NAME = "lnicola/sen2agri-dem"
 DEFAULT_MAJA3_IMAGE_NAME = "lnicola/maja:3.2.2-centos-7"
 DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
 DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
-#tmp
-#DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor"
-DEFAULT_SEN2COR_IMAGE_NAME = "sen2cor"
-#tmp
+DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.8.0-ubuntu-20.04"
 DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/l2a_processors"
 
 
@@ -1592,8 +1588,6 @@ class Maja(L2aProcessor):
         script_command.append("-v")
         script_command.append("/var/run/docker.sock:/var/run/docker.sock")
         script_command.append("--rm")
-        #tmp not commented it
-        script_command.append("-it")
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
@@ -1993,8 +1987,6 @@ class Sen2Cor(L2aProcessor):
         script_command.append("-v")
         script_command.append("/var/run/docker.sock:/var/run/docker.sock")
         script_command.append("--rm")
-        #tmp not commented it
-        script_command.append("-it")
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
@@ -2086,10 +2078,10 @@ class Sen2Cor(L2aProcessor):
         script_command.append(DEFAULT_SEN2COR_IMAGE_NAME)
         script_command.append("--docker-image-gdal")
         script_command.append(DEFAULT_GDAL_IMAGE_NAME)
-        # tmp only for testing purposes
-        script_command.append("--resolution")
-        script_command.append(str(60))
-        # tmp
+        #tmp only for testing purposes
+        #script_command.append("--resolution")
+        #script_command.append(str(60))
+        #tmp
 
         sen2corlog_path = os.path.join(self.l2a.output_path,"sen2cor.log")
         sen2corlog_file = open(sen2corlog_path, "w")

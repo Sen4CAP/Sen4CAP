@@ -804,7 +804,6 @@ dem_command = []
 dem_command.append("docker")
 dem_command.append("run")
 dem_command.append("--rm")
-dem_command.append("-it")
 dem_command.append("-u")
 dem_command.append("{}:{}".format(os.getuid(), os.getgid()))
 dem_command.append("-v")
