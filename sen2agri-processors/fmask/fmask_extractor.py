@@ -94,10 +94,11 @@ def remove_sym_links(filenames, target_directory):
     return True
 
 class DEMMACCSContext(object):
-    def __init__(self, base_working_dir, l1c_input, l2a_output):
+    def __init__(self, base_working_dir, l1c_input, l2a_output, threshold):
         self.base_working_dir = base_working_dir
         self.input = l1c_input
         self.output = l2a_output
+        self.threshold = threshold
 
 def fmask_launcher(fmask_context):
     product_name = os.path.basename(fmask_context.input[:len(fmask_context.input) - 1]) if fmask_context.input.endswith("/") else os.path.basename(fmask_context.input)
@@ -121,6 +122,8 @@ def fmask_launcher(fmask_context):
     if os.path.isdir(granules_path):
         for sub_dir_tupple in os.walk(granules_path):
             print ("SubdirT = {}".format(sub_dir_tupple))
+            if len(sub_dir_tupple[1]) == 0 : 
+                continue
             sub_dir = sub_dir_tupple[1][0]
             print ("Subdir = {}".format(sub_dir))
             if sub_dir.startswith("L1C_T") :
@@ -153,6 +156,9 @@ def fmask_launcher(fmask_context):
                         "--workdir", 
                         "/work/{}".format(docker_work_dir), 
                         "fmask"]
+        if fmask_context.threshold != '' and int(fmask_context.threshold) >= 0 and int(fmask_context.threshold) <= 100: 
+            cmd_array += [ "3", "3", "0", fmask_context.threshold ]
+            
     log(fmask_context.output, "sat_id = {} | acq_date = {}".format(sat_id, acquistion_date), tile_log_filename)
     log(fmask_context.output, "Starting FMask in {}".format(fmask_context.input), tile_log_filename)
     log(fmask_context.output, "FMask: {}".format(cmd_array), tile_log_filename)
@@ -199,6 +205,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument('input', help="input L1C directory")
 parser.add_argument('-w', '--working-dir', required=True,
                     help="working directory")
+parser.add_argument('-t', '--threshold', required=False, default = "", 
+                    help="FMask threshold")
+                    
 parser.add_argument('--delete-temp', required=False,
                         help="if set to True, it will delete all the temporary files and directories. Default: True", default="True")
 parser.add_argument('output', help="output location")
@@ -226,7 +235,7 @@ product_name = os.path.basename(args.input[:len(args.input) - 1]) if args.input.
 sat_id, acquistion_date = get_product_info(product_name)
 
 print("Creating demmaccs contexts with: input: {} | output {}".format(args.input, args.output))
-fmask_context = DEMMACCSContext(working_dir, args.input, args.output)
+fmask_context = DEMMACCSContext(working_dir, args.input, args.output, args.threshold)
 
 processed_tiles = [] 
 out = fmask_launcher(fmask_context)
