@@ -41,7 +41,7 @@ class Config(object):
         self.year = args.year
         self.new_prd_info_file = args.new_prd_info_file
         self.prds_history_files = args.prds_history_files
-        self.ignore_no_data_rows = args.ignore_no_data_rows
+        self.add_no_data_rows = args.add_no_data_rows
         
         self.output = args.output
         
@@ -118,7 +118,7 @@ def main():
     parser.add_argument("-y", "--year", help="year")
     parser.add_argument('-n', '--new-prd-info-file', help="File containing the id and full path of a new product")
     parser.add_argument('-f', '--prds-history-files', help="File containing the id and the full path of the previous L4C products created by scheduled jobs")
-    parser.add_argument('-g', '--ignore-no-data-rows', required=False, default=True, help="Ignore rows having all values invalid")
+    parser.add_argument('-g', '--add-no-data-rows', required=False, type=int, default=1, help="Add also rows having all values invalid")
     parser.add_argument('-o', '--output', help="The output IPC file")
     parser.add_argument(
         "-c",
@@ -148,7 +148,7 @@ def main():
                 command = []
                 command += [EXPORT_TO_IPC_SCRIPT]
                 command += ["-o", config.output]
-                command += ["-g", config.ignore_no_data_rows]
+                command += ["-g", config.add_no_data_rows]
                 command += prd_hist_prds
 
                 run_command(command)

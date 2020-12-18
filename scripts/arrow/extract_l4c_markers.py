@@ -22,7 +22,7 @@ class Config(object):
         parser = ConfigParser()
         self.input_products = args.products
         self.output = args.output
-        self.ignore_no_data_rows = args.ignore_no_data_rows
+        self.add_no_data_rows = args.add_no_data_rows
  
 def run_command(args, env=None):
     args = list(map(str, args))
@@ -105,7 +105,7 @@ def export_mdb_csv_practice_file(config, vect_data_path, practiceFile, prd_date)
                                 ignore_row = False
                         new_row.append(translated_val)
                     #print ("The new line to write is {}".format(new_row))
-                    if config.ignore_no_data_rows == False or ignore_row == False :
+                    if config.add_no_data_rows == 1 or ignore_row == False :
                         wtr.writerow(new_row)
                 i = i + 1
     return new_file_path
@@ -164,7 +164,7 @@ def main():
     parser = argparse.ArgumentParser(description="Create a new markers DB ipc file from a list of L4C products.")
     parser.add_argument('products', nargs='+', action='store')
     parser.add_argument('-o', '--output', help="The output IPC file")
-    parser.add_argument('-g', '--ignore-no-data-rows', required=False, default=False, help="Ignore rows having all values invalid")
+    parser.add_argument('-g', '--add-no-data-rows', required=False, type=int, default=1, help="Add also rows having all values invalid")
 
     args = parser.parse_args()
     
