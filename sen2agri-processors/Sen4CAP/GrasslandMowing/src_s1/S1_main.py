@@ -638,7 +638,6 @@ class S4CConfig(object):
         self.do_cmpl = args.do_cmpl
         self.test = args.test
         
-
         if args.season_start:
             self.season_start = parse_date(args.season_start)
             print("Season_start = ", args.season_start)
@@ -834,6 +833,10 @@ def main() :
     args = parser.parse_args()
     
     s4cConfig = S4CConfig(args)
+    
+    if not os.path.isfile(args.input_shape_file) : 
+        print("ERROR: the file for input-shape-file does not exists!!! Exiting ... ")
+        sys.exit(1)
     
     with psycopg2.connect(host=s4cConfig.host, dbname=s4cConfig.dbname, user=s4cConfig.user, password=s4cConfig.password) as conn:
         data_x_detection, orbit_list, orbit_type_list = getPathsAndOrbits(s4cConfig, conn, args.input_products_list)
