@@ -14,6 +14,7 @@ import fnmatch
 import psycopg2
 from psycopg2.sql import SQL, Literal
 import psycopg2.extras
+import glob
 
 from dateutil.relativedelta import relativedelta
 
@@ -130,11 +131,14 @@ def get_aux_files_from_ndvi_products_from_db(config, conn):
 
         products = []
         for (dt, tiles, full_path) in results:
-            ndviTilePath = os.path.join(full_path, "AUX_DATA")
+            auxdataPath = os.path.join(full_path, "AUX_DATA")
             acq_date = dt.strftime("%Y%m%dT%H%M%S")
-            ndviTilePath = os.path.join(ndviTilePath, "S2AGRI_L3B_IPP_A{}.xml".format(acq_date))
-            s2HdrFiles = getFilesFromIPPFile(config, ndviTilePath)
-            products += s2HdrFiles
+            files = os.listdir(auxdataPath)
+            ippFiles = fnmatch.filter(files, "S2AGRI_L3B_IPP_A*.xml")
+            if len(ippFiles) > 0:
+                ippPath = ippFiles[0]
+                s2HdrFiles = getFilesFromIPPFile(config, os.path.join(auxdataPath,ippPath))
+                products += s2HdrFiles
 
         return products
 

@@ -6,7 +6,7 @@ VALUES
 INSERT INTO processor
 (id, name, short_name, label)
 VALUES
-(2, 'L3A Composite','l3a', 'L3A &mdash; Cloud-free Composite');
+(2, 'S2A L3A Composite','l3a', 'Sen2Agri L3A &mdash; Cloud-free Composite');
 
 INSERT INTO processor
 (id, name, short_name, label)
@@ -16,17 +16,17 @@ VALUES
 INSERT INTO processor
 (id, name, short_name, label)
 VALUES
-(4, 'L3E Pheno NDVI metrics','l3e', 'L3E &mdash; Phenology Indices');
+(4, 'S2A L3E Pheno NDVI metrics','l3e', 'Sen2Agri L3E &mdash; Phenology Indices');
 
 INSERT INTO processor
 (id, name, short_name, label)
 VALUES
-(5, 'L4A Crop Mask','l4a', 'L4A &mdash; Cropland Mask');
+(5, 'S2A L4A Crop Mask','l4a', 'Sen2Agri L4A &mdash; Cropland Mask');
 
 INSERT INTO processor
 (id, name, short_name, label)
 VALUES
-(6, 'L4B Crop Type','l4b', 'L4B &mdash; Crop Type Map');
+(6, 'S2A L4B Crop Type','l4b', 'Sen2Agri L4B &mdash; Crop Type Map');
 
 INSERT INTO processor
 (id, name, short_name, label)

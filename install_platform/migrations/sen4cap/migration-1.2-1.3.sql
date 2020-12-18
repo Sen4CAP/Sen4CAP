@@ -124,6 +124,9 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.end-of-job', NULL, '/usr/bin/true', '2016-01-12 14:56:57.501918+02') on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('executor.module.path.end-of-job', 'End of a multi root steps job', 'file', true, 8) on conflict DO nothing;
             
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.s1_s2_startdate_diff',  NULL, '0', '2020-10-02 15:27:41.861613+02') on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s1_s2_startdate_diff', 'Offset in days between S1 and S2 start dates', 'string', TRUE, 19, TRUE, 'Offset in days between S1 and S2 start dates') on conflict DO nothing;
+            
             $str$;
             raise notice '%', _statement;
             execute _statement;

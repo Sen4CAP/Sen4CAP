@@ -39,7 +39,7 @@
 : ${SLURM_MACHINE_NOCPUS:=$(cat /proc/cpuinfo | grep processor | wc -l)}
 : ${SLURM_CONFIG:="slurm.conf"}
 : ${SLURM_CONFIG_DB:="slurmdbd.conf"}
-: ${SLURM_QOS_LIST:="qosMaccs,qosComposite,qosCropMask,qosCropType,qosPheno,qosLai"}
+: ${SLURM_QOS_LIST:="qosMaccs,qosComposite,qosCropMask,qosCropType,qosPheno,qosLai,qoss4cmdb1,qoss4cl4a,qoss4cl4b,qoss4cl4c"}
 #----------------SLURM MYSQL DATABASE CREATION---------------------------------------------#
 MYSQL_DB_CREATION="create database slurm_acct_db;create user slurm@localhost;
 set password for slurm@localhost = password('sen2agri');"
@@ -63,6 +63,7 @@ function parse_and_update_slurm_conf_file()
    ####################################
    ####  copy conf files to /etc/slurm
    ####################################
+   mkdir -p ${SLURM_CONF_PATH}
    cp $(find ./ -name ${SLURM_CONFIG}) ${SLURM_CONF_PATH}
    cp $(find ./ -name ${SLURM_CONFIG_DB}) ${SLURM_CONF_PATH}
 

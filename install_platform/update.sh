@@ -4,6 +4,8 @@ INSTAL_CONFIG_FILE="./config/install_config.conf"
 HAS_S2AGRI_SERVICES=false
 
 : ${GPT_CONFIG_FILE:="./config/gpt.vmoptions"}
+: ${SYS_ACC_NAME:="sen2agri-service"}
+: ${SLURM_QOS_LIST:="qosMaccs,qosComposite,qosCropMask,qosCropType,qosPheno,qosLai,qoss4cmdb1,qoss4cl4a,qoss4cl4b,qoss4cl4c"}
 
 
 function get_install_config_property
@@ -47,9 +49,39 @@ function install_sen2agri_services()
     else
         echo "sen2agri-services already exist in ${TARGET_SERVICES_DIR}"
         if [ -d "${TARGET_SERVICES_DIR}/bin" ] && [ -d "${TARGET_SERVICES_DIR}/config" ] ; then
+            
+            add_plgs_bkp=lib_add_plgs_bkp_$( date "+%Y_%m_%d_%H_%M_%S" )            
+            #check if lib directory exist and is not empty
+            if [ -d "${TARGET_SERVICES_DIR}/lib" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/lib)" ] ; then
+                mkdir ${TARGET_SERVICES_DIR}/$add_plgs_bkp
+                for filepath in ${TARGET_SERVICES_DIR}/lib/tao-datasources-*.jar
+                do
+                    filename=$(basename $filepath)
+                    #make a backup for tao-datasource*.jar, others that scihub and usgs
+                    if [[ $filename != tao-datasources-scihub* ]] && [[ $filename != tao-datasources-usgs* ]]; then
+                        cp ${TARGET_SERVICES_DIR}/lib/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/  
+                    fi  
+                done;
+            fi
             if [ -f ../sen2agri-services/${SERVICES_ARCHIVE} ]; then
                 echo "Updating ${TARGET_SERVICES_DIR}/lib folder ..."
                 mkdir -p ${TARGET_SERVICES_DIR}/lib && rm -f ${TARGET_SERVICES_DIR}/lib/*.jar && unzip -o ${zipArchive} 'lib/*' -d ${TARGET_SERVICES_DIR}
+                # Check if directory lib_add_plgs_bkp_<timestamp> exist and is not empty
+                if [ -d "${TARGET_SERVICES_DIR}/${add_plgs_bkp}" ] ; then
+                    if [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/${add_plgs_bkp})" ]; then
+                        for filepath in ${TARGET_SERVICES_DIR}/$add_plgs_bkp/tao-datasources-*.jar
+                        do
+                            filename=$(basename $filepath| grep -oP '.*(?=-)')
+                            if [ -f ../sen2agri-services/datasource-additional-plugins/$filename*.jar ];then
+                                cp ../sen2agri-services/datasource-additional-plugins/$filename*.jar ${TARGET_SERVICES_DIR}/lib/
+                            else
+                                echo "IT WAS USED THE VERSION FOUND IN LIB FOLDER OF " $filename " BUT MAY NOT BE COMPATIBLE WITH CURRENT VERSION OF SEN2AGRI-SERVICES  "
+                                cp ${TARGET_SERVICES_DIR}/$add_plgs_bkp/$filename*.jar ${TARGET_SERVICES_DIR}/lib/
+                            fi
+                        done;
+                    fi
+                    rm -rf ${TARGET_SERVICES_DIR}/$add_plgs_bkp
+                fi
                 echo "Updating ${TARGET_SERVICES_DIR}/modules folder ..."
                 mkdir -p ${TARGET_SERVICES_DIR}/modules && rm -f ${TARGET_SERVICES_DIR}/modules/*.jar && unzip -o ${zipArchive} 'modules/*' -d ${TARGET_SERVICES_DIR}
 
@@ -214,7 +246,7 @@ function migrate_postgres_to_docker() {
     echo "Starting Postgres container"
     cd docker
     docker-compose up -d db
-
+    
     RETRIES=120
     until docker-compose exec db pg_isready || [ $RETRIES -eq 0 ]; do
         echo "Waiting for postgres, $RETRIES remaining attempts..."
@@ -231,7 +263,7 @@ function migrate_postgres_to_docker() {
         RETRIES=$((RETRIES-1))
         sleep 1
     done
-
+    
     cd ..
 
     echo "Restoring database backup"
@@ -248,6 +280,61 @@ function migrate_to_docker() {
     install_docker
     migrate_postgres_to_docker
     setup_containers
+}
+
+# TODO: This function is the same as the one in the installation script. Should be extracted in a common functions file
+function create_and_config_slurm_qos()
+{
+   #extract each configured QOS from SLURM_QOS_LIST
+   IFS=',' read -ra ADDR <<< "${SLURM_QOS_LIST}"
+
+   #for each qos defined in configuration, add the missing QOS
+   for qosName in "${ADDR[@]}"; do
+        if [ -z $(sacctmgr list qos --parsable | grep -i ${qosName}) ] ; then 
+            #add qos to slurm
+            SLURM_ADD_QOS=$(expect -c "
+             set timeout 5
+             spawn sacctmgr add qos  \"${qosName}\"
+             expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
+             send \"y\r\"
+             expect eof
+            ")
+            echo "$SLURM_ADD_QOS"
+
+            #set qos number of jobs able to run at any given time
+            SLURM_JOBS_PER_QOS=$(expect -c "
+             set timeout 5
+             spawn sacctmgr modify qos "${qosName}" set GrpJobs=1
+             expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
+             send \"y\r\"
+             expect eof
+            ")
+            echo "$SLURM_JOBS_PER_QOS"
+
+            #add already created qos to user , and another qos if that qos already exists
+            SLURM_ADD_QOS_TO_ACC=$(expect -c "
+             set timeout 5
+             spawn sacctmgr modify user "${SYS_ACC_NAME}" set qos+="${qosName}"
+             expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
+             send \"y\r\"
+             expect eof
+            ")
+            echo "$SLURM_ADD_QOS_TO_ACC"
+        fi
+   done
+
+   #show current configuration for SLURM
+   echo "CLUSTER,USERS,QOS INFO:"
+   sacctmgr show assoc format=cluster,user,qos
+
+   echo "QOS INFO:"
+   sacctmgr list qos
+
+   echo "Partition INFO:"
+   scontrol show partition
+
+   echo "Nodes INFO:"
+   scontrol show node
 }
 
 systemctl stop sen2agri-scheduler sen2agri-executor sen2agri-orchestrator sen2agri-http-listener sen2agri-sentinel-downloader sen2agri-landsat-downloader sen2agri-demmaccs sen2agri-sentinel-downloader.timer sen2agri-landsat-downloader.timer sen2agri-demmaccs.timer sen2agri-monitor-agent sen2agri-services
@@ -274,6 +361,8 @@ TARGET_SERVICES_DIR="/usr/share/sen2agri/sen2agri-services"
 #fi
 
 install_sen2agri_services
+
+create_and_config_slurm_qos
 
 ldconfig
 
@@ -319,18 +408,50 @@ if [ "$DB_NAME" == "sen2agri" ] ; then
     resetDownloadFailedProducts
 else
     # Install and config SNAP if old version
-    if grep -q "6.0" "/opt/snap/VERSION.txt"; then
-        wget http://step.esa.int/downloads/7.0/installers/esa-snap_sentinel_unix_7_0.sh && \
-        cp -f esa-snap_sentinel_unix_7_0.sh /tmp/ && \
-        chmod +x /tmp/esa-snap_sentinel_unix_7_0.sh && \
-        /tmp/esa-snap_sentinel_unix_7_0.sh -q && \
-        /opt/snap/bin/snap --nosplash --nogui --modules --update-all
-        rm -f ./esa-snap_sentinel_unix_7_0.sh /tmp/esa-snap_sentinel_unix_7_0.sh
-        if [ ! -h /usr/local/bin/gpt ]; then sudo ln -s /opt/snap/bin/gpt /usr/local/bin/gpt;fi
+    INSTALL_SNAP_8=0
+    if [ $INSTALL_SNAP_8 -eq 1 ] ; then
+        NEED_INSTALL_SNAP_8=0
+        if grep -q "6.0" "/opt/snap/VERSION.txt"; then
+                NEED_INSTALL_SNAP_8=1
+        elif grep -q "7.0" "/opt/snap/VERSION.txt"; then
+                NEED_INSTALL_SNAP_8=1
+        fi
+        
+        if [ $NEED_INSTALL_SNAP_8 -eq 1 ]  ; then
+            wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
+            cp -f esa-snap_sentinel_unix_8_0.sh /tmp/ && \
+            chmod +x /tmp/esa-snap_sentinel_unix_8_0.sh && \
+            /tmp/esa-snap_sentinel_unix_8_0.sh -q && \
+            /opt/snap/bin/snap --nosplash --nogui --modules --update-all
+            rm -f ./esa-snap_sentinel_unix_8_0.sh /tmp/esa-snap_sentinel_unix_8_0.sh
+            if [ ! -h /usr/local/bin/gpt ]; then sudo ln -s /opt/snap/bin/gpt /usr/local/bin/gpt;fi
 
-        cp -f ${GPT_CONFIG_FILE} /opt/snap/bin/
+            cp -f ${GPT_CONFIG_FILE} /opt/snap/bin/
+            
+            if [ -f ../tools/snap_extra/aster_dem/extra-cluster.zip ] ; then
+                unzip ../tools/snap_extra/aster_dem/extra-cluster.zip -d /opt/snap
+                sed -i '$a-Dsnap.extraClusters=/opt/snap/extra' /opt/snap/bin/gpt.vmoptions
+                if [ -d ../tools/snap_extra/aster_dem/DEM ] ; then
+                    mkdir -p "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
+                    cp -fR ../tools/snap_extra/aster_dem/DEM/*/* "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
+                    chown -R sen2agri-service:sen2agri-service "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
+                    chmod 755 "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
+                fi
+            fi
+        fi        
+    else
+        if grep -q "6.0" "/opt/snap/VERSION.txt"; then
+            wget http://step.esa.int/downloads/7.0/installers/esa-snap_sentinel_unix_7_0.sh && \
+            cp -f esa-snap_sentinel_unix_7_0.sh /tmp/ && \
+            chmod +x /tmp/esa-snap_sentinel_unix_7_0.sh && \
+            /tmp/esa-snap_sentinel_unix_7_0.sh -q && \
+            /opt/snap/bin/snap --nosplash --nogui --modules --update-all
+            rm -f ./esa-snap_sentinel_unix_7_0.sh /tmp/esa-snap_sentinel_unix_7_0.sh
+            if [ ! -h /usr/local/bin/gpt ]; then sudo ln -s /opt/snap/bin/gpt /usr/local/bin/gpt;fi
+
+            cp -f ${GPT_CONFIG_FILE} /opt/snap/bin/
+        fi
     fi
-
 #    # Install R-devel
 #    yum install -y R-devel
 #    echo 'install.packages(c("e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily"), repos = c(CRAN = "https://cran.rstudio.com"))' | Rscript -
