@@ -649,16 +649,35 @@ begin
                 
                 INSERT INTO config_metadata VALUES ('orchestrator.http-server.listen-ip', 'Orchestrator HTTP listen ip', 'string', false, 1) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('orchestrator.http-server.listen-port', 'Orchestrator HTTP listen port', 'string', false, 1) ON conflict DO nothing;
+                
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
             _statement := $str$
+                DELETE FROM config WHERE key = 's1.preprocessing.enabled';
+                DELETE FROM config WHERE key = 's1.preprocessing.path';
+                DELETE FROM config WHERE key = 's1.preprocessing.work.dir';
+                DELETE FROM config_metadata WHERE key = 's1.preprocessing.enabled';
+                DELETE FROM config_metadata WHERE key = 's1.preprocessing.path';
+                DELETE FROM config_metadata WHERE key = 's1.preprocessing.work.dir';
 
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.path', NULL, '/mnt/archive/{site}/l2a-s1', '2017-10-24 14:56:57.501918+02') ON conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.work.dir', NULL, '/mnt/archive/s1_preprocessing_work_dir', '2017-10-24 14:56:57.501918+02') ON conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.enabled', NULL, 'true', '2020-05-18 14:56:57.501918+02') ON conflict DO nothing;
 
+                INSERT INTO config_metadata VALUES ('processor.l2s1.path', 'The path where the S1 L2 products will be created', 'string', false, 15) ON conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.work.dir', 'The path where to create the temporary S1 L2A files', 'string', false, 15) ON conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.enabled', 'S1 pre-processing enabled', 'bool', false, 15) ON conflict DO nothing;
             $str$;
             raise notice '%', _statement;
             execute _statement;
+
+            _statement := $str$
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
 
            _statement := 'update meta set version = ''2.0'';';
             raise notice '%', _statement;
