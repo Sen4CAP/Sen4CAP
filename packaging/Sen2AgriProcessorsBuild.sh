@@ -122,8 +122,6 @@ function build_SEN2AGRI_downloaders_demmacs_RPM_Package()
    ###put demmaccs script files into the install folder  usr/share/sen2agri/sen2agri-demmaccs
    cp -f ${SOURCES_DIR_PATH}/sen2agri-processors/DEM-WB/test/*.py  ${DOWNL_DEM_INSTALL_PATH}/usr/share/sen2agri/sen2agri-demmaccs
 
-   cp -rf ${SOURCES_DIR_PATH}/sen2agri-processors/DEM-WB/UserConfiguration ${DOWNL_DEM_INSTALL_PATH}/usr/share/sen2agri/sen2agri-demmaccs
-
    cp -rf ${SOURCES_DIR_PATH}/sen2agri-processors/DEM-WB/wrs2_descending ${DOWNL_DEM_INSTALL_PATH}/usr/share/sen2agri
    cp -rf ${SOURCES_DIR_PATH}/sen2agri-processors/DEM-WB/l8_alignment ${DOWNL_DEM_INSTALL_PATH}/usr/share/sen2agri
 
