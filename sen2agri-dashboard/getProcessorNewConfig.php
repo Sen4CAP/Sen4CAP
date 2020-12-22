@@ -630,9 +630,14 @@ else {
 		insertjob($name, $description, $processor_short_name, $siteId, 2, $json_param, $json_config);
 		redirect_page($processor_short_name, "OK", "Your job has been successfully submitted!", $params);
 	}
-	elseif (isset($_POST['s4c_l4b'])) {
+	elseif (isset($_POST['s4c_l4b']) || isset($_POST['s4c_l4c']) || isset($_POST['s4c_mdb1'])) {
         // TODO: A lot of Duplicated code with the previous ifs. To be made more generic
 		$processor_short_name = "s4c_l4b";
+        if (isset($_POST['s4c_l4c'])) {
+            $processor_short_name = "s4c_l4c";
+        } elseif (isset($_POST['s4c_mdb1'])) {
+            $processor_short_name = "s4c_mdb1";
+        }
         $processor_cfg_prefix = "processor." . $processor_short_name . ".";
 		// set job name and description and save job
 		$name = $processor_short_name . "_processor" . date ( "m.d.y" );
@@ -661,48 +666,6 @@ else {
 		
 		// generate json_param (skip parameters with empty values)
 		$params = array ("input_COHE" => $input_COHE, "input_AMP"  => $input_AMP, "input_NDVI" => $input_NDVI);
-		$json_param = json_encode(array_filter($params));
-		
-		insertjob($name, $description, $processor_short_name, $siteId, 2, $json_param, $json_config);
-		redirect_page($processor_short_name, "OK", "Your job has been successfully submitted!", $params);
-	}
-	elseif (isset($_POST['s4c_l4c'])) {
-        // TODO: A lot of Duplicated code with the previous ifs. To be made more generic
-		$processor_short_name = "s4c_l4c";
-        $processor_cfg_prefix = "processor." . $processor_short_name . ".";
-		// set job name and description and save job
-		$name = $processor_short_name . "_processor" . date ( "m.d.y" );
-		$description = "generated new configuration from site for ".$processor_short_name;
-		
-		// default parameters
-		$siteId     = $_POST['siteId'];
-		$input_COHE = $_POST['inputFiles_COHE'];
-		$input_AMP  = $_POST['inputFiles_AMP'];
-		$input_NDVI = $_POST['inputFiles_NDVI'];
-        $s2_tiles = $_POST['S2Tiles'];
-        $l8_tiles = $_POST['L8Tiles'];
-        $s2_l8_tiles = $s2_tiles . ((strlen($s2_tiles) > 0 && strlen($l8_tiles) > 0) ? "," : "") . $l8_tiles; 
-		
-        // print_r($s2_l8_tiles);
-        // exit();
-
-		// advanced parameters	- dynamically get the 
-        $fconfig = array();        
-        foreach ($_POST as $key => $value) {
-            if ($value != "") {
-                $suffix = "_".$processor_short_name;
-                if (endsWith($key, $suffix))  {
-                    $realKeyName = substr($key, 0, strrpos($key, $suffix));
-                    $cfgKeyToSend = $processor_cfg_prefix . $realKeyName;
-                    array_push($fconfig, array ( "key"   => $cfgKeyToSend, "value" => $value ));
-                }
-            }
-        }
-		
-        $json_config = json_encode( $fconfig );
-		
-		// generate json_param (skip parameters with empty values)
-		$params = array ("input_COHE" => $input_COHE, "input_AMP"  => $input_AMP, "input_NDVI" => $input_NDVI, "s2_l8_tiles" => $s2_l8_tiles);
 		$json_param = json_encode(array_filter($params));
 		
 		insertjob($name, $description, $processor_short_name, $siteId, 2, $json_param, $json_config);

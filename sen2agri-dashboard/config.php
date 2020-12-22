@@ -18,7 +18,7 @@ function getParameters($current_processor_name, $adv){
             FROM config_metadata cm
             INNER JOIN config_category cfc ON cm.config_category_id = cfc.id
             LEFT JOIN config cf ON lower(cf.key) = lower(cm.key)
-            WHERE cfc.id IN (3,4,5,6,18,19,20,21,22,23,24,25) AND cm.Key ilike 'processor.{$current_processor_name}.%' AND is_site_visible=true 
+            WHERE cfc.id IN (3,4,5,6,18,19,20,21,22,23,24,25,26) AND cm.Key ilike 'processor.{$current_processor_name}.%' AND is_site_visible=true 
             AND is_advanced='".$adv."' 
             ORDER BY cfc.display_order";
 	
@@ -90,7 +90,7 @@ $processors = pg_fetch_all($res);
 											<?php $prefix = $processor['short_name'];
 											include "filterInputFiles.php"?>
 											<!-- End Filter criteria for input files -->
-                                            <?php if($processor['short_name'] != "s4c_l4b" && $processor['short_name'] != "s4c_l4c"){?> 
+                                            <?php if($processor['short_name'] != "s4c_l4b" && $processor['short_name'] != "s4c_l4c" && $processor['short_name'] != "s4c_mdb1"){?> 
 												<div class="form-group form-group-sm required">
 													<label class="control-label" for="inputFiles">Available input files:</label>
 													<select multiple class="form-control input-files" id="inputFiles" name="inputFiles[]" size="7"></select>
