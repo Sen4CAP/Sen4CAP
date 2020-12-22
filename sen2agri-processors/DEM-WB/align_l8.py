@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import argparse
-import gdal
-import osr
-import ogr
+from osgeo import gdal
+from osgeo import osr
+from osgeo import ogr
 
 
 def get_l8_tile(l8_tiles, tile_id):
@@ -12,6 +12,7 @@ def get_l8_tile(l8_tiles, tile_id):
 
     for feature in layer:
         return layer.GetSpatialRef(), feature
+
 
 def get_input_extent(l8_tiles, tile_id, out_srs):
     l8_srs, tile = get_l8_tile(l8_tiles, tile_id)
@@ -27,6 +28,7 @@ def get_input_extent(l8_tiles, tile_id, out_srs):
     print(envelope_reprojected)
     fudge_extent(envelope_reprojected)
 
+
 def get_dataset_srs(product):
     ds = gdal.Open(product, gdal.gdalconst.GA_ReadOnly)
     return osr.SpatialReference(wkt=ds.GetProjection())
@@ -34,8 +36,8 @@ def get_dataset_srs(product):
 
 def fudge_extent(envelope):
     print(envelope)
-    A, B = envelope[0][0:2] # llx, lly
-    C, D = envelope[1][0:2] # urx, ury
+    A, B = envelope[0][0:2]  # llx, lly
+    C, D = envelope[1][0:2]  # urx, ury
 
     newA = round(A / 30) * 30 + 15
     newB = round(B / 30) * 30 + 15
@@ -62,7 +64,7 @@ def fudge_extent(envelope):
         newD = newD + scale_factor - restY
 
     print("{} {} {} {}".format(newA, newB, newC, newD))
-    print("{} {} {} {}".format(newA, newD, newC, newB)) # llx, ury, urx, lly
+    print("{} {} {} {}".format(newA, newD, newC, newB))  # llx, ury, urx, lly
 
 out_srs = get_dataset_srs("/mnt/archive/dwn_def/l8/default/south_africa_small/LC81710782015282LGN00/LC81710782015282LGN00_B1.TIF")
 print(out_srs)
