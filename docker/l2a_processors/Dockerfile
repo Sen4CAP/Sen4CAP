@@ -1,9 +1,6 @@
-# Filename: Dockerfile
+FROM ubuntu:20.04
 
-#Ubuntu 20.04 Focal Fossa
-FROM ubuntu:focal
-
-LABEL name="l2a_processors" \
+LABEL name="sen2agri-l2a-processors" \
       maintainer="Laurentiu Nicola <laurentiu.nicola@c-s.ro>"
 
 RUN apt-get update

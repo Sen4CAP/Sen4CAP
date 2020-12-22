@@ -59,7 +59,7 @@ DEFAULT_MAJA3_IMAGE_NAME = "lnicola/maja:3.2.2-centos-7"
 DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
 DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
 DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.8.0-ubuntu-20.04"
-DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/l2a_processors"
+DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/sen2agri-l2a-processors"
 
 
 class Database(object):
