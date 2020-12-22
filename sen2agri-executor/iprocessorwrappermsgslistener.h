@@ -9,7 +9,7 @@ public:
     IProcessorWrapperMsgsListener() {}
     virtual ~IProcessorWrapperMsgsListener(){}
 
-    virtual void OnProcessorNewMsg(RequestParamsBase *pReq) = 0;
+    virtual void OnStepFeedbackNewMsg(RequestParamsBase *pReq) = 0;
 };
 
 #endif // IPROCESSORWRAPPERMSGSLISTENER_H

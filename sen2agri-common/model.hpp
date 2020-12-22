@@ -225,13 +225,15 @@ enum class ProductType {
     L3DProductTypeId = 9,
     S4CS1L2AmpProductTypeId = 10,
     S4CS1L2CoheProductTypeId = 11,
-    S4CL4AProductTypeId = 4,
-    S4CL4BProductTypeId = 5,
-    S4CL4CProductTypeId = 6,
+    S4CL4AProductTypeId = 12,
+    S4CL4BProductTypeId = 13,
     S4CLPISProductTypeId = 14,
+    S4CL4CProductTypeId = 15,
+    S4CL3CProductTypeId = 16,
     S4MDB1ProductTypeId = 17,
     S4MDB2ProductTypeId = 18,
-    S4MDB3ProductTypeId = 19
+    S4MDB3ProductTypeId = 19,
+    S4MDB4ProductTypeId = 20
 };
 
 QDBusArgument &operator<<(QDBusArgument &argument, const ProductType &productType);
@@ -786,6 +788,9 @@ public:
                     QString stepName,
                     StepArgumentList arguments);
 
+    QString toJson() const;
+    static NewExecutorStep fromJson(const QString &json);
+
     static void registerMetaTypes();
 };
 
@@ -812,6 +817,18 @@ public:
 };
 
 typedef QList<JobStepToRun> JobStepToRunList;
+
+class JobStep : public JobStepToRun
+{
+public:
+    QList<int> precedingTaskIds;
+
+    JobStep();
+    JobStep(int taskId, QString module, QString stepName, QString parametersJson, QList<int> taskIds);
+
+};
+
+typedef QList<JobStep> JobStepList;
 
 Q_DECLARE_METATYPE(JobStepToRun)
 Q_DECLARE_METATYPE(JobStepToRunList)
@@ -992,6 +1009,11 @@ struct ProcessingRequest
     int siteId;
     int ttNextScheduledRunTime;
     QString parametersJson; // or map<string, string>
+
+    QString toJson() const;
+
+    static ProcessingRequest fromJson(const QString &json);
+
 };
 Q_DECLARE_METATYPE(ProcessingRequest)
 QDBusArgument &operator<<(QDBusArgument &argument, const ProcessingRequest &request);
@@ -1003,6 +1025,11 @@ struct JobDefinition
     int processorId;
     int siteId;
     QString jobDefinitionJson;
+
+    QString toJson() const;
+
+    static JobDefinition fromJson(const QString &json);
+
 };
 Q_DECLARE_METATYPE(JobDefinition)
 QDBusArgument &operator<<(QDBusArgument &argument, const JobDefinition &job);

@@ -6,6 +6,8 @@
 
 #include "persistencemanager.hpp"
 
+using namespace stefanfrings;
+
 class DashboardController : public HttpRequestHandler
 {
     Q_OBJECT

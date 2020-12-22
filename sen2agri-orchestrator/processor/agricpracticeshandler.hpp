@@ -34,6 +34,9 @@ typedef struct AgricPracticesSiteCfg {
     // Perform also tillage monitoring
     bool bTillageMonitoring;
 
+    // For L4C markers, add also parcel rows containing only NA/NA1/NR
+    bool bMarkersAddNoDataRows;
+
 } AgricPracticesSiteCfg;
 
 enum AgricPractOperation {none = 0x00,
@@ -63,6 +66,8 @@ typedef struct AgricPracticesJobPayload {
                                                                         "tsa_min_acqs_no", L4C_AP_CFG_PREFIX);
         siteCfg.bTillageMonitoring = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
                                                                         "tillage_monitoring", L4C_AP_CFG_PREFIX);
+        siteCfg.bMarkersAddNoDataRows = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
+                                                                        "markers_add_no_data_rows", L4C_AP_CFG_PREFIX);
         siteCfg.year = GetYear(parameters, configParameters, siteShortName);
     }
     static AgricPractOperation GetExecutionOperation(const QJsonObject &parameters,

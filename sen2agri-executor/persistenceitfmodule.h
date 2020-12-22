@@ -8,9 +8,19 @@
  * @brief The PersistenceItfModule class
  * \note
  * This class represents the interface with the persistence manager
- * application. The communication is made via DBus.
+ * application. 
  *
  */
+
+#define SRV_IP_ADDR                 "executor.listen-ip"
+#define SRV_PORT_NO                 "executor.listen-port"
+#define PROCESSOR_WRAPPER_PATH      "executor.wrapper-path"
+#define WRP_SEND_RETRIES_NO         "executor.wrp-send-retries-no"
+#define WRP_TIMEOUT_BETWEEN_RETRIES "executor.wrp-timeout-between-retries"
+#define WRP_EXECUTES_LOCAL          "executor.wrp-executes-local"
+
+#define INTER_PROC_COM_TYPE         "general.inter-proc-com-type"
+#define ORCHESTRATOR_TMP_PATH       "general.scratch-path"
 
 class PersistenceItfModule : public QObject
 {
@@ -21,7 +31,6 @@ public:
 
     static PersistenceItfModule *GetInstance();
 
-    void SendProcessorExecInfos(ProcessorExecutionInfos &execInfos);
     void RequestConfiguration();
 
     void MarkStepPendingStart(int taskId, QString &name);
@@ -29,8 +38,11 @@ public:
     bool MarkStepFinished(int taskId, QString &name, ProcessorExecutionInfos &statistics);
     void MarkStepFailed(int taskId, QString &name, ProcessorExecutionInfos &statistics);
 
+    // Slurm configuration
     QString GetExecutorQos(int processorId);
     QString GetExecutorPartition(int processorId);
+
+    PersistenceManagerDBProvider * GetDBProvider();
 
 signals:
     void OnConfigurationReceived();
@@ -41,6 +53,7 @@ private:
 
     bool GetValueForKey(const ConfigurationParameterValueList &configuration,
                         const QString &key, QString &value);
+
     void SaveMainConfigKeys(const ConfigurationParameterValueList &configuration);
     long ParseTimeStr(const QString &strTime);
     ExecutionStatistics InitStatistics(const ProcessorExecutionInfos &statistics);

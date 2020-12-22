@@ -1,7 +1,7 @@
 include(../common.pri)
 
 QT -= gui
-QT += core dbus sql
+QT += core dbus sql network
 
 TARGET = sen2agri-orchestrator
 
@@ -49,7 +49,14 @@ SOURCES += main.cpp \
     processor/grasslandmowinghandler.cpp \
     processor/s4c_utils.cpp \
     processor/s4c_markersdb1.cpp \
-    processor/s4c_mdb1_dataextract_steps_builder.cpp
+    processor/s4c_mdb1_dataextract_steps_builder.cpp \
+    http/controller/orchestratorcontroller.cpp \
+    adaptor/dbusorchestratoradaptor.cpp \
+    adaptor/httporchestratoradaptor.cpp \
+    executorclient/executorproxy.cpp \
+    executorclient/dbusexecutorproxy.cpp \
+    executorclient/httpexecutorproxy.cpp \
+    executorclient/executorproxyfactory.cpp
 
 HEADERS += \
     pch.hpp \
@@ -78,7 +85,14 @@ HEADERS += \
     processor/grasslandmowinghandler.hpp \
     processor/s4c_utils.hpp \
     processor/s4c_markersdb1.hpp \
-    processor/s4c_mdb1_dataextract_steps_builder.hpp
+    processor/s4c_mdb1_dataextract_steps_builder.hpp \
+    http/controller/orchestratorcontroller.hpp \
+    adaptor/dbusorchestratoradaptor.h \
+    adaptor/httporchestratoradaptor.h \
+    executorclient/dbusexecutorproxy.hpp \
+    executorclient/httpexecutorproxy.hpp \
+    executorclient/executorproxy.hpp \
+    executorclient/executorproxyfactory.h
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \
@@ -124,3 +138,30 @@ INCLUDEPATH += $$PWD/../sen2agri-common
 DEPENDPATH += $$PWD/../sen2agri-common
 
 PRE_TARGETDEPS += $$OUT_PWD/../sen2agri-common/libsen2agri-common.a
+
+QTWEBAPP = -lQtWebApp
+CONFIG(debug, debug|release) {
+    QTWEBAPP = $$join(QTWEBAPP,,,d)
+}
+
+LIBS += -L$$OUT_PWD/../QtWebApp/ $$QTWEBAPP
+
+INCLUDEPATH += $$PWD/../QtWebApp
+DEPENDPATH += $$PWD/../QtWebApp
+
+CONFIG(debug, debug|release) {
+    LIBQTWEBAPP = $$OUT_PWD/../QtWebApp/libQtWebAppd.so
+}
+CONFIG(release, debug|release) {
+    LIBQTWEBAPP = $$OUT_PWD/../QtWebApp/libQtWebApp.so
+}
+
+PRE_TARGETDEPS += $$LIBQTWEBAPP
+
+
+LIBS += -L$$OUT_PWD/../sen2agri-http-server-common/ -lsen2agri-http-server-common
+
+INCLUDEPATH += $$PWD/../sen2agri-http-server-common
+DEPENDPATH += $$PWD/../sen2agri-http-server-common
+
+PRE_TARGETDEPS += $$OUT_PWD/../sen2agri-http-server-common/libsen2agri-http-server-common.a

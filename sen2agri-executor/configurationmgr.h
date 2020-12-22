@@ -15,7 +15,7 @@ public:
 
     static ConfigurationMgr *GetInstance();
 
-    bool GetValue(QString &strKey, QString &strVal, QString strDefVal = "");
+    bool GetValue(const QString &strKey, QString &strVal, QString strDefVal = "");
     void SetValue(const QString &strKey, const QString &strVal);
 
 private:

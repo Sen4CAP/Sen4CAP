@@ -8,25 +8,27 @@
 #include "httpglobal.h"
 #include "httpconnectionhandler.h"
 
+namespace stefanfrings {
+
 /**
-  Pool of http connection handlers. Connection handlers are created on demand and idle handlers are
-  cleaned up in regular time intervals.
+  Pool of http connection handlers. The size of the pool grows and
+  shrinks on demand.
   <p>
   Example for the required configuration settings:
   <code><pre>
-  minThreads=1
+  minThreads=4
   maxThreads=100
-  cleanupInterval=1000
+  cleanupInterval=60000
   readTimeout=60000
   ;sslKeyFile=ssl/my.key
   ;sslCertFile=ssl/my.cert
   maxRequestSize=16000
   maxMultiPartSize=1000000
   </pre></code>
-  The pool is empty initially and grows with the number of concurrent
-  connections. A timer removes one idle connection handler at each
-  interval, but it leaves some spare handlers in memory to improve
-  performance.
+  After server start, the size of the thread pool is always 0. Threads
+  are started on demand when requests come in. The cleanup timer reduces
+  the number of idle threads slowly by closing one thread in each interval.
+  But the configured minimum number of threads are kept running.
   <p>
   For SSL support, you need an OpenSSL certificate file and a key file.
   Both can be created with the command
@@ -36,7 +38,7 @@
   <p>
   Visit http://slproweb.com/products/Win32OpenSSL.html to download the Light version of OpenSSL for Windows.
   <p>
-  Please note that a connection handler with SSL settings can only handle HTTPS protocol. To
+  Please note that a listener with SSL settings can only handle HTTPS protocol. To
   support both HTTP and HTTPS simultaneously, you need to start two listeners on different ports -
   one with SLL and one without SSL.
   @see HttpConnectionHandler for description of the readTimeout
@@ -54,7 +56,7 @@ public:
       @param requestHandler The handler that will process each received HTTP request.
       @warning The requestMapper gets deleted by the destructor of this pool
     */
-    HttpConnectionHandlerPool(QSettings* settings, HttpRequestHandler* requestHandler);
+    HttpConnectionHandlerPool(const QSettings* settings, HttpRequestHandler *requestHandler);
 
     /** Destructor */
     virtual ~HttpConnectionHandlerPool();
@@ -65,7 +67,7 @@ public:
 private:
 
     /** Settings for this pool */
-    QSettings* settings;
+    const QSettings* settings;
 
     /** Will be assigned to each Connectionhandler during their creation */
     HttpRequestHandler* requestHandler;
@@ -91,5 +93,7 @@ private slots:
     void cleanup();
 
 };
+
+} // end of namespace
 
 #endif // HTTPCONNECTIONHANDLERPOOL_H

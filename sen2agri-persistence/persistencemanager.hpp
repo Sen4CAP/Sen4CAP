@@ -25,6 +25,7 @@ public:
     ConfigurationParameterValueList GetConfigurationParameters(const QString &prefix);
     JobConfigurationParameterValueList GetJobConfigurationParameters(int jobId,
                                                                      const QString &prefix);
+    JobDefinition GetJobDefinition(int jobId);
 
     KeyedMessageList UpdateConfigurationParameters(const ConfigurationUpdateActionList &actions,
                                                    bool isAdmin);
@@ -52,6 +53,7 @@ public:
     void MarkJobNeedsInput(int jobId);
 
     TaskIdList GetJobTasksByStatus(int jobId, const ExecutionStatusList &statusList);
+    JobStepList GetJobSteps(int jobId);
     JobStepToRunList GetTaskStepsForStart(int taskId);
     JobStepToRunList GetJobStepsForResume(int jobId);
 
@@ -99,4 +101,6 @@ public:
     void InsertScheduledTask( ScheduledTask& task);
 
     SeasonList GetSiteSeasons(int siteId);
+
+    QList<int> QListIntFromString(QString str, const QString &sep = ",");
 };

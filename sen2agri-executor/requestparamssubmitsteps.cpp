@@ -62,7 +62,7 @@ ExecutionStep& ExecutionStep::operator=(const ExecutionStep &rhs)
 }
 
 RequestParamsSubmitSteps::RequestParamsSubmitSteps()
-    : RequestParamsBase(START_PROCESSOR_REQ)
+    : RequestParamsBase(START_STEP_REQ)
 {
 }
 

@@ -44,7 +44,7 @@ SlurmSacctResultParser::~SlurmSacctResultParser()
     m_pPosArr = NULL;
 }
 
-int SlurmSacctResultParser::ParseResults(QString &strLog, QList<ProcessorExecutionInfos> &executionInfos, QString *pJobNameFilter)
+int SlurmSacctResultParser::ParseResults(const QString &strLog, QList<ProcessorExecutionInfos> &executionInfos, const QString &jobNameFilter)
 {
     /* The expected log is similar with the one below:
 
@@ -73,8 +73,8 @@ int SlurmSacctResultParser::ParseResults(QString &strLog, QList<ProcessorExecuti
                 ProcessorExecutionInfos procExecInfos;
                 if(ParseLine(curLine, procExecInfos))
                 {
-                    if(pJobNameFilter) {
-                        if(procExecInfos.strJobName == *pJobNameFilter) {
+                    if(jobNameFilter.size() > 0) {
+                        if(procExecInfos.strJobName == jobNameFilter) {
                             // add it and exit the loop
                             executionInfos.append(procExecInfos);
                             break;

@@ -5,9 +5,8 @@
 #include "configuration.hpp"
 #include "make_unique.hpp"
 
-DatabaseTaskLoader::DatabaseTaskLoader()
-    : persistenceManager(
-          Settings::readSettings(getConfigurationFile(*QCoreApplication::instance())))
+DatabaseTaskLoader::DatabaseTaskLoader(PersistenceManagerDBProvider &persistenceMng)
+    : persistenceManager(persistenceMng)
 {
 }
 

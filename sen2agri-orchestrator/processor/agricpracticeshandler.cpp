@@ -276,6 +276,7 @@ QString AgricPracticesHandler::CreateStepsForExportL4CMarkers(const AgricPractic
                                                      "--year", jobCfg.siteCfg.year,
                                                      "--new-prd-info-file", productFormatterPrdFileIdFile,
                                                      "--prds-history-files", schedPrdsHistFile,
+                                                     "--add-no-data-rows", QString::number(jobCfg.siteCfg.bMarkersAddNoDataRows),
                                                      "-o", exportedFile
                                                 };
     steps.append(exportTask.CreateStep("export-l4c-markers", exportL4CMarkersProductArgs));
@@ -446,7 +447,7 @@ bool AgricPracticesHandler::LoadL4CConfigFile(AgricPracticesJobPayload &jobCfg,
 }
 
 QStringList AgricPracticesHandler::GetFilesMergeArgs(const QStringList &listInputPaths, const QString &outFileName,
-                                                     const QDateTime &prdMaxDate)
+                                                     const QDateTime &)
 {
     QStringList retArgs = { "Markers1CsvMerge", "-out", outFileName, "-il" };
     retArgs += listInputPaths;

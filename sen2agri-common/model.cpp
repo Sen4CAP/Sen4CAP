@@ -1431,6 +1431,40 @@ NewExecutorStep::NewExecutorStep(int processorId,
 {
 }
 
+QString NewExecutorStep::toJson() const
+{
+    QJsonObject node;
+    node[QStringLiteral("processorId")] = processorId;
+    node[QStringLiteral("taskId")] = taskId;
+    node[QStringLiteral("processorPath")] = processorPath;
+    node[QStringLiteral("stepName")] = stepName;
+    QJsonArray stepArgs;
+    for(auto stepArg: arguments) {
+        stepArgs.append(stepArg.value);
+    }
+    node[QStringLiteral("arguments")] = stepArgs;
+
+    return QString::fromUtf8(QJsonDocument(node).toJson());
+}
+
+NewExecutorStep NewExecutorStep::fromJson(const QString &json)
+{
+    const auto &doc = QJsonDocument::fromJson(json.toUtf8());
+    const auto &object = doc.object();
+    const QJsonArray &arr = object.value(QStringLiteral("arguments")).toArray();
+    QList<StepArgument> arguments;
+    for (auto obj: arr) {
+        arguments.append(StepArgument(obj.toString()));
+    }
+
+    return { object.value(QStringLiteral("processorId")).toInt(),
+             object.value(QStringLiteral("taskId")).toInt(),
+             object.value(QStringLiteral("processorPath")).toString(),
+             object.value(QStringLiteral("stepName")).toString(),
+             arguments
+    };
+}
+
 void NewExecutorStep::registerMetaTypes()
 {
     qDBusRegisterMetaType<StepArgument>();
@@ -1493,6 +1527,16 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, JobStepToRun &ste
     argument.endStructure();
 
     return argument;
+}
+
+JobStep::JobStep() : JobStepToRun()
+{
+}
+
+JobStep::JobStep(int taskId, QString module, QString stepName, QString parametersJson, QList<int> taskIds)
+    : JobStepToRun(taskId, module, stepName, parametersJson),
+      precedingTaskIds(std::move(taskIds))
+{
 }
 
 StepConsoleOutput::StepConsoleOutput() : taskId()
@@ -1753,6 +1797,29 @@ ScheduledTask::ScheduledTask(int ti,
 {
 }
 
+QString ProcessingRequest::toJson() const
+{
+    QJsonObject node;
+    node[QStringLiteral("processorId")] = processorId;
+    node[QStringLiteral("siteId")] = siteId;
+    node[QStringLiteral("ttNextScheduledRunTime")] = ttNextScheduledRunTime;
+    node[QStringLiteral("parametersJson")] = parametersJson;
+
+    return QString::fromUtf8(QJsonDocument(node).toJson());
+}
+
+ProcessingRequest ProcessingRequest::fromJson(const QString &json)
+{
+    const auto &doc = QJsonDocument::fromJson(json.toUtf8());
+    const auto &object = doc.object();
+
+    return { object.value(QStringLiteral("processorId")).toInt(),
+             object.value(QStringLiteral("siteId")).toInt(),
+             object.value(QStringLiteral("ttNextScheduledRunTime")).toInt(),
+             object.value(QStringLiteral("parametersJson")).toString()
+    };
+}
+
 QDBusArgument &operator<<(QDBusArgument &argument, const ProcessingRequest &request)
 {
     argument.beginStructure();
@@ -1770,6 +1837,29 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, ProcessingRequest
     argument.endStructure();
 
     return argument;
+}
+
+QString JobDefinition::toJson() const
+{
+    QJsonObject node;
+    node[QStringLiteral("isValid")] = isValid;
+    node[QStringLiteral("processorId")] = processorId;
+    node[QStringLiteral("siteId")] = siteId;
+    node[QStringLiteral("jobDefinitionJson")] = jobDefinitionJson;
+
+    return QString::fromUtf8(QJsonDocument(node).toJson());
+}
+
+JobDefinition JobDefinition::fromJson(const QString &json)
+{
+    const auto &doc = QJsonDocument::fromJson(json.toUtf8());
+    const auto &object = doc.object();
+
+    return { object.value(QStringLiteral("isValid")).toBool(),
+             object.value(QStringLiteral("processorId")).toInt(),
+             object.value(QStringLiteral("siteId")).toInt(),
+             object.value(QStringLiteral("jobDefinitionJson")).toString()
+    };
 }
 
 QDBusArgument &operator<<(QDBusArgument &argument, const JobDefinition &job)
@@ -1817,3 +1907,4 @@ Season::Season(int seasonId, int siteId, QString name, QDate startDate, QDate en
     : seasonId(seasonId), siteId(siteId), name(move(name)), startDate(move(startDate)), endDate(move(endDate)), midDate(move(midDate)), enabled(enabled)
 {
 }
+

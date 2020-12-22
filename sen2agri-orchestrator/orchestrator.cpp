@@ -74,10 +74,7 @@ Orchestrator::Orchestrator(QObject *parent)
     : QObject(parent),
       persistenceManager(
           Settings::readSettings(getConfigurationFile(*QCoreApplication::instance()))),
-      executorClient(OrgEsaSen2agriProcessorsExecutorInterface::staticInterfaceName(),
-                     QStringLiteral("/org/esa/sen2agri/processorsExecutor"),
-                     QDBusConnection::systemBus()),
-      worker(GetHandlersMap(persistenceManager), persistenceManager, executorClient)
+      worker(GetHandlersMap(persistenceManager), persistenceManager)
 {
     worker.RescanEvents();
 }

@@ -1,7 +1,7 @@
 include(../common.pri)
 
 QT -= gui
-QT += core dbus sql
+QT += core dbus sql network
 
 DESTDIR = bin
 
@@ -22,7 +22,8 @@ SOURCES += main.cpp \
     resourcereader.cpp \
     runestimator.cpp \
     databasetaskloader.cpp \
-    dbusorchestratorproxy.cpp
+    dbusorchestratorproxy.cpp \
+    httporchestratorproxy.cpp
 
 #adaptor.files = ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml
 #adaptor.header_flags = -i ../sen2agri-common/model.hpp
@@ -66,4 +67,5 @@ HEADERS += \
     orchestratorproxy.hpp \
     runestimator.hpp \
     databasetaskloader.hpp \
-    dbusorchestratorproxy.hpp
+    dbusorchestratorproxy.hpp \
+    httporchestratorproxy.hpp

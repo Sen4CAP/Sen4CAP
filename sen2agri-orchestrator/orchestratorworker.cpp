@@ -7,18 +7,19 @@
 #include "orchestratorworker.hpp"
 #include "persistencemanager.hpp"
 #include "dbus_future_utils.hpp"
+#include "executorclient/executorproxyfactory.h"
 
 static StepArgumentList getStepArguments(const JobStepToRun &step);
 static NewExecutorStepList
 getExecutorStepList(EventProcessingContext &ctx, int processorId, int jobId, const JobStepToRunList &steps);
 
 OrchestratorWorker::OrchestratorWorker(std::map<int, std::unique_ptr<ProcessorHandler>> &handlerMap,
-                                       PersistenceManagerDBProvider &persistenceManagerClient,
-                                       OrgEsaSen2agriProcessorsExecutorInterface &executorClient)
+                                       PersistenceManagerDBProvider &persistenceManagerClient)
     : persistenceManager(persistenceManagerClient),
-      executorClient(executorClient),
       handlerMap(handlerMap)
 {
+    executorClient = ExecutorProxyFactory::GetExecutorClient(this, persistenceManager);
+
     moveToThread(&workerThread);
     workerThread.start();
 }
@@ -120,7 +121,7 @@ void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const TaskRun
 
     const auto &stepsToSubmit = getExecutorStepList(ctx, event.processorId, event.jobId, steps);
 
-    WaitForResponseAndThrow(executorClient.SubmitSteps(stepsToSubmit));
+    executorClient->SubmitSteps(stepsToSubmit);
 }
 
 void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const TaskFinishedEvent &event)
@@ -152,7 +153,8 @@ void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const JobCanc
                                                ExecutionStatus::Paused });
 
     try {
-        WaitForResponseAndThrow(executorClient.CancelTasks(tasks));
+        executorClient->CancelTasks(tasks);
+        executorClient->CancelJob(event.jobId);
     } catch (const std::exception &e) {
         Logger::error(e.what());
     }
@@ -168,7 +170,8 @@ void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const JobPaus
         event.jobId, { ExecutionStatus::Submitted, ExecutionStatus::Running });
 
     try {
-        WaitForResponseAndThrow(executorClient.CancelTasks(tasks));
+        executorClient->CancelTasks(tasks);
+        executorClient->PauseJob(event.jobId);
     } catch (const std::exception &e) {
         Logger::error(e.what());
     }
@@ -184,8 +187,14 @@ void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const JobResu
 
 //    const auto &stepsToSubmit = getExecutorStepList(ctx, event.processorId, event.jobId, steps);
 
-//    WaitForResponseAndThrow(executorClient.SubmitSteps(stepsToSubmit));
+//    executorClient.SubmitSteps(stepsToSubmit);
     ctx.MarkJobResumed(event.jobId);
+
+    try {
+        executorClient->ResumeJob(event.jobId);
+    } catch (const std::exception &e) {
+        Logger::error(e.what());
+    }
 }
 
 void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const JobSubmittedEvent &event)
@@ -195,6 +204,12 @@ void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const JobSubm
                      .arg(event.processorId));
 
     GetHandler(event.processorId).HandleJobSubmitted(ctx, event);
+
+    try {
+        executorClient->SubmitJob(event.jobId);
+    } catch (const std::exception &e) {
+        Logger::error(e.what());
+    }
 }
 
 void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const StepFailedEvent &event)
@@ -211,7 +226,7 @@ void OrchestratorWorker::ProcessEvent(EventProcessingContext &ctx, const StepFai
                                                ExecutionStatus::Submitted });
 
     try {
-        WaitForResponseAndThrow(executorClient.CancelTasks(tasks));
+        executorClient->CancelTasks(tasks);
     } catch (const std::exception &e) {
         Logger::error(e.what());
     }

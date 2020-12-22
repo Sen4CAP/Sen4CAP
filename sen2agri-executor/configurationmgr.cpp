@@ -22,7 +22,7 @@ ConfigurationMgr *ConfigurationMgr::GetInstance()
     return &instance;
 }
 
-bool ConfigurationMgr::GetValue(QString &strKey, QString &strVal, QString strDefVal)
+bool ConfigurationMgr::GetValue(const QString &strKey, QString &strVal, QString strDefVal)
 {
     if (m_mapVals.contains(strKey))
     {

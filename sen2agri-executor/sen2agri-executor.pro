@@ -31,7 +31,6 @@ SOURCES += main.cpp \
     execinfosprotsrvfactory.cpp \
     orchestratorrequestshandler.cpp \
     persistenceitfmodule.cpp \
-    ressourcemanageritf.cpp \
     simpleudpexecinfosprotsrv.cpp \
     commandinvoker.cpp \
     slurmsacctresultparser.cpp \
@@ -42,16 +41,27 @@ SOURCES += main.cpp \
     requestparamscanceltasks.cpp \
     requestparamssubmitsteps.cpp \
     requestparamsexecutioninfos.cpp \
-    orchestratorclient.cpp \
     simpletcpexecinfosprotsrv.cpp \
-    simpletcpexecinfoconnection.cpp
+    simpletcpexecinfoconnection.cpp \
+    http/controller/executorcontroller.cpp \
+    adaptor/dbusexecutoradaptor.cpp \
+    adaptor/httpexecutoradaptor.cpp \
+    resourcemanager/resourcemanagerfactory.cpp \
+    resourcemanager/abstractresourcemanageritf.cpp \
+    resourcemanager/resourcemanageritf_slurm.cpp \
+    resourcemanager/resourcemanageritf_tao.cpp \
+    requestparamsjobops.cpp \
+    orchestratorclient/orchestratorclient.cpp \
+    orchestratorclient/dbusorchestratorclient.cpp \
+    orchestratorclient/httporchestratorclient.cpp \
+    orchestratorclient/orchestratorclientfactory.cpp \
+    resourcemanager/taojoboperationssender.cpp
 
 HEADERS += \
     abstractexecinfosprotsrv.h \
     execinfosprotsrvfactory.h \
     orchestratorrequestshandler.h \
     persistenceitfmodule.h \
-    ressourcemanageritf.h \
     simpleudpexecinfosprotsrv.h \
     iprocessorwrappermsgslistener.h \
     commandinvoker.h \
@@ -64,9 +74,21 @@ HEADERS += \
     requestparamscanceltasks.h \
     requestparamssubmitsteps.h \
     requestparamsexecutioninfos.h \
-    orchestratorclient.h \
     simpletcpexecinfosprotsrv.h \
-    simpletcpexecinfoconnection.h
+    simpletcpexecinfoconnection.h \
+    http/controller/executorcontroller.hpp \
+    adaptor/dbusexecutoradaptor.h \
+    adaptor/httpexecutoradaptor.h \
+    resourcemanager/resourcemanagerfactory.h \
+    resourcemanager/abstractresourcemanageritf.h \
+    resourcemanager/resourcemanageritf_slurm.h \
+    resourcemanager/resourcemanageritf_tao.h \
+    requestparamsjobops.h \
+    orchestratorclient/orchestratorclient.h \
+    orchestratorclient/dbusorchestratorclient.h \
+    orchestratorclient/httporchestratorclient.h \
+    orchestratorclient/orchestratorclientfactory.h \
+    resourcemanager/taojoboperationssender.h
 
 OTHER_FILES += \
     ../dbus-interfaces/org.esa.sen2agri.processorsExecutor.xml \
@@ -103,3 +125,30 @@ INCLUDEPATH += $$PWD/../sen2agri-common
 DEPENDPATH += $$PWD/../sen2agri-common
 
 PRE_TARGETDEPS += $$OUT_PWD/../sen2agri-common/libsen2agri-common.a
+
+QTWEBAPP = -lQtWebApp
+CONFIG(debug, debug|release) {
+    QTWEBAPP = $$join(QTWEBAPP,,,d)
+}
+
+LIBS += -L$$OUT_PWD/../QtWebApp/ $$QTWEBAPP
+
+INCLUDEPATH += $$PWD/../QtWebApp
+DEPENDPATH += $$PWD/../QtWebApp
+
+CONFIG(debug, debug|release) {
+    LIBQTWEBAPP = $$OUT_PWD/../QtWebApp/libQtWebAppd.so
+}
+CONFIG(release, debug|release) {
+    LIBQTWEBAPP = $$OUT_PWD/../QtWebApp/libQtWebApp.so
+}
+
+PRE_TARGETDEPS += $$LIBQTWEBAPP
+
+
+LIBS += -L$$OUT_PWD/../sen2agri-http-server-common/ -lsen2agri-http-server-common
+
+INCLUDEPATH += $$PWD/../sen2agri-http-server-common
+DEPENDPATH += $$PWD/../sen2agri-http-server-common
+
+PRE_TARGETDEPS += $$OUT_PWD/../sen2agri-http-server-common/libsen2agri-http-server-common.a

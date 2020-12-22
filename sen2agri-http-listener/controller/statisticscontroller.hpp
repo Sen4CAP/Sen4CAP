@@ -6,6 +6,8 @@
 
 #include "persistencemanager.hpp"
 
+using namespace stefanfrings;
+
 class StatisticsController : public HttpRequestHandler
 {
     Q_OBJECT

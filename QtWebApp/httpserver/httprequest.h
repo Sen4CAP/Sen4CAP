@@ -7,6 +7,7 @@
 #define HTTPREQUEST_H
 
 #include <QByteArray>
+#include <QHostAddress>
 #include <QTcpSocket>
 #include <QMap>
 #include <QMultiMap>
@@ -14,6 +15,8 @@
 #include <QTemporaryFile>
 #include <QUuid>
 #include "httpglobal.h"
+
+namespace stefanfrings {
 
 /**
   This object represents a single HTTP request. It reads the request
@@ -45,7 +48,7 @@ public:
       Constructor.
       @param settings Configuration settings
     */
-    HttpRequest(QSettings* settings);
+    HttpRequest(const QSettings* settings);
 
     /**
       Destructor.
@@ -53,11 +56,12 @@ public:
     virtual ~HttpRequest();
 
     /**
-      Read the request from a socket. This method must be called repeatedly
+      Read the HTTP request from a socket.
+      This method is called by the connection handler repeatedly
       until the status is RequestStatus::complete or RequestStatus::abort.
       @param socket Source of the data
     */
-    void readFromSocket(QTcpSocket* socket);
+    void readFromSocket(QTcpSocket *socket);
 
     /**
       Get the status of this reqeust.
@@ -71,12 +75,15 @@ public:
     /** Get the decoded path of the HTPP request (e.g. "/index.html") */
     QByteArray getPath() const;
 
+    /** Get the raw path of the HTTP request (e.g. "/file%20with%20spaces.html") */
+    const QByteArray& getRawPath() const;
+
     /** Get the version of the HTPP request (e.g. "HTTP/1.1") */
     QByteArray getVersion() const;
 
     /**
       Get the value of a HTTP request header.
-      @param name Name of the header
+      @param name Name of the header, not case-senitive.
       @return If the header occurs multiple times, only the last
       one is returned.
     */
@@ -84,16 +91,19 @@ public:
 
     /**
       Get the values of a HTTP request header.
-      @param name Name of the header
+      @param name Name of the header, not case-senitive.
     */
     QList<QByteArray> getHeaders(const QByteArray& name) const;
 
-    /** Get all HTTP request headers */
+    /**
+     * Get all HTTP request headers. Note that the header names
+     * are returned in lower-case.
+     */
     QMultiMap<QByteArray,QByteArray> getHeaderMap() const;
 
     /**
       Get the value of a HTTP request parameter.
-      @param name Name of the parameter
+      @param name Name of the parameter, case-sensitive.
       @return If the parameter occurs multiple times, only the last
       one is returned.
     */
@@ -101,14 +111,14 @@ public:
 
     /**
       Get the values of a HTTP request parameter.
-      @param name Name of the parameter
+      @param name Name of the parameter, case-sensitive.
     */
     QList<QByteArray> getParameters(const QByteArray& name) const;
 
-    /** Get all HTTP request parameters */
+    /** Get all HTTP request parameters. */
     QMultiMap<QByteArray,QByteArray> getParameterMap() const;
 
-    /** Get the HTTP request body  */
+    /** Get the HTTP request body.  */
     QByteArray getBody() const;
 
     /**
@@ -127,16 +137,23 @@ public:
       For uploaded files, the method getParameters() returns
       the original fileName as provided by the calling web browser.
     */
-    QTemporaryFile* getUploadedFile(const QByteArray fieldName);
+    QTemporaryFile* getUploadedFile(const QByteArray fieldName) const;
 
     /**
-      Get the value of a cookie
+      Get the value of a cookie.
       @param name Name of the cookie
     */
     QByteArray getCookie(const QByteArray& name) const;
 
-    /** Get the map of cookies */
+    /** Get all cookies. */
     QMap<QByteArray,QByteArray>& getCookieMap();
+
+    /**
+      Get the address of the connected client.
+      Note that multiple clients may have the same IP address, if they
+      share an internet connection (which is very common).
+     */
+    QHostAddress getPeerAddress() const;
 
 private:
 
@@ -165,10 +182,13 @@ private:
     QByteArray version;
 
     /**
-      Status of this request.
+      Status of this request. For the state engine.
       @see RequestStatus
     */
     RequestStatus status;
+
+    /** Address of the connected peer. */
+    QHostAddress peerAddress;
 
     /** Maximum size of requests in bytes. */
     int maxSize;
@@ -189,9 +209,9 @@ private:
     QByteArray boundary;
 
     /** Temp file, that is used to store the multipart/form-data body */
-    QTemporaryFile tempFile;
+    QTemporaryFile* tempFile;
 
-    /** Parset he multipart body, that has been stored in the temp file. */
+    /** Parse the multipart body, that has been stored in the temp file. */
     void parseMultiPartFile();
 
     /** Sub-procedure of readFromSocket(), read the first line of a request. */
@@ -213,5 +233,7 @@ private:
     QByteArray lineBuffer;
 
 };
+
+} // end of namespace
 
 #endif // HTTPREQUEST_H

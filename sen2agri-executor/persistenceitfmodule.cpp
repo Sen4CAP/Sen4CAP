@@ -22,6 +22,10 @@ PersistenceItfModule *PersistenceItfModule::GetInstance()
     return &instance;
 }
 
+PersistenceManagerDBProvider* PersistenceItfModule::GetDBProvider() {
+    return &clientInterface;
+}
+
 void PersistenceItfModule::MarkStepPendingStart(int taskId, QString &name)
 {
     clientInterface.MarkStepPendingStart(taskId, name);
@@ -53,8 +57,11 @@ void PersistenceItfModule::MarkStepFailed(int taskId,
 void PersistenceItfModule::RequestConfiguration()
 {
     // Do not catch any exception as without configuration the executor is useles
-    const auto &keys = clientInterface.GetConfigurationParameters("executor.");
-    SaveMainConfigKeys(keys);
+    const auto &executorKeys = clientInterface.GetConfigurationParameters("executor.");
+    SaveMainConfigKeys(executorKeys);
+    const auto &generalKeys = clientInterface.GetConfigurationParameters("general.");
+    SaveMainConfigKeys(generalKeys);
+
     // SaveProcessorsConfigKeys(keys);
     emit OnConfigurationReceived();
 }
@@ -80,30 +87,8 @@ QString PersistenceItfModule::GetExecutorPartition(int processorId) {
 void PersistenceItfModule::SaveMainConfigKeys(const ConfigurationParameterValueList &configuration)
 {
     for (const auto &p : configuration) {
-        if (p.key == "executor.listen-ip") {
-            QString strKey("SRV_IP_ADDR");
-            ConfigurationMgr::GetInstance()->SetValue(strKey, p.value);
-        }
-        if (p.key == "executor.listen-port") {
-            QString strKey("SRV_PORT_NO");
-            ConfigurationMgr::GetInstance()->SetValue(strKey, p.value);
-        }
-        if (p.key == "executor.wrapper-path") {
-            QString strKey("PROCESSOR_WRAPPER_PATH");
-            ConfigurationMgr::GetInstance()->SetValue(strKey, p.value);
-        }
-        if (p.key == "executor.wrp-send-retries-no") {
-            QString strKey("WRP_SEND_RETRIES_NO");
-            ConfigurationMgr::GetInstance()->SetValue(strKey, p.value);
-        }
-        if (p.key == "executor.wrp-timeout-between-retries") {
-            QString strKey("WRP_TIMEOUT_BETWEEN_RETRIES");
-            ConfigurationMgr::GetInstance()->SetValue(strKey, p.value);
-        }
-        if (p.key == "executor.wrp-executes-local") {
-            QString strKey("WRP_EXECUTES_LOCAL");
-            ConfigurationMgr::GetInstance()->SetValue(strKey, p.value);
-        }
+        // add the original key
+        ConfigurationMgr::GetInstance()->SetValue(p.key, p.value);
     }
 }
 

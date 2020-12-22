@@ -5,10 +5,10 @@
 
 class DatabaseTaskLoader : public TaskLoader
 {
-    PersistenceManagerDBProvider persistenceManager;
+    PersistenceManagerDBProvider &persistenceManager;
 
 public:
-    DatabaseTaskLoader();
+    DatabaseTaskLoader(PersistenceManagerDBProvider &persistenceMng);
     virtual ~DatabaseTaskLoader();
     virtual std::vector<ScheduledTask> LoadFromDatabase( );
     virtual void UpdateStatusinDatabase( const std::vector<ScheduledTask>& );

@@ -182,6 +182,37 @@ PersistenceManagerDBProvider::GetJobConfigurationParameters(int jobId, const QSt
     });
 }
 
+JobDefinition
+PersistenceManagerDBProvider::GetJobDefinition(int jobId)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query = db.prepareQuery(
+            QStringLiteral("select * from sp_get_job_definition(:job_id)"));
+        query.bindValue(QStringLiteral(":job_id"), jobId);
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+
+        auto dataRecord = query.record();
+        auto proceIdCol = dataRecord.indexOf(QStringLiteral("processor_id"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
+        auto paramsCol = dataRecord.indexOf(QStringLiteral("parameters"));
+
+        JobDefinition result;
+        while (query.next()) {
+            result = { true, query.value(proceIdCol).toInt(),
+                            query.value(siteIdCol).toInt(),
+                            query.value(paramsCol).toString() };
+        }
+
+        return result;
+    });
+}
+
 KeyedMessageList PersistenceManagerDBProvider::UpdateConfigurationParameters(
     const ConfigurationUpdateActionList &actions, bool isAdmin)
 {
@@ -692,6 +723,39 @@ TaskIdList PersistenceManagerDBProvider::GetJobTasksByStatus(int jobId,
         TaskIdList result;
         while (query.next()) {
             result.append({ query.value(taskIdCol).toInt() });
+        }
+
+        return result;
+    });
+}
+
+JobStepList PersistenceManagerDBProvider::GetJobSteps(int jobId)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query =
+            db.prepareQuery(QStringLiteral("select * from sp_get_job_steps(:jobId)"));
+        query.bindValue(QStringLiteral(":jobId"), jobId);
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+
+        auto dataRecord = query.record();
+        auto taskIdCol = dataRecord.indexOf(QStringLiteral("task_id"));
+        auto moduleCol = dataRecord.indexOf(QStringLiteral("module_short_name"));
+        auto stepNameCol = dataRecord.indexOf(QStringLiteral("step_name"));
+        auto parametersCol = dataRecord.indexOf(QStringLiteral("parameters"));
+        auto precedingTasksCol = dataRecord.indexOf(QStringLiteral("preceding_task_ids"));
+
+        JobStepList result;
+        while (query.next()) {
+            result.append(
+                { query.value(taskIdCol).toInt(),      query.value(moduleCol).toString(),
+                  query.value(stepNameCol).toString(), query.value(parametersCol).toString(),
+                  QListIntFromString(query.value(precedingTasksCol).toString())});
         }
 
         return result;
@@ -1835,4 +1899,22 @@ QString PersistenceManagerDBProvider::GetSiteShortName(int siteId)
         }
     }
     return "";
+}
+
+QList<int> PersistenceManagerDBProvider::QListIntFromString(QString str, const QString &sep)
+{
+    int firstPos = 0;
+    int nChars = str.length();
+    if ((str.startsWith('{') && str.endsWith('}')) ||
+            (str.startsWith('[') && str.endsWith(']'))) {
+        firstPos = 1;
+        nChars = str.length() - 2;
+    }
+    QStringRef sref (&str, firstPos, nChars); // Remove braces
+    QVector<QStringRef> v = sref.split(sep);
+    QList<int> l;
+    for (const QStringRef &r: v) {
+        l << r.toInt();
+    }
+    return l;
 }

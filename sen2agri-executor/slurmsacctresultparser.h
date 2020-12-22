@@ -9,7 +9,7 @@ class SlurmSacctResultParser
 public:
     SlurmSacctResultParser();
     ~SlurmSacctResultParser();
-    int ParseResults(QString &strLog, QList<ProcessorExecutionInfos> &executionInfos, QString *pJobNameFilter = NULL);
+    int ParseResults(const QString &strLog, QList<ProcessorExecutionInfos> &executionInfos, const QString &jobNameFilter = "");
 
     enum {
         JOB_ID_POS = 0,

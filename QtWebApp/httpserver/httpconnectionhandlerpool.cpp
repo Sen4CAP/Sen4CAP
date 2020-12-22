@@ -1,4 +1,4 @@
-#ifndef QT_NO_OPENSSL
+#ifndef QT_NO_SSL
     #include <QSslSocket>
     #include <QSslKey>
     #include <QSslCertificate>
@@ -7,7 +7,9 @@
 #include <QDir>
 #include "httpconnectionhandlerpool.h"
 
-HttpConnectionHandlerPool::HttpConnectionHandlerPool(QSettings* settings, HttpRequestHandler* requestHandler)
+using namespace stefanfrings;
+
+HttpConnectionHandlerPool::HttpConnectionHandlerPool(const QSettings *settings, HttpRequestHandler *requestHandler)
     : QObject()
 {
     Q_ASSERT(settings!=0);
@@ -20,31 +22,38 @@ HttpConnectionHandlerPool::HttpConnectionHandlerPool(QSettings* settings, HttpRe
 }
 
 
-HttpConnectionHandlerPool::~HttpConnectionHandlerPool() {
+HttpConnectionHandlerPool::~HttpConnectionHandlerPool()
+{
     // delete all connection handlers and wait until their threads are closed
-    foreach(HttpConnectionHandler* handler, pool) {
-       handler->deleteLater();
+    foreach(HttpConnectionHandler* handler, pool)
+    {
+       delete handler;
     }
     delete sslConfiguration;
     qDebug("HttpConnectionHandlerPool (%p): destroyed", this);
 }
 
 
-HttpConnectionHandler* HttpConnectionHandlerPool::getConnectionHandler() {
+HttpConnectionHandler* HttpConnectionHandlerPool::getConnectionHandler()
+{
     HttpConnectionHandler* freeHandler=0;
     mutex.lock();
     // find a free handler in pool
-    foreach(HttpConnectionHandler* handler, pool) {
-        if (!handler->isBusy()) {
+    foreach(HttpConnectionHandler* handler, pool)
+    {
+        if (!handler->isBusy())
+        {
             freeHandler=handler;
             freeHandler->setBusy();
             break;
         }
     }
     // create a new handler, if necessary
-    if (!freeHandler) {
+    if (!freeHandler)
+    {
         int maxConnectionHandlers=settings->value("maxThreads",100).toInt();
-        if (pool.count()<maxConnectionHandlers) {
+        if (pool.count()<maxConnectionHandlers)
+        {
             freeHandler=new HttpConnectionHandler(settings,requestHandler,sslConfiguration);
             freeHandler->setBusy();
             pool.append(freeHandler);
@@ -55,15 +64,19 @@ HttpConnectionHandler* HttpConnectionHandlerPool::getConnectionHandler() {
 }
 
 
-void HttpConnectionHandlerPool::cleanup() {
+void HttpConnectionHandlerPool::cleanup()
+{
     int maxIdleHandlers=settings->value("minThreads",1).toInt();
     int idleCounter=0;
     mutex.lock();
-    foreach(HttpConnectionHandler* handler, pool) {
-        if (!handler->isBusy()) {
-            if (++idleCounter > maxIdleHandlers) {
-                pool.removeOne(handler);
+    foreach(HttpConnectionHandler* handler, pool)
+    {
+        if (!handler->isBusy())
+        {
+            if (++idleCounter > maxIdleHandlers)
+            {
                 delete handler;
+                pool.removeOne(handler);
                 qDebug("HttpConnectionHandlerPool: Removed connection handler (%p), pool size is now %i",handler,pool.size());
                 break; // remove only one handler in each interval
             }
@@ -73,12 +86,14 @@ void HttpConnectionHandlerPool::cleanup() {
 }
 
 
-void HttpConnectionHandlerPool::loadSslConfig() {
+void HttpConnectionHandlerPool::loadSslConfig()
+{
     // If certificate and key files are configured, then load them
     QString sslKeyFileName=settings->value("sslKeyFile","").toString();
     QString sslCertFileName=settings->value("sslCertFile","").toString();
-    if (!sslKeyFileName.isEmpty() && !sslCertFileName.isEmpty()) {
-        #ifdef QT_NO_OPENSSL
+    if (!sslKeyFileName.isEmpty() && !sslCertFileName.isEmpty())
+    {
+        #ifdef QT_NO_SSL
             qWarning("HttpConnectionHandlerPool: SSL is not supported");
         #else
             // Convert relative fileNames to absolute, based on the directory of the config file.
@@ -102,7 +117,8 @@ void HttpConnectionHandlerPool::loadSslConfig() {
 
             // Load the SSL certificate
             QFile certFile(sslCertFileName);
-            if (!certFile.open(QIODevice::ReadOnly)) {
+            if (!certFile.open(QIODevice::ReadOnly))
+            {
                 qCritical("HttpConnectionHandlerPool: cannot open sslCertFile %s", qPrintable(sslCertFileName));
                 return;
             }
@@ -111,7 +127,8 @@ void HttpConnectionHandlerPool::loadSslConfig() {
 
             // Load the key file
             QFile keyFile(sslKeyFileName);
-            if (!keyFile.open(QIODevice::ReadOnly)) {
+            if (!keyFile.open(QIODevice::ReadOnly))
+            {
                 qCritical("HttpConnectionHandlerPool: cannot open sslKeyFile %s", qPrintable(sslKeyFileName));
                 return;
             }

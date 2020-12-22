@@ -7,7 +7,7 @@
 #include "logger.hpp"
 
 RequestParamsExecutionInfos::RequestParamsExecutionInfos()
-    : RequestParamsBase(PROCESSOR_EXECUTION_INFO_MSG)
+    : RequestParamsBase(STEP_EXECUTION_INFO_MSG)
 {
 
 }

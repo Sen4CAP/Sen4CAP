@@ -3,8 +3,8 @@
   @author Stefan Frings
 */
 
-#ifndef LISTENER_H
-#define LISTENER_H
+#ifndef HTTPLISTENER_H
+#define HTTPLISTENER_H
 
 #include <QTcpServer>
 #include <QSettings>
@@ -13,6 +13,8 @@
 #include "httpconnectionhandler.h"
 #include "httpconnectionhandlerpool.h"
 #include "httprequesthandler.h"
+
+namespace stefanfrings {
 
 /**
   Listens for incoming TCP connections and and passes all incoming HTTP requests to your implementation of HttpRequestHandler,
@@ -46,14 +48,32 @@ public:
 
     /**
       Constructor.
-      @param settings Configuration settings for the HTTP server. Must not be 0.
+      Creates a connection pool and starts listening on the configured host and port.
+      @param settings Configuration settings, usually stored in an INI file. Must not be 0.
+      Settings are read from the current group, so the caller must have called settings->beginGroup().
+      Because the group must not change during runtime, it is recommended to provide a
+      separate QSettings instance that is not used by other parts of the program.
+      The HttpListener does not take over ownership of the QSettings instance, so the
+      caller should destroy it during shutdown.
       @param requestHandler Processes each received HTTP request, usually by dispatching to controller classes.
       @param parent Parent object.
+      @warning Ensure to close or delete the listener before deleting the request handler.
     */
-    HttpListener(QSettings* settings, HttpRequestHandler* requestHandler, QObject* parent = 0);
+    HttpListener(const QSettings* settings, HttpRequestHandler* requestHandler, QObject* parent=nullptr);
 
     /** Destructor */
     virtual ~HttpListener();
+
+    /**
+      Restart listeing after close().
+    */
+    void listen();
+
+    /**
+     Closes the listener, waits until all pending requests are processed,
+     then closes the connection pool.
+    */
+    void close();
 
 protected:
 
@@ -63,7 +83,10 @@ protected:
 private:
 
     /** Configuration settings for the HTTP server */
-    QSettings* settings;
+    const QSettings* settings;
+
+    /** Point to the reuqest handler which processes all HTTP requests */
+    HttpRequestHandler* requestHandler;
 
     /** Pool of connection handlers */
     HttpConnectionHandlerPool* pool;
@@ -71,7 +94,7 @@ private:
 signals:
 
     /**
-      Emitted when the connection handler shall process a new incoming onnection.
+      Sent to the connection handler to process a new incoming connection.
       @param socketDescriptor references the accepted connection.
     */
 
@@ -79,4 +102,6 @@ signals:
 
 };
 
-#endif // LISTENER_H
+} // end of namespace
+
+#endif // HTTPLISTENER_H

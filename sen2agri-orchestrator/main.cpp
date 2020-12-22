@@ -8,7 +8,10 @@
 #include "logger.hpp"
 
 #include "orchestrator.hpp"
-#include "orchestrator_adaptor.h"
+#include "adaptor/dbusorchestratoradaptor.h"
+#include "adaptor/httporchestratoradaptor.h"
+
+#include "configuration.hpp"
 
 #define RESCAN_EVENTS_TIMEOUT   10000
 
@@ -21,26 +24,26 @@ int main(int argc, char *argv[])
 
         registerMetaTypes();
 
+        PersistenceManagerDBProvider persistenceManager(
+                    Settings::readSettings(
+                        getConfigurationFile(*QCoreApplication::instance())));
+        QString interProcCommType;
+        const auto &params =
+            persistenceManager.GetConfigurationParameters("general.inter-proc-com-type");
+        for (const auto &p : params) {
+            if (!p.siteId) {
+                interProcCommType = p.value;
+            }
+        }
+
         Orchestrator orchestrator;
         Timer timer(&orchestrator);
         timer.start(RESCAN_EVENTS_TIMEOUT);
 
-        new OrchestratorAdaptor(&orchestrator);
-
-        auto connection = QDBusConnection::systemBus();
-        if (!connection.registerObject(QStringLiteral("/org/esa/sen2agri/orchestrator"),
-                                       &orchestrator)) {
-            throw std::runtime_error(
-                QStringLiteral("Error registering the object with D-Bus: %1, exiting.")
-                    .arg(connection.lastError().message())
-                    .toStdString());
-        }
-
-        if (!connection.registerService(QStringLiteral("org.esa.sen2agri.orchestrator"))) {
-            throw std::runtime_error(
-                QStringLiteral("Error registering the service with D-Bus: %1, exiting.")
-                    .arg(connection.lastError().message())
-                    .toStdString());
+        if (interProcCommType == "http") {
+            new HttpOrchestratorAdaptor(persistenceManager, &orchestrator);
+        } else {
+            new DBusOrchestratorAdaptor(&orchestrator);
         }
 
         return app.exec();

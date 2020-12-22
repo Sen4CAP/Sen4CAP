@@ -9,6 +9,7 @@
 #include "persistencemanager.hpp"
 #include "orchestratorworker.hpp"
 #include "processorhandler.hpp"
+#include "executorclient/executorproxy.hpp"
 
 class Orchestrator : public QObject, protected QDBusContext
 {
@@ -26,7 +27,8 @@ public slots:
 
 private:
     PersistenceManagerDBProvider persistenceManager;
-    OrgEsaSen2agriProcessorsExecutorInterface executorClient;
+    //OrgEsaSen2agriProcessorsExecutorInterface executorClient;
+    //ExecutorProxy &executorClient;
     OrchestratorWorker worker;
 
     void RescanEvents();

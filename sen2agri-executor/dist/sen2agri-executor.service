@@ -5,6 +5,7 @@ After=docker.service
 Requires=docker.service
 
 [Service]
+Type=simple
 BusName=org.esa.sen2agri.processorsExecutor
 ExecStart=/usr/bin/sen2agri-executor
 User=sen2agri-service

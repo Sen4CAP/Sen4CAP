@@ -5,6 +5,8 @@
 
 #include "persistencemanager.hpp"
 
+using namespace stefanfrings;
+
 class RequestMapper : public HttpRequestHandler
 {
     Q_OBJECT

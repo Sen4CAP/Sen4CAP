@@ -1,6 +1,140 @@
 Dont forget to update the release number also in
 QtWebApp.pro and httpserver/httpglobal.cpp.
 
+1.7.11
+28.12.2019
+Fix Http Headers are not properly received if the two characters of
+a line-break (\r\n) were not received together in the same ethernet
+package.
+
+1.7.10
+04.12.2019
+Add support for other SSL implementations than OpenSSL (as far Qt supports it).
+Fix log bufffer was triggered only by severities above minLevel (should be "at least" minLevel).
+
+1.7.9
+20.06.2019
+INFO messages do not trigger writing out buffered log messages anymore when
+bufferSize>0 and minLevel>0.
+
+1.7.8
+05.02.2019
+HttpConnectionHandler closes the socket now in the thread of the socket.
+Headers and Body sent to the browser are now separated into individual ethernet packets.
+
+1.7.7
+04.02.2019
+HttpConnectionHandler creates a new Qthread instead of being itself a QThread.
+Improved formatting of thread ID in logger.
+
+1.7.6
+18.01.2019
+Code cleanup with const keywords and type conversions.
+Update Documentation.
+
+1.7.5
+17.01.2019
+Added content-types for *.xml and *.json to the StaticFileController.
+Fixed locking and memory leak in HttpSession.
+
+1.7.4
+24.05.2018
+Fixed two possible null-pointer references in case of broken HTTP requests.
+
+1.7.3
+25.04.2017
+Wait until all data are sent before closing connections.
+
+1.7.2
+17.01.2017
+Fixed compile error with MSVC.
+
+1.7.1
+10.11.2016
+Fixed a possible memory leak in case of broken Multipart HTTP Requests.
+
+1.7.0
+08.11.2016
+Introduced namespace "stefanfrings".
+Improved performance a little.
+
+1.6.7
+10.10.2016
+Fix type of socketDescriptor in qtservice library.
+Add support for INFO log messages (new since QT 5.5).
+Improve indentation of log messages.
+
+1.6.6
+25.07.2016
+Removed useless mutex from TemplateLoader.
+Add mutex to TemplateCache (which is now needed).
+
+1.6.5
+10.06.2016
+Incoming HTTP request headers are now processed case-insensitive.
+Add support for the HttpOnly flag of cookies.
+
+1.6.4
+27.03.2016
+Fixed constructor of Template class did not load the source file properly.
+Template loader and cache were not affected.
+
+1.6.3
+11.03.2016
+Fixed compilation error.
+Added missing implementation of HttpRequest::getPeerAddress().
+
+1.6.2
+06.03.2016
+Added mime types for some file extensions.
+
+1.6.1
+25.01.2016
+Fixed parser of boundary value in multi-part request, which caused that
+QHttpMultipart did not work on client side.
+
+1.6.0
+29.12.2015
+Much better output buffering, reduces the number of small IP packages.
+
+1.5.13
+29.12.2015
+Improved performance a little.
+Add support for old HTTP 1.0 clients.
+Add HttpResposne::flush() and HttpResponse::isConnected() which are helpful to support
+SSE from HTML 5 specification.
+
+1.5.12
+11.12.2015
+Fix program crash when using SSL with a variable sized thread pool on Windows.
+Changed name of HttpSessionStore::timerEvent() to fix compiler warnings since Qt 5.0.
+Add HttpRequest::getRawPath().
+HttpSessionStore::sessions is now protected.
+
+1.5.11
+21.11.2015
+Fix project file for Mac OS.
+Add HttpRequest::getPeerAddress() and HttpResponse::getStatusCode().
+
+1.5.10
+01.09.2015
+Modified StaticFileController to support ressource files (path starting with ":/" or "qrc://").
+
+1.5.9
+06.08.2015
+New HttpListener::listen() method, to restart listening after close.
+Add missing include for QObject in logger.h.
+Add a call to flush() before closing connections, which solves an issue with nginx.
+
+1.5.8
+26.07.2015
+Fixed segmentation fault error when closing the application while a HTTP request is in progress.
+New HttpListener::close() method to simplifly proper shutdown.
+
+1.5.7
+20.07.2015
+Fix Qt 5.5 compatibility issue.
+
 1.5.6
 22.06.2015
 Fixed compilation failes if QT does not support SSL.

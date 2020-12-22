@@ -1,11 +1,34 @@
 #include <QDebug>
-#include <QJsonDocument>
-#include <QJsonObject>
 
 #include "orchestratorrequestshandler.h"
-#include "ressourcemanageritf.h"
+#include "resourcemanager/resourcemanagerfactory.h"
 #include "requestparamssubmitsteps.h"
 #include "requestparamscanceltasks.h"
+#include "requestparamsjobops.h"
+
+void OrchestratorRequestsHandler::SubmitJob(int jobId)
+{
+    ResourceManagerFactory::GetResourceManager()->PerformJobOperation(
+                new RequestParamsJobOps(START_JOB_REQ, jobId));
+}
+
+void OrchestratorRequestsHandler::CancelJob(int jobId)
+{
+    ResourceManagerFactory::GetResourceManager()->PerformJobOperation(
+                new RequestParamsJobOps(CANCEL_JOB_REQ, jobId));
+}
+
+void OrchestratorRequestsHandler::PauseJob(int jobId)
+{
+    ResourceManagerFactory::GetResourceManager()->PerformJobOperation(
+                new RequestParamsJobOps(PAUSE_JOB_REQ, jobId));
+}
+
+void OrchestratorRequestsHandler::ResumeJob(int jobId)
+{
+    ResourceManagerFactory::GetResourceManager()->PerformJobOperation(
+                new RequestParamsJobOps(RESUME_JOB_REQ, jobId));
+}
 
 void OrchestratorRequestsHandler::SubmitSteps(const NewExecutorStepList &steps)
 {
@@ -21,7 +44,7 @@ void OrchestratorRequestsHandler::SubmitSteps(const NewExecutorStepList &steps)
             execStep.AddArgument((*stepArgIt).value);
         }
     }
-    RessourceManagerItf::GetInstance()->StartProcessor(pReqParams);
+    ResourceManagerFactory::GetResourceManager()->StartExecutionSteps(pReqParams);
 }
 
 void OrchestratorRequestsHandler::CancelTasks(const TaskIdList &tasks)
@@ -33,6 +56,6 @@ void OrchestratorRequestsHandler::CancelTasks(const TaskIdList &tasks)
         taskIds.append(*idIt);
     }
     pReq->SetTaskIdsToCancel(taskIds);
-    RessourceManagerItf::GetInstance()->CancelTasks(pReq);
+    ResourceManagerFactory::GetResourceManager()->CancelTasks(pReq);
 }
 

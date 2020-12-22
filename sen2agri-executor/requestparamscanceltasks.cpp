@@ -1,7 +1,7 @@
 #include "requestparamscanceltasks.h"
 
 RequestParamsCancelTasks::RequestParamsCancelTasks()
-    : RequestParamsBase(STOP_PROCESSOR_REQ)
+    : RequestParamsBase(STOP_STEP_REQ)
 {
 
 }

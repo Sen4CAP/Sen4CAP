@@ -16,6 +16,11 @@ class OrchestratorRequestsHandler : public QObject
     Q_OBJECT
 
 public:
+    Q_INVOKABLE void SubmitJob(int jobId);
+    Q_INVOKABLE void CancelJob(int jobId);
+    Q_INVOKABLE void PauseJob(int jobId);
+    Q_INVOKABLE void ResumeJob(int jobId);
+
     Q_INVOKABLE void SubmitSteps(const NewExecutorStepList &steps);
     Q_INVOKABLE void CancelTasks(const TaskIdList &tasks);
 };

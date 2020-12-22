@@ -4,6 +4,7 @@ After=docker.service
 Requires=docker.service
 
 [Service]
+Type=simple
 BusName=org.esa.sen2agri.orchestrator
 ExecStart=/usr/bin/sen2agri-orchestrator
 User=sen2agri-service

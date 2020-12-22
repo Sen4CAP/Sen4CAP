@@ -1,6 +1,4 @@
 #include <QVariantMap>
-#include <QJsonDocument>
-#include <QJsonObject>
 
 #include "abstractexecinfosprotsrv.h"
 #include "iprocessorwrappermsgslistener.h"
@@ -49,7 +47,7 @@ bool AbstractExecInfosProtSrv::HandleNewMessage(const QByteArray &message)
             return false;
         }
 
-        m_pListener->OnProcessorNewMsg(pReqParams);
+        m_pListener->OnStepFeedbackNewMsg(pReqParams);
     }
 
     return true;
