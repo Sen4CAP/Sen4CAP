@@ -34,6 +34,7 @@ import os
 import re
 import sys
 import time
+import shutil
 
 # project libraries
 import config
@@ -43,10 +44,8 @@ from osgeo import gdal
 
 gdal.UseExceptions()
 from DEM_common import display_parameters, usage, searchOneFile
-from GDAL_Tools.DEM_gdalTools import (crop_with_mask, crop_with_extent, get_image_info_with_gdal,
+from GDAL_Tools.DEM_gdalTools import (crop_with_extent, get_image_info_with_gdal,
                                       get_feature_enveloppe, convert_extent, get_extent_from_l8_extent)
-from GDAL_Tools.gdalinfoO import gdalinfoO
-from DEM_Generator.DEMGeneratorCommon import  bandmath
 
 # import logging for debug messages
 import logging
@@ -128,13 +127,13 @@ def update_txt(txt_file, shape_env_points, output_dir, epsg_code):
 
     f_in .close()
     f_out.close()
-    print "MTD ok"
+    print("MTD ok")
 
 
 
 def getPathRowFromMTL(mtlFile):
     if not os.path.isfile(mtlFile):
-        print "Input prodict incomplete. Missing txt", mtlFile
+        print("Input prodict incomplete. Missing txt", mtlFile)
         sys.exit()
     else:
         path, row = "", ""
@@ -194,16 +193,16 @@ def get_arguments():
     if not os.path.isdir(working_dir):
         os.mkdir(working_dir)
     if not os.path.isdir(input_directory):
-        print "Error, input dir is missing "
+        print("Error, input dir is missing ")
         usage(argParser, 2)
     logger.debug("Output directories ok")
 
     # checking if inputs exist
     if not input_directory:
-        print "input image missing"
+        print("input image missing")
         sys.exit(2)
     if not l8_vector:
-        print "l8_vector missing"
+        print("l8_vector missing")
         sys.exit(2)
 
     # get path, row of the product
@@ -266,7 +265,7 @@ def l8_align(input_dir, l8_vector, output_directory_path_row_data, working_dir, 
 
         image = searchOneFile(input_dir, "*_B1.TIF")
         if not image:
-            print "B1 is missing"
+            print("B1 is missing")
             sys.exit(2)
         logger.debug(image)
 
@@ -276,7 +275,6 @@ def l8_align(input_dir, l8_vector, output_directory_path_row_data, working_dir, 
         logger.debug(txt_file)
 
         epsg_code = get_image_info_with_gdal(image, get_only_epsg = True)
-        # print epsg_code
 
         logging.debug("epsg code{}".format(epsg_code))
         shape_temp = os.path.join(working_dir, os.path.splitext(os.path.basename(l8_vector))[0] + "_reprojected" + os.path.splitext(os.path.basename(l8_vector))[1])
@@ -295,7 +293,6 @@ def l8_align(input_dir, l8_vector, output_directory_path_row_data, working_dir, 
         bqd_out = ""
         for tif_file in glob.glob(os.path.join(input_dir, "*.TIF")):
             data_out = os.path.join(output_product_dir_data, os.path.basename(tif_file))
-            resolution = gdalinfoO(tif_file).getPixelSize()[0]
             scale_factor = float(config.L2_coarse_resolution)
             extent, shape_env_points = get_feature_enveloppe(shape_temp, working_dir, int(epsg_code), scale_factor)
 
@@ -308,11 +305,7 @@ def l8_align(input_dir, l8_vector, output_directory_path_row_data, working_dir, 
 
             # crop_with_mask(tif_file, extent, data_out)
         if os.path.isfile(bqa_temp):
-            image_support = searchOneFile(output_product_dir_data, "*_B1.TIF")
-            if not image_support:
-                print "B1 is missing in output directory"
-                sys.exit(2)
-            bandmath([image_support, bqa_temp], "(im1b1==0&&im2b1==0?0:im2b1)", bqd_out)
+            shutil.copyfile(bqa_temp, bqd_out)
     else:
         logging.info("{} already processed.".format(output_product_dir_data))
 

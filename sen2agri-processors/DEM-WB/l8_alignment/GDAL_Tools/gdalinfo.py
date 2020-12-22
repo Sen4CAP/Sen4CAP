@@ -32,12 +32,8 @@
 # ****************************************************************************/
 
 import sys
-try:
-    from osgeo import gdal
-    from osgeo import osr
-except:
-    import gdal
-    import osr
+from osgeo import gdal
+from osgeo import osr
 
 #/************************************************************************/
 #/*                               Usage()                                */
@@ -154,7 +150,7 @@ def main( argv = None ):
         print("gdalinfo failed - unable to open '%s'." % pszFilename )
 
         return 1
-    
+
 #/* -------------------------------------------------------------------- */
 #/*      Report general info.                                            */
 #/* -------------------------------------------------------------------- */

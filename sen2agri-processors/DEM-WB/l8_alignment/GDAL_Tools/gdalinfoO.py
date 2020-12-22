@@ -29,10 +29,10 @@ import sys
 import math
 
 # import gdal
-import gdal
-from gdalconst import *
-import osr
-import gdalinfo
+from osgeo.gdalconst import GA_ReadOnly
+from osgeo import gdal
+from osgeo import osr
+from . import gdalinfo
 
 
 class gdalinfoO(object):
@@ -40,7 +40,7 @@ class gdalinfoO(object):
         self.imageFilename = filename
 
         if not os.path.exists(filename) and not os.path.isfile(filename):
-            print "WARNING : " + filename + " does not exists !"
+            print("WARNING : " + filename + " does not exists !")
             sys.exit(1)
 
         self._size = []
@@ -81,7 +81,7 @@ class gdalinfoO(object):
             if getStats:
                 self._setHistogram(dataset)
         else:
-            print "ERROR"
+            print("ERROR")
 
     def __str__(self):
         message = ["Driver: " + str(self.getDriver()),
@@ -144,7 +144,7 @@ class gdalinfoO(object):
             self._dataType.append(gdal.GetDataTypeName(band.DataType))
             self._noData.append(band.GetNoDataValue())
         self._histogram = histogramBand
-        print "self._dataType", self._dataType
+        print("self._dataType", self._dataType)
 
     def getSize(self):
         return self._size

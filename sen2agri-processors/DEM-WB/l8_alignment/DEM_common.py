@@ -51,7 +51,7 @@ def usage(argParser, return_code = 1):
     :param return_code:
     :return:
     """
-    print argParser.format_usage()
+    print(argParser.format_usage())
     sys.exit(return_code)
 
 
@@ -67,7 +67,7 @@ def display_parameters(dictParameters, functionName):
     # print "dictParameters", dictParameters
     logging.debug("--------------------------------")
     logging.debug("\t{}".format(functionName))
-    for argument, value in dictParameters.iteritems():
+    for argument, value in dictParameters.items():
         logging.debug( "\t\t {argument}: {value}".format(argument=argument, value=value))
     logging.debug("--------------------------------")
 
@@ -126,6 +126,6 @@ def searchOneFile(directory, filePattern):
     #print resList
     if resList:
         if len(resList)>1:
-            print "Warning, more than one value matching the pattern", filePattern, "in", directory
+            print("Warning, more than one value matching the pattern", filePattern, "in", directory)
         return resList[0]
     return None

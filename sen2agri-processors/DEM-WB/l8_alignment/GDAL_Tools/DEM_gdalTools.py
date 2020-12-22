@@ -34,7 +34,7 @@ import config
 # import GDAL and QGIS libraries
 from osgeo import gdal, osr, ogr
 gdal.UseExceptions()
-import gdalconst
+from osgeo import gdalconst
 
 #import logging for debug messages
 import logging
@@ -72,7 +72,7 @@ def get_extent_from_l8_extent(l8_vector, path, row, working_dir, epsg_code):
 
     ds = ogr.Open(l8_vector)
     if ds is None:
-        print "ogr_get_area: " + l8_vector + " Open failed.\n"
+        print("ogr_get_area: " + l8_vector + " Open failed.\n")
         return None
 
     lyr = ds.GetLayer(0)
@@ -89,7 +89,7 @@ def get_extent_from_l8_extent(l8_vector, path, row, working_dir, epsg_code):
     logger.debug("feats")
     logger.debug(feats)
     if not feats:
-        print "Error getting extent : row/path are incorrect or the given l8_vector file is wrong"
+        print("Error getting extent : row/path are incorrect or the given l8_vector file is wrong")
         sys.exit(1)
     else:
         logger.debug(feats)
@@ -114,7 +114,7 @@ def get_extent_from_l8_extent(l8_vector, path, row, working_dir, epsg_code):
         feat_new.SetGeometry(poly)
         extent = writtingOneEmptyFeatureVectorLayerWithOgr(feat_new, working_dir, epsg_code)
     del(ds)
-    print "extent", extent
+    print("extent", extent)
     return extent, [env[0], env[3], env[1], env[2]], extent_feature
 
 
@@ -137,7 +137,7 @@ def writtingOneEmptyFeatureVectorLayerWithOgr(feat, outputDirectory, epsg_code):
     driverName = "ESRI Shapefile"
     drv = ogr.GetDriverByName(driverName)
     if drv is None:
-        print "%s driver not available.\n" % driverName
+        print("%s driver not available.\n" % driverName)
         sys.exit(1)
 
     outputLayer = os.path.join(outputDirectory, "oneFeature_" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".shp")
@@ -149,26 +149,26 @@ def writtingOneEmptyFeatureVectorLayerWithOgr(feat, outputDirectory, epsg_code):
 
     ds = drv.CreateDataSource(outputLayer)
     if ds is None:
-        print "Creation of output file failed.\n"
+        print("Creation of output file failed.\n")
         sys.exit(1)
 
     # end creating vector layer
     # creating a layer in the vector file
     lyr = ds.CreateLayer("point_out", outSpatialRef, ogr.wkbPolygon)
     if lyr is None:
-        print "Layer creation failed.\n"
+        print("Layer creation failed.\n")
         sys.exit(1)
 
     # creating a field inside the layer
     field_defn = ogr.FieldDefn("field", ogr.OFTString)
 
     if lyr.CreateField(field_defn) != 0:
-        print "Creating Name field failed.\n"
+        print("Creating Name field failed.\n")
         sys.exit(1)
 
     # creating the feature
     if lyr.CreateFeature(feat) != 0:
-        print "Failed to create feature in shapefile.\n"
+        print("Failed to create feature in shapefile.\n")
         sys.exit(1)
 
     logger.debug("end writting layer")
@@ -242,7 +242,7 @@ def get_feature_enveloppe(l8_vector, working_dir, epsg_code, scale_factor=None):
     """
     ds = ogr.Open(l8_vector)
     if ds is None:
-        print "ogr_get_area: " + l8_vector + " Open failed.\n"
+        print("ogr_get_area: " + l8_vector + " Open failed.\n")
         return None
 
     lyr = ds.GetLayer(0)
@@ -281,8 +281,8 @@ def get_feature_enveloppe(l8_vector, working_dir, epsg_code, scale_factor=None):
         # print "scale_factor-(sizeX%scale_factor) {}".format(scale_factor-(sizeX%scale_factor))
         # print "C {}".format(C)
 
-        print "Old : {} {} {} {}".format(A, B, C, D)
-        print "Old on 30 grid : {} {} {} {}".format(newA, newB, Ctemp, Dtemp)
+        print("Old : {} {} {} {}".format(A, B, C, D))
+        print("Old on 30 grid : {} {} {} {}".format(newA, newB, Ctemp, Dtemp))
 
         # scale_factor = 1/scale_factor
 
@@ -298,7 +298,7 @@ def get_feature_enveloppe(l8_vector, working_dir, epsg_code, scale_factor=None):
         if (sizeY % scale_factor) != 0:
             newD = Dtemp + (scale_factor-(sizeY%scale_factor))
 
-        print "New : {} {} {} {}".format(newA, newB, newC, newD)
+        print("New : {} {} {} {}".format(newA, newB, newC, newD))
         A = newA
         B = newB
         C = newC
@@ -343,20 +343,19 @@ def crop_with_mask(image, mask, output_filename):
     :return:
     """
     if not os.path.exists(os.path.join(os.path.dirname(__file__),"crop.sh")):
-        print "crop.sh is missing"
+        print("crop.sh is missing")
         sys.exit(1)
     command = " ".join([os.path.join(os.path.dirname(__file__),"crop.sh"), mask, image, output_filename])
 
     # command = "gdalwarp -overwrite -q -cutline " + mask + " -crop_to_cutline -of GTiff " + image + " " + output_filename
     logging.debug("command {}".format(command))
-    print "command {}".format(command)
+    print("command {}".format(command))
     os.system(command)
 
 
 def crop_with_extent(image, extent, output_filename):
-    commandGDAL = "gdal_translate -projwin {} -of GTiff {} {}".format(extent,
-                                                             image, output_filename)
-    print "command GDAL", commandGDAL
+    commandGDAL = "gdal_translate -projwin {} -of GTiff {} {}".format(extent, image, output_filename)
+    print("command GDAL", commandGDAL)
     os.system( commandGDAL )
 
 
