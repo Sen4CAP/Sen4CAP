@@ -1147,15 +1147,13 @@ class L2aProcessor(object):
     def move_to_destination(self):
         #Copies a valid product from the output path to the destination product path
         try:
-            if self.l2a.destination_path.endswith("/"):
-                dst = os.path.dirname(self.l2a.destination_path[:-1])
-            else:
-                dst = os.path.dirname(self.l2a.destination_path)
+            dst = os.path.join(self.l2a.destination_path, os.pardir)
+            shutil.rmtree(self.l2a.destination_path, ignore_errors=True)
             if not os.path.isdir(dst):
                 create_recursive_dirs(dst)
             os.rename(self.l2a.output_path, self.l2a.destination_path)
         except Exception as e:
-            self.update_rejection_reason(" Can NOT copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e))
+            self.update_rejection_reason("Can NOT copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e))
 
 class Maja(L2aProcessor):
     def __init__(self, processor_context, input_context):
