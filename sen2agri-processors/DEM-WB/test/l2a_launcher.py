@@ -181,16 +181,16 @@ class ProcessingContext(object):
                 else:
                     self.num_workers["default"] = int(value)
             elif parameter == "processor.l2a.optical.cog-tiffs":
-                if (value == "1") or (value.lower() == "true"): 
+                if (value == "1") or (value.lower() == "true"):
                     cogTiffs = True
                 else:
                     cogTiffs = False
                 if site is not None:
-                    self.cogTiffs[site] = cogTiffs 
+                    self.cogTiffs[site] = cogTiffs
                 else:
                     self.cogTiffs["default"] = cogTiffs
             elif parameter == "processor.l2a.optical.compress-tiffs":
-                if (value == "1") or (value.lower() == "true"): 
+                if (value == "1") or (value.lower() == "true"):
                     compressTiffs = True
                 else:
                     compressTiffs = False
@@ -209,7 +209,7 @@ class ProcessingContext(object):
                 else:
                     self.maja_launcher["default"] = value
             elif parameter == "processor.l2a.maja.remove-fre":
-                if (value == "1") or (value.lower() == "true"): 
+                if (value == "1") or (value.lower() == "true"):
                     removeFreFiles = True
                 else:
                     removeFreFiles = False
@@ -218,7 +218,7 @@ class ProcessingContext(object):
                 else:
                     self.removeFreFiles["default"] = removeFreFiles
             elif parameter == "processor.l2a.maja.remove-sre":
-                if (value == "1") or (value.lower() == "true"): 
+                if (value == "1") or (value.lower() == "true"):
                     removeSreFiles = True
                 else:
                     removeSreFiles = False
@@ -416,7 +416,7 @@ class SiteContext(object):
             )
             return False
 
-        if not os.path.isdir(self.sen2cor_gipp):
+        if self.implementation == "sen2cor" and not os.path.isdir(self.sen2cor_gipp):
             print(
                 "(launcher err) Invalid processing context sen2cor_gipp: {}".format(
                     self.sen2cor_gipp
@@ -431,7 +431,7 @@ class SiteContext(object):
             )
             return False
 
-        if not os.path.isdir(self.maja_gipp):
+        if self.implementation == "maja" and not os.path.isdir(self.maja_gipp):
             print(
                 "(launcher err) Invalid processing context maja_gipp: {}".format(
                     self.maja_gipp
@@ -1249,7 +1249,7 @@ class Maja(L2aProcessor):
                     )
                 )
         else:
-            #starting with maja 4.2.1 the cloud coverage is read from maja.log, not from eef 
+            #starting with maja 4.2.1 the cloud coverage is read from maja.log, not from eef
             maja_log_path = os.path.join(self.l2a.output_path,"maja.log")
             if os.path.isfile(maja_log_path):
                 with open(maja_log_path) as log_file:
@@ -1606,7 +1606,7 @@ class Maja(L2aProcessor):
         if len(prev_l2a_tiles_paths) > 0:
             for path in prev_l2a_tiles_paths:
                 script_command.append("-v")
-                script_command.append("{}:{}".format(path, path))  
+                script_command.append("{}:{}".format(path, path))
 
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
@@ -1647,7 +1647,7 @@ class Maja(L2aProcessor):
             tiles = []
             tiles.append(self.lin.tile_id)
             script_command += tiles
-        
+
         if len(prev_l2a_tiles) > 0:
             script_command.append("--prev-l2a-tiles")
             script_command += prev_l2a_tiles
