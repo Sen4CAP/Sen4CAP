@@ -488,39 +488,8 @@ In version 1.8 the L8 download can be disabled from the Edit page of a site.
 
 ## How can I use products from a local `L1C` store like the IPT Cloud platform?
 
-In versions prior to version 1.8, this can be done by modifying the downloader command line and only works for Sentinel-2 products. You can use the following commands to see and edit the `systemd` downloader unit:
-
-```bash
-systemctl cat sen2agri-sentinel-downloader
-sudo systemctl edit sen2agri-sentinel-downloader
-```
-
-In the override file, add a `Service` section with an additional argument in the `ExecStart` clause, e.g.:
-
-```ini
-[Service]
-ExecStart=/usr/share/sen2agri/sen2agri-downloaders/downloader.py \
-    -r s2 -s /usr/share/sen2agri/sen2agri-downloaders/apihub.txt \
-    -l local -i /eodata/Sentinel-2/MSI/L1C
-```
-
-making sure to replace the source path (after `-i`). The path needs to be quoted if it contains spaces or other special characters.
-
-After saving the file you need restart the service:
-
-```bash
-sudo systemctl restart sen2agri-sentinel-downloader
-```
-
-To undo this, simply remove the override file, reload and restart:
-
-```bash
-sudo rm -rf /etc/systemd/system/sen2agri-sentinel-downloader.service.d
-sudo systemctl daemon-reload
-sudo systemctl restart sen2agri-sentinel-downloader
-```
-
 Starting with version 1.8, the download is done by the sen2agri-services. In order to configure the services to use local store the following operations should be done:
+
 1. Edit the file /usr/share/sen2agri/sen2agri-services/ in order to add/change the following lines:
     ```
     AWSDataSource.Sentinel2.local_archive_path=/eodata/Sentinel-2/MSI/L1C
@@ -530,6 +499,7 @@ Starting with version 1.8, the download is done by the sen2agri-services. In ord
     ```
     sudo systemctl restart sen2agri-services
     ```
+
 # Other questions
 
 ## Why does the system download products outside the growing season?

@@ -149,9 +149,6 @@ function build_SEN2AGRI_downloaders_demmacs_RPM_Package()
        -p ${DEFAULT_DIR}/${WORKING_DIR_RPM}/sen2agri-downloaders-demmaccs-VERSION.centos7.ARCH.rpm \
        usr
 
-#       --config-files usr/share/sen2agri/sen2agri-downloaders/usgs.txt \
-#       --config-files usr/share/sen2agri/sen2agri-downloaders/apihub.txt \
-
    #remove temporary dir
    rm -rf ${DEFAULT_DIR}/${WORKING_DIR_RPM}/tmp_download_demmacs
 }
