@@ -227,21 +227,3 @@ def get_footprint(image_filename):
 
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
