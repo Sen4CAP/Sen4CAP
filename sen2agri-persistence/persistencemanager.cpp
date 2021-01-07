@@ -8,8 +8,8 @@
 
 #include <math.h>
 
-#include "optional_util.hpp"
 #include "json_conversions.hpp"
+#include "optional_util.hpp"
 
 static QString getConfigurationUpsertJson(const ConfigurationUpdateActionList &actions);
 static QString getJobConfigurationUpsertJson(const JobConfigurationUpdateActionList &actions);
@@ -38,10 +38,7 @@ SqlDatabaseRAII PersistenceManagerDBProvider::getDatabase() const
     return provider.getDatabase(QStringLiteral("PersistenceManager"));
 }
 
-void PersistenceManagerDBProvider::TestConnection()
-{
-    getDatabase();
-}
+void PersistenceManagerDBProvider::TestConnection() { getDatabase(); }
 
 ConfigurationSet PersistenceManagerDBProvider::GetConfigurationSet()
 {
@@ -100,7 +97,7 @@ ConfigurationSet PersistenceManagerDBProvider::GetConfigurationSet()
 
         while (query.next()) {
             result.parameterInfo.append(
-                { query.value(keyCol).toString(),          query.value(categoryCol).toInt(),
+                { query.value(keyCol).toString(), query.value(categoryCol).toInt(),
                   query.value(friendlyNameCol).toString(), query.value(dataTypeCol).toString(),
                   query.value(isAdvancedCol).toBool() });
         }
@@ -589,14 +586,17 @@ void PersistenceManagerDBProvider::MarkJobFinished(int jobId)
     });
 }
 
-void PersistenceManagerDBProvider::MarkEmptyJobFailed(int jobId, const QString &err) {
+void PersistenceManagerDBProvider::MarkEmptyJobFailed(int jobId, const QString &err)
+{
     // add also a generic error task and step that contain the error string
     NewTask task{ jobId, "generic-error-task", "{}", {} };
     int taskId = SubmitTask(task);
-    // Imediately set the job failed as it sets also the task canceled in order to avoid sending it to executor
+    // Imediately set the job failed as it sets also the task canceled in order to avoid sending it
+    // to executor
     MarkJobFailed(jobId);
     // Add also a step in order to have the error
-    NewStepList liststeps = {{taskId, "generic-error-step", "{\"arguments\":[\"/usr/bin/false\"]}"}};
+    NewStepList liststeps = { { taskId, "generic-error-step",
+                                "{\"arguments\":[\"/usr/bin/false\"]}" } };
     SubmitSteps(liststeps);
     ExecutionStatistics newStats;
     newStats.node = "local_node";
@@ -784,9 +784,9 @@ JobStepToRunList PersistenceManagerDBProvider::GetTaskStepsForStart(int taskId)
 
         JobStepToRunList result;
         while (query.next()) {
-            result.append(
-                { query.value(taskIdCol).toInt(),      query.value(moduleCol).toString(),
-                  query.value(stepNameCol).toString(), query.value(parametersCol).toString() });
+            result.append({ query.value(taskIdCol).toInt(), query.value(moduleCol).toString(),
+                            query.value(stepNameCol).toString(),
+                            query.value(parametersCol).toString() });
         }
 
         return result;
@@ -815,9 +815,9 @@ JobStepToRunList PersistenceManagerDBProvider::GetJobStepsForResume(int jobId)
 
         JobStepToRunList result;
         while (query.next()) {
-            result.append(
-                { query.value(taskIdCol).toInt(),      query.value(moduleCol).toString(),
-                  query.value(stepNameCol).toString(), query.value(parametersCol).toString() });
+            result.append({ query.value(taskIdCol).toInt(), query.value(moduleCol).toString(),
+                            query.value(stepNameCol).toString(),
+                            query.value(parametersCol).toString() });
         }
 
         return result;
@@ -846,9 +846,9 @@ StepConsoleOutputList PersistenceManagerDBProvider::GetTaskConsoleOutputs(int ta
 
         StepConsoleOutputList result;
         while (query.next()) {
-            result.append(
-                { query.value(taskIdCol).toInt(),        query.value(stepNameCol).toString(),
-                  query.value(stdOutTextCol).toString(), query.value(stdErrTextCol).toString() });
+            result.append({ query.value(taskIdCol).toInt(), query.value(stepNameCol).toString(),
+                            query.value(stdOutTextCol).toString(),
+                            query.value(stdErrTextCol).toString() });
         }
 
         return result;
@@ -917,17 +917,18 @@ int PersistenceManagerDBProvider::InsertProduct(const NewProduct &product)
         auto query = db.prepareQuery(
             QStringLiteral("select * from sp_insert_product(:productType, :processorId, "
                            ":satelliteId, :siteId, :jobId, :fullPath, :createdTimestamp, :name, "
-                           ":quicklookImage, :footprint, :orbitId, :tiles)"));
+                           ":quicklookImage, :geom, :orbitId, :tiles)"));
         query.bindValue(QStringLiteral(":productType"), static_cast<int>(product.productType));
         query.bindValue(QStringLiteral(":processorId"), product.processorId);
-        query.bindValue(QStringLiteral(":satelliteId"), (product.satelliteId<=0) ? QVariant() : product.satelliteId);
+        query.bindValue(QStringLiteral(":satelliteId"),
+                        (product.satelliteId <= 0) ? QVariant() : product.satelliteId);
         query.bindValue(QStringLiteral(":siteId"), product.siteId);
         query.bindValue(QStringLiteral(":jobId"), product.jobId);
         query.bindValue(QStringLiteral(":fullPath"), product.fullPath);
         query.bindValue(QStringLiteral(":createdTimestamp"), product.createdTimestamp);
         query.bindValue(QStringLiteral(":name"), product.name);
         query.bindValue(QStringLiteral(":quicklookImage"), product.quicklookImage);
-        query.bindValue(QStringLiteral(":footprint"), product.footprint);
+        query.bindValue(QStringLiteral(":geom"), product.footprint);
         if (product.orbitId) {
             query.bindValue(QStringLiteral(":orbitId"), *product.orbitId);
         } else {
@@ -981,13 +982,12 @@ ProductList PersistenceManagerDBProvider::GetProducts(int siteId,
 
         ProductList result;
         while (query.next()) {
-            result.append({ query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
-                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
-                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
-                            QDateTime().fromString(query.value(creationDateCol).toString(),
-                                                   Qt::ISODate),
-                            QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                   Qt::ISODate)});
+            result.append(
+                { query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
+                  static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                  query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                  QDateTime().fromString(query.value(creationDateCol).toString(), Qt::ISODate),
+                  QDateTime().fromString(query.value(insertionDateCol).toString(), Qt::ISODate) });
         }
 
         return result;
@@ -995,9 +995,9 @@ ProductList PersistenceManagerDBProvider::GetProducts(int siteId,
 }
 
 ProductList PersistenceManagerDBProvider::GetProductsByInsertedTime(int siteId,
-                                                      int productTypeId,
-                                                      const QDateTime &startDate,
-                                                      const QDateTime &endDate)
+                                                                    int productTypeId,
+                                                                    const QDateTime &startDate,
+                                                                    const QDateTime &endDate)
 {
     auto db = getDatabase();
 
@@ -1026,13 +1026,12 @@ ProductList PersistenceManagerDBProvider::GetProductsByInsertedTime(int siteId,
 
         ProductList result;
         while (query.next()) {
-            result.append({ query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
-                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
-                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
-                            QDateTime().fromString(query.value(creationDateCol).toString(),
-                                                   Qt::ISODate),
-                            QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                   Qt::ISODate) });
+            result.append(
+                { query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
+                  static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                  query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                  QDateTime().fromString(query.value(creationDateCol).toString(), Qt::ISODate),
+                  QDateTime().fromString(query.value(insertionDateCol).toString(), Qt::ISODate) });
         }
 
         return result;
@@ -1043,120 +1042,123 @@ Product PersistenceManagerDBProvider::GetProduct(int productId)
 {
     auto db = getDatabase();
 
-    return provider.handleTransactionRetry(
-        __func__, [&] {
-            auto query = db.prepareQuery(QStringLiteral("select * from sp_get_product_by_id("
-                                                        ":productId)"));
-            query.bindValue(QStringLiteral(":productId"), productId);
-            query.setForwardOnly(true);
-            if (!query.exec()) {
-                throw_query_error(db, query);
-            }
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query = db.prepareQuery(QStringLiteral("select * from sp_get_product_by_id("
+                                                    ":productId)"));
+        query.bindValue(QStringLiteral(":productId"), productId);
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
 
-            auto dataRecord = query.record();
-            auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
-            auto processorIdCol = dataRecord.indexOf(QStringLiteral("processor_id"));
-            auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
-            auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
-            auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
-            auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
-            auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+        auto processorIdCol = dataRecord.indexOf(QStringLiteral("processor_id"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+        auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
 
-            Product result;
-            while (query.next()) {
-                result = { query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
-                           static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
-                           query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
-                           QDateTime().fromString(query.value(creationDateCol).toString(),
-                                                  Qt::ISODate),
-                           QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                  Qt::ISODate) };
-            }
+        Product result;
+        while (query.next()) {
+            result = { query.value(productIdCol).toInt(),
+                       query.value(processorIdCol).toInt(),
+                       static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                       query.value(siteIdCol).toInt(),
+                       query.value(fullPathCol).toString(),
+                       QDateTime().fromString(query.value(creationDateCol).toString(), Qt::ISODate),
+                       QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                              Qt::ISODate) };
+        }
 
-            return result;
-        });
+        return result;
+    });
 }
 
 Product PersistenceManagerDBProvider::GetProduct(int siteId, const QString &productName)
 {
     auto db = getDatabase();
 
-    return provider.handleTransactionRetry(
-        __func__, [&] {
-            auto query = db.prepareQuery(QStringLiteral("select * from sp_get_product_by_name("
-                                                        ":siteId, :productName)"));
-            query.bindValue(QStringLiteral(":siteId"), siteId);
-            query.bindValue(QStringLiteral(":productName"), productName);
-            query.setForwardOnly(true);
-            if (!query.exec()) {
-                throw_query_error(db, query);
-            }
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query = db.prepareQuery(QStringLiteral("select * from sp_get_product_by_name("
+                                                    ":siteId, :productName)"));
+        query.bindValue(QStringLiteral(":siteId"), siteId);
+        query.bindValue(QStringLiteral(":productName"), productName);
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
 
-            auto dataRecord = query.record();
-            auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
-            auto processorIdCol = dataRecord.indexOf(QStringLiteral("processor_id"));
-            auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
-            auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
-            auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
-            auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
-            auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+        auto processorIdCol = dataRecord.indexOf(QStringLiteral("processor_id"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+        auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
 
-            Product result;
-            while (query.next()) {
-                result = { query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
-                           static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
-                           query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
-                           QDateTime().fromString(query.value(creationDateCol).toString(),
-                                                  Qt::ISODate),
-                           QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                  Qt::ISODate) };
-            }
+        Product result;
+        while (query.next()) {
+            result = { query.value(productIdCol).toInt(),
+                       query.value(processorIdCol).toInt(),
+                       static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                       query.value(siteIdCol).toInt(),
+                       query.value(fullPathCol).toString(),
+                       QDateTime().fromString(query.value(creationDateCol).toString(), Qt::ISODate),
+                       QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                              Qt::ISODate) };
+        }
 
-            return result;
-        });
+        return result;
+    });
 }
 
-ProductList PersistenceManagerDBProvider::GetProductsForTile(int siteId, const QString &tileId, ProductType productType,
-                                                             int satelliteId, int targetSatelliteId)
+ProductList PersistenceManagerDBProvider::GetProductsForTile(int siteId,
+                                                             const QString &tileId,
+                                                             ProductType productType,
+                                                             int satelliteId,
+                                                             int targetSatelliteId)
 {
     auto db = getDatabase();
 
-    return provider.handleTransactionRetry(
-        __func__, [&] {
-            auto query = db.prepareQuery(QStringLiteral("select * from sp_get_products_for_tile("
-                                                        ":siteId, :tileId, :productType, :satelliteId, :targeSatelliteId)"));
-            query.bindValue(QStringLiteral(":siteId"), siteId);
-            query.bindValue(QStringLiteral(":tileId"), tileId);
-            query.bindValue(QStringLiteral(":productType"), static_cast<int>(productType));
-            query.bindValue(QStringLiteral(":satelliteId"), satelliteId);
-            query.bindValue(QStringLiteral(":targeSatelliteId"), targetSatelliteId);
-            query.setForwardOnly(true);
-            if (!query.exec()) {
-                throw_query_error(db, query);
-            }
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query = db.prepareQuery(
+            QStringLiteral("select * from sp_get_products_for_tile("
+                           ":siteId, :tileId, :productType, :satelliteId, :targeSatelliteId)"));
+        query.bindValue(QStringLiteral(":siteId"), siteId);
+        query.bindValue(QStringLiteral(":tileId"), tileId);
+        query.bindValue(QStringLiteral(":productType"), static_cast<int>(productType));
+        query.bindValue(QStringLiteral(":satelliteId"), satelliteId);
+        query.bindValue(QStringLiteral(":targeSatelliteId"), targetSatelliteId);
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
 
-            auto dataRecord = query.record();
-            auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
-            auto productDateCol = dataRecord.indexOf(QStringLiteral("product_date"));
+        auto dataRecord = query.record();
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto productDateCol = dataRecord.indexOf(QStringLiteral("product_date"));
 
-            ProductList result;
-            while (query.next()) {
-                Product product;
-                product.fullPath = query.value(fullPathCol).toString();
-                product.created = query.value(productDateCol).toDateTime();
+        ProductList result;
+        while (query.next()) {
+            Product product;
+            product.fullPath = query.value(fullPathCol).toString();
+            product.created = query.value(productDateCol).toDateTime();
 
-                result.append(std::move(product));
-            }
+            result.append(std::move(product));
+        }
 
-            return result;
-        });
+        return result;
+    });
 }
 
 L1CProductList PersistenceManagerDBProvider::GetL1CProducts(int siteId,
-                                                      const SatellitesList &satelliteIds,
-                                                      const StatusesList &statusIds,
-                                                      const QDateTime &startDate,
-                                                      const QDateTime &endDate)
+                                                            const SatellitesList &satelliteIds,
+                                                            const StatusesList &statusIds,
+                                                            const QDateTime &startDate,
+                                                            const QDateTime &endDate)
 {
     auto db = getDatabase();
 
@@ -1186,13 +1188,12 @@ L1CProductList PersistenceManagerDBProvider::GetL1CProducts(int siteId,
 
         L1CProductList result;
         while (query.next()) {
-            result.append({ query.value(productIdCol).toInt(), query.value(satelliteIdCol).toInt(),
-                            query.value(statusIdCol).toInt(),
-                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
-                            QDateTime().fromString(query.value(creationDateCol).toString(),
-                                                   Qt::ISODate),
-                            QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                   Qt::ISODate)});
+            result.append(
+                { query.value(productIdCol).toInt(), query.value(satelliteIdCol).toInt(),
+                  query.value(statusIdCol).toInt(), query.value(siteIdCol).toInt(),
+                  query.value(fullPathCol).toString(),
+                  QDateTime().fromString(query.value(creationDateCol).toString(), Qt::ISODate),
+                  QDateTime().fromString(query.value(insertionDateCol).toString(), Qt::ISODate) });
         }
 
         return result;
@@ -1203,63 +1204,62 @@ TileList PersistenceManagerDBProvider::GetSiteTiles(int siteId, int satelliteId)
 {
     auto db = getDatabase();
 
-    return provider.handleTransactionRetry(
-        __func__, [&] {
-            auto query = db.prepareQuery(QStringLiteral("select * from sp_get_site_tiles("
-                                                        ":siteId, :satelliteId)"));
-            query.bindValue(QStringLiteral(":siteId"), siteId);
-            query.bindValue(QStringLiteral(":satelliteId"), satelliteId);
-            query.setForwardOnly(true);
-            if (!query.exec()) {
-                throw_query_error(db, query);
-            }
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query = db.prepareQuery(QStringLiteral("select * from sp_get_site_tiles("
+                                                    ":siteId, :satelliteId)"));
+        query.bindValue(QStringLiteral(":siteId"), siteId);
+        query.bindValue(QStringLiteral(":satelliteId"), satelliteId);
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
 
-            auto dataRecord = query.record();
-            auto tileIdCol = dataRecord.indexOf(QStringLiteral("tile_id"));
+        auto dataRecord = query.record();
+        auto tileIdCol = dataRecord.indexOf(QStringLiteral("tile_id"));
 
-            TileList result;
-            while (query.next()) {
-                Tile tile;
-                tile.satellite = static_cast<Satellite>(satelliteId);
-                tile.tileId = query.value(tileIdCol).toString();
+        TileList result;
+        while (query.next()) {
+            Tile tile;
+            tile.satellite = static_cast<Satellite>(satelliteId);
+            tile.tileId = query.value(tileIdCol).toString();
 
-                result.append(std::move(tile));
-            }
+            result.append(std::move(tile));
+        }
 
-            return result;
-        });
+        return result;
+    });
 }
 
-TileList PersistenceManagerDBProvider::GetIntersectingTiles(Satellite satellite, const QString &tileId)
+TileList PersistenceManagerDBProvider::GetIntersectingTiles(Satellite satellite,
+                                                            const QString &tileId)
 {
     auto db = getDatabase();
 
-    return provider.handleTransactionRetry(
-        __func__, [&] {
-            auto query = db.prepareQuery(QStringLiteral("select * from sp_get_intersecting_tiles("
-                                                        ":satelliteId, :tileId)"));
-            query.bindValue(QStringLiteral(":satelliteId"), static_cast<int>(satellite));
-            query.bindValue(QStringLiteral(":tileId"), tileId);
-            query.setForwardOnly(true);
-            if (!query.exec()) {
-                throw_query_error(db, query);
-            }
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query = db.prepareQuery(QStringLiteral("select * from sp_get_intersecting_tiles("
+                                                    ":satelliteId, :tileId)"));
+        query.bindValue(QStringLiteral(":satelliteId"), static_cast<int>(satellite));
+        query.bindValue(QStringLiteral(":tileId"), tileId);
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
 
-            auto dataRecord = query.record();
-            auto satelliteIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
-            auto tileIdCol = dataRecord.indexOf(QStringLiteral("tile_id"));
+        auto dataRecord = query.record();
+        auto satelliteIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+        auto tileIdCol = dataRecord.indexOf(QStringLiteral("tile_id"));
 
-            TileList result;
-            while (query.next()) {
-                Tile tile;
-                tile.satellite = static_cast<Satellite>(query.value(satelliteIdCol).toInt());
-                tile.tileId = query.value(tileIdCol).toString();
+        TileList result;
+        while (query.next()) {
+            Tile tile;
+            tile.satellite = static_cast<Satellite>(query.value(satelliteIdCol).toInt());
+            tile.tileId = query.value(tileIdCol).toString();
 
-                result.append(std::move(tile));
-            }
+            result.append(std::move(tile));
+        }
 
-            return result;
-        });
+        return result;
+    });
 }
 
 QString PersistenceManagerDBProvider::GetDashboardCurrentJobData(int page)
@@ -1536,38 +1536,33 @@ std::vector<ScheduledTask> PersistenceManagerDBProvider::GetScheduledTasks()
             ScheduledTaskStatus ss;
             ss.id = query.value(statusIdCol).toInt();
             ss.taskId = query.value(taskIdCol).toInt();
-            ss.nextScheduledRunTime = QDateTime::fromString(query.value(nextScheduleCol).toString(),
-                                               Qt::ISODate);
-            ss.lastSuccesfullScheduledRun = QDateTime::fromString(query.value(lastScheduledRunCol).toString(),
-                                                     Qt::ISODate);
-            ss.lastSuccesfullTimestamp = QDateTime::fromString(query.value(lastRunTimestampCol).toString(),
-                                                  Qt::ISODate);
-            ss.lastRetryTime = QDateTime::fromString(query.value(lastRetryTimestampCol).toString(), Qt::ISODate);
-            ss.estimatedRunTime = QDateTime::fromString(query.value(estimatedNextRunTimeCol).toString(),
-                                           Qt::ISODate);
+            ss.nextScheduledRunTime =
+                QDateTime::fromString(query.value(nextScheduleCol).toString(), Qt::ISODate);
+            ss.lastSuccesfullScheduledRun =
+                QDateTime::fromString(query.value(lastScheduledRunCol).toString(), Qt::ISODate);
+            ss.lastSuccesfullTimestamp =
+                QDateTime::fromString(query.value(lastRunTimestampCol).toString(), Qt::ISODate);
+            ss.lastRetryTime =
+                QDateTime::fromString(query.value(lastRetryTimestampCol).toString(), Qt::ISODate);
+            ss.estimatedRunTime =
+                QDateTime::fromString(query.value(estimatedNextRunTimeCol).toString(), Qt::ISODate);
 
             taskList.emplace_back(
-                query.value(taskIdCol).toInt(),
-                query.value(nameCol).toString(),
-                query.value(processorIdCol).toInt(),
-                query.value(siteIdCol).toInt(),
-                query.value(seasonIdCol).toInt(),
-                query.value(processorParamsCol).toString(),
-                query.value(repeatTypeCol).toInt(),
-                query.value(repeatAfterDaysCol).toInt(),
+                query.value(taskIdCol).toInt(), query.value(nameCol).toString(),
+                query.value(processorIdCol).toInt(), query.value(siteIdCol).toInt(),
+                query.value(seasonIdCol).toInt(), query.value(processorParamsCol).toString(),
+                query.value(repeatTypeCol).toInt(), query.value(repeatAfterDaysCol).toInt(),
                 query.value(repeatOnMonthDayCol).toInt(),
                 QDateTime::fromString(query.value(firstRunTimeCol).toString(), Qt::ISODate),
-                query.value(retrySecondsCol).toInt(),
-                query.value(priorityCol).toInt(),
-                ss);
+                query.value(retrySecondsCol).toInt(), query.value(priorityCol).toInt(), ss);
         }
 
         return taskList;
     });
 }
 
-void
-PersistenceManagerDBProvider::UpdateScheduledTasksStatus(std::vector<ScheduledTaskStatus> &statuses)
+void PersistenceManagerDBProvider::UpdateScheduledTasksStatus(
+    std::vector<ScheduledTaskStatus> &statuses)
 {
     auto db = getDatabase();
 
@@ -1855,12 +1850,9 @@ SeasonList PersistenceManagerDBProvider::GetSiteSeasons(int siteId)
         auto enabledCol = dataRecord.indexOf(QStringLiteral("enabled"));
 
         while (query.next()) {
-            result.append({ query.value(idCol).toInt(),
-                            query.value(siteIdCol).toInt(),
-                            query.value(nameCol).toString(),
-                            query.value(startDateCol).toDate(),
-                            query.value(endDateCol).toDate(),
-                            query.value(midDateCol).toDate(),
+            result.append({ query.value(idCol).toInt(), query.value(siteIdCol).toInt(),
+                            query.value(nameCol).toString(), query.value(startDateCol).toDate(),
+                            query.value(endDateCol).toDate(), query.value(midDateCol).toDate(),
                             query.value(enabledCol).toBool() });
         }
 

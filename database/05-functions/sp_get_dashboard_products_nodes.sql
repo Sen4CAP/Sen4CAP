@@ -33,12 +33,11 @@ $BODY$
 		from site s
 		join public.user u on u.login = $1 and (u.role_id = 1 or s.id in (select * from unnest(u.site_id)))
 		),
-	    data(id, product, footprint, site_coord, product_type_id, satellite_id, is_raster) AS (
+	    data(id, product, site_coord, product_type_id, satellite_id, is_raster) AS (
 
 		SELECT
 		P.id,
 		P.name,
-		P.footprint,
 		S.geog,
 		PT.id,
 		P.satellite_id,
