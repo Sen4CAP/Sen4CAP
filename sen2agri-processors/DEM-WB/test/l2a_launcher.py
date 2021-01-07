@@ -901,37 +901,39 @@ class L2aProcessor(object):
         return None
 
     def extract_from_archive_if_needed(self, archive_file):
-        # create the temporary path where the archive will be extracted
         archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-        if os.path.exists(archives_dir) == False:
-            os.makedirs(archives_dir)
-        create_recursive_dirs(archives_dir)
-        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-        extracted_file_path = None
-        # check if the file is indeed an archive
-        # exception raised only if the archive_file does not exist
-        try:
-            if zipfile.is_zipfile(archive_file):
-                extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
-        except Exception as e:
-            extracted_file_path = None
-        try:
-            if tarfile.is_tarfile(archive_file):
-                extracted_file_path = self.untar(extracted_archive_dir, archive_file)
-        except Exception as e:
-            extracted_file_path = None
-        if extracted_file_path is not None:
-            self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-            return True, extracted_file_path
-        # this isn't and archive, so no need for the temporary directory
-        self.launcher_log(
-            "This wasn't an archive, so continue as is. Deleting {}".format(
-                extracted_archive_dir
+        if zipfile.is_zipfile(archive_file):
+            if create_recursive_dirs(archives_dir):
+                try:
+                    extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
+                    extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
+                    self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
+                    return True, extracted_file_path
+                except Exception as e:
+                    self.launcher_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
+                    return False, None
+            else:
+                self.launcher_log("Can NOT create arhive dir.")
+                return False, None
+        elif tarfile.is_tarfile(archive_file):
+            if create_recursive_dirs(archives_dir):
+                try:
+                    extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir) 
+                    extracted_file_path = self.untar(extracted_archive_dir, archive_file)
+                    self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
+                    return True, extracted_file_path
+                except Exception as e:
+                    self.launcher_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
+                    return False, None
+            else:
+                self.launcher_log("Can NOT create arhive dir.")
+                return False, None
+        else:
+            self.launcher_log(
+                "This wasn't an archive, so continue as is."
             )
-        )
-        remove_dir(extracted_archive_dir)
+            return False, archive_file
 
-        return False, archive_file
 
     def validate_input_product_dir(self):
         # First check if the product path actually exists
@@ -983,11 +985,14 @@ class L2aProcessor(object):
             self.lin.db_path
         )
         self.launcher_log(
-            "{}: Ended extract_from_archive_if_needed for tile {}".format(
-                self.context.worker_id, self.lin.tile_id
+                "{}: Ended extract_from_archive_if_needed for tile {}".format(
+                    self.context.worker_id, self.lin.tile_id
+                )
             )
-        )
-        return self.validate_input_product_dir()
+        if self.lin.path is not None:
+            return self.validate_input_product_dir()
+        else:
+            return False
 
     def get_l2a_info(self, product_name):
         acquisition_date = None
@@ -1970,13 +1975,12 @@ class Sen2Cor(L2aProcessor):
             self.context.gips_path, "ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
         )
         wrk_dir = os.path.join(self.context.working_dir, self.l2a.basename)
-        if not os.path.exists(wrk_dir):
-            if create_recursive_dirs(wrk_dir) == False:
-                self.update_rejection_reason(
-                    "Can NOT create wrk dir {}".format(wrk_dir)
-                )
-                self.l2a_log("Can NOT create wrk dir {}".format(wrk_dir))
-                return False
+        if not create_recursive_dirs(wrk_dir) == False:
+            self.update_rejection_reason(
+                "Can NOT create wrk dir {}".format(wrk_dir)
+            )
+            self.l2a_log("Can NOT create wrk dir {}".format(wrk_dir))
+            return False
 
         script_command = []
         #docker run
@@ -2578,10 +2582,8 @@ if not os.path.isdir(default_site_context.working_dir) and not create_recursive_
     sys.exit(1)
 # delete all the temporary content from a previous run
 remove_dir_content(default_site_context.working_dir)
-# create directory for the eventual archives like l1c products
-create_recursive_dirs(os.path.join(default_site_context.working_dir, ARCHIVES_DIR_NAME))
-# clear pending tiless
 
+# clear pending tiless
 db_clear_pending_tiles()
 l2a_master = L2aMaster(default_site_context.num_workers)
 l2a_master.run()

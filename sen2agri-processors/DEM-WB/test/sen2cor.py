@@ -140,8 +140,13 @@ def CheckInput():
         default_wrk_dir_path = os.path.join(
             os.path.dirname(os.path.realpath(__file__)), default_wrk_dir_name
         )
-        if os.path.isdir(default_wrk_dir_path) is False:
-            create_recursive_dirs(default_wrk_dir_path)
+        if not create_recursive_dirs(default_wrk_dir_path):
+            log(
+                SEN2COR_LOG_DIR,
+                "(sen2cor err) Can NOT create working directory {}.".format(default_wrk_dir_path),
+                SEN2COR_LOG_FILE_NAME,
+            )
+            return False
 
     # --resolution checks
     if args.resolution:
@@ -972,9 +977,7 @@ def ConvertPreviews(L2A_product_name):
 
 def InitLog():
     log_file_path = os.path.join(SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME)
-    if os.path.exists(log_file_path) == False:
-        create_recursive_dirs(SEN2COR_LOG_DIR)
-
+    if not create_recursive_dirs(SEN2COR_LOG_DIR):
         # create the log file
         try:
             log_file = open(log_file_path, "a+")
