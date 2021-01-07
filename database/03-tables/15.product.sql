@@ -14,8 +14,6 @@ CREATE TABLE product
   footprint polygon,
   job_id integer,
   geog geography,
-  geom geometry,
-  srid integer,
   satellite_id integer,
   orbit_id integer,
   orbit_type_id smallint,

@@ -7,9 +7,9 @@ CREATE OR REPLACE FUNCTION sp_get_products(
     IN product_type_id smallint DEFAULT NULL::smallint,
     IN start_time timestamp with time zone DEFAULT NULL::timestamp with time zone,
     IN end_time timestamp with time zone DEFAULT NULL::timestamp with time zone)
-  RETURNS TABLE("ProductId" integer, "Product" character varying, "ProductType" character varying, "ProductTypeId" smallint, "Processor" character varying,
+  RETURNS TABLE("ProductId" integer, "Product" character varying, "ProductType" character varying, "ProductTypeId" smallint, "Processor" character varying, 
                 "ProcessorId" smallint, "Site" character varying, "SiteId" smallint, full_path character varying,
-                quicklook_image character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone) AS
+                quicklook_image character varying, footprint polygon, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone) AS
 $BODY$
 DECLARE q text;
 BEGIN
@@ -32,6 +32,7 @@ BEGIN
             P.site_id AS SiteId,
             P.full_path,
             P.quicklook_image,
+            P.footprint,
             P.created_timestamp,
             P.inserted_timestamp
   		FROM product P
@@ -60,7 +61,7 @@ BEGIN
         ORDER BY S.row, PT.row, P.name;$SQL$;
 
     -- raise notice '%', q;
-
+    
 	RETURN QUERY
         EXECUTE q
         USING $1, $2, $3, $4;
