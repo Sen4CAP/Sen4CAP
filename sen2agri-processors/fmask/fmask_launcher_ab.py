@@ -557,7 +557,6 @@ class FmaskProcessor(object):
 
         # postprocessing
         if self.get_fmask_footprint(self.fmask.output_path):
-            self.postprocess()
             postprocess_succesful = True
         print(
             "\n(launcher info) <worker {}>: Successful post-processing = {}".format(
