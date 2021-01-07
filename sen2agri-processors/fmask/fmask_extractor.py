@@ -136,7 +136,7 @@ def fmask_launcher(fmask_context):
         docker_work_dir = prd_name
         fmask_out_location = fmask_working_dir
 
-    os.chdir(fmask_working_dir) # TODO: asta nu este absolut necesara
+    #os.chdir(fmask_working_dir) # TODO: asta nu este absolut necesara
     cmd_array = []
     debug = False
     if debug == True:
@@ -194,7 +194,7 @@ def fmask_launcher(fmask_context):
             log(fmask_context.output, "No FMask file found in: {}.".format(fmask_working_dir), tile_log_filename)
         log(fmask_context.output, "Erasing the FMask working directory: rmtree: {}".format(fmask_working_dir), tile_log_filename)
         shutil.rmtree(fmask_working_dir)
-    except Exception, e:
+    except Exception as e:
         new_fmask_out_file = ""
         log(fmask_context.output, "FMask product failure: Exception caught when moving fmask files  to the output directory {}: {}".format(fmask_context.output, e), tile_log_filename)
  

@@ -283,7 +283,7 @@ def validate_L1C_product_dir(l1cDir):
     # First check if the product path actually exists
     try:
         os.stat(l1cDir)
-    except OSError, e:
+    except OSError as e:
             print ("###################################")
             print ("Cannot check if product root dir path {} exists or it is a valid symlink. Error was: {}".format(l1cDir, e.errno))
             print ("###################################")
@@ -298,7 +298,7 @@ def validate_L1C_product_dir(l1cDir):
 #            print('\t- subdirectory ' + subdir_path)
             try:
                 os.stat(subdir_path)
-            except OSError, e:
+            except OSError as e:
                     print ("###################################")
                     print ("Cannot check if dir path {} exists or it is a valid symlink. Error was: {}".format(subdir_path, e.errno))
                     print ("###################################")
@@ -309,7 +309,7 @@ def validate_L1C_product_dir(l1cDir):
             #print('\t- file %s (full path: %s)' % (filename, file_path))
             try:
                 os.stat(file_path)
-            except OSError, e:
+            except OSError as e:
                 print ("###################################")
                 print ("Cannot check if file path {} exists or is a valid symlink. Error was: {}".format(subdir_path, e.errno))
                 print ("###################################")
@@ -349,7 +349,7 @@ def unzip(output_dir, input_file):
         with zipfile.ZipFile(input_file) as zip_archive:
             zip_archive.extractall(output_dir)
             return check_if_flat_archive(output_dir, path_filename(input_file))
-    except Exception, e:
+    except Exception as e:
         log(general_log_path, "Exception when trying to unzip file {}:  {} ".format(input_file, e), general_log_filename)
     return None
 
@@ -362,7 +362,7 @@ def untar(output_dir, input_file):
         tar_archive.extractall(output_dir)
         tar_archive.close()
         return check_if_flat_archive(output_dir, path_filename(input_file))
-    except Exception, e:
+    except Exception as e:
         log(general_log_path, "Exception when trying to untar file {}:  {} ".format(input_file, e), general_log_filename)
     return None
     
@@ -376,13 +376,13 @@ def extract_from_archive_if_needed(archive_file):
     try:
         if zipfile.is_zipfile(archive_file):
             extracted_file_path = unzip(extracted_archive_dir, archive_file)
-    except Exception, e:
+    except Exception as e:
         print("is_zipfile: The object (directory or file) {} is not an archive: {} !".format(archive_file, e))
         extracted_file_path = None            
     try:
         if tarfile.is_tarfile(archive_file):
             extracted_file_path = untar(extracted_archive_dir, archive_file)
-    except Exception, e:
+    except Exception as e:
         print("is_tarfile: The object (directory or file) {} is not an archive: {} !".format(archive_file, e))
         extracted_file_path = None            
     if extracted_file_path is not None:
