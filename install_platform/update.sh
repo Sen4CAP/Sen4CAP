@@ -1,7 +1,7 @@
 #!/bin/sh
 
 USE_SNAP_8_DOCKER=0
-    
+
 INSTAL_CONFIG_FILE="./config/install_config.conf"
 HAS_S2AGRI_SERVICES=false
 
@@ -206,17 +206,17 @@ function install_docker() {
     if [ $? -ne 0 ]; then
         echo "Installing docker"
         yum -y update epel-release
-        yum -y install docker jq
+        yum -y install docker
         sed -i "s/'--selinux-enabled /'/" /etc/sysconfig/docker
         systemctl enable docker
     fi
 
+    yum -y install jq docker-compose
     jq '. + { group: "dockerroot" }' < /etc/docker/daemon.json > /etc/docker/daemon.json.new
     mv -f /etc/docker/daemon.json.new /etc/docker/daemon.json
     usermod -aG dockerroot ${SYS_ACC_NAME}
 
     systemctl restart docker
-    yum -y install docker-compose
 }
 
 function migrate_postgres_to_docker() {
@@ -346,11 +346,11 @@ function create_and_config_slurm_qos()
 
 function update_maja_gipp() {
     VAL=$(psql -qtAX -U admin ${DB_NAME} -c "select value from config where key = 'processor.l2a.maja.gipp-path'")
-    if [ ! -z $VAL ] ; then 
+    if [ ! -z $VAL ] ; then
         if [ -d $VAL ] ; then
             echo "Key processor.l2a.maja.gipp-path found with value ${VAL}. Copying UserConfiguration into this location ..."
             cp -fR /usr/share/sen2agri/sen2agri-demmaccs/UserConfiguration ${VAL}
-        else 
+        else
             echo "WARNING: Key processor.l2a.maja.gipp-path found in config table for database ${DB_NAME} with value $VAL but the directory does not exists for this value. UserConfiguration not updated ..."
         fi
     else
@@ -439,7 +439,7 @@ else
             mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
             chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
             docker build -t sen4cap/snap -f ./docker/snap8/Dockerfile ./docker/snap8/
-        #else 
+        #else
         #    echo "No need to install SNAP container, it already exists ..."
         #fi
     else
