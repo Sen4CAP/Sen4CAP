@@ -1,1 +1,1 @@
-insert into meta(version) values('1.3');
+insert into meta(version) values('2.0');

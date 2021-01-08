@@ -57,7 +57,7 @@ begin
                 UPDATE product_type SET id = 12 where id = 4 and name = 's4c_l4a';
                 UPDATE product_type SET id = 13 where id = 5 and name = 's4c_l4b';
                 UPDATE product_type SET id = 15 where id = 6 and name = 's4c_l4c';
-                UPDATE product_type SET description = 'Sen4CAP L4A Crop type product' WHERE id = 11;
+                UPDATE product_type SET description = 'Sen4CAP L4A Crop type product' WHERE id = 12;
                 UPDATE product_type SET description = 'Sen4CAP L4B Grassland Mowing product' WHERE id = 13;
                 UPDATE product_type SET description = 'Sen4CAP Sen4CAP L4C Agricultural Practices product' WHERE id = 14;
                 UPDATE product_type SET description = 'Sen4CAP L3C LAI Reprocessed product' WHERE id = 16;
@@ -517,16 +517,17 @@ begin
             execute _statement;
 
             _statement := $str$
-                DELETE FROM config where key = 'demmaccs.maccs-launcher';
-                DELETE FROM config where key = 'demmaccs.srtm-path';
-                DELETE FROM config where key = 'demmaccs.swbd-path';
-                DELETE FROM config where key = 'demmaccs.working-dir';
-                DELETE FROM config where key = 'demmaccs.output-path';
-                DELETE FROM config where key = 'demmaccs.gips-path';
-                DELETE FROM config WHERE key = 'demmaccs.compress-tiffs';
-                DELETE FROM config WHERE key = 'demmaccs.cog-tiffs';
-                DELETE FROM config WHERE key = 'demmaccs.remove-sre';
-                DELETE FROM config WHERE key = 'demmaccs.remove-fre';
+                UPDATE config SET key = 'processor.l2a.maja.launcher' WHERE key = 'demmaccs.maccs-launcher';
+                UPDATE config SET key = 'processor.l2a.srtm-path' WHERE key = 'demmaccs.srtm-path';
+                UPDATE config SET key = 'processor.l2a.swbd-path' WHERE key = 'demmaccs.swbd-path';
+                UPDATE config SET key = 'processor.l2a.working-dir' WHERE key = 'demmaccs.working-dir';
+                UPDATE config SET key = 'processor.l2a.optical.output-path' WHERE key = 'demmaccs.output-path';
+                UPDATE config SET key = 'processor.l2a.maja.gipp-path' WHERE key = 'demmaccs.gips-path';
+                UPDATE config SET key = 'processor.l2a.optical.compress-tiffs' WHERE key = 'demmaccs.compress-tiffs';
+                UPDATE config SET key = 'processor.l2a.optical.cog-tiffs' WHERE key = 'demmaccs.cog-tiffs';
+                UPDATE config SET key = 'processor.l2a.maja.remove-sre' WHERE key = 'demmaccs.remove-sre';
+                UPDATE config SET key = 'processor.l2a.maja.remove-fre' WHERE key = 'demmaccs.remove-fre';
+                
                 DELETE FROM config WHERE key = 'processor.l2a.s2.retry-interval';
             
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.s2.implementation', NULL, 'maja', '2020-09-07 14:17:52.846794+03') ON conflict DO nothing;
@@ -544,6 +545,8 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.srtm-path', NULL, '/mnt/archive/srtm', '2016-02-25 11:11:36.372405+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.swbd-path', NULL, '/mnt/archive/swbd', '2016-02-25 11:12:04.008319+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.working-dir', NULL, '/mnt/archive/demmaccs_tmp/', '2016-02-25 17:31:06.01191+02') ON conflict DO nothing;
+
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('downloader.use.esa.l2a', NULL, 'false', '2019-12-16 14:56:57.501918+02') ON conflict DO nothing;
 
                 -- Tillage processor keys               
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.tillage_monitoring', NULL, '0', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
@@ -585,16 +588,17 @@ begin
             execute _statement;
 
             _statement := $str$
-                DELETE FROM config_metadata where key = 'demmaccs.maccs-launcher';
-                DELETE FROM config_metadata where key = 'demmaccs.srtm-path';
-                DELETE FROM config_metadata where key = 'demmaccs.swbd-path';
-                DELETE FROM config_metadata where key = 'demmaccs.working-dir';
-                DELETE FROM config_metadata where key = 'demmaccs.output-path';
-                DELETE FROM config_metadata where key = 'demmaccs.gips-path';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.compress-tiffs';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.cog-tiffs';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.remove-sre';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.remove-fre';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.launcher' WHERE key = 'demmaccs.maccs-launcher';
+                UPDATE config_metadata SET key = 'processor.l2a.srtm-path' WHERE key = 'demmaccs.srtm-path';
+                UPDATE config_metadata SET key = 'processor.l2a.swbd-path' WHERE key = 'demmaccs.swbd-path';
+                UPDATE config_metadata SET key = 'processor.l2a.working-dir' WHERE key = 'demmaccs.working-dir';
+                UPDATE config_metadata SET key = 'processor.l2a.optical.output-path' WHERE key = 'demmaccs.output-path';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.gipp-path' WHERE key = 'demmaccs.gips-path';
+                UPDATE config_metadata SET key = 'processor.l2a.optical.compress-tiffs' WHERE key = 'demmaccs.compress-tiffs';
+                UPDATE config_metadata SET key = 'processor.l2a.optical.cog-tiffs' WHERE key = 'demmaccs.cog-tiffs';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.remove-sre' WHERE key = 'demmaccs.remove-sre';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.remove-fre' WHERE key = 'demmaccs.remove-fre';
+
                 DELETE FROM config_metadata WHERE key = 'processor.l2a.s2.retry-interval';
 
                 INSERT INTO config_metadata VALUES ('downloader.skip.existing', 'If enabled, products downloaded for another site will be duplicated, in database only, for the current site', 'bool', false, 15) ON conflict DO nothing;
@@ -614,6 +618,7 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'Path to the SWBD dataset', 'directory', false, 2) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'Working directory', 'string', false, 2) ON conflict DO nothing;
                 
+                INSERT INTO config_metadata VALUES ('downloader.use.esa.l2a', 'Enable S2 L2A ESA products download', 'bool', false, 15) ON conflict DO nothing;
                 
                 -- Marker database new config category                
                 INSERT INTO config_category VALUES (26, 'S4C Marker database 1', 4, true) ON conflict DO nothing;

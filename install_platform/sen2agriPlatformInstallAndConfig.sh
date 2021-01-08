@@ -994,6 +994,8 @@ install_additional_packages
 #-----------------------------------------------------------#
 systemctl enable sen2agri-services
 systemctl start sen2agri-services
+systemctl enable sen2agri-executor
+systemctl start sen2agri-executor
 systemctl enable sen2agri-orchestrator
 systemctl start sen2agri-orchestrator
 systemctl enable sen2agri-scheduler
@@ -1003,4 +1005,4 @@ systemctl start sen2agri-http-listener
 systemctl enable sen2agri-monitor-agent
 systemctl start sen2agri-monitor-agent
 
-echo "Please edit the USGS and SciHub credentials in the sen2agri-services.properties for the downloaders!"
+

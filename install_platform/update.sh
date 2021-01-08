@@ -1,5 +1,7 @@
 #!/bin/sh
 
+USE_SNAP_8_DOCKER=0
+    
 INSTAL_CONFIG_FILE="./config/install_config.conf"
 HAS_S2AGRI_SERVICES=false
 
@@ -342,6 +344,20 @@ function create_and_config_slurm_qos()
    scontrol show node
 }
 
+function update_maja_gipp() {
+    VAL=$(psql -qtAX -U admin ${DB_NAME} -c "select value from config where key = 'processor.l2a.maja.gipp-path'")
+    if [ ! -z $VAL ] ; then 
+        if [ -d $VAL ] ; then
+            echo "Key processor.l2a.maja.gipp-path found with value ${VAL}. Copying UserConfiguration into this location ..."
+            cp -fR /usr/share/sen2agri/sen2agri-demmaccs/UserConfiguration ${VAL}
+        else 
+            echo "WARNING: Key processor.l2a.maja.gipp-path found in config table for database ${DB_NAME} with value $VAL but the directory does not exists for this value. UserConfiguration not updated ..."
+        fi
+    else
+        echo "WARNING: Key processor.l2a.maja.gipp-path not found in config table for database ${DB_NAME}. UserConfiguration not updated ..."
+    fi
+}
+
 systemctl stop sen2agri-scheduler sen2agri-executor sen2agri-orchestrator sen2agri-http-listener sen2agri-sentinel-downloader sen2agri-landsat-downloader sen2agri-demmaccs sen2agri-sentinel-downloader.timer sen2agri-landsat-downloader.timer sen2agri-demmaccs.timer sen2agri-monitor-agent sen2agri-services
 
 saveOldDownloadCredentials
@@ -391,6 +407,8 @@ else
     run_migration_scripts "migrations/${DB_NAME}" "${DB_NAME}"
 fi
 
+update_maja_gipp
+
 systemctl daemon-reload
 systemctl restart httpd
 
@@ -412,38 +430,18 @@ if [ "$DB_NAME" == "sen2agri" ] ; then
     # Reset the download failed products
     resetDownloadFailedProducts
 else
-    # Install and config SNAP if old version
-    INSTALL_SNAP_8=0
-    if [ $INSTALL_SNAP_8 -eq 1 ] ; then
-        NEED_INSTALL_SNAP_8=0
-        if grep -q "6.0" "/opt/snap/VERSION.txt"; then
-                NEED_INSTALL_SNAP_8=1
-        elif grep -q "7.0" "/opt/snap/VERSION.txt"; then
-                NEED_INSTALL_SNAP_8=1
-        fi
-
-        if [ $NEED_INSTALL_SNAP_8 -eq 1 ]  ; then
+    # Install and config SNAP
+    if [ $USE_SNAP_8_DOCKER -eq 1 ] ; then
+        # check if docker image already exists
+        # TODO: "docker image inspect sen4cap/snap" might be also used instead images -q
+        #if [[ "$(docker images -q sen4cap/snap 2> /dev/null)" == "" ]]; then
             wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
-            cp -f esa-snap_sentinel_unix_8_0.sh /tmp/ && \
-            chmod +x /tmp/esa-snap_sentinel_unix_8_0.sh && \
-            /tmp/esa-snap_sentinel_unix_8_0.sh -q && \
-            /opt/snap/bin/snap --nosplash --nogui --modules --update-all
-            rm -f ./esa-snap_sentinel_unix_8_0.sh /tmp/esa-snap_sentinel_unix_8_0.sh
-            if [ ! -h /usr/local/bin/gpt ]; then sudo ln -s /opt/snap/bin/gpt /usr/local/bin/gpt;fi
-
-            cp -f ${GPT_CONFIG_FILE} /opt/snap/bin/
-
-            if [ -f ../tools/snap_extra/aster_dem/extra-cluster.zip ] ; then
-                unzip ../tools/snap_extra/aster_dem/extra-cluster.zip -d /opt/snap
-                sed -i '$a-Dsnap.extraClusters=/opt/snap/extra' /opt/snap/bin/gpt.vmoptions
-                if [ -d ../tools/snap_extra/aster_dem/DEM ] ; then
-                    mkdir -p "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
-                    cp -fR ../tools/snap_extra/aster_dem/DEM/*/* "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
-                    chown -R sen2agri-service:sen2agri-service "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
-                    chmod 755 "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
-                fi
-            fi
-        fi
+            mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
+            chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
+            docker build -t sen4cap/snap -f ./docker/snap8/Dockerfile ./docker/snap8/
+        #else 
+        #    echo "No need to install SNAP container, it already exists ..."
+        #fi
     else
         if grep -q "6.0" "/opt/snap/VERSION.txt"; then
             wget http://step.esa.int/downloads/7.0/installers/esa-snap_sentinel_unix_7_0.sh && \
