@@ -901,38 +901,44 @@ class L2aProcessor(object):
         return None
 
     def extract_from_archive_if_needed(self, archive_file):
-        archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-        if zipfile.is_zipfile(archive_file):
-            if create_recursive_dirs(archives_dir):
-                try:
-                    extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-                    extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
-                    self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                    return True, extracted_file_path
-                except Exception as e:
-                    self.launcher_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
-                    return False, None
-            else:
-                self.launcher_log("Can NOT create arhive dir.")
-                return False, None
-        elif tarfile.is_tarfile(archive_file):
-            if create_recursive_dirs(archives_dir):
-                try:
-                    extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir) 
-                    extracted_file_path = self.untar(extracted_archive_dir, archive_file)
-                    self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                    return True, extracted_file_path
-                except Exception as e:
-                    self.launcher_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
-                    return False, None
-            else:
-                self.launcher_log("Can NOT create arhive dir.")
-                return False, None
-        else:
+        if os.path.isdir(archive_file):
             self.launcher_log(
                 "This wasn't an archive, so continue as is."
             )
             return False, archive_file
+        else:
+            archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
+            if zipfile.is_zipfile(archive_file):
+                if create_recursive_dirs(archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
+                        extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
+                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.launcher_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.launcher_log("Can NOT create arhive dir.")
+                    return False, None
+            elif tarfile.is_tarfile(archive_file):
+                if create_recursive_dirs(archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir) 
+                        extracted_file_path = self.untar(extracted_archive_dir, archive_file)
+                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.launcher_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.launcher_log("Can NOT create arhive dir.")
+                    return False, None
+            else:
+                self.launcher_log(
+                    "This wasn't an zip or tar archive, can NOT use input product."
+                )
+                return False, None
 
 
     def validate_input_product_dir(self):
