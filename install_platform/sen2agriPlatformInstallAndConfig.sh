@@ -238,6 +238,7 @@ function create_system_account()
 {
    #create system account for running services
    adduser -m ${SYS_ACC_NAME}
+   usermod -aG dockerroot ${SYS_ACC_NAME}
 }
 #-----------------------------------------------------------#
 function create_slurm_account()
@@ -936,8 +937,12 @@ disable_firewall
 yum -y install epel-release https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm yum-utils
 yum -y update epel-release pgdg-redhat-repo
 yum-config-manager --disable pgdg95
-yum -y install docker docker-compose gdal
+yum -y install docker docker-compose gdal jq
 sed -i "s/'--selinux-enabled /'/" /etc/sysconfig/docker
+
+jq '. + { group: "dockerroot" }' < /etc/docker/daemon.json > /etc/docker/daemon.json.new
+mv /etc/docker/daemon.json.new /etc/docker/daemon.json
+
 systemctl enable docker
 systemctl start docker
 

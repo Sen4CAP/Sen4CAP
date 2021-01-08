@@ -49,8 +49,8 @@ function install_sen2agri_services()
     else
         echo "sen2agri-services already exist in ${TARGET_SERVICES_DIR}"
         if [ -d "${TARGET_SERVICES_DIR}/bin" ] && [ -d "${TARGET_SERVICES_DIR}/config" ] ; then
-            
-            add_plgs_bkp=lib_add_plgs_bkp_$( date "+%Y_%m_%d_%H_%M_%S" )            
+
+            add_plgs_bkp=lib_add_plgs_bkp_$( date "+%Y_%m_%d_%H_%M_%S" )
             #check if lib directory exist and is not empty
             if [ -d "${TARGET_SERVICES_DIR}/lib" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/lib)" ] ; then
                 mkdir ${TARGET_SERVICES_DIR}/$add_plgs_bkp
@@ -59,8 +59,8 @@ function install_sen2agri_services()
                     filename=$(basename $filepath)
                     #make a backup for tao-datasource*.jar, others that scihub and usgs
                     if [[ $filename != tao-datasources-scihub* ]] && [[ $filename != tao-datasources-usgs* ]]; then
-                        cp ${TARGET_SERVICES_DIR}/lib/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/  
-                    fi  
+                        cp ${TARGET_SERVICES_DIR}/lib/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/
+                    fi
                 done;
             fi
             if [ -f ../sen2agri-services/${SERVICES_ARCHIVE} ]; then
@@ -204,11 +204,16 @@ function install_docker() {
     if [ $? -ne 0 ]; then
         echo "Installing docker"
         yum -y update epel-release
-        yum -y install docker
+        yum -y install docker jq
         sed -i "s/'--selinux-enabled /'/" /etc/sysconfig/docker
         systemctl enable docker
     fi
-    systemctl start docker
+
+    jq '. + { group: "dockerroot" }' < /etc/docker/daemon.json > /etc/docker/daemon.json.new
+    mv -f /etc/docker/daemon.json.new /etc/docker/daemon.json
+    usermod -aG dockerroot ${SYS_ACC_NAME}
+
+    systemctl restart docker
     yum -y install docker-compose
 }
 
@@ -246,7 +251,7 @@ function migrate_postgres_to_docker() {
     echo "Starting Postgres container"
     cd docker
     docker-compose up -d db
-    
+
     RETRIES=120
     until docker-compose exec db pg_isready || [ $RETRIES -eq 0 ]; do
         echo "Waiting for postgres, $RETRIES remaining attempts..."
@@ -263,7 +268,7 @@ function migrate_postgres_to_docker() {
         RETRIES=$((RETRIES-1))
         sleep 1
     done
-    
+
     cd ..
 
     echo "Restoring database backup"
@@ -290,7 +295,7 @@ function create_and_config_slurm_qos()
 
    #for each qos defined in configuration, add the missing QOS
    for qosName in "${ADDR[@]}"; do
-        if [ -z $(sacctmgr list qos --parsable | grep -i ${qosName}) ] ; then 
+        if [ -z $(sacctmgr list qos --parsable | grep -i ${qosName}) ] ; then
             #add qos to slurm
             SLURM_ADD_QOS=$(expect -c "
              set timeout 5
@@ -416,7 +421,7 @@ else
         elif grep -q "7.0" "/opt/snap/VERSION.txt"; then
                 NEED_INSTALL_SNAP_8=1
         fi
-        
+
         if [ $NEED_INSTALL_SNAP_8 -eq 1 ]  ; then
             wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
             cp -f esa-snap_sentinel_unix_8_0.sh /tmp/ && \
@@ -427,7 +432,7 @@ else
             if [ ! -h /usr/local/bin/gpt ]; then sudo ln -s /opt/snap/bin/gpt /usr/local/bin/gpt;fi
 
             cp -f ${GPT_CONFIG_FILE} /opt/snap/bin/
-            
+
             if [ -f ../tools/snap_extra/aster_dem/extra-cluster.zip ] ; then
                 unzip ../tools/snap_extra/aster_dem/extra-cluster.zip -d /opt/snap
                 sed -i '$a-Dsnap.extraClusters=/opt/snap/extra' /opt/snap/bin/gpt.vmoptions
@@ -438,7 +443,7 @@ else
                     chmod 755 "/home/sen2agri-service/.snap/auxdata/dem/ASTER 1sec GDEM v3"
                 fi
             fi
-        fi        
+        fi
     else
         if grep -q "6.0" "/opt/snap/VERSION.txt"; then
             wget http://step.esa.int/downloads/7.0/installers/esa-snap_sentinel_unix_7_0.sh && \
