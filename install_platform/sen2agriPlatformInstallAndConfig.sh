@@ -941,7 +941,7 @@ yum -y install docker docker-compose gdal jq
 sed -i "s/'--selinux-enabled /'/" /etc/sysconfig/docker
 
 jq '. + { group: "dockerroot" }' < /etc/docker/daemon.json > /etc/docker/daemon.json.new
-mv /etc/docker/daemon.json.new /etc/docker/daemon.json
+mv -f /etc/docker/daemon.json.new /etc/docker/daemon.json
 
 systemctl enable docker
 systemctl start docker
