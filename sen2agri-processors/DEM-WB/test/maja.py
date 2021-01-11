@@ -693,11 +693,11 @@ if args.suffix_log_name is not None:
     log_filename = "demmaccs_{}.log".format(args.suffix_log_name)
 if not create_recursive_dirs(args.output):
     log(MAJA_LOG_DIR, "Could not create the output directory", log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
 if len(args.prev_l2a_tiles) != len(args.prev_l2a_products_paths):
     log(MAJA_LOG_DIR, "The number of previous l2a tiles is not the same as for paths for these tiles. Check args: --prev-l2-tiles and --prev-l2a-products-paths, the length should be equal", log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
 MAJA_LOG_DIR = args.output
 
@@ -706,7 +706,7 @@ if args.product_id:
     working_dir = os.path.join(args.working_dir, working_dir_name)
     if not create_recursive_dirs(working_dir):
         log(MAJA_LOG_DIR, "Could not create the temporary directory", log_filename)
-        sys.exit(-1)
+        os._exit(1)
     else:
         log(MAJA_LOG_DIR, "Created the working dir", log_filename)
 else:
@@ -720,13 +720,13 @@ if not create_recursive_dirs(dem_output_dir):
     log(MAJA_LOG_DIR, "Could NOT create the output directory for DEM", log_filename)
     if not remove_dir(working_dir):
         log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
 if not create_recursive_dirs(dem_working_dir):
     log(MAJA_LOG_DIR, "Could not create the working directory for DEM", log_filename)
     if not remove_dir(working_dir):
         log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
 log(MAJA_LOG_DIR,"working_dir = {}".format(working_dir), log_filename)
 log(MAJA_LOG_DIR,"dem_working_dir = {}".format(dem_working_dir), log_filename)
@@ -747,7 +747,7 @@ if sat_id == LANDSAT8_SATELLITE_ID:
         log(MAJA_LOG_DIR, "Could not create the l8 align working directory.", log_filename)
         if not remove_dir(working_dir):
             log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
-        sys.exit(-1)
+        os._exit(1)
 
     cmd_array = []
     #docker run 
@@ -786,7 +786,7 @@ if sat_id == LANDSAT8_SATELLITE_ID:
         log(MAJA_LOG_DIR, "The LANDSAT8 product could not be aligned {}".format(args.input), log_filename)
         if not remove_dir(working_dir):
             log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
-        sys.exit(-1)
+        os._exit(1)
     #the l8.align.py outputs in the working_dir directory where creates a directory which has the product name
     args.input = working_dir + "/" + product_name
     log(MAJA_LOG_DIR, "The LANDSAT8 product was aligned here: {}".format(args.input), log_filename)
@@ -840,7 +840,7 @@ if run_command(dem_command , MAJA_LOG_DIR, log_filename) != 0:
     log(MAJA_LOG_DIR, "DEM failed", log_filename)
     if not remove_dir(working_dir):
         log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
 log(MAJA_LOG_DIR, "DEM finished in: {}".format(datetime.timedelta(seconds=(time.time() - start))), log_filename)
 
@@ -856,7 +856,7 @@ if len(dem_hdrs) == 0:
             log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(dem_output_dir), log_filename)
         if not remove_dir(working_dir):
             log(MAJA_LOG_DIR, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
 if len(tiles_to_process) > 0 and len(tiles_to_process) != len(dem_hdrs):
     log(MAJA_LOG_DIR, "The number of hdr DEM files in {} is not equal with the number of the received tiles to process !!".format(dem_output_dir), log_filename)
@@ -907,5 +907,5 @@ if args.delete_temp:
 
 log(MAJA_LOG_DIR, "Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), log_filename)
 
-sys.exit(ret)
+os._exit(ret)
 
