@@ -251,10 +251,6 @@ def main():
         command += ["--optical-products", "../optical-products.csv"]
         if args.mode != "both":
             command += ["--no-re"]
-        if config.tiles:
-            command += ["--tiles"] + config.tiles
-        if config.products:
-            command += ["--products"] + config.products
         if config_file:
             command += ["-c", config_file]
 
@@ -270,10 +266,6 @@ def main():
         command += ["--lpis-path", lpis_path]
         command += ["--tile-footprints", "../tile-footprints.csv"]
         command += ["--radar-products", "../radar-products.csv"]
-        if config.tiles:
-            command += ["--tiles"] + config.tiles
-        if config.products:
-            command += ["--products"] + config.products
         if config_file:
             command += ["-c", config_file]
 

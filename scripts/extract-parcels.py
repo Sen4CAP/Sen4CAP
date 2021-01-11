@@ -238,7 +238,7 @@ def extract_optical_products(
         conn.commit()
 
 
-def extract_radar_products(conn, site_id, season_start, season_end, products, file):
+def extract_radar_products(conn, site_id, season_start, season_end, tiles, products, file):
     with conn.cursor() as cursor:
         query = SQL(
             """
@@ -255,7 +255,9 @@ def extract_radar_products(conn, site_id, season_start, season_end, products, fi
                 inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id
                 inner join product on ST_Intersects(product.geog, shape_tiles_s2.geog)
                 where product.satellite_id = 3
-                    and product.site_id = {}
+                  and product.site_id = {}
+                  {}
+                  {}
             ) products
             where date between {} and {}
             order by date;
@@ -265,17 +267,31 @@ def extract_radar_products(conn, site_id, season_start, season_end, products, fi
         site_id_filter = Literal(site_id)
         start_date_filter = Literal(season_start)
         end_date_filter = Literal(season_end)
-        query = query.format(
-            site_id_filter, site_id_filter, start_date_filter, end_date_filter
-        )
 
         if products is not None:
             products_filter = SQL(
                 """
-                and name in {}
+                and product.name in {}
                 """
-            )
-            query += products_filter.format(Literal(products))
+            ).format(Literal(products))
+        else:
+            products_filter = SQL("")
+
+        if tiles is not None:
+            tiles_filter = SQL(
+                """
+                and site_tiles.tile_id in {}
+                """
+            ).format(Literal(tiles))
+        else:
+            tiles_filter = SQL("")
+
+        query = query.format(
+            site_id_filter, site_id_filter,
+            products_filter,
+            tiles_filter,
+            start_date_filter, end_date_filter,
+        )
 
         print(query.as_string(conn))
         cursor.execute(query)
@@ -365,6 +381,7 @@ def main():
             args.site_id,
             args.season_start,
             args.season_end,
+            args.tiles,
             args.products,
             args.radar_products,
         )

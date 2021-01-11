@@ -123,11 +123,6 @@ class Config(object):
         self.site_id = args.site_id
         self.path = args.path
         self.lpis_path = args.lpis_path
-        self.tiles = args.tiles
-        if args.products:
-            self.products = set(args.products)
-        else:
-            self.products = None
         self.mode = args.mode
         self.re = args.re
 
@@ -1068,8 +1063,6 @@ def process_radar(config, pool):
     missing_products = set()
     found_products = set()
     for product in products:
-        if config.tiles is not None and product.tile_id not in config.tiles:
-            continue
         if product.path in missing_products:
             continue
         if product.path not in found_products:
@@ -1368,8 +1361,6 @@ def main():
     )
     parser.add_argument("-p", "--path", default=".", help="working path")
     parser.add_argument("--lpis-path", help="path to the rasterized LPIS")
-    parser.add_argument("--tiles", nargs="+", help="tile filter")
-    parser.add_argument("--products", nargs="+", help="product filter")
     parser.add_argument("--tile-footprints", required=False, help="tile footprints CSV")
     parser.add_argument("--optical-products", required=False, help="optical products CSV")
     parser.add_argument("--radar-products", required=False, help="radar products CSV")
