@@ -349,7 +349,7 @@ function update_maja_gipp() {
     if [ ! -z $VAL ] ; then
         if [ -d $VAL ] ; then
             echo "Key processor.l2a.maja.gipp-path found with value ${VAL}. Copying UserConfiguration into this location ..."
-            cp -fR /usr/share/sen2agri/sen2agri-demmaccs/UserConfiguration ${VAL}
+            cp -fR ./config/maja/UserConfiguration ${VAL}
         else
             echo "WARNING: Key processor.l2a.maja.gipp-path found in config table for database ${DB_NAME} with value $VAL but the directory does not exists for this value. UserConfiguration not updated ..."
         fi
