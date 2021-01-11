@@ -924,7 +924,7 @@ class L2aProcessor(object):
             elif tarfile.is_tarfile(archive_file):
                 if create_recursive_dirs(archives_dir):
                     try:
-                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir) 
+                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
                         extracted_file_path = self.untar(extracted_archive_dir, archive_file)
                         self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
                         return True, extracted_file_path
@@ -1981,7 +1981,7 @@ class Sen2Cor(L2aProcessor):
             self.context.gips_path, "ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
         )
         wrk_dir = os.path.join(self.context.working_dir, self.l2a.basename)
-        if not create_recursive_dirs(wrk_dir) == False:
+        if not create_recursive_dirs(wrk_dir):
             self.update_rejection_reason(
                 "Can NOT create wrk dir {}".format(wrk_dir)
             )
