@@ -3,8 +3,9 @@ from __future__ import print_function
 
 import argparse
 from collections import defaultdict
-from datetime import date, datetime
-from datetime import timedelta
+import csv
+from datetime import datetime, timedelta
+import dateutil.parser
 from glob import glob
 import multiprocessing
 import multiprocessing.dummy
@@ -15,10 +16,8 @@ from osgeo import osr
 from osgeo import gdal
 from gdal import gdalconst
 import pipes
-import psycopg2
-from psycopg2.sql import SQL, Literal
-import psycopg2.extras
 import subprocess
+import sys
 import tempfile
 
 try:
@@ -132,8 +131,9 @@ class Config(object):
         self.mode = args.mode
         self.re = args.re
 
-        self.season_start = parse_date(args.season_start)
-        self.season_end = parse_date(args.season_end)
+        self.tile_footprints = args.tile_footprints
+        self.optical_products = args.optical_products
+        self.radar_products = args.radar_products
 
 
 def get_season_dates(start_date, end_date):
@@ -301,45 +301,15 @@ def paste_files(file1, file2, out):
     os.remove(temp)
 
 
-def process_optical(config, conn, pool, satellite_id):
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-            select site_id,
-                   name,
-                   full_path,
-                   tiles,
-                   created_timestamp
-            from product
-            where satellite_id = {}
-              and product_type_id = 1
-              and created_timestamp between {} and {}
-              and site_id = {}
-            order by site_id, created_timestamp
-            """
-        )
-
-        satellite_filter = Literal(satellite_id)
-        start_date_filter = Literal(config.season_start)
-        end_date_filter = Literal(config.season_end)
-        site_filter = Literal(config.site_id)
-
-        query = query.format(
-            satellite_filter, start_date_filter, end_date_filter, site_filter
-        )
-        print(query.as_string(conn))
-        cursor.execute(query)
-
-        products = cursor.fetchall()
-        conn.commit()
-
+def process_optical(config, pool, satellite_id):
     product_map = defaultdict(lambda: defaultdict(list))
-    for (site_id, name, full_path, tiles, created_timestamp) in products:
-        for tile in tiles:
-            if config.tiles is not None and tile not in config.tiles:
-                continue
-            if config.products is not None and name not in config.products:
-                continue
+    with open(config.optical_products, "rb") as file:
+        reader = csv.reader(file)
+        next(reader)
+        for (site_id, name, full_path, tile, created_timestamp) in reader:
+            site_id = int(site_id)
+            # created_timestamp = datetime.fromisoformat(created_timestamp)
+            created_timestamp = dateutil.parser.parse(created_timestamp)
 
             product = OpticalProduct(site_id, tile, created_timestamp.date(), full_path)
             product_map[site_id][tile].append(product)
@@ -353,11 +323,11 @@ def process_optical(config, conn, pool, satellite_id):
             for product in products:
                 if (
                     first_date is None or product.date < first_date
-                ) and product.date >= config.season_start:
+                ):
                     first_date = product.date
                 if (
                     last_date is None or product.date > last_date
-                ) and product.date <= config.season_end:
+                ):
                     last_date = product.date
 
         start_date = first_date
@@ -736,98 +706,48 @@ class CoherenceSeasonGroup(object):
         )
 
 
-def get_tile_footprints(conn, site_id):
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-            select shape_tiles_s2.tile_id,
-                   shape_tiles_s2.epsg_code,
-                   ST_AsBinary(shape_tiles_s2.geog) as geog
-            from shape_tiles_s2
-            where shape_tiles_s2.tile_id in (
-                select tile_id
-                from sp_get_site_tiles({} :: smallint, 1 :: smallint)
-            );
-            """
-        )
+def get_tile_footprints(file):
+    tiles = {}
+    with open(file, "rb") as file:
+        reader = csv.reader(file)
+        next(reader)
+        for (tile_id, epsg_code, geog) in reader:
+            epsg_code = int(epsg_code)
+            geog = ogr.CreateGeometryFromWkt(geog)
 
-        site_id_filter = Literal(site_id)
-        query = query.format(site_id_filter)
-        print(query.as_string(conn))
-        cursor.execute(query)
-
-        results = cursor.fetchall()
-        conn.commit()
-
-        tiles = {}
-        for (tile_id, epsg_code, geog) in results:
-            geog = bytes(geog)
-            geog = ogr.CreateGeometryFromWkb(geog)
             tiles[tile_id] = (geog, epsg_code)
+    return tiles
 
-        return tiles
 
-
-def get_radar_products(config, conn, site_id):
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-            select *
-            from (
-                select
-                    greatest(substr(split_part(product.name, '_', 4), 2), split_part(product.name, '_', 5)) :: date as date,
-                    site_tiles.tile_id,
-                    product.orbit_type_id,
-                    split_part(product.name, '_', 6) as polarization,
-                    product.product_type_id,
-                    product.name,
-                    product.full_path
-                from sp_get_site_tiles({} :: smallint, 1 :: smallint) as site_tiles
-                inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id
-                inner join product on ST_Intersects(product.geog, shape_tiles_s2.geog)
-                where product.satellite_id = 3
-                    and product.site_id = {}
-            ) products
-            where date between {} and {}
-            order by date;
-            """
-        )
-
-        site_id_filter = Literal(site_id)
-        start_date_filter = Literal(config.season_start)
-        end_date_filter = Literal(config.season_end)
-        query = query.format(
-            site_id_filter, site_id_filter, start_date_filter, end_date_filter
-        )
-        print(query.as_string(conn))
-        cursor.execute(query)
-
-        results = cursor.fetchall()
-        conn.commit()
-
-        products = []
+def get_radar_products(file):
+    products = []
+    with open(file, "rb") as file:
+        reader = csv.reader(file)
+        next(reader)
         for (
             dt,
             tile_id,
             orbit_type_id,
             polarization,
             radar_product_type,
-            name,
             full_path,
-        ) in results:
-            if config.products is None or name in config.products:
-                products.append(
-                    RadarProduct(
-                        dt,
-                        tile_id,
-                        orbit_type_id,
-                        polarization,
-                        radar_product_type,
-                        full_path,
-                    )
+        ) in reader:
+            # dt = datetime.fromisoformat(dt)
+            dt = dateutil.parser.parse(dt)
+            orbit_type_id = int(orbit_type_id)
+            radar_product_type = int(radar_product_type)
+            products.append(
+                RadarProduct(
+                    dt,
+                    tile_id,
+                    orbit_type_id,
+                    polarization,
+                    radar_product_type,
+                    full_path,
                 )
+            )
 
-        return products
+    return products
 
 
 def get_otb_extended_filename_with_tiling(file):
@@ -1138,10 +1058,10 @@ def get_extent(raster):
     return extent
 
 
-def process_radar(config, conn, pool):
-    tiles = get_tile_footprints(conn, config.site_id)
+def process_radar(config, pool):
+    tiles = get_tile_footprints(config.tile_footprints)
 
-    products = get_radar_products(config, conn, config.site_id)
+    products = get_radar_products(config.radar_products)
     groups = defaultdict(list)
     input_srs = None
     force_input_epsg = None
@@ -1446,12 +1366,14 @@ def main():
     parser.add_argument(
         "-m", "--mode", required=True, choices=["optical", "sar"], help="mode"
     )
-    parser.add_argument("--season-start", help="season start date")
-    parser.add_argument("--season-end", help="season end date")
     parser.add_argument("-p", "--path", default=".", help="working path")
     parser.add_argument("--lpis-path", help="path to the rasterized LPIS")
     parser.add_argument("--tiles", nargs="+", help="tile filter")
     parser.add_argument("--products", nargs="+", help="product filter")
+    parser.add_argument("--tile-footprints", required=False, help="tile footprints CSV")
+    parser.add_argument("--optical-products", required=False, help="optical products CSV")
+    parser.add_argument("--radar-products", required=False, help="radar products CSV")
+
     re = parser.add_mutually_exclusive_group(required=False)
     re.add_argument(
         "--re",
@@ -1468,21 +1390,23 @@ def main():
     config = Config(args)
     cpu_count = multiprocessing.cpu_count()
     if config.mode == "optical":
+        if not args.optical_products:
+            print("--optical-products is required with -m optical")
+            sys.exit(1)
         pool = multiprocessing.dummy.Pool(cpu_count / 2)
     else:
+        if not args.tile_footprints:
+            print("--tile-footprints is required with -m sar")
+            sys.exit(1)
+        if not args.radar_products:
+            print("--radar-products is required with -m sar")
+            sys.exit(1)
         pool = multiprocessing.dummy.Pool(cpu_count)
 
-    with psycopg2.connect(
-        host=config.host,
-        port=config.port,
-        dbname=config.dbname,
-        user=config.user,
-        password=config.password,
-    ) as conn:
-        if config.mode == "optical":
-            process_optical(config, conn, pool, SATELLITE_ID_SENTINEL2)
-        else:
-            process_radar(config, conn, pool)
+    if config.mode == "optical":
+        process_optical(config, pool, SATELLITE_ID_SENTINEL2)
+    else:
+        process_radar(config, pool)
 
 
 if __name__ == "__main__":

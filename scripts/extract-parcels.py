@@ -50,11 +50,11 @@ def get_site_name(conn, site_id):
         return rows[0][0]
 
 
-def save_to_csv(cursor, path, headers):
+def save_to_csv(rows, path, headers):
     with open(path, "wb") as csvfile:
         writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
         writer.writerow(headers)
-        for row in cursor:
+        for row in rows:
             writer.writerow(row)
 
 
@@ -156,9 +156,149 @@ def extract_lut(config, args, lut_table):
             conn.commit()
 
 
+def extract_tile_footprints(conn, site_id, file):
+    with conn.cursor() as cursor:
+        query = SQL(
+            """
+            select shape_tiles_s2.tile_id,
+                   shape_tiles_s2.epsg_code,
+                   ST_AsText(shape_tiles_s2.geog) as geog
+            from shape_tiles_s2
+            where shape_tiles_s2.tile_id in (
+                select tile_id
+                from sp_get_site_tiles({} :: smallint, 1 :: smallint)
+            );
+            """
+        )
+
+        site_id_filter = Literal(site_id)
+        query = query.format(site_id_filter)
+        print(query.as_string(conn))
+        cursor.execute(query)
+
+        save_to_csv(cursor, file, ["tile_id", "epsg_code", "geog"])
+        conn.commit()
+
+
+def extract_optical_products(
+    conn, site_id, satellite_id, season_start, season_end, tiles, products, file
+):
+    with conn.cursor() as cursor:
+        query = SQL(
+            """
+            select site_id,
+                   name,
+                   full_path,
+                   unnest(tiles) as tile,
+                   created_timestamp
+            from product
+            where satellite_id = {}
+              and product_type_id = 1
+              and created_timestamp between {} and {}
+              and site_id = {}
+            """
+        )
+
+        satellite_filter = Literal(satellite_id)
+        start_date_filter = Literal(season_start)
+        end_date_filter = Literal(season_end)
+        site_filter = Literal(site_id)
+        query = query.format(
+            satellite_filter, start_date_filter, end_date_filter, site_filter
+        )
+
+        if tiles is not None:
+            tile_filter = SQL(
+                """
+                and tiles && {}
+                """
+            )
+            query += tile_filter.format(Literal(tiles))
+
+        if products is not None:
+            products_filter = SQL(
+                """
+                and name in {}
+                """
+            )
+            query += products_filter.format(Literal(products))
+
+        query += SQL(
+            """
+            order by site_id, created_timestamp;
+            """
+        )
+        print(query.as_string(conn))
+        cursor.execute(query)
+
+        save_to_csv(
+            cursor, file, ["site_id", "name", "full_path", "tile", "created_timestamp"]
+        )
+
+        conn.commit()
+
+
+def extract_radar_products(conn, site_id, season_start, season_end, products, file):
+    with conn.cursor() as cursor:
+        query = SQL(
+            """
+            select *
+            from (
+                select
+                    greatest(substr(split_part(product.name, '_', 4), 2), split_part(product.name, '_', 5)) :: date as date,
+                    site_tiles.tile_id,
+                    product.orbit_type_id,
+                    split_part(product.name, '_', 6) as polarization,
+                    product.product_type_id,
+                    product.full_path
+                from sp_get_site_tiles({} :: smallint, 1 :: smallint) as site_tiles
+                inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id
+                inner join product on ST_Intersects(product.geog, shape_tiles_s2.geog)
+                where product.satellite_id = 3
+                    and product.site_id = {}
+            ) products
+            where date between {} and {}
+            order by date;
+            """
+        )
+
+        site_id_filter = Literal(site_id)
+        start_date_filter = Literal(season_start)
+        end_date_filter = Literal(season_end)
+        query = query.format(
+            site_id_filter, site_id_filter, start_date_filter, end_date_filter
+        )
+
+        if products is not None:
+            products_filter = SQL(
+                """
+                and name in {}
+                """
+            )
+            query += products_filter.format(Literal(products))
+
+        print(query.as_string(conn))
+        cursor.execute(query)
+
+        save_to_csv(
+            cursor,
+            file,
+            [
+                "dt",
+                "tile_id",
+                "orbit_type_id",
+                "polarization",
+                "radar_product_type",
+                "full_path",
+            ],
+        )
+
+        conn.commit()
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Crops and recompresses S1 L2A products"
+        description="Extracts input data for the L4A processor"
     )
     parser.add_argument(
         "-c",
@@ -168,12 +308,25 @@ def main():
     )
     parser.add_argument("-s", "--site-id", type=int, help="site ID to filter by")
     parser.add_argument("-y", "--year", help="year")
+    parser.add_argument("--season-start", help="season start date")
+    parser.add_argument("--season-end", help="season end date")
+    parser.add_argument("--tiles", nargs="+", help="tile filter")
+    parser.add_argument("--products", nargs="+", help="product filter")
     parser.add_argument("--strata", help="strata definition")
     parser.add_argument("--srid", help="strata SRID")
     parser.add_argument(
         "output_parcels", help="output parcels file", default="parcels.csv"
     )
     parser.add_argument("output_lut", help="output LUT file", default="lut.csv")
+    parser.add_argument(
+        "tile_footprints", help="output tile footprints", default="tiles.csv"
+    )
+    parser.add_argument(
+        "optical_products", help="output optical products", default="optical.csv"
+    )
+    parser.add_argument(
+        "radar_products", help="output radar products", default="radar.csv"
+    )
 
     args = parser.parse_args()
 
@@ -195,6 +348,26 @@ def main():
         year = args.year or date.today().year
         lpis_table = "decl_{}_{}".format(site_name, year)
         lut_table = "lut_{}_{}".format(site_name, year)
+
+        extract_tile_footprints(conn, args.site_id, args.tile_footprints)
+        extract_optical_products(
+            conn,
+            args.site_id,
+            1,
+            args.season_start,
+            args.season_end,
+            args.tiles,
+            args.products,
+            args.optical_products,
+        )
+        extract_radar_products(
+            conn,
+            args.site_id,
+            args.season_start,
+            args.season_end,
+            args.products,
+            args.radar_products,
+        )
 
     if args.strata is None:
         extract_parcels(config, args, lpis_table, lut_table, None, None)

@@ -224,6 +224,22 @@ def main():
     except OSError:
         pass
 
+    parcels = os.path.join(args.working_path, "parcels.csv")
+    lut = os.path.join(args.working_path, "lut.csv")
+    tile_footprints = os.path.join(args.working_path, "tile-footprints.csv")
+    optical_products = os.path.join(args.working_path, "optical-products.csv")
+    radar_products = os.path.join(args.working_path, "radar-products.csv")
+
+    command = []
+    command += ["extract-parcels.py"]
+    command += ["-s", config.site_id]
+    command += ["-y", config.year]
+    command += ["--season-start", format_date(config.season_start)]
+    command += ["--season-end", format_date(config.season_end)]
+    command += [parcels, lut, tile_footprints, optical_products, radar_products]
+
+    run_command(command)
+
     if args.mode != "s1-only":
         os.chdir("optical")
 
@@ -231,9 +247,8 @@ def main():
         command += ["crop-type-parcels.py"]
         command += ["-m", "optical"]
         command += ["-s", config.site_id]
-        command += ["--season-start", format_date(config.season_start)]
-        command += ["--season-end", format_date(config.season_end)]
         command += ["--lpis-path", lpis_path]
+        command += ["--optical-products", "../optical-products.csv"]
         if args.mode != "both":
             command += ["--no-re"]
         if config.tiles:
@@ -252,9 +267,9 @@ def main():
         command += ["crop-type-parcels.py"]
         command += ["-m", "sar"]
         command += ["-s", config.site_id]
-        command += ["--season-start", format_date(config.season_start)]
-        command += ["--season-end", format_date(config.season_end)]
         command += ["--lpis-path", lpis_path]
+        command += ["--tile-footprints", "../tile-footprints.csv"]
+        command += ["--radar-products", "../radar-products.csv"]
         if config.tiles:
             command += ["--tiles"] + config.tiles
         if config.products:
@@ -280,17 +295,6 @@ def main():
         os.rename("sar-merged/sar-temporal.csv", "features/sar-temporal.csv")
 
     os.chdir(current_path)
-
-    parcels = os.path.join(args.working_path, "parcels.csv")
-    lut = os.path.join(args.working_path, "lut.csv")
-
-    command = []
-    command += ["extract-parcels.py"]
-    command += ["-s", config.site_id]
-    command += ["-y", config.year]
-    command += [parcels, lut]
-
-    run_command(command)
 
     optical_features = os.path.join(args.working_path, "features/optical-features.csv")
     optical_re_features = os.path.join(
