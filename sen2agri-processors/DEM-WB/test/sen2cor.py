@@ -22,7 +22,6 @@ import argparse
 import glob
 import re
 import os
-import sys
 import datetime
 from lxml import etree
 import hashlib
@@ -656,7 +655,7 @@ def RunSen2Cor():
             return True
     except (KeyboardInterrupt, SystemExit):
         print("(sen2cor err) Keyboard interrupted")
-        os.exit(1)
+        os._exit(1)
     except:
         return False
 
@@ -742,7 +741,7 @@ def TranslateToTif(L2A_product_name):
                     os.remove(jp2)
             except (KeyboardInterrupt, SystemExit):
                 print("(sen2cor err) Keyboard interrupted")
-                os.exit(1)
+                os._exit(1)
             except Exception as e:
                 log(
                     SEN2COR_LOG_DIR,
@@ -954,7 +953,7 @@ def ConvertPreviews(L2A_product_name):
                         )
             except (KeyboardInterrupt, SystemExit):
                 print("(sen2cor err) Keyboard interrupted")
-                os.exit(1)
+                os._exit(1)
             except Exception as e:
                 log(
                     SEN2COR_LOG_DIR,
@@ -1162,7 +1161,7 @@ def RunScript():
             "(sen2cor err) Keyboard interrupted.",
             SEN2COR_LOG_FILE_NAME,
         )
-        os.exit(1)
+        os._exit(1)
     except Exception as e:
         print("(sen2cor err): Exception {} encountered".format(e))
         log(
@@ -1170,7 +1169,7 @@ def RunScript():
             "(sen2cor err): Exception {} encountered".format(e),
             SEN2COR_LOG_FILE_NAME,
         )
-        os.exit(1)
+        os._exit(1)
 
 
 # script argument operations
@@ -1361,7 +1360,7 @@ print("(sen2cor info) Start Sen2Cor script.")
 nominal_run = RunScript()
 if nominal_run == True:
     print("(sen2cor info) End Sen2Cor script with success.")
-    os.exit(0)
+    os._exit(0)
 else:
     print("(sen2cor info) End Sen2Cor script with errors.")
-    os.exit(1)
+    os._exit(1)
