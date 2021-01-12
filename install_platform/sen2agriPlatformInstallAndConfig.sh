@@ -615,7 +615,7 @@ function maccs_or_maja()
 	l1c_processor_name="MAJA"
 	l1c_processor_bin="maja"
 	l1c_processor_path="/opt/maja"
-	l1c_processor_gipp_destination="/mnt/archive/gipp_maja"
+	l1c_processor_gipp_destination="/mnt/archive/gipp/maja"
 	l1c_processor_gipp_source="../gipp_maja"
 	;;
     *)
@@ -692,8 +692,9 @@ function check_paths()
 
     if ! ls -A $l1c_processor_gipp_destination > /dev/null 2>&1; then
         if [ -d $l1c_processor_gipp_source ]; then
-            echo "Copying $l1c_processor_name GIPP files to /mnt/archive"
-            cp -rf $l1c_processor_gipp_source /mnt/archive
+            echo "Copying $l1c_processor_name GIPP files to ${l1c_processor_gipp_destination}"
+            mkdir -p ${l1c_processor_gipp_destination}
+            cp -rf "${l1c_processor_gipp_source}"/* ${l1c_processor_gipp_destination}
         else
             echo "Cannot find $l1c_processor_name GIPP files in the distribution, please copy them to $l1c_processor_gipp_destination"
         fi
