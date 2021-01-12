@@ -2,34 +2,16 @@
 from __future__ import print_function
 
 import argparse
-from collections import defaultdict
-from datetime import date, datetime
-from datetime import timedelta
-from glob import glob
-import multiprocessing
-import multiprocessing.dummy
 import os
 import os.path
-from osgeo import ogr
 import pipes
-import psycopg2
-from psycopg2.sql import SQL, Literal
-import psycopg2.extras
 import subprocess
-import tempfile
+import sys
 
 try:
     from configparser import ConfigParser
 except ImportError:
     from ConfigParser import ConfigParser
-
-
-def parse_date(str):
-    return datetime.strptime(str, "%Y-%m-%d").date()
-
-
-def format_date(dt):
-    return dt.strftime("%Y-%m-%d")
 
 
 def run_command(args, env=None, retry=False):
@@ -62,35 +44,6 @@ class Config(object):
         self.tiles = args.tiles
         self.products = args.products
 
-        self.season_start = parse_date(args.season_start)
-        self.season_end = parse_date(args.season_end)
-        self.year = get_year(self.season_start, self.season_end)
-
-
-def get_lpis_path(conn, site_id, season_end):
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-            select full_path
-            from product
-            where
-                site_id = {}
-            and product_type_id = 14
-            and created_timestamp <= {}
-            order by created_timestamp desc
-            limit 1
-            """
-        )
-
-        query = query.format(Literal(site_id), Literal(season_end))
-        print(query.as_string(conn))
-        cursor.execute(query)
-
-        results = cursor.fetchall()
-        conn.commit()
-
-        return results[0][0]
-
 
 def check_file(p):
     if not os.path.exists(p):
@@ -99,17 +52,6 @@ def check_file(p):
         if f.readline() and f.readline():
             return True
     return False
-
-
-def get_year(start, end):
-    if start.year == end.year:
-        return start.year
-    d1 = start.replace(month=12, day=31) - start
-    d2 = end - end.replace(month=1, day=1)
-    if d2 >= d1:
-        return end.year
-    else:
-        return start.year
 
 
 def main():
@@ -184,19 +126,20 @@ def main():
     parser.add_argument(
         "--min-node-size", type=int, help="minimum node size", default=10
     )
-
+    parser.add_argument(
+        "--standalone", action="store_true", help="standalone mode"
+    )
+    parser.add_argument(
+        "--parcels", help="parcels file"
+    )
+    parser.add_argument("--lut", required=False, help="LUT file")
+    parser.add_argument("--tile-footprints", required=False, help="tile footprints")
+    parser.add_argument("--optical-products", required=False, help="optical products")
+    parser.add_argument("--radar-products", required=False, help="radar products")
+    parser.add_argument("--lpis-path", required=False, help="LPIS path file")
     args = parser.parse_args()
 
     config = Config(args)
-
-    with psycopg2.connect(
-        host=config.host,
-        dbname=config.dbname,
-        user=config.user,
-        password=config.password,
-    ) as conn:
-        lpis_path = get_lpis_path(conn, config.site_id, config.season_end)
-        print("Using LPIS from {}".format(lpis_path))
 
     if args.config_file:
         config_file = os.path.realpath(args.config_file)
@@ -224,21 +167,36 @@ def main():
     except OSError:
         pass
 
-    parcels = os.path.join(args.working_path, "parcels.csv")
-    lut = os.path.join(args.working_path, "lut.csv")
-    tile_footprints = os.path.join(args.working_path, "tile-footprints.csv")
-    optical_products = os.path.join(args.working_path, "optical-products.csv")
-    radar_products = os.path.join(args.working_path, "radar-products.csv")
+    if args.standalone:
+        parcels = os.path.join(args.working_path, "parcels.csv")
+        lut = os.path.join(args.working_path, "lut.csv")
+        tile_footprints = os.path.join(args.working_path, "tile-footprints.csv")
+        optical_products = os.path.join(args.working_path, "optical-products.csv")
+        radar_products = os.path.join(args.working_path, "radar-products.csv")
+        lpis_path = os.path.join(args.working_path, "lpis.txt")
 
-    command = []
-    command += ["extract-parcels.py"]
-    command += ["-s", config.site_id]
-    command += ["-y", config.year]
-    command += ["--season-start", format_date(config.season_start)]
-    command += ["--season-end", format_date(config.season_end)]
-    command += [parcels, lut, tile_footprints, optical_products, radar_products]
+        command = []
+        command += ["extract-parcels.py"]
+        command += ["-s", config.site_id]
+        command += ["--season-start", args.season_start]
+        command += ["--season-end", args.season_end]
+        command += [parcels, lut, tile_footprints, optical_products, radar_products, lpis_path]
 
-    run_command(command)
+        run_command(command)
+    else:
+        if not args.parcels or not args.lut or not args.tile_footprints or not args.optical_products or not args.radar_products or not args.lpis_path:
+            print("The input files are required when not using `--standalone`")
+            sys.exit(1)
+
+        parcels = os.path.abspath(args.parcels)
+        lut = os.path.abspath(args.lut)
+        tile_footprints = os.path.abspath(args.tile_footprints)
+        optical_products = os.path.abspath(args.optical_products)
+        radar_products = os.path.abspath(args.radar_products)
+        lpis_path = os.path.abspath(args.lpis_path)
+
+    with open(lpis_path, "rt") as f:
+        lpis_path = f.readline().strip()
 
     if args.mode != "s1-only":
         os.chdir("optical")
@@ -248,7 +206,7 @@ def main():
         command += ["-m", "optical"]
         command += ["-s", config.site_id]
         command += ["--lpis-path", lpis_path]
-        command += ["--optical-products", "../optical-products.csv"]
+        command += ["--optical-products", optical_products]
         if args.mode != "both":
             command += ["--no-re"]
         if config_file:
@@ -264,8 +222,8 @@ def main():
         command += ["-m", "sar"]
         command += ["-s", config.site_id]
         command += ["--lpis-path", lpis_path]
-        command += ["--tile-footprints", "../tile-footprints.csv"]
-        command += ["--radar-products", "../radar-products.csv"]
+        command += ["--tile-footprints", tile_footprints]
+        command += ["--radar-products", radar_products]
         if config_file:
             command += ["-c", config_file]
 

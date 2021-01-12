@@ -4,6 +4,7 @@ from __future__ import print_function
 import argparse
 import csv
 from datetime import date
+import dateutil.parser
 import os.path
 from osgeo import gdal, ogr
 import psycopg2
@@ -15,6 +16,17 @@ try:
     from configparser import ConfigParser
 except ImportError:
     from ConfigParser import ConfigParser
+
+
+def get_year(start, end):
+    if start.year == end.year:
+        return start.year
+    d1 = start.replace(month=12, day=31) - start
+    d2 = end - end.replace(month=1, day=1)
+    if d2 >= d1:
+        return end.year
+    else:
+        return start.year
 
 
 class Config(object):
@@ -106,7 +118,7 @@ def extract_parcels(config, args, lpis_table, lut_table, id, geom):
         headers = ["NewID", "Area_meters", "S1Pix", "S2Pix", "CTnumL4A", "CTL4A", "LC"]
         with conn.cursor() as cursor:
             if args.strata is None:
-                output = args.output_parcels
+                output = args.parcels
                 query = SQL(q1).format(Identifier(lpis_table), Identifier(lut_table))
                 print(query.as_string(conn))
 
@@ -114,8 +126,8 @@ def extract_parcels(config, args, lpis_table, lut_table, id, geom):
                 save_to_csv(cursor, output, headers)
                 conn.commit()
             else:
-                dirname = os.path.dirname(args.output_parcels)
-                basename = os.path.basename(args.output_parcels)
+                dirname = os.path.dirname(args.parcels)
+                basename = os.path.basename(args.parcels)
                 split = os.path.splitext(basename)
 
                 query = SQL(q2).format(
@@ -145,7 +157,7 @@ def extract_lut(config, args, lut_table):
         q = 'select distinct ctnuml4a as "CTnumL4A", ctl4a as "CTL4A" from {}'
 
         with conn.cursor() as cursor:
-            output = args.output_lut
+            output = args.lut
             query = SQL(q).format(Identifier(lut_table))
             print(query.as_string(conn))
 
@@ -194,14 +206,14 @@ def extract_optical_products(
             from product
             where satellite_id = {}
               and product_type_id = 1
-              and created_timestamp between {} and {}
+              and created_timestamp between {} and {} + interval '1 day'
               and site_id = {}
             """
         )
 
         satellite_filter = Literal(satellite_id)
-        start_date_filter = Literal(season_start)
-        end_date_filter = Literal(season_end)
+        start_date_filter = Literal(season_start.date())
+        end_date_filter = Literal(season_end.date())
         site_filter = Literal(site_id)
         query = query.format(
             satellite_filter, start_date_filter, end_date_filter, site_filter
@@ -259,14 +271,14 @@ def extract_radar_products(conn, site_id, season_start, season_end, tiles, produ
                   {}
                   {}
             ) products
-            where date between {} and {}
+            where date between {} and {} + interval '1 day'
             order by date;
             """
         )
 
         site_id_filter = Literal(site_id)
-        start_date_filter = Literal(season_start)
-        end_date_filter = Literal(season_end)
+        start_date_filter = Literal(season_start.date())
+        end_date_filter = Literal(season_end.date())
 
         if products is not None:
             products_filter = SQL(
@@ -312,6 +324,31 @@ def extract_radar_products(conn, site_id, season_start, season_end, tiles, produ
         conn.commit()
 
 
+def extract_lpis_path(conn, site_id, season_end, file):
+    with conn.cursor() as cursor:
+        query = SQL(
+            """
+            select full_path
+            from product
+            where site_id = {}
+              and product_type_id = 14
+              and created_timestamp <= {}
+            order by created_timestamp desc
+            limit 1;
+            """
+        )
+
+        query = query.format(Literal(site_id), Literal(season_end))
+        print(query.as_string(conn))
+        cursor.execute(query)
+
+        path = cursor.fetchone()[0]
+        conn.commit()
+
+        with open(file, "wt") as file:
+            file.write(path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Extracts input data for the L4A processor"
@@ -323,7 +360,6 @@ def main():
         help="configuration file location",
     )
     parser.add_argument("-s", "--site-id", type=int, help="site ID to filter by")
-    parser.add_argument("-y", "--year", help="year")
     parser.add_argument("--season-start", help="season start date")
     parser.add_argument("--season-end", help="season end date")
     parser.add_argument("--tiles", nargs="+", help="tile filter")
@@ -331,9 +367,9 @@ def main():
     parser.add_argument("--strata", help="strata definition")
     parser.add_argument("--srid", help="strata SRID")
     parser.add_argument(
-        "output_parcels", help="output parcels file", default="parcels.csv"
+        "parcels", help="output parcels file", default="parcels.csv"
     )
-    parser.add_argument("output_lut", help="output LUT file", default="lut.csv")
+    parser.add_argument("lut", help="output LUT file", default="lut.csv")
     parser.add_argument(
         "tile_footprints", help="output tile footprints", default="tiles.csv"
     )
@@ -343,8 +379,13 @@ def main():
     parser.add_argument(
         "radar_products", help="output radar products", default="radar.csv"
     )
+    parser.add_argument(
+        "lpis_path", help="output LPIS path file", default="lpis.txt"
+    )
 
     args = parser.parse_args()
+    dir(args)
+    print(args)
 
     config = Config(args)
 
@@ -361,7 +402,10 @@ def main():
         password=config.password,
     ) as conn:
         site_name = get_site_name(conn, config.site_id)
-        year = args.year or date.today().year
+        season_start = dateutil.parser.parse(args.season_start)
+        season_end = dateutil.parser.parse(args.season_end)
+
+        year = get_year(season_start, season_end)
         lpis_table = "decl_{}_{}".format(site_name, year)
         lut_table = "lut_{}_{}".format(site_name, year)
 
@@ -370,8 +414,8 @@ def main():
             conn,
             args.site_id,
             1,
-            args.season_start,
-            args.season_end,
+            season_start,
+            season_end,
             args.tiles,
             args.products,
             args.optical_products,
@@ -379,12 +423,13 @@ def main():
         extract_radar_products(
             conn,
             args.site_id,
-            args.season_start,
-            args.season_end,
+            season_start,
+            season_end,
             args.tiles,
             args.products,
             args.radar_products,
         )
+        extract_lpis_path(conn, args.site_id, season_end, args.lpis_path)
 
     if args.strata is None:
         extract_parcels(config, args, lpis_table, lut_table, None, None)
