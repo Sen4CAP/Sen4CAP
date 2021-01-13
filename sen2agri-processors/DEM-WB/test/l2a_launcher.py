@@ -508,7 +508,7 @@ class L2aMaster(object):
         self.num_workers = num_workers
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
-        self.in_processing = []
+        self.in_processing = set()
         for worker_id in range(self.num_workers):
             self.workers.append(L2aWorker(worker_id, self.master_q))
             self.workers[worker_id].daemon = True
@@ -532,14 +532,12 @@ class L2aMaster(object):
         cmd.append("docker")
         cmd.append("stop")
         for product_id in self.in_processing:
-            containers.append("l2a_processors_"+str(product_id))
-            containers.append("dem_"+str(product_id))
-            containers.append("l8align_"+str(product_id))
-            containers.append("maja_"+str(product_id))
-            containers.append("sen2cor_"+str(product_id))
-            containers.append("gdal_"+str(product_id))
+            container_types = ["l2a_processors", "dem", "l8align", "maja", "sen2cor", "gdal"]
+            for product_id in self.in_processing:
+                for container_type in container_types:
+                    containers.append("{}_{}".format(container_type, product_id))
 
-        if len(containers) >0 :
+        if containers:
             print("\n(launcher info) <master>: Stoping containers")
             cmd.extend(containers)
             run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
@@ -608,7 +606,7 @@ class L2aMaster(object):
                             worker_id = sleeping_workers.pop()
                             msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                             self.workers[worker_id].worker_q.put(msg_to_worker)
-                            self.in_processing.append(unprocessed_tile.downloader_history_id)
+                            self.in_processing.add(unprocessed_tile.downloader_history_id)
                             print(
                                 "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
                                     unprocessed_tile.downloader_history_id, worker_id
