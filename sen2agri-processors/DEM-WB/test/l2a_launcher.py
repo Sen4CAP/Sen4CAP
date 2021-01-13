@@ -516,7 +516,11 @@ class L2aMaster(object):
             msg_to_master = MsgToMaster(worker_id, None, None, False)
             self.master_q.put(msg_to_master)
 
-    def stop_workers(self, signum, frame):
+    def signal_handler(self, signum, frame):
+        print("(launcher info) Signal caught: {}.".format(signum))
+        self.stop_workers()
+
+    def stop_workers(self):
         print("\n(launcher info) <master>: Stoping workers")
         for worker in self.workers:
             worker.worker_q.put(None)
@@ -538,17 +542,14 @@ class L2aMaster(object):
         if len(containers) >0 :
             print("\n(launcher info) <master>: Stoping containers")
             cmd.extend(containers)
-            if run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME):
-                print("Containers closed with success.")
-            else:
-                print("Containers NOT closed with success.")
+            run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 
         os._exit(1)
 
     def run(self):
         sleeping_workers = []
-        signal.signal(signal.SIGTERM, self.stop_workers)
-        signal.signal(signal.SIGINT, self.stop_workers)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        signal.signal(signal.SIGINT, self.signal_handler)
         try:
             while True:
                 # wait for a worker to finish
@@ -623,7 +624,7 @@ class L2aMaster(object):
         except Exception as e:
             print("\n(launcher err) <master>: Exception encountered: {}.".format(e))
         finally:
-            self.stop_workers(None, None)
+            self.stop_workers()
 
 
 class MsgToMaster(object):
