@@ -119,10 +119,11 @@ def main():
         writer.write_batch(b)
         
         idCol = b.column(0)
-        idxFile.write(struct.pack('i', currentBatch))
-        idxFile.write(struct.pack('i', idCol[0].as_py()))
-        idxFile.write(struct.pack('i', idCol[len(idCol) - 1].as_py()))
+        idxFile.write(struct.pack('>i', currentBatch))
+        idxFile.write(struct.pack('>i', idCol[0].as_py()))
+        idxFile.write(struct.pack('>i', idCol[len(idCol) - 1].as_py()))
         currentBatch = currentBatch + 1
+        # print("Written index for batch = {}, start = {}, end = {}".format(currentBatch - 1, idCol[0].as_py(), idCol[len(idCol) - 1].as_py()))
     writer.close()
     idxFile.close()
     

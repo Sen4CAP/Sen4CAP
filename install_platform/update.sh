@@ -485,7 +485,8 @@ else
         echo "Printing current environments ..."
         sudo su -l sen2agri-service -c bash -c "conda info --envs"
     else
-        echo "sen4cap conda environment already exists. Nothing to do ..."
+        echo "sen4cap conda environment already exists. Checking for pyarrow installation ..."
+        sudo su -l sen2agri-service -c bash -c "conda activate sen4cap &&  pip install pyarrow"
         echo "Environments:"
         sudo su -l sen2agri-service -c bash -c "conda info --envs"
     fi

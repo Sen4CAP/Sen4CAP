@@ -562,11 +562,14 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.input_ndvi', NULL, 'N/A', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.markers_add_no_data_rows', NULL, '1', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_mdb1.keep_job_folders', NULL, '0', '2016-10-18 16:41:20.194169+02') ON conflict DO nothing;
 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.ndvi_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.amp_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.cohe_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.lai_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.fapar_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.fcover_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_mdb1.slurm_qos', NULL, 'qoss4cmdb1', '2020-12-16 17:31:06.01191+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'qoss4cmdb1';
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_l4a.slurm_qos', NULL, 'qoss4cl4a', '2015-08-24 17:44:38.29255+03') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'qoss4cl4a';
@@ -645,6 +648,8 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_enabled', 'AMP markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.cohe_enabled', 'COHE markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.lai_enabled', 'LAI markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fapar_enabled', 'FAPAR markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fcover_enabled', 'FCOVER markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
                 
                 -- Executor/orchestrator/scheduler changes
                 INSERT INTO config_metadata VALUES ('general.inter-proc-com-type', 'Type of the interprocess communication', 'string', false, 1) ON conflict DO nothing;

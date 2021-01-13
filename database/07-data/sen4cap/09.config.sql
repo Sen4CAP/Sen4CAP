@@ -55,6 +55,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processo
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3b.keep_job_folders', NULL, '0', '2016-03-09 16:41:20.194169+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_l4b.keep_job_folders', NULL, '0', '2016-10-18 16:41:20.194169+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_l4c.keep_job_folders', NULL, '0', '2016-10-18 16:41:20.194169+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_mdb1.keep_job_folders', NULL, '0', '2016-10-18 16:41:20.194169+02');
 
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3b.name', NULL, 'L3B', '2015-06-03 17:02:50.028002+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3b.path', NULL, '/bin/false', '2015-07-20 16:31:23.208369+03');
@@ -238,6 +239,8 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.amp_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.cohe_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.lai_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.fapar_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.fcover_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
 
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_mdb1.slurm_qos', NULL, 'qoss4cmdb1', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_l4a.slurm_qos', NULL, 'qoss4cl4a', '2015-08-24 17:44:38.29255+03');
