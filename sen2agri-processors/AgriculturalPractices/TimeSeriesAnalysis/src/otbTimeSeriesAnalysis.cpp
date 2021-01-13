@@ -335,6 +335,10 @@ private:
         SetParameterDescription("acqsdatelimit", "Limit acquisition date");
         MandatoryOff("acqsdatelimit");
 
+        AddParameter(ParameterType_InputFilename, "filterids", "File containing ids to be filtered");
+        SetParameterDescription("filterids","File containing ids to be filtered i.e. the monitorable parcels ids");
+        MandatoryOff("filterids");
+
         // Doc example parameter settings
         //SetDocExampleParameterValue("in", "support_image.tif");
     }
@@ -401,6 +405,9 @@ private:
 
         // Initialize tillage handler, if needed
         InitializeTillageHandler();
+
+        // if filter is needed, load the parcel ids
+        LoadMonitorableParcelIdsFilters();
     }
     void DoExecute() override
     {
@@ -460,6 +467,13 @@ private:
     bool HandleFeature(const FeatureDescription& feature, void*) {
         // DisplayFeature(feature);
 
+        // filter feature if it is the case
+        if (m_FilterIdsMap.size() > 0) {
+            if (m_FilterIdsMap.find(feature.GetFieldSeqId()) == m_FilterIdsMap.end()) {
+                return false;
+            }
+        }
+
         const std::string &fieldId = feature.GetFieldId();
         const std::string &vegetationStart = feature.GetVegetationStart();
         const std::string &harvestStart = feature.GetHarvestStart();
@@ -467,7 +481,7 @@ private:
         const std::string &practiceStart = feature.GetPracticeStart();
         const std::string &practiceEnd = feature.GetPracticeEnd();
 
-//        if (feature.GetFieldSeqId() != "883293") {
+//        if (feature.GetFieldSeqId() != "1") {
 //            return false;
 //        }
         FieldInfoType fieldInfos(fieldId);
@@ -953,6 +967,32 @@ private:
             m_tillageHandler = std::unique_ptr<TsaTillageAnalysisHandler>(pHandler);
         }
     }
+
+
+    void LoadMonitorableParcelIdsFilters() {
+        // Reproject geometries
+        if (HasValue("filterids")) {
+            const std::string &filterIdsFile = this->GetParameterString("filterids");
+            if (boost::filesystem::exists(filterIdsFile ))
+            {
+                otbAppLogINFO("Loading filter IDs from file " << filterIdsFile);
+                // load the indexes
+                std::ifstream idxFileStream(filterIdsFile);
+                std::string line;
+                int i = 0;
+                while (std::getline(idxFileStream, line)) {
+                    // ignore the first line which is the header line
+                    if (i == 0) {
+                        i++;
+                        continue;
+                    }
+                    m_FilterIdsMap[line] = std::atoi(line.c_str());
+                }
+                otbAppLogINFO("Loading filter IDs file done!");
+            }
+        }
+    }
+
 private:
     std::unique_ptr<PracticeReaderBase> m_pPracticeReader;
 
@@ -992,7 +1032,8 @@ private:
 
     bool m_bMonitorTillage;
 
-
+    typedef std::map<std::string, int> FilterIdsMapType;
+    FilterIdsMapType m_FilterIdsMap;
 };
 
 } // end of namespace Wrapper
