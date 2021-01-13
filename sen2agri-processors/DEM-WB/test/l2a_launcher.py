@@ -40,7 +40,8 @@ from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 import grp
 import shutil
 import subprocess
-from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, manage_log_file, remove_dir_content
+import signal
+from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, manage_log_file, remove_dir_content, run_command
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
 from l2a_commons import DEBUG, MAJA_LOG_DIR, MAJA_LOG_FILE_NAME, SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME
@@ -48,8 +49,8 @@ from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_
 
 MIN_VALID_PIXELS_THRESHOLD = 10.0
 MAX_CLOUD_COVERAGE = 90.0
-LAUCHER_LOG_DIR = "/tmp/"
-LAUCHER_LOG_FILE_NAME = "l2a_launcher.log"
+LAUNCHER_LOG_DIR = "/tmp/"
+LAUNCHER_LOG_FILE_NAME = "l2a_launcher.log"
 ARCHIVES_DIR_NAME = "archives"
 SQL_MAX_NB_RETRIES = 3
 MAJA_CONFIGURATION_FILE_NAME = "UserConfiguration"
@@ -235,9 +236,9 @@ class ProcessingContext(object):
                 pass
         else:
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid database row: {}".format(row),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
 
     def get_site_context(self, site_id):
@@ -333,11 +334,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context output_path: {}.".format(
                     self.output_path
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -348,11 +349,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context num_workers: {}".format(
                     self.num_workers
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -363,11 +364,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context swbd_path: {}".format(
                     self.swbd_path
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -378,11 +379,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context dem_path: {}".format(
                     self.dem_path
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -393,11 +394,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context working_dir: {}".format(
                     self.working_dir
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -408,11 +409,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context implementation: {}".format(
                     self.implementation
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -423,11 +424,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context sen2cor_gipp: {}".format(
                     self.sen2cor_gipp
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -438,11 +439,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context maja_gipp: {}".format(
                     self.maja_gipp
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -451,17 +452,17 @@ class SiteContext(object):
                 "(launcher err) Invalid processing context both removeFreFiles and removeSreFiles are True."
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context both removeFreFiles and removeSreFiles are True.",
             )
             return False
 
-        if not os.path.isdir(self.maja_conf):
+        if self.implementation == "maja" and not os.path.isdir(self.maja_conf):
             print(
                 "(launcher err) Invalid Maja configuration file {}.".format(self.maja_conf)
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid Maja configuration file.".format(self.maja_conf),
             )
             return False
@@ -507,6 +508,7 @@ class L2aMaster(object):
         self.num_workers = num_workers
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
+        self.in_processing = []
         for worker_id in range(self.num_workers):
             self.workers.append(L2aWorker(worker_id, self.master_q))
             self.workers[worker_id].daemon = True
@@ -514,21 +516,49 @@ class L2aMaster(object):
             msg_to_master = MsgToMaster(worker_id, None, None, False)
             self.master_q.put(msg_to_master)
 
-    def stop_workers(self):
+    def stop_workers(self, signum, frame):
         print("\n(launcher info) <master>: Stoping workers")
         for worker in self.workers:
             worker.worker_q.put(None)
         for worker in self.workers:
-            worker.join()
+            worker.join(timeout=5)
+
+        cmd = []
+        containers = []
+        cmd.append("docker")
+        cmd.append("stop")
+        for product_id in self.in_processing:
+            containers.append("l2a_processors_"+str(product_id))
+            containers.append("dem_"+str(product_id))
+            containers.append("l8_align_"+str(product_id))
+            containers.append("maja_"+str(product_id))
+            containers.append("sen2cor_"+str(product_id))
+            containers.append("gdal_"+str(product_id))
+
+        if len(containers) >0 :
+            print("\n(launcher info) <master>: Stoping containers")
+            cmd.extend(containers)
+            if run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME):
+                print("Containers closed with success.")
+            else:
+                print("Containers NOT closed with success.")
+
+        os._exit(1)
 
     def run(self):
         sleeping_workers = []
+        signal.signal(signal.SIGTERM, self.stop_workers)
+        signal.signal(signal.SIGINT, self.stop_workers)
         try:
             while True:
                 # wait for a worker to finish
-                msg_to_master = self.master_q.get()
+                try:
+                    msg_to_master = self.master_q.get(timeout=5)
+                except Queue.Empty:
+                    continue
                 if msg_to_master.update_db:
                     db_postrun_update(msg_to_master.lin, msg_to_master.l2a)
+                    self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     unprocessed_tile = db_get_unprocessed_tile()
@@ -548,7 +578,7 @@ class L2aMaster(object):
                                 )
                             )
                             log(
-                                LAUCHER_LOG_DIR,
+                                LAUNCHER_LOG_DIR,
                                 "(launcher err) <master>: Product {} has invalid tile info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
@@ -565,7 +595,7 @@ class L2aMaster(object):
                                 )
                             )
                             log(
-                                LAUCHER_LOG_DIR,
+                                LAUNCHER_LOG_DIR,
                                 "(launcher err) <master>: Product {} has invalid site info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
@@ -577,6 +607,7 @@ class L2aMaster(object):
                             worker_id = sleeping_workers.pop()
                             msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                             self.workers[worker_id].worker_q.put(msg_to_worker)
+                            self.in_processing.append(unprocessed_tile.downloader_history_id)
                             print(
                                 "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
                                     unprocessed_tile.downloader_history_id, worker_id
@@ -589,14 +620,10 @@ class L2aMaster(object):
                     print("\n(launcher info) <master>: No more tiles to process")
                     break
 
-        except (KeyboardInterrupt, SystemExit):
-            print("\n(launcher err) <master>: Keyboard interrupted.")
         except Exception as e:
-            print("\n(launcher err) <master>: Exception {} encountered".format(e))
+            print("\n(launcher err) <master>: Exception encountered: {}.".format(e))
         finally:
-            self.stop_workers()
-            print("\n(launcher info) <master>: is stopped")
-            sys.exit(0)
+            self.stop_workers(None, None)
 
 
 class MsgToMaster(object):
@@ -726,11 +753,11 @@ class L2aWorker(threading.Thread):
                 return lin, l2a
             else:
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Aborting processing for site {} because the processor name {} is not recognized".format(
                         self.worker_id, site_context.site_id, site_context.implementation
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 return None, None
 
@@ -750,11 +777,11 @@ class Tile(object):
     def is_valid(self):
         if len(self.site_short_name) == 0:
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 ": Aborting processing for tile {} because site short name {} is incorrect".format(
                     self.tile_id, self.site_short_name
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -820,7 +847,7 @@ class L2aProcessor(object):
 
     def launcher_log(self, log_msg):
         log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
-        log(LAUCHER_LOG_DIR, log_msg, LAUCHER_LOG_FILE_NAME)
+        log(LAUNCHER_LOG_DIR, log_msg, LAUNCHER_LOG_FILE_NAME)
 
     def get_envelope(self, footprints):
         geomCol = ogr.Geometry(ogr.wkbGeometryCollection)
@@ -2210,11 +2237,11 @@ def db_update(db_func):
         db_updated = False
         if not products_db.database_connect():
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "{}: Database connection failed upon updating the database.".format(
                     threading.currentThread().getName()
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return db_updated
         while True:
@@ -2232,39 +2259,39 @@ def db_update(db_func):
                     and nb_retries > 0
                 ):
                     log(
-                        LAUCHER_LOG_DIR,
+                        LAUNCHER_LOG_DIR,
                         "{}: Exception {} when trying to update db: SERIALIZATION failure".format(
                             threading.currentThread().getName(), e.pgcode
                         ),
-                        LAUCHER_LOG_FILE_NAME,
+                        LAUNCHER_LOG_FILE_NAME,
                     )
                     time.sleep(random.uniform(0, max_sleep))
                     max_sleep *= 2
                     nb_retries -= 1
                     continue
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to update db".format(
                         threading.currentThread().getName(), e.pgcode
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             except Exception as e:
                 products_db.conn.rollback()
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to update db".format(
                         threading.currentThread().getName(), e
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             else:
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Successful db update".format(threading.currentThread().getName()),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 db_updated = True
                 break
@@ -2283,11 +2310,11 @@ def db_fetch(db_func):
         ret_val = None
         if not products_db.database_connect():
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "{}: Database connection failed upon updating the database.".format(
                     threading.currentThread().getName()
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return ret_val
         while True:
@@ -2306,39 +2333,39 @@ def db_fetch(db_func):
                     and nb_retries > 0
                 ):
                     log(
-                        LAUCHER_LOG_DIR,
+                        LAUNCHER_LOG_DIR,
                         "{}: Exception {} when trying to fetch from db: SERIALIZATION failure".format(
                             threading.currentThread().getName(), e.pgcode
                         ),
-                        LAUCHER_LOG_FILE_NAME,
+                        LAUNCHER_LOG_FILE_NAME,
                     )
                     time.sleep(random.uniform(0, max_sleep))
                     max_sleep *= 2
                     nb_retries -= 1
                     continue
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to fetch from db".format(
                         threading.currentThread().getName(), e.pgcode
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             except Exception as e:
                 products_db.conn.rollback()
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to fetch from db".format(
                         threading.currentThread().getName(), e
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             else:
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Successful db fetch".format(threading.currentThread().getName()),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 break
             finally:
@@ -2534,7 +2561,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 #Create and manage log files
-manage_log_file(LAUCHER_LOG_DIR, LAUCHER_LOG_FILE_NAME)
+manage_log_file(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 sen2corlog_path = os.path.join(SEN2COR_LOG_DIR,SEN2COR_LOG_FILE_NAME)
 if os.path.isfile(sen2corlog_path) == False:
     with open(sen2corlog_path, "w") as log_file:
@@ -2552,9 +2579,9 @@ else:
 products_db = Database()
 if not products_db.loadConfig(args.config):
     log(
-        LAUCHER_LOG_DIR,
+        LAUNCHER_LOG_DIR,
         "Could not load the config from configuration file",
-        LAUCHER_LOG_FILE_NAME,
+        LAUNCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
 
@@ -2562,15 +2589,15 @@ if not products_db.loadConfig(args.config):
 default_processing_context = db_get_processing_context()
 if default_processing_context is None:
     log(
-        LAUCHER_LOG_DIR,
+        LAUNCHER_LOG_DIR,
         "Could not load the processing context from database",
-        LAUCHER_LOG_FILE_NAME,
+        LAUNCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
 
 default_site_context = default_processing_context.get_site_context("default")
 if default_site_context.is_valid() == False:
-    log(LAUCHER_LOG_DIR, "Invalid processing context", LAUCHER_LOG_FILE_NAME)
+    log(LAUNCHER_LOG_DIR, "Invalid processing context", LAUNCHER_LOG_FILE_NAME)
     sys.exit(1)
 
 # woking dir operations
@@ -2579,11 +2606,11 @@ if not os.path.isdir(default_site_context.working_dir) and not create_recursive_
     default_site_context.working_dir
 ):
     log(
-        LAUCHER_LOG_DIR,
+        LAUNCHER_LOG_DIR,
         "Could not create the work base directory {}".format(
             default_site_context.working_dir
         ),
-        LAUCHER_LOG_FILE_NAME,
+        LAUNCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
 # delete all the temporary content from a previous run
