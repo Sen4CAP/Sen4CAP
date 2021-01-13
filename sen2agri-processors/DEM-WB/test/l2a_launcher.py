@@ -530,7 +530,7 @@ class L2aMaster(object):
         for product_id in self.in_processing:
             containers.append("l2a_processors_"+str(product_id))
             containers.append("dem_"+str(product_id))
-            containers.append("l8_align_"+str(product_id))
+            containers.append("l8align_"+str(product_id))
             containers.append("maja_"+str(product_id))
             containers.append("sen2cor_"+str(product_id))
             containers.append("gdal_"+str(product_id))
