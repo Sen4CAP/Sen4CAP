@@ -15,7 +15,7 @@ public:
 
 private:
     std::string GetResultsCsvFilePath(const std::string &outDir, const std::string &practiceName, const std::string &countryCode, int year);
-    std::string TranslateHWeekNrDate(const std::string &strHDate);
+    std::string TranslateWeekNrDate(const std::string &strHDate, bool isTillage = false);
 
     std::string GetHWS1Gaps(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo);
     std::string GetHQuality(const FieldInfoType &fieldInfo, const HarvestEvaluationInfoType &harvestEvalInfo);

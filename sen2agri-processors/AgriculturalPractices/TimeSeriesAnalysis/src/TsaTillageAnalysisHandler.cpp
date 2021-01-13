@@ -26,10 +26,10 @@ bool TsaTillageAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
         if (retAllMergedValues[i].ttDate == harvestEvalInfos.ttHarvestConfirmWeekStart) {
             // get the first date greater than the harvest confirm week
             if (minTillageStartDateIdx == -1) {
-                minTillageStartDateIdx = i;
+                minTillageStartDateIdx = i+1;
                 // reset also all the ndviPresence flags. We are resetting only for the ones in the interval of interest
-                for (size_t j = i; j < retAllMergedValues.size() && retAllMergedValues[j].ttDate <= tlMonitEndDate; j++) {
-                    retAllMergedValues[j].ndviPresence = false;
+                for (size_t j = minTillageStartDateIdx; j < retAllMergedValues.size() && retAllMergedValues[j].ttDate <= tlMonitEndDate; j++) {
+                    retAllMergedValues[j].ndviPresence = NOT_AVAILABLE;
                 }
                 break;
             }
@@ -42,29 +42,38 @@ bool TsaTillageAnalysisHandler::PerformAnalysis(const FieldInfoType &fieldInfos,
     }
 
     bool coherenceBase, coherencePresence;
+    bool tillageEvalSet = false;
     // check each week for the NDVI presence and for the M5
     for(size_t i = minTillageStartDateIdx; i<retAllMergedValues.size(); i++) {
         if (retAllMergedValues[i].ttDate <= tlMonitEndDate) {
             if (IsNA(retAllMergedValues[i].ndviMeanVal)) {
                 retAllMergedValues[i].ndviPresence = false;
             } else if (IsGreater(retAllMergedValues[i].ndviMeanVal, m_OpticalThrVegCycle)) {
-                tillageEvalInfo.tillageConfirmWeek = NR;
-                tillageEvalInfo.ttTillageConfirmWeekStart = NR;
-                break;  // start of vegetation growth after the harvest of the main crop, tillage is not detected
+                // do not set the tillageConfirmWeek if we already did it somewhere but continue
+                // to compute the ndviPresence for the ContinuousProduct export
+                if (!tillageEvalSet) {
+                    tillageEvalInfo.tillageConfirmWeek = NR;
+                    tillageEvalInfo.ttTillageConfirmWeekStart = NR;
+                    tillageEvalSet = true;
+                }
+                retAllMergedValues[i].ndviPresence = true;
+                //break;  // start of vegetation growth after the harvest of the main crop, tillage is not detected
             } else {
                 retAllMergedValues[i].ndviPresence = false;
             }
 
-            // check M5 conditions
-            coherenceBase = IsGreaterOrEqual(retAllMergedValues[i].cohChange, m_CohThrBase);
-            coherencePresence = IsGreaterOrEqual(retAllMergedValues[i].cohMax, CohThrAbs);
-            retAllMergedValues[i].candidateCoherence = (coherenceBase || coherencePresence);
-            if ((int)i > minTillageStartDateIdx) {
-                // M1=False OR M1 is not set AND M5(previous week)=True AND M5(current week)=False
-                if (retAllMergedValues[i-1].candidateCoherence && !retAllMergedValues[i].candidateCoherence) {
-                    tillageEvalInfo.tillageConfirmWeek = GetWeekFromDate(retAllMergedValues[i].ttDate);
-                    tillageEvalInfo.ttTillageConfirmWeekStart = retAllMergedValues[i].ttDate;
-                    break;
+            if (!tillageEvalSet) {
+                // check M5 conditions
+                coherenceBase = IsGreaterOrEqual(retAllMergedValues[i].cohChange, m_CohThrBase);
+                coherencePresence = IsGreaterOrEqual(retAllMergedValues[i].cohMax, CohThrAbs);
+                retAllMergedValues[i].candidateCoherence = (coherenceBase || coherencePresence);
+                if ((int)i >= minTillageStartDateIdx) {
+                    // M1=False OR M1 is not set AND M5(previous week)=True AND M5(current week)=False
+                    if (retAllMergedValues[i-1].candidateCoherence && !retAllMergedValues[i].candidateCoherence) {
+                        tillageEvalInfo.tillageConfirmWeek = GetWeekFromDate(retAllMergedValues[i].ttDate);
+                        tillageEvalInfo.ttTillageConfirmWeekStart = retAllMergedValues[i].ttDate;
+                        tillageEvalSet = true;
+                    }
                 }
             }
         }

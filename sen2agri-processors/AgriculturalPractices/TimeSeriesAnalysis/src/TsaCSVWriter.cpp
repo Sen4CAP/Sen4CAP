@@ -72,15 +72,15 @@ void TsaCSVWriter::WriteHarvestInfoToCsv(const FieldInfoType &fieldInfo, const H
                // M5;
                ValueToString(harvestEvalInfo.candidateCoherence, true) << ";" <<
                //H_WEEK;
-               TranslateHWeekNrDate(ValueToString(harvestEvalInfo.harvestConfirmWeek)) << ";" <<
+               TranslateWeekNrDate(ValueToString(harvestEvalInfo.harvestConfirmWeek)) << ";" <<
                // H_W_START;
-               TranslateHWeekNrDate(TimeToString(harvestEvalInfo.ttHarvestConfirmWeekStart)) << ";" <<
+               TranslateWeekNrDate(TimeToString(harvestEvalInfo.ttHarvestConfirmWeekStart)) << ";" <<
                // H_W_END;
-               TranslateHWeekNrDate(TimeToString((IsNA(harvestEvalInfo.ttHarvestConfirmWeekStart) || harvestEvalInfo.ttHarvestConfirmWeekStart == 0) ?
+               TranslateWeekNrDate(TimeToString((IsNA(harvestEvalInfo.ttHarvestConfirmWeekStart) || harvestEvalInfo.ttHarvestConfirmWeekStart == 0) ?
                                harvestEvalInfo.ttHarvestConfirmWeekStart :
                                harvestEvalInfo.ttHarvestConfirmWeekStart + (6 * SEC_IN_DAY))) << ";" <<
                // H_W_S1;
-               TranslateHWeekNrDate(TimeToString(harvestEvalInfo.ttS1HarvestWeekStart)) << ";" <<
+               TranslateWeekNrDate(TimeToString(harvestEvalInfo.ttS1HarvestWeekStart)) << ";" <<
                // M6;M7;
                ValueToString(efaHarvestEvalInfo.ndviPresence, true) << ";" << ValueToString(efaHarvestEvalInfo.ndviGrowth, true) << ";" <<
                // M8;M9;
@@ -95,13 +95,13 @@ void TsaCSVWriter::WriteHarvestInfoToCsv(const FieldInfoType &fieldInfo, const H
                GetHQuality(fieldInfo, harvestEvalInfo) << ";" <<
                GetCQuality(fieldInfo, harvestEvalInfo);
     if (m_bAddTillage) {
-        m_OutFileStream << ";" << TranslateHWeekNrDate(ValueToString(tillageEvalInfo.tillageConfirmWeek)) << ";" <<
+        m_OutFileStream << ";" << TranslateWeekNrDate(ValueToString(tillageEvalInfo.tillageConfirmWeek), true) << ";" <<
                            // TL_W_START;
-                           TranslateHWeekNrDate(TimeToString(tillageEvalInfo.ttTillageConfirmWeekStart)) << ";" <<
+                           TranslateWeekNrDate(TimeToString(tillageEvalInfo.ttTillageConfirmWeekStart), true) << ";" <<
                            // TL_W_END;
-                           TranslateHWeekNrDate(TimeToString((IsNA(tillageEvalInfo.ttTillageConfirmWeekStart) || tillageEvalInfo.ttTillageConfirmWeekStart == 0) ?
+                           TranslateWeekNrDate(TimeToString((IsNA(tillageEvalInfo.ttTillageConfirmWeekStart) || tillageEvalInfo.ttTillageConfirmWeekStart == 0) ?
                                            tillageEvalInfo.ttTillageConfirmWeekStart :
-                                           tillageEvalInfo.ttTillageConfirmWeekStart + (6 * SEC_IN_DAY)));
+                                           tillageEvalInfo.ttTillageConfirmWeekStart + (6 * SEC_IN_DAY)), true);
     }
     m_OutFileStream << "\n";
     m_OutFileStream.flush();
@@ -114,9 +114,9 @@ std::string TsaCSVWriter::GetResultsCsvFilePath(const std::string &outDir, const
     return (rootFolder / fileName).string();
 }
 
-std::string TsaCSVWriter::TranslateHWeekNrDate(const std::string &strHDate) {
+std::string TsaCSVWriter::TranslateWeekNrDate(const std::string &strHDate, bool isTillage) {
     if (strHDate == "NR") {
-        return "NO-HARVEST";
+        return isTillage ? "NO-TILLAGE" : "NO-HARVEST";
     }
     return strHDate;
 }

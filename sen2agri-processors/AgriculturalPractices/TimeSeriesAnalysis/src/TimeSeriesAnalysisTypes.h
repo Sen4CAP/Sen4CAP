@@ -307,14 +307,10 @@ typedef struct EfaEvaluationInfoType {
 
 typedef struct TillageEvaluationInfoType {
     TillageEvaluationInfoType(int naInitVal = NOT_AVAILABLE) {
-        isValid = false;
         tillageConfirmWeek = naInitVal;         // WEEK
         ttTillageConfirmWeekStart = naInitVal;          //  WEEK start as date
     }
 
-    void SetValid(bool valid) {isValid = valid;}
-
-    bool isValid;
     short tillageConfirmWeek;       // WEEK
     time_t ttTillageConfirmWeekStart; // WEEK start as date
 } TillageEvaluationInfoType;
