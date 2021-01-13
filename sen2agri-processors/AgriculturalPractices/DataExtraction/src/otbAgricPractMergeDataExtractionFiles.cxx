@@ -365,11 +365,15 @@ private:
         bool isCohe = false;
         int hdrDiff;
         bool fieldValid;
+        char csvSep = ',';
         while (std::getline(ifs, line)) {
             // skip the header
             if (i == 0) {
+                if (line.find(';') != std::string::npos) {
+                    csvSep = ';';
+                }
                 std::vector<std::string> results;
-                boost::algorithm::split(results, line, [](char c){return c == ';';});
+                boost::algorithm::split(results, line, [csvSep](char c){return c == csvSep;});
                 isCohe = (results.size() == COHE_HEADER_SIZE);
                 i++;
                 continue;
@@ -383,7 +387,7 @@ private:
             for (const auto &entry: entries) {
                 FidInfos fidInfo;
                 std::vector<std::string> results;
-                boost::algorithm::split(results, entry, [](char c){return c == ';';});
+                boost::algorithm::split(results, entry, [csvSep](char c){return c == csvSep;});
                 int offset = 0;
                 if (j == 0) {
                     // check if the field passes the filter, if the filter is set

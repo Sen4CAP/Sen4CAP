@@ -14,6 +14,12 @@ class Markers1CsvReader : public StatisticsInfosReaderBase
 
     typedef std::map<std::string, std::vector<FieldIndexInfos>> IdxMapType;
 
+    typedef struct StdDevMeanColColIdxs {
+        bool isMeanCol;
+        int meanColIdx;
+        int stdDevColIdx;
+    } StdDevMeanColColIdxs;
+
     typedef struct ColumnInfo {
         time_t ttDate;
         std::string strDateSeparators;
@@ -27,6 +33,11 @@ class Markers1CsvReader : public StatisticsInfosReaderBase
 
         std::string fullColName;
         bool bIgnoreColumn;
+
+        // mapping for the stddev and mean indexes in the header.
+        // This is useful for fast identifying the columns where the two are located
+        StdDevMeanColColIdxs stdDevMeanColMap;
+
     } ColumnInfo;
 
 public:
@@ -58,6 +69,7 @@ private:
     std::string m_strSource;
     IdxMapType m_IdxMap;
     std::string m_inDateFormat;
+    char m_separator;
 };
 
 #endif

@@ -9,10 +9,10 @@
 #include "TimeSeriesAnalysisUtils.h"
 
 
-
 Markers1CsvReader::Markers1CsvReader()
 {
     m_inDateFormat = "%Y%m%d";
+    m_separator = ',';
 }
 
 void Markers1CsvReader::Initialize(const std::string &source, const std::vector<std::string> &filters, int year)
@@ -104,7 +104,10 @@ bool Markers1CsvReader::GetEntriesForField(const std::string &fid, const std::ve
 
 bool Markers1CsvReader::ExtractHeaderInfos(const std::string &hdrLine, int year) {
     std::vector<std::string> headerItems;
-    boost::algorithm::split(headerItems, hdrLine, [](char c){return c == ';';});
+    if (hdrLine.find(';') != std::string::npos) {
+        m_separator = ';';
+    }
+    boost::algorithm::split(headerItems, hdrLine, [this](char c){return c == m_separator;});
     if (headerItems.size() <= 1) {
         //otbAppLogWARNING("Invalid line fields length for line " << fileLine);
         std::cout << "Invalid header length for header " << hdrLine << std::endl;
@@ -115,10 +118,11 @@ bool Markers1CsvReader::ExtractHeaderInfos(const std::string &hdrLine, int year)
         ColumnInfo colInfo;
         colInfo.bIgnoreColumn = false;
         colInfo.fullColName = headerItem;
+        colInfo.stdDevMeanColMap.isMeanCol = false;
+        colInfo.stdDevMeanColMap.stdDevColIdx = -1;
+        colInfo.stdDevMeanColMap.meanColIdx = -1;
 
-        if (i == 0) {
-            i++;
-        } else {
+        if (i > 0) {
             std::vector<std::string> columnItems;
             boost::algorithm::split(columnItems, headerItem, [](char c){return c == '_';});
             if (columnItems.size() < 3) {
@@ -141,6 +145,12 @@ bool Markers1CsvReader::ExtractHeaderInfos(const std::string &hdrLine, int year)
                 return false;
             }
             colInfo.paramName = columnItems[1];
+            if (colInfo.paramName == "mean") {
+                colInfo.stdDevMeanColMap.isMeanCol = true;
+                colInfo.stdDevMeanColMap.meanColIdx = i;
+            } else {
+                colInfo.stdDevMeanColMap.stdDevColIdx = i;
+            }
             colInfo.prdType = columnItems[2];
             if (columnItems.size() >= 4) {
                 colInfo.polarisation = columnItems[3];
@@ -154,7 +164,25 @@ bool Markers1CsvReader::ExtractHeaderInfos(const std::string &hdrLine, int year)
                 colInfo.bIgnoreColumn = true;
             }
         }
+        i++;
         m_header.push_back(colInfo);
+    }
+    // fill the empty gaps in the each column info stdDevMeanColMap
+    std::string stdDevColName;
+    i = 0;
+    for(ColumnInfo &colInfo : m_header) {
+        if (colInfo.stdDevMeanColMap.isMeanCol) {
+            // search for the corresponding stddev col
+            stdDevColName = colInfo.fullColName;
+            boost::replace_all(stdDevColName, "_mean", "_stdev");
+            ptrdiff_t pos = std::distance(headerItems.begin(), std::find(headerItems.begin(), headerItems.end(), stdDevColName));
+            if(pos < m_header.size()) {
+                // update both this column and the stdev column with the mapping indices
+                colInfo.stdDevMeanColMap.stdDevColIdx = pos;
+                m_header[pos].stdDevMeanColMap.meanColIdx = i;
+            }
+        }
+        i++;
     }
     return true;
 }
@@ -162,13 +190,21 @@ bool Markers1CsvReader::ExtractHeaderInfos(const std::string &hdrLine, int year)
 bool Markers1CsvReader::LoadIndexFile(const std::string &source) {
     // check if index file exists near the source xml
     const std::string &idxFilePath(source + ".idx");
+    char csvSep = ',';
     if ( boost::filesystem::exists(idxFilePath)) {
         std::cout << "Loading indexes file " << idxFilePath << std::endl;
         // load the indexes
         std::string line;
         std::ifstream idxFileStream(idxFilePath);
+        int i = 0;
         while (std::getline(idxFileStream, line)) {
-            const std::vector<std::string> &tokens = split (line, ';');
+            if (i == 0) {
+                if (line.find(';') != std::string::npos) {
+                    csvSep = ';';
+                }
+                i++;
+            }
+            const std::vector<std::string> &tokens = split (line, csvSep);
             if (tokens.size() == 3) {
                 std::string key = tokens[0];
                 NormalizeFieldId(key);
@@ -196,7 +232,7 @@ bool Markers1CsvReader::ExtractLinesFromStream(std::istream &inStream, const std
                                                             std::map<std::string, std::vector<InputFileLineInfoType>> &retMap) {
     std::string line;
     // ensure that we don't have a partial matching and getting other ids (ex. xxx_27 to be got for xxx_2)
-    std::string fieldToFind = fieldId + ";";
+    std::string fieldToFind = fieldId + m_separator;
 
     std::map<std::string, std::vector<InputFileLineInfoType>>::iterator i;
     std::map<std::string, std::vector<InputFileLineInfoType>>::iterator itInfos;
@@ -256,7 +292,7 @@ bool Markers1CsvReader::ExtractLinesFromStream(std::istream &inStream, const std
 
 std::vector<std::string> Markers1CsvReader::GetInputFileLineElements(const std::string &line) {
     std::vector<std::string> results;
-    boost::algorithm::split(results, line, [](char c){return c == ';';});
+    boost::algorithm::split(results, line, [this](char c){return c == m_separator;});
     return results;
 }
 
@@ -275,10 +311,20 @@ bool Markers1CsvReader::ExtractInfosFromLine(const std::string &fileLine, const 
     typename std::map<std::string, std::vector<InputFileLineInfoType>>::iterator containerIt;
     for (size_t i = 1; i<m_header.size(); i++) {
         if (lineElems[i].size() == 0) {
-            i++; // we skip also the next column which should be stddev
+            // i++; // we skip also the next column which should be stddev
             continue;   // ignore no data columns
         }
         const ColumnInfo &colInfo = m_header[i];
+        // we consider only the mean columns and if we have both indexes set
+        if (!colInfo.stdDevMeanColMap.isMeanCol) {
+            continue;
+        }
+        if (colInfo.stdDevMeanColMap.meanColIdx == -1 || colInfo.stdDevMeanColMap.stdDevColIdx == -1 ||
+                colInfo.stdDevMeanColMap.stdDevColIdx >= lineElems.size()) {
+            // ignore columns that do not have both stddev and mean values as they are not usable
+            continue;
+        }
+
         // if we have filters on polarisation, check if the current column value is accepted
         if(findFilters.size() > 0) {
             bool doFilter = false;
@@ -296,9 +342,8 @@ bool Markers1CsvReader::ExtractInfosFromLine(const std::string &fileLine, const 
         InputFileLineInfoType lineInfo;
         lineInfo.Reset();
         lineInfo.fieldId = id;
-        // we assume that the mean and stdev are consecutives for the same date and prdtype, polarisation and orbit
-        lineInfo.meanVal = std::stod(lineElems[i++], &sz);
-        lineInfo.stdDev = std::stod(lineElems[i], &sz);
+        lineInfo.meanVal = std::stod(lineElems[i], &sz);
+        lineInfo.stdDev = std::stod(lineElems[colInfo.stdDevMeanColMap.stdDevColIdx], &sz);
 
         // fill the other fields from the header infos
         lineInfo.strDate = colInfo.strDateSeparators;

@@ -61,12 +61,10 @@ void S4CMarkersDB1Handler::CreateSteps(QList<TaskToSubmit> &allTasksList, const 
         // If scheduled jobs, force adding the data extraction directories for all markers as data extraction source
         if (jobCfg.isScheduledJob) {
             // add a data extraction dir corresponding to the scheduled date which is saved as jobCfg.maxPrdDate
-            for (const auto &marker: enabledMarkers) {
-                const QString &dataExtrDirName = dataExtrStepsBuilder.GetDataExtractionDir(marker.marker);
-                if (!dataExtrDirs.contains(dataExtrDirName)) {
-                    QDir().mkpath(dataExtrDirName);
-                    dataExtrDirs.append(dataExtrDirName);
-                }
+            const QString &dataExtrDirName = dataExtrStepsBuilder.GetDataExtractionDir(marker.marker);
+            if (!dataExtrDirs.contains(dataExtrDirName)) {
+                QDir().mkpath(dataExtrDirName);
+                dataExtrDirs.append(dataExtrDirName);
             }
         }
         // Steps to merge and create the MDB1 IPC

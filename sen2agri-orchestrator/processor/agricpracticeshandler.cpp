@@ -29,6 +29,7 @@
 #define SECS_TILL_EOD               86399   // 24 hour x 3600 + 59 minutes x 60 + 59 seconds
 
 static QStringList ALL_PRACTICES_NAMES = {"CC", "FL", "NFC", "NA"};
+static QStringList L4C_INPUT_MARKER_NAMES = {"NDVI", "AMP", "COHE"};
 
 static bool compareL4CProductDates(const Product& prod1,const Product& prod2)
 {
@@ -47,10 +48,12 @@ void AgricPracticesHandler::CreateTasks(const AgricPracticesJobPayload &jobCfg, 
         dataExtrStepsBuilder.CreateTasks(marker, outAllTasksList, curTaskIdx);
         int maxDataExtrIndex = curTaskIdx-1;
 
-        // create the merging tasks if needed
-        int mergeTaskIdx = CreateMergeTasks(outAllTasksList, marker.marker.toLower() + "-data-extraction-merge",
-                                                minDataExtrIndex, maxDataExtrIndex, curTaskIdx);
-        mergeTasksIndexes.push_back(mergeTaskIdx);
+        if (L4C_INPUT_MARKER_NAMES.contains(marker.marker)) {
+            // create the merging tasks if needed
+            int mergeTaskIdx = CreateMergeTasks(outAllTasksList, marker.marker.toLower() + "-data-extraction-merge",
+                                                    minDataExtrIndex, maxDataExtrIndex, curTaskIdx);
+            mergeTasksIndexes.push_back(mergeTaskIdx);
+        }
     }
 
     if (IsOperationEnabled(jobCfg.execOper, catchCrop) || IsOperationEnabled(jobCfg.execOper, fallow) ||
@@ -92,20 +95,21 @@ void AgricPracticesHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,
         QStringList dataExtrDirs;
         // Create the data extraction steps if needed
         dataExtrStepsBuilder.CreateSteps(marker, allTasksList, steps, curTaskIdx, dataExtrDirs);
-        // If scheduled jobs, force adding the data extraction directories for all markers as data extraction source
-        if (jobCfg.isScheduledJob) {
-            // add a data extraction dir corresponding to the scheduled date which is saved as jobCfg.maxPrdDate
-            for (const auto &marker: enabledMarkers) {
+
+        if (L4C_INPUT_MARKER_NAMES.contains(marker.marker)) {
+            // If scheduled jobs, force adding the data extraction directories for all markers as data extraction source
+            if (jobCfg.isScheduledJob) {
+                // add a data extraction dir corresponding to the scheduled date which is saved as jobCfg.maxPrdDate
                 const QString &dataExtrDirName = dataExtrStepsBuilder.GetDataExtractionDir(marker.marker);
                 if (!dataExtrDirs.contains(dataExtrDirName)) {
                     QDir().mkpath(dataExtrDirName);
                     dataExtrDirs.append(dataExtrDirName);
                 }
             }
+            const QString &mergedFile = CreateStepsForFilesMerge(jobCfg, marker.prdType, dataExtrDirs, steps,
+                                                                     allTasksList, curTaskIdx);
+            mergedFiles[marker.marker] = mergedFile;
         }
-        const QString &mergedFile = CreateStepsForFilesMerge(jobCfg, marker.prdType, dataExtrDirs, steps,
-                                                                 allTasksList, curTaskIdx);
-        mergedFiles[marker.marker] = mergedFile;
     }
 
     if (IsOperationEnabled(jobCfg.execOper, catchCrop) || IsOperationEnabled(jobCfg.execOper, fallow) ||
