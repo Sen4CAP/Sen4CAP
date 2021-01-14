@@ -32,7 +32,7 @@ import zipfile
 import tarfile
 import tempfile
 import re
-import datetime
+import grp
 import glob
 import subprocess
 from bs4 import BeautifulSoup as Soup
@@ -43,8 +43,8 @@ from fmask_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATAB
 from fmask_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
 
 ARCHIVES_DIR_NAME = "archives"
-LAUCHER_LOG_DIR = "/tmp/"
-LAUCHER_LOG_FILE_NAME = "fmask_extractor.log"
+LAUNCHER_LOG_DIR = "/tmp/"
+LAUNCHER_LOG_FILE_NAME = "fmask_launcher.log"
 FMASK_EXTRACTOR = "fmask_extractor.py"
 DATABASE_FMASK_OUTPUT_PATH = "fmask.output-path"
 DATABASE_FMASK_WORKING_DIR = "fmask.working-dir"
@@ -96,7 +96,7 @@ class FmaskProcessor(object):
 
     def launcher_log(self, log_msg):
         log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
-        log(LAUCHER_LOG_DIR, log_msg, LAUCHER_LOG_FILE_NAME)
+        log(LAUNCHER_LOG_DIR, log_msg, LAUNCHER_LOG_FILE_NAME)
 
     def get_envelope(self, footprints):
         geomCol = ogr.Geometry(ogr.wkbGeometryCollection)
@@ -378,7 +378,7 @@ class FmaskProcessor(object):
         self.fmask.satellite_id = self.lin.satellite_id
         self.fmask.site_id = self.lin.site_id
         self.fmask.product_id = self.lin.product_id
-        self.fmask_log_file = "fmask_{}.log".format(self.lin.product_id)
+        self.fmask_log_file = "fmask_extractor.log"
         return True
 
     def update_rejection_reason(self, message):
@@ -421,17 +421,37 @@ class FmaskProcessor(object):
 
     def run_script(self):
 
-        script_name = "fmask_extractor.py"
-        script_path = os.path.join(self.context.base_abs_path, script_name)
-        script_command = [
-            script_path,
-            "--working-dir",
-            self.context.working_dir,
-            "--delete-temp",
-            "False"
-        ]
+        script_command = []
+        #docker run
+        script_command.append("docker")
+        script_command.append("run")
+        script_command.append("-v")
+        script_command.append("/var/run/docker.sock:/var/run/docker.sock")
+        script_command.append("--rm")
+        script_command.append("-u")
+        script_command.append("{}:{}".format(os.getuid(), os.getgid()))
+        script_command.append("--group-add")
+        script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.lin.path, self.lin.path))
+        script_command.append("-v")
+        script_command.append("{}:{}".format(self.fmask.output_path, self.fmask.output_path))
+        script_command.append("--name")
+        script_command.append("fmask_extractor_{}".format(self.lin.product_id))
+        script_command.append("fmask_extractor")
 
-        fmask_threshold = db_get_fmask_threshold(self.lin.satellite_id)
+        #actual fmask_extractor command
+        script_path = "/usr/share/fmask/fmask_extractor.py"
+        script_command.append(script_path)
+        script_command.append("--working-dir")
+        script_command.append(self.context.working_dir)
+        script_command.append("--delete-temp")
+        script_command.append("False")
+        script_command.append("--product-id")
+        script_command.append(str(self.lin.product_id))
+        fmask_threshold = db_get_fmask_threshold(self.lin.site_id)
         if fmask_threshold is not None:
             script_command.append("-t")
             script_command.append(self.lin.fmask_threshold)
@@ -439,7 +459,7 @@ class FmaskProcessor(object):
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
   
-        fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
+        fmask_log_path = os.path.join(self.fmask.output_path,"fmask_launcher.log")
         fmask_log_file = open(fmask_log_path, "w")
         command_string =""
         for argument in script_command:
@@ -618,7 +638,7 @@ class FMaskMaster(object):
                                 )
                             )
                             log(
-                                LAUCHER_LOG_DIR,
+                                LAUNCHER_LOG_DIR,
                                 "(launcher err) <master>: Product {} has invalid tile info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
@@ -641,7 +661,7 @@ class FMaskMaster(object):
                                 )
                             )
                             log(
-                                LAUCHER_LOG_DIR,
+                                LAUNCHER_LOG_DIR,
                                 "(launcher err) <master>: Product {} has invalid site info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
@@ -773,11 +793,11 @@ class Tile(object):
     def is_valid(self):
         if not os.path.exists(self.path):
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 ": Aborting processing for product with downloaded history id {} because the path {} is incorrect".format(
                     self.downloader_history_id, self.path
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -799,11 +819,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context output_path: {}.".format(
                     self.output_path
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -814,11 +834,11 @@ class SiteContext(object):
                 )
             )
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "(launcher err) Invalid processing context working_dir: {}".format(
                     self.working_dir
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
@@ -827,7 +847,7 @@ class SiteContext(object):
 class ProcessingContext(object):
     def __init__(self):
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
-        self.output_path = {"default": "/mnt/archive/fmask_def/{site}/"}
+        self.output_path = {"default": "/mnt/archive/fmask_def/{site}/fmask/"}
         self.working_dir = {"default": "/mnt/archive/fmask_tmp/"}
 
     def get_site_context(self, site_id):
@@ -921,11 +941,11 @@ def db_update(db_func):
         db_updated = False
         if not products_db.database_connect():
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "{}: Database connection failed upon updating the database.".format(
                     threading.currentThread().getName()
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return db_updated
         while True:
@@ -943,39 +963,39 @@ def db_update(db_func):
                     and nb_retries > 0
                 ):
                     log(
-                        LAUCHER_LOG_DIR,
+                        LAUNCHER_LOG_DIR,
                         "{}: Exception {} when trying to update db: SERIALIZATION failure".format(
                             threading.currentThread().getName(), e.pgcode
                         ),
-                        LAUCHER_LOG_FILE_NAME,
+                        LAUNCHER_LOG_FILE_NAME,
                     )
                     time.sleep(random.uniform(0, max_sleep))
                     max_sleep *= 2
                     nb_retries -= 1
                     continue
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to update db".format(
                         threading.currentThread().getName(), e.pgcode
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             except Exception as e:
                 products_db.conn.rollback()
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to update db".format(
                         threading.currentThread().getName(), e
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             else:
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Successful db update".format(threading.currentThread().getName()),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 db_updated = True
                 break
@@ -993,11 +1013,11 @@ def db_fetch(db_func):
         ret_val = None
         if not products_db.database_connect():
             log(
-                LAUCHER_LOG_DIR,
+                LAUNCHER_LOG_DIR,
                 "{}: Database connection failed upon updating the database.".format(
                     threading.currentThread().getName()
                 ),
-                LAUCHER_LOG_FILE_NAME,
+                LAUNCHER_LOG_FILE_NAME,
             )
             return ret_val
         while True:
@@ -1016,39 +1036,39 @@ def db_fetch(db_func):
                     and nb_retries > 0
                 ):
                     log(
-                        LAUCHER_LOG_DIR,
+                        LAUNCHER_LOG_DIR,
                         "{}: Exception {} when trying to fetch from db: SERIALIZATION failure".format(
                             threading.currentThread().getName(), e.pgcode
                         ),
-                        LAUCHER_LOG_FILE_NAME,
+                        LAUNCHER_LOG_FILE_NAME,
                     )
                     time.sleep(random.uniform(0, max_sleep))
                     max_sleep *= 2
                     nb_retries -= 1
                     continue
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to fetch from db".format(
                         threading.currentThread().getName(), e.pgcode
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             except Exception as e:
                 products_db.conn.rollback()
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Exception {} when trying to fetch from db".format(
                         threading.currentThread().getName(), e
                     ),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             else:
                 log(
-                    LAUCHER_LOG_DIR,
+                    LAUNCHER_LOG_DIR,
                     "{}: Successful db fetch".format(threading.currentThread().getName()),
-                    LAUCHER_LOG_FILE_NAME,
+                    LAUNCHER_LOG_FILE_NAME,
                 )
                 break
             finally:
@@ -1209,9 +1229,9 @@ args = parser.parse_args()
 products_db = Database()
 if not products_db.loadConfig(args.config):
     log(
-        LAUCHER_LOG_DIR,
+        LAUNCHER_LOG_DIR,
         "Could not load the db config from configuration file",
-        LAUCHER_LOG_FILE_NAME,
+        LAUNCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
 
@@ -1224,11 +1244,11 @@ if not os.path.isdir(default_processing_context.working_dir['default']) and not 
     default_processing_context.working_dir['default']
 ):
     log(
-        LAUCHER_LOG_DIR,
+        LAUNCHER_LOG_DIR,
         "Could not create the work base directory {}".format(
             default_processing_context.working_dir['default']
         ),
-        LAUCHER_LOG_FILE_NAME,
+        LAUNCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
 
