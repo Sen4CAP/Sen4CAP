@@ -35,10 +35,11 @@ import re
 import grp
 import glob
 import subprocess
-from bs4 import BeautifulSoup as Soup
+import signal
+import traceback
 from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 from psycopg2.sql import NULL
-from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, delete_file_if_match, get_footprint
+from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, delete_file_if_match, get_footprint, run_command
 from fmask_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from fmask_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
 
@@ -362,7 +363,7 @@ class FmaskProcessor(object):
             self.context.output_path, "output", fmask_basename
         )
         fmask_destination_path = os.path.join(
-            self.context.output_path, acq_year, acq_month, acq_day, fmask_output_path
+            self.context.output_path, acq_year, acq_month, acq_day, fmask_basename
         )
         if not create_recursive_dirs(fmask_output_path):
             self.update_rejection_reason(
@@ -378,7 +379,7 @@ class FmaskProcessor(object):
         self.fmask.satellite_id = self.lin.satellite_id
         self.fmask.site_id = self.lin.site_id
         self.fmask.product_id = self.lin.product_id
-        self.fmask_log_file = "fmask_extractor.log"
+        self.fmask_log_file = "fmask.log"
         return True
 
     def update_rejection_reason(self, message):
@@ -459,8 +460,8 @@ class FmaskProcessor(object):
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
   
-        fmask_log_path = os.path.join(self.fmask.output_path,"fmask_launcher.log")
-        fmask_log_file = open(fmask_log_path, "w")
+        fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
+        fmask_log_file = open(fmask_log_path, "a")
         command_string =""
         for argument in script_command:
             command_string = command_string + " " + str(argument)
@@ -604,6 +605,7 @@ class FMaskMaster(object):
         self.num_workers = num_workers
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
+        self.in_processing = set()
         for worker_id in range(self.num_workers):
             self.workers.append(FmaskWorker(worker_id, self.master_q))
             self.workers[worker_id].daemon = True
@@ -611,35 +613,68 @@ class FMaskMaster(object):
             msg_to_master = MsgToMaster(worker_id, None, None, False)
             self.master_q.put(msg_to_master)
 
+    def signal_handler(self, signum, frame):
+        print("(launcher info) Signal caught: {}.".format(signum))
+        self.stop_workers()
+
     def stop_workers(self):
         print("\n(launcher info) <master>: Stoping workers")
         for worker in self.workers:
             worker.worker_q.put(None)
         for worker in self.workers:
-            worker.join()
+            worker.join(timeout=5)
+
+        cmd = []
+        containers = []
+        cmd.append("docker")
+        cmd.append("stop")
+        container_types = ["fmask", "fmask_extractor"]
+        for product_id in self.in_processing:
+            for container_type in container_types:
+                containers.append("{}_{}".format(container_type, product_id))
+
+        if containers:
+            print("\n(launcher info) <master>: Stoping containers")
+            cmd.extend(containers)
+            run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+
+        print("\n(launcher info) <master>: is stopped")
+        os._exit(1)
 
     def run(self):
         sleeping_workers = []
+        signal.signal(signal.SIGTERM, self.signal_handler)
+        signal.signal(signal.SIGINT, self.signal_handler)
         try:
             while True:
                 # wait for a worker to finish
-                msg_to_master = self.master_q.get()
+                try:
+                    msg_to_master = self.master_q.get(timeout=5)
+                except Queue.Empty:
+                    continue
                 if msg_to_master.update_db:
                     db_postrun_update(msg_to_master.lin, msg_to_master.fmask)
+                    self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     unprocessed_tile = db_get_unprocessed_tile()
+                    #tmp
+                    print(" <<<<<<< {} {} >>>>>>>".format(unprocessed_tile, len(sleeping_workers)))
+                    #tmp
                     if unprocessed_tile is not None:
+                        #tmp
+                        print(" <<<<<<<< Am intrat >>>>>>>>>")
+                        #tmp
                         valid_tile = unprocessed_tile.is_valid()
                         if valid_tile == False:
                             print(
-                                "\n(launcher err) <master>: Product {} has invalid tile info.".format(
+                                "\n(launcher error) <master>: Product {} has invalid tile info.".format(
                                     unprocessed_tile.downloader_history_id
                                 )
                             )
                             log(
                                 LAUNCHER_LOG_DIR,
-                                "(launcher err) <master>: Product {} has invalid tile info.".format(
+                                "(launcher error) <master>: Product {} has invalid tile info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
                             )
@@ -656,13 +691,13 @@ class FMaskMaster(object):
 
                         if site_context_valid == False:
                             print(
-                                "\n(launcher err) <master>: Product {} has invalid site info.".format(
+                                "\n(launcher error) <master>: Product {} has invalid site info.".format(
                                     unprocessed_tile.downloader_history_id
                                 )
                             )
                             log(
                                 LAUNCHER_LOG_DIR,
-                                "(launcher err) <master>: Product {} has invalid site info.".format(
+                                "(launcher error) <master>: Product {} has invalid site info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
                             )
@@ -673,6 +708,7 @@ class FMaskMaster(object):
                             worker_id = sleeping_workers.pop()
                             msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                             self.workers[worker_id].worker_q.put(msg_to_worker)
+                            self.in_processing.add(unprocessed_tile.downloader_history_id)
                             print(
                                 "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
                                     unprocessed_tile.downloader_history_id, worker_id
@@ -685,14 +721,12 @@ class FMaskMaster(object):
                     print("\n(launcher info) <master>: No more tiles to process")
                     break
 
-        except (KeyboardInterrupt, SystemExit):
-            print("\n(launcher err) <master>: Keyboard interrupted.")
         except Exception as e:
-            print("\n(launcher err) <master>: Exception {} encountered".format(e))
+            print("\n(launcher error) <master>: Exception {} encountered".format(e))
+            traceback.print_exc(limit=20, file=sys.stdout)
         finally:
             self.stop_workers()
-            print("\n(launcher info) <master>: is stopped")
-            sys.exit(0)
+
 
 class MsgToMaster(object):
     def __init__(self, worker_id, lin, fmask, update_db):
@@ -729,7 +763,7 @@ class FmaskWorker(threading.Thread):
                     or msg_to_worker.site_context is None
                 ):
                     print(
-                        "\n(launcher err) <worker {}>: Either the tile or site context is None".format(
+                        "\n(launcher error) <worker {}>: Either the tile or site context is None".format(
                             self.worker_id
                         )
                     )
@@ -742,10 +776,11 @@ class FmaskWorker(threading.Thread):
                     self.worker_q.task_done()
         except Exception as e:
             print(
-                "\n(launcher err) <worker {}>: Exception {} encountered".format(
+                "\n(launcher error) <worker {}>: Exception {} encountered".format(
                     self.worker_id, e
                 )
             )
+            traceback.print_exc(limit=20, file=sys.stdout)
             os._exit(1)
         finally:
             print("\n(launcher info) <worker {}>: is stopped".format(self.worker_id))
@@ -814,13 +849,13 @@ class SiteContext(object):
     def is_valid(self):
         if len(self.output_path) == 0:
             print(
-                "(launcher err) Invalid processing context output_path: {}.".format(
+                "(launcher error) Invalid processing context output_path: {}.".format(
                     self.output_path
                 )
             )
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context output_path: {}.".format(
+                "(launcher error) Invalid processing context output_path: {}.".format(
                     self.output_path
                 ),
                 LAUNCHER_LOG_FILE_NAME,
@@ -829,13 +864,13 @@ class SiteContext(object):
 
         if not os.path.isdir(self.working_dir):
             print(
-                "(launcher err) Invalid processing context working_dir: {}".format(
+                "(launcher error) Invalid processing context working_dir: {}".format(
                     self.working_dir
                 )
             )
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context working_dir: {}".format(
+                "(launcher error) Invalid processing context working_dir: {}".format(
                     self.working_dir
                 ),
                 LAUNCHER_LOG_FILE_NAME,
@@ -881,7 +916,7 @@ class Database(object):
 
     def database_connect(self):
         if self.is_connected:
-            print("{}: Database is already connected...".format(threading.currentThread().getName()))
+            print("(launcher info) <master>: Database is already connected.")
             return True
         connectString = "dbname='{}' user='{}' host='{}' password='{}'".format(self.database_name, self.user, self.server_ip, self.password)
         try:
@@ -889,18 +924,21 @@ class Database(object):
             self.cursor = self.conn.cursor()
             self.is_connected = True
         except:
-            print("Unable to connect to the database")
             exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
             # Exit the script and print an error telling what happened.
-            print("Database connection failed!\n ->{}".format(exceptionValue))
+            print("(launcher error) <master>: Database connection failed!\n ->{}".format(exceptionValue))
             self.is_connected = False
             return False
         return True
 
     def database_disconnect(self):
-        if self.conn:
-            self.conn.close()
-            self.is_connected = False
+        try:
+            if self.conn:
+                self.conn.close()
+                self.is_connected = False
+        except Exception as e:
+            print("(launcher error) <master>: Can NOT close database connection due to: {}".format(e))
+
 
     def loadConfig(self, configFile):
         try:
@@ -994,7 +1032,7 @@ def db_update(db_func):
             else:
                 log(
                     LAUNCHER_LOG_DIR,
-                    "{}: Successful db update".format(threading.currentThread().getName()),
+                    "(launcher info) <master>: Successful db update by".format(db_func.__name__),
                     LAUNCHER_LOG_FILE_NAME,
                 )
                 db_updated = True
@@ -1014,9 +1052,7 @@ def db_fetch(db_func):
         if not products_db.database_connect():
             log(
                 LAUNCHER_LOG_DIR,
-                "{}: Database connection failed upon updating the database.".format(
-                    threading.currentThread().getName()
-                ),
+                "(launcher error) <master>: Database connection failed upon fetching from the database.",
                 LAUNCHER_LOG_FILE_NAME,
             )
             return ret_val
@@ -1037,9 +1073,7 @@ def db_fetch(db_func):
                 ):
                     log(
                         LAUNCHER_LOG_DIR,
-                        "{}: Exception {} when trying to fetch from db: SERIALIZATION failure".format(
-                            threading.currentThread().getName(), e.pgcode
-                        ),
+                        "(launcher error) <master>: Exception {} when trying to fetch from db: SERIALIZATION failure".format(e.pgcode),
                         LAUNCHER_LOG_FILE_NAME,
                     )
                     time.sleep(random.uniform(0, max_sleep))
@@ -1048,9 +1082,7 @@ def db_fetch(db_func):
                     continue
                 log(
                     LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to fetch from db".format(
-                        threading.currentThread().getName(), e.pgcode
-                    ),
+                    "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e.pgcode, db_func.__name__),
                     LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
@@ -1058,17 +1090,15 @@ def db_fetch(db_func):
                 products_db.conn.rollback()
                 log(
                     LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to fetch from db".format(
-                        threading.currentThread().getName(), e
-                    ),
+                    "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e, db_func.__name__),
                     LAUNCHER_LOG_FILE_NAME,
                 )
                 raise
             else:
                 log(
                     LAUNCHER_LOG_DIR,
-                    "{}: Successful db fetch".format(threading.currentThread().getName()),
-                    LAUNCHER_LOG_FILE_NAME,
+                    "(launcher info) <master>: Successful db fetch by {}".format(db_func.__name__),
+                    LAUNCHER_LOG_FILE_NAME
                 )
                 break
             finally:
@@ -1084,6 +1114,9 @@ def db_get_unprocessed_tile():
     products_db.cursor.execute("select * from sp_start_fmask_l1_tile_processing();")
     tile_info = products_db.cursor.fetchall()
     if tile_info == []:
+        #tmp
+        print("########## NU  ESTE NICI UN PRODUS DISPONIBIL #############")
+        #tmp
         return None
     else:
         return Tile(tile_info[0])
@@ -1093,7 +1126,7 @@ def db_get_fmask_threshold(site_id):
     products_db.cursor.execute("set transaction isolation level serializable;")
     products_db.cursor.execute("select value from sp_get_parameters('{}') where site_id is null or site_id = {} order by site_id limit 1".format(DATABASE_FMASK_THRESHOLD, site_id))
     rows = products_db.cursor.fetchall()
-    if len(rows) != 0 and isinstance(rows[0], int):
+    if rows and isinstance(rows[0], int):
         return rows[0]
     else:
         return None
@@ -1151,12 +1184,6 @@ def db_postrun_update(input_prod, fmask_prod):
                                  },
         )
 
-    # update donwloader_history
-    products_db.cursor.execute(
-        """update downloader_history set status_id = %(status_id)s :: smallint where id=%(l1c_id)s :: integer;""",
-        {"status_id": processing_status, "l1c_id": downloader_product_id},
-    )
-
     # update product table
     if reason is None and (
         processing_status == DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
@@ -1200,7 +1227,7 @@ def db_prerun_update(tile, reason):
     should_retry = True
 
     products_db.cursor.execute("set transaction isolation level serializable;")
-    # updating l1_tile_history
+    # updating  fmask_l1_tile_history
     products_db.cursor.execute(
         """SELECT * FROM sp_mark_fmask_l1_tile_failed(%(downloader_history_id)s :: integer,
                                                                                   %(reason)s, 
@@ -1209,14 +1236,6 @@ def db_prerun_update(tile, reason):
             "downloader_history_id" : downloader_history_id,
             "reason" : reason,
             "should_retry" : should_retry
-        }
-    )
-
-    # update donwloader_history
-    products_db.cursor.execute(
-        """SELECT * FROM sp_mark_fmask_l1_tile_done(%(downloader_history_id)s :: integer);""",
-        {
-            "downloader_history_id" : downloader_history_id
         }
     )
 
