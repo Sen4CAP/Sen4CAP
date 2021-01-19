@@ -15,7 +15,7 @@ def check_regex(regex, field_name):
 
 
 def get_type_for_column(args, field_name):
-    pd_type = pyarrow.float32() # TODO: what should be the default ?
+    pd_type = pyarrow.float32()  # TODO: what should be the default ?
     if check_regex(args.int8_columns, field_name):
         pd_type = pyarrow.int8()
     elif check_regex(args.int16_columns, field_name):
@@ -70,12 +70,14 @@ def main():
         )
     )
 
-    if not os.path.exists(os.path.dirname(args.output)):
+    outdir = os.path.dirname(args.output)
+    if outdir:
         try:
-            os.makedirs(os.path.dirname(args.output))
+            os.makedirs(outdir)
         except OSError as exc:  # Guard against race condition
             if exc.errno != errno.EEXIST:
                 raise
+
     writer = ipc.new_file(args.output, schema)
     idxFile = open("{}.idx".format(args.output), "wb")
     currentBatch = 0
