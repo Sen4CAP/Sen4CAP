@@ -119,11 +119,11 @@ NULLABLE_COLS=""
 TEXT_COLS=""
 
 if [ ! -z ${int32_columns} ] ; then
-    INT32_COLS="--float-columns \"${int32_columns}\""
+    INT32_COLS="--int32-columns \"${int32_columns}\""
 fi
 
 if [ ! -z ${float32_columns} ] ; then
-    FLOAT32_COLS="--int32-columns \"${float32_columns}\""
+    FLOAT32_COLS="--float-columns \"${float32_columns}\""
 fi
 
 if [ ! -z ${bool_columns} ] ; then
