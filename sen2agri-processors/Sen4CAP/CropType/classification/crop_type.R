@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 #
-# requiredPackages = c("ranger","dplyr","e1071","caret","smotefamily","readr","gsubfn","caTools","tidyverse","data.table")
+# requiredPackages = c("arrow", "ranger","dplyr","e1071","caret","smotefamily","readr","gsubfn","caTools","tidyverse","data.table")
 #
 # for(p in requiredPackages){
 #   if(!require(p,character.only = TRUE)) install.packages(p)
@@ -8,6 +8,7 @@
 # }
 #
 
+library(arrow)
 library(ranger)
 library(dplyr)
 library(e1071)
@@ -89,41 +90,60 @@ data_joined = Shapefile
 
 if (InputOpt != 0) {
   print("Importing optical features...")
-  ncol_Optcsv=system(paste("head -1",InputOpt,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
-  Opt_features=read_csv(InputOpt,col_types=paste0("i",paste(rep("d",as.numeric(ncol_Optcsv)-1),collapse="")))
-
-  data_joined = inner_join(data_joined, Opt_features, by="NewID")
+  if (endsWith(InputOpt, ".ipc")) {
+    Opt_features=read_feather(InputOpt, as_data_frame=FALSE)
+    data_joined = inner_join(data_joined, Opt_features, by="NewID", copy=TRUE)
+  } else {
+    ncol_Optcsv=system(paste("head -1",InputOpt,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
+    Opt_features=read_csv(InputOpt,col_types=paste0("i",paste(rep("d",as.numeric(ncol_Optcsv)-1),collapse="")))
+    data_joined = inner_join(data_joined, Opt_features, by="NewID")
+  }
   rm(Opt_features)
 }
 
 if (InputOptRe != 0) {
   print("Importing red-edge optical features...")
-  ncol_OptRecsv=system(paste("head -1",InputOptRe,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
-  Opt_Re_features=read_csv(InputOptRe,col_types=paste0("i",paste(rep("d",as.numeric(ncol_OptRecsv)-1),collapse="")))
+  if (endsWith(InputOptRe, ".ipc")) {
+    Opt_Re_features=read_feather(InputOptRe, as_data_frame=FALSE)
+    data_joined = inner_join(data_joined, Opt_Re_features, by="NewID", copy=TRUE)
+  } else {
+    ncol_OptRecsv=system(paste("head -1",InputOptRe,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
+    Opt_Re_features=read_csv(InputOptRe,col_types=paste0("i",paste(rep("d",as.numeric(ncol_OptRecsv)-1),collapse="")))
+    data_joined = inner_join(data_joined, Opt_Re_features, by="NewID")
+  }
 
-  data_joined = inner_join(data_joined, Opt_Re_features, by="NewID")
   rm(Opt_Re_features)
 }
-
 if (InputSAR != 0) {
   print("Importing SAR features...")
-  ncol_SARcsv=system(paste("head -1",InputSAR,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
-  SAR_features=read_csv(InputSAR,col_types=paste0("i",paste(rep("d",as.numeric(ncol_SARcsv)-1),collapse="")))
+  if (endsWith(InputSAR, ".ipc")) {
+    SAR_features=read_feather(InputSAR, as_data_frame=FALSE)
+    data_joined = inner_join(data_joined, SAR_features, by="NewID", copy=TRUE)
+  } else {
+    ncol_SARcsv=system(paste("head -1",InputSAR,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
+    SAR_features=read_csv(InputSAR,col_types=paste0("i",paste(rep("d",as.numeric(ncol_SARcsv)-1),collapse="")))
+    data_joined = inner_join(data_joined, SAR_features, by="NewID")
+  }
 
-  data_joined = inner_join(data_joined, SAR_features, by="NewID")
   rm(SAR_features)
 }
 
 if (InputSAR_tempStats != 0) {
   print("Importing temporal SAR features...")
-  ncol_SARcsv=system(paste("head -1",InputSAR_tempStats,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
-  SAR_tempStats=read_csv(InputSAR_tempStats,col_types=paste0("i",paste(rep("d",as.numeric(ncol_SARcsv)-1),collapse="")))
+  if (endsWith(InputSAR_tempStats, ".ipc")) {
+    SAR_tempStats=read_feather(InputSAR_tempStats, as_data_frame=FALSE)
+    data_joined = inner_join(data_joined, SAR_tempStats, by="NewID", copy=TRUE)
+  } else {
+    ncol_SARcsv=system(paste("head -1",InputSAR_tempStats,"| sed 's/[^,]//g' | wc -c"),intern=TRUE)
+    SAR_tempStats=read_csv(InputSAR_tempStats,col_types=paste0("i",paste(rep("d",as.numeric(ncol_SARcsv)-1),collapse="")))
+    data_joined = inner_join(data_joined, SAR_tempStats, by="NewID")
+  }
 
-  data_joined = inner_join(data_joined, SAR_tempStats, by="NewID")
   rm(SAR_tempStats)
 }
 
 print("Features imported successfully")
+gc()
 
 data_joined=as.data.frame(data_joined)
 print(paste('Dimensions before filtering:',dim(data_joined)))
@@ -502,7 +522,7 @@ Accuracy_metrics <- Accuracy_metrics %>% dplyr::select("Accuracy","Kappa")
 
 write.csv(Accuracy_metrics, file = paste0(workdir, paste("Accuracy_metrics",format(Sys.time(), "%m%d_%H%M"),sep="_"), ".csv"), row.names = FALSE, quote = FALSE)
 
-## COnfusion matrix
+## Confusion matrix
 
 # Data preparation
 
