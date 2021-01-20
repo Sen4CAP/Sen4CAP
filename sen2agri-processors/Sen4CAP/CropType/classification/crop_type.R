@@ -432,11 +432,8 @@ if (samplingmethod=="Smote") {
 data_calib_final_red <- data_calib_final_red %>% dplyr::select(starts_with("NewID"),starts_with("CTnumL4A"),starts_with("SMOTE"),starts_with("XX"))
 write.csv(data_calib_final_red,paste0(workdir,paste("Data_calibration_final_after_smote",format(Sys.time(),"%m%d_%H%M"),sep="_"),".csv"))
 data_calib_final_red <- data_calib_final_red %>% dplyr::select(starts_with("NewID"),starts_with("CTnumL4A"),starts_with("XX"))
-data_joined_smote=rbind(data_calib_final_red,data_valid_final_red)
 
-print(paste('Dimensions data_joined_smote:',dim(data_joined_smote)))
-
-rm(data_joined_smote)
+print(paste('Dimensions data_calib_final_red:',dim(data_calib_final_red)))
 
 ## Random Forest model creation
 
