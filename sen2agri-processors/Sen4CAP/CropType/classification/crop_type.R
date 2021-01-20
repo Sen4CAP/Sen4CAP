@@ -319,9 +319,11 @@ data_joined=rbind(data_valid_final,data_calib_final)
 rm(data_valid1,data_strategy1_valid,data_strategy2_valid,data_strategy3_valid,data_strategy1_calib,data_strategy2_calib,data_strategy3_calib)
 
 print(paste('Dimensions data_valid_final:',dim(data_valid_final)))
-write.csv(data_valid_final,paste0(workdir,paste("Data_validation_final",format(Sys.time(),"%m%d_%H%M"),sep="_"),".csv"))
+data_valid_final_file = paste0(workdir,paste("Data_validation_final",format(Sys.time(),"%m%d_%H%M"),sep="_"),".csv")
+write_feather(data_valid_final, data_valid_final_file, compression = "uncompressed")
 print(paste('Dimensions data_calib_final:',dim(data_calib_final)))
-write.csv(data_calib_final,paste0(workdir,paste("Data_calibration_final_before_smote",format(Sys.time(),"%m%d_%H%M"),sep="_"),".csv"))
+data_calib_final_file = paste0(workdir,paste("Data_calibration_final_before_smote",format(Sys.time(),"%m%d_%H%M"),sep="_"),".csv")
+write_feather(data_calib_final, data_calib_final_file, compression = "uncompressed")
 print(paste('Dimensions data_joined:',dim(data_joined)))
 
 # ## Trajectory and purpose flags (old but could be reactivated)
