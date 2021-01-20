@@ -460,7 +460,10 @@ gc()
 # Preparation of the calibration dataset
 
 data_calib_final_red_plus <- data_calib_final_red %>% dplyr:: select(union(starts_with("CTnumL4A"),starts_with("XX")))
+rm(data_calib_final_red)
 data_calib_final_red_plus$CTnumL4A <- as.factor(data_calib_final_red_plus$CTnumL4A)
+data_calib_final_red_plus <- droplevels(data_calib_final_red_plus)
+gc()
 
 # Model creation
 
@@ -468,7 +471,7 @@ print("Start training using Ranger script")
 
 start.time <- Sys.time()
 
-Ranger_trees = ranger(CTnumL4A ~ ., data = droplevels(data_calib_final_red_plus), write.forest = TRUE,probability = TRUE,num.trees = numtrees,mtry = NULL,importance = "impurity",min.node.size = min_node_size,seed = 42)
+Ranger_trees = ranger(CTnumL4A ~ ., data = data_calib_final_red_plus, write.forest = TRUE,probability = TRUE,num.trees = numtrees,mtry = NULL,importance = "impurity",min.node.size = min_node_size,seed = 42)
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
