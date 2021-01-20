@@ -441,8 +441,14 @@ print(paste('Dimensions data_calib_final_red:',dim(data_calib_final_red)))
 # Preparation of the classified parcels
 
 parcels_predict <- data_joined %>% dplyr::select(-starts_with("XX")) #-starts_with("Trajectory"),-starts_with("Purpose"))
+parcels_predict_file = paste0(workdir, paste("Parcels_predict", format(Sys.time(), "%m%d_%H%M"), sep="_"), ".ipc")
+write_feather(parcels_predict, parcels_predict_file, compression = "uncompressed")
+rm(parcels_predict)
 
 data_predict_red <- data_joined %>% dplyr:: select(starts_with("XX"))
+data_predict_red_file = paste0(workdir, paste("Data_predict_red", format(Sys.time(), "%m%d_%H%M"), sep="_"), ".ipc")
+write_feather(data_predict_red, data_predict_red_file, compression = "uncompressed")
+rm(data_predict_red)
 
 gc()
 
@@ -788,6 +794,7 @@ print("Start prediction")
 
 start.time <- Sys.time()
 
+data_predict_red <- read_feather(data_predict_red_file)
 predict_Ranger_trees=predict(Ranger_trees,data_predict_red)
 
 end.time <- Sys.time()
@@ -813,12 +820,14 @@ predict.2class=colnames(predictions)[predict.which2max]
 
 predict.2class=ifelse(predict.class==predict.2class,colnames(predictions)[apply(predictions, 1, function(x) which(x==sort(x,partial=n-1)[n-1])[2])],predict.2class)
 
+parcels_predict <- read_feather(parcels_predict_file)
 Predict_classif=data.frame(parcels_predict$NewID,parcels_predict$CTnumL4A,predict.class,round(predict.max,digits=3),predict.2class,round(predict.2max,digits=3))
 colnames(Predict_classif)=c("NewID",'CT_decl','CT_pred_1','CT_conf_1','CT_pred_2','CT_conf_2')
 
 # Save classified parcels with predictions
 
 Parcels_classified_with_predictions=left_join(parcels_predict,Predict_classif,by="NewID")
+rm(parcels_predict)
 
 write.csv(Parcels_classified_with_predictions,paste0(workdir,paste("Parcels_classified_with_predictions",format(Sys.time(),"%m%d_%H%M"),sep="_"), ".csv"), row.names = FALSE)
 
