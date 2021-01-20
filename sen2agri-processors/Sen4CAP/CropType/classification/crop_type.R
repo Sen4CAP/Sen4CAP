@@ -355,8 +355,10 @@ data_calib_final_red <- data_calib_final %>% dplyr::select(starts_with("NewID"),
 
 # Preparation of the validation dataset
 
-data_valid_final_red <- data_valid_final %>% dplyr::select(starts_with("NewID"),starts_with("CTnumL4A"),starts_with("XX"))
-data_valid_final_red_plus <- data_valid_final_red %>% dplyr:: select(union(starts_with("CTnumL4A"),starts_with("XX")))
+data_valid_final_red_plus <- data_valid_final %>% dplyr::select(starts_with("CTnumL4A"), starts_with("XX"))
+data_valid_final_red_plus_file = paste0(workdir, paste("Data_valid_final_red_plus", format(Sys.time(), "%m%d_%H%M"), sep="_"), ".ipc")
+write_feather(data_valid_final_red_plus, data_valid_final_red_plus_file, compression = "uncompressed")
+rm(data_valid_final_red_plus)
 
 gc()
 
@@ -490,7 +492,8 @@ print("Start validation and confusion matrix")
 
 start.time <- Sys.time()
 
-predict_Ranger_trees=predict(Ranger_trees,data_valid_final_red_plus)
+data_valid_final_red_plus <- read_feather(data_valid_final_red_plus_file, as_data_frame=TRUE)
+predict_Ranger_trees=predict(Ranger_trees, data_valid_final_red_plus)
 
 end.time <- Sys.time()
 time.taken <- end.time - start.time
@@ -505,6 +508,7 @@ predict.whichmax=apply(predictions, 1, which.max)
 predict.class=colnames(predictions)[predict.whichmax]
 
 data_ref=factor(data_valid_final_red_plus$CTnumL4A)
+rm(data_valid_final_red_plus)
 
 lvl = union(levels(predict.class), levels(data_ref))
 
