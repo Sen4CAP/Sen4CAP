@@ -353,9 +353,12 @@ print(paste('Dimensions data_joined:',dim(data_joined)))
 
 data_calib_final_red <- data_calib_final %>% dplyr::select(starts_with("NewID"),starts_with("CTnumL4A"),starts_with("XX"))
 
-## Preparation of data_valid_final_red
+# Preparation of the validation dataset
 
 data_valid_final_red <- data_valid_final %>% dplyr::select(starts_with("NewID"),starts_with("CTnumL4A"),starts_with("XX"))
+data_valid_final_red_plus <- data_valid_final_red %>% dplyr:: select(union(starts_with("CTnumL4A"),starts_with("XX")))
+
+gc()
 
 ## SMOTE process
 
@@ -449,12 +452,6 @@ data_predict_red <- data_joined %>% dplyr:: select(starts_with("XX"))
 data_predict_red_file = paste0(workdir, paste("Data_predict_red", format(Sys.time(), "%m%d_%H%M"), sep="_"), ".ipc")
 write_feather(data_predict_red, data_predict_red_file, compression = "uncompressed")
 rm(data_predict_red)
-
-gc()
-
-# Preparation of the validation dataset
-
-data_valid_final_red_plus <- data_valid_final_red %>% dplyr:: select(union(starts_with("CTnumL4A"),starts_with("XX")))
 
 gc()
 
