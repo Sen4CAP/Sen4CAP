@@ -430,7 +430,8 @@ if (samplingmethod=="Smote") {
 # Prepare data_joined after smote
 
 data_calib_final_red <- data_calib_final_red %>% dplyr::select(starts_with("NewID"),starts_with("CTnumL4A"),starts_with("SMOTE"),starts_with("XX"))
-write.csv(data_calib_final_red,paste0(workdir,paste("Data_calibration_final_after_smote",format(Sys.time(),"%m%d_%H%M"),sep="_"),".csv"))
+data_calib_final_red_file = paste0(workdir,paste("Data_calibration_final_after_smote",format(Sys.time(),"%m%d_%H%M"),sep="_"),".ipc")
+write_feather(data_calib_final_red, data_calib_final_red_file, compression = "uncompressed")
 data_calib_final_red <- data_calib_final_red %>% dplyr::select(starts_with("NewID"),starts_with("CTnumL4A"),starts_with("XX"))
 
 print(paste('Dimensions data_calib_final_red:',dim(data_calib_final_red)))
