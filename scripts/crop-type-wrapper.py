@@ -112,11 +112,6 @@ def main():
     parser.add_argument("--lpis-path", required=False, help="LPIS path file")
     args = parser.parse_args()
 
-    if args.config_file:
-        config_file = os.path.realpath(args.config_file)
-    else:
-        config_file = None
-
     current_path = os.getcwd()
     os.chdir(args.working_path)
     if args.mode != "s1-only":
@@ -180,8 +175,6 @@ def main():
         command += ["--optical-products", optical_products]
         if args.mode != "both":
             command += ["--no-re"]
-        if config_file:
-            command += ["-c", config_file]
 
         run_command(command)
         os.chdir("..")
@@ -195,8 +188,6 @@ def main():
         command += ["--lpis-path", lpis_path]
         command += ["--tile-footprints", tile_footprints]
         command += ["--radar-products", radar_products]
-        if config_file:
-            command += ["-c", config_file]
 
         run_command(command)
 
