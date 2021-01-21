@@ -222,7 +222,7 @@ def extract_optical_products(
         if tiles is not None:
             tile_filter = SQL(
                 """
-                and tiles && {}
+                and tiles && {} :: character varying[]
                 """
             )
             query += tile_filter.format(Literal(tiles))
@@ -230,7 +230,7 @@ def extract_optical_products(
         if products is not None:
             products_filter = SQL(
                 """
-                and name in {}
+                and name = any({})
                 """
             )
             query += products_filter.format(Literal(products))
@@ -283,7 +283,7 @@ def extract_radar_products(conn, site_id, season_start, season_end, tiles, produ
         if products is not None:
             products_filter = SQL(
                 """
-                and product.name in {}
+                and product.name = any({})
                 """
             ).format(Literal(products))
         else:
@@ -292,7 +292,7 @@ def extract_radar_products(conn, site_id, season_start, season_end, tiles, produ
         if tiles is not None:
             tiles_filter = SQL(
                 """
-                and site_tiles.tile_id in {}
+                and site_tiles.tile_id = any({})
                 """
             ).format(Literal(tiles))
         else:
