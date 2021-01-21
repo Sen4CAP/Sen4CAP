@@ -52,7 +52,7 @@ begin
                     '{}' :: json);
     end if;
 
-	if _processor_id is null or (_processor_id = 3 and _processor_name = 'l3b_lai')  then
+	if _processor_id is null or (_processor_id = 3 and (_processor_name = 'l3b_lai' or _processor_name = 'l3b'))  then
         perform sp_insert_scheduled_task(
                     _site_name || '_' || _season_name || '_L3B' :: character varying,
                     3,
@@ -100,7 +100,7 @@ begin
   	if _processor_id is null or _processor_name = 's4c_l4a' then
         perform sp_insert_scheduled_task(
                     _site_name || '_' || _season_name || '_S4C_L4A' :: character varying,
-                    4,
+                    9,
                     _site_id :: int,
                     _season_id :: int,
                     2::smallint,
@@ -115,7 +115,7 @@ begin
   	if _processor_id is null or _processor_name = 's4c_l4b' then
         perform sp_insert_scheduled_task(
                     _site_name || '_' || _season_name || '_S4C_L4B' :: character varying,
-                    5,
+                    10,
                     _site_id :: int,
                     _season_id :: int,
                     2::smallint,
@@ -130,7 +130,7 @@ begin
   	if _processor_id is null or _processor_name = 's4c_l4c' then
         perform sp_insert_scheduled_task(
                     _site_name || '_' || _season_name || '_S4C_L4C' :: character varying,
-                    6,
+                    11,
                     _site_id :: int,
                     _season_id :: int,
                     1::smallint,
@@ -142,8 +142,22 @@ begin
                     '{}' :: json);
     end if;
 
+    if _processor_id is null or (_processor_id = 14 and _processor_name = 's4c_mdb1')  then
+        perform sp_insert_scheduled_task(
+                    _site_name || '_' || _season_name || '_S4C_MDB1' :: character varying,
+                    14,
+                    _site_id :: int,
+                    _season_id :: int,
+                    1::smallint,
+                    1::smallint,
+                    0::smallint,
+                    cast((_start_date + 1) as character varying),
+                    60,
+                    1 :: smallint,
+                    '{}' :: json);
+    end if;
 
-    if _processor_id is not null and (_processor_id not in (2, 3, 5, 6) and _processor_name not in ('s4c_l4a', 's4c_l4b', 's4c_l4c')) then
+    if _processor_id is not null and _processor_id not in (2, 3, 5, 6, 9, 10, 11, 12, 13, 14) then
         raise exception 'No default jobs defined for processor id %', _processor_id;
     end if;
 

@@ -695,6 +695,10 @@ function check_paths()
             echo "Copying $l1c_processor_name GIPP files to ${l1c_processor_gipp_destination}"
             mkdir -p ${l1c_processor_gipp_destination}
             cp -rf "${l1c_processor_gipp_source}"/* ${l1c_processor_gipp_destination}
+
+            echo "Copying UserConfiguration into maja gipp location ..."
+            cp -fR ./config/maja/UserConfiguration ${l1c_processor_gipp_destination}
+            
         else
             echo "Cannot find $l1c_processor_name GIPP files in the distribution, please copy them to $l1c_processor_gipp_destination"
         fi

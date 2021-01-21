@@ -2,6 +2,33 @@
 
 USE_SNAP_8_DOCKER=0
 
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+    -s|--snap8-docker)
+    USE_SNAP8_DOCKER="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    *)    # unknown option
+    POSITIONAL+=("$1") # save it in an array for later
+    shift # past argument
+    ;;
+esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+if [ -z ${USE_SNAP8_DOCKER} ] ; then 
+    USE_SNAP_8_DOCKER=0
+else
+    if [[ "$USE_SNAP8_DOCKER" == "1" || "$USE_SNAP8_DOCKER" == "true" ]] ; then 
+        USE_SNAP_8_DOCKER=1
+    fi
+fi
+
 INSTAL_CONFIG_FILE="./config/install_config.conf"
 HAS_S2AGRI_SERVICES=false
 
