@@ -6,7 +6,7 @@ LABEL name="sen2agri-services" \
 RUN yum -y install yum-utils epel-release https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
     yum-config-manager --disable pgdg95 && \
     yum -y update && \
-    yum -y install file postgresql12 python-psycopg2 python2-pip R-devel libcurl-devel openssl-devel libxml2-devel && \
+    yum -y install file postgresql12 python-psycopg2 python-dateutil python2-pip R-devel libcurl-devel openssl-devel libxml2-devel && \
     echo -e 'packages <- c("arrow", "e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily", "caTools", "tidyverse", "data.table")\n\
              diff <- setdiff(packages, rownames(installed.packages()))\n\
              if (length(diff) > 0) {\n\
