@@ -8,11 +8,6 @@ import pipes
 import subprocess
 import sys
 
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
-
 
 def run_command(args, env=None, retry=False):
     args = list(map(str, args))
@@ -29,22 +24,6 @@ def run_command(args, env=None, retry=False):
             break
 
 
-class Config(object):
-    def __init__(self, args):
-        parser = ConfigParser()
-        parser.read([args.config_file])
-
-        self.host = parser.get("Database", "HostName")
-        self.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
-        self.dbname = parser.get("Database", "DatabaseName")
-        self.user = parser.get("Database", "UserName")
-        self.password = parser.get("Database", "Password")
-
-        self.site_id = args.site_id
-        self.tiles = args.tiles
-        self.products = args.products
-
-
 def check_file(p):
     if not os.path.exists(p):
         return False
@@ -56,12 +35,6 @@ def check_file(p):
 
 def main():
     parser = argparse.ArgumentParser(description="Crop type processor wrapper")
-    parser.add_argument(
-        "-c",
-        "--config-file",
-        default="/etc/sen2agri/sen2agri.conf",
-        help="configuration file location",
-    )
     parser.add_argument("-s", "--site-id", type=int, help="site ID to filter by")
     parser.add_argument(
         "-m",
@@ -139,8 +112,6 @@ def main():
     parser.add_argument("--lpis-path", required=False, help="LPIS path file")
     args = parser.parse_args()
 
-    config = Config(args)
-
     if args.config_file:
         config_file = os.path.realpath(args.config_file)
     else:
@@ -177,7 +148,7 @@ def main():
 
         command = []
         command += ["extract-parcels.py"]
-        command += ["-s", config.site_id]
+        command += ["-s", args.site_id]
         command += ["--season-start", args.season_start]
         command += ["--season-end", args.season_end]
         command += [parcels, lut, tile_footprints, optical_products, radar_products, lpis_path]
@@ -204,7 +175,7 @@ def main():
         command = []
         command += ["crop-type-parcels.py"]
         command += ["-m", "optical"]
-        command += ["-s", config.site_id]
+        command += ["-s", args.site_id]
         command += ["--lpis-path", lpis_path]
         command += ["--optical-products", optical_products]
         if args.mode != "both":
@@ -220,7 +191,7 @@ def main():
         command = []
         command += ["crop-type-parcels.py"]
         command += ["-m", "sar"]
-        command += ["-s", config.site_id]
+        command += ["-s", args.site_id]
         command += ["--lpis-path", lpis_path]
         command += ["--tile-footprints", tile_footprints]
         command += ["--radar-products", radar_products]

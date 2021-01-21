@@ -20,11 +20,6 @@ import subprocess
 import sys
 import tempfile
 
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
-
 
 SATELLITE_ID_SENTINEL2 = 1
 SATELLITE_ID_LANDSAT = 2
@@ -107,28 +102,6 @@ class RadarProduct(object):
 
 def parse_date(str):
     return datetime.strptime(str, "%Y-%m-%d").date()
-
-
-class Config(object):
-    def __init__(self, args):
-        parser = ConfigParser()
-        parser.read([args.config_file])
-
-        self.host = parser.get("Database", "HostName")
-        self.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
-        self.dbname = parser.get("Database", "DatabaseName")
-        self.user = parser.get("Database", "UserName")
-        self.password = parser.get("Database", "Password")
-
-        self.site_id = args.site_id
-        self.path = args.path
-        self.lpis_path = args.lpis_path
-        self.mode = args.mode
-        self.re = args.re
-
-        self.tile_footprints = args.tile_footprints
-        self.optical_products = args.optical_products
-        self.radar_products = args.radar_products
 
 
 def get_season_dates(start_date, end_date):
@@ -296,9 +269,9 @@ def paste_files(file1, file2, out):
     os.remove(temp)
 
 
-def process_optical(config, pool, satellite_id):
+def process_optical(args, pool, satellite_id):
     product_map = defaultdict(lambda: defaultdict(list))
-    with open(config.optical_products, "rb") as file:
+    with open(args.optical_products, "rb") as file:
         reader = csv.reader(file)
         next(reader)
         for (site_id, name, full_path, tile, created_timestamp) in reader:
@@ -328,10 +301,10 @@ def process_optical(config, pool, satellite_id):
         start_date = first_date
         dates = get_season_dates(start_date, last_date)
         print(site_id, start_date, last_date)
-        dates_file = save_dates_file(config.path, site_id, satellite_id, dates)
+        dates_file = save_dates_file(args.path, site_id, satellite_id, dates)
 
-        ref_map_10m = get_lpis_map(config.lpis_path, 10)
-        ref_map_20m = get_lpis_map(config.lpis_path, 20)
+        ref_map_10m = get_lpis_map(args.lpis_path, 10)
+        ref_map_20m = get_lpis_map(args.lpis_path, 20)
         work = []
         for tile, products in tiles.items():
             filtered_products = [
@@ -343,7 +316,7 @@ def process_optical(config, pool, satellite_id):
             if tile_ref_10m is not None:
                 work.append(
                     (
-                        config.path,
+                        args.path,
                         satellite_id,
                         tile,
                         filtered_products,
@@ -352,12 +325,12 @@ def process_optical(config, pool, satellite_id):
                         False,
                     )
                 )
-            if config.re:
+            if args.re:
                 tile_ref_20m = ref_map_20m.get(tile)
                 if tile_ref_20m is not None:
                     work.append(
                         (
-                            config.path,
+                            args.path,
                             satellite_id,
                             tile,
                             filtered_products,
@@ -377,15 +350,15 @@ def process_optical(config, pool, satellite_id):
             dev = "dev-{}.csv".format(tile)
             count = "count-{}.csv".format(tile)
 
-            mean = os.path.join(config.path, mean)
-            dev = os.path.join(config.path, dev)
-            count = os.path.join(config.path, count)
+            mean = os.path.join(args.path, mean)
+            dev = os.path.join(args.path, dev)
+            count = os.path.join(args.path, count)
 
             command += [mean, dev, count]
 
         run_command(command)
 
-        if config.re:
+        if args.re:
             command = []
             command += ["merge-statistics"]
             command += ["mean-re.csv", "dev-re.csv"]
@@ -394,25 +367,25 @@ def process_optical(config, pool, satellite_id):
                 dev_re = "dev-re-{}.csv".format(tile)
                 count_re = "count-re-{}.csv".format(tile)
 
-                mean_re = os.path.join(config.path, mean_re)
-                dev_re = os.path.join(config.path, dev_re)
-                count_re = os.path.join(config.path, count_re)
+                mean_re = os.path.join(args.path, mean_re)
+                dev_re = os.path.join(args.path, dev_re)
+                count_re = os.path.join(args.path, count_re)
 
                 command += [mean_re, dev_re, count_re]
 
             run_command(command)
 
         headers_mean = "mean-headers.csv"
-        headers_mean = os.path.join(config.path, headers_mean)
+        headers_mean = os.path.join(args.path, headers_mean)
 
         headers_dev = "dev-headers.csv"
-        headers_dev = os.path.join(config.path, headers_dev)
+        headers_dev = os.path.join(args.path, headers_dev)
 
         headers_re_mean = "mean-re-headers.csv"
-        headers_re_mean = os.path.join(config.path, headers_re_mean)
+        headers_re_mean = os.path.join(args.path, headers_re_mean)
 
         headers_re_dev = "dev-re-headers.csv"
-        headers_re_dev = os.path.join(config.path, headers_re_dev)
+        headers_re_dev = os.path.join(args.path, headers_re_dev)
 
         generate_headers(
             dates_file,
@@ -420,19 +393,19 @@ def process_optical(config, pool, satellite_id):
             headers_dev,
             headers_re_mean,
             headers_re_dev,
-            config.re,
+            args.re,
         )
 
         optical_features = "optical-features.csv"
-        optical_features = os.path.join(config.path, optical_features)
+        optical_features = os.path.join(args.path, optical_features)
 
         if not os.path.exists(optical_features):
             paste_files(headers_mean, headers_dev, optical_features)
             paste_files("mean.csv", "dev.csv", optical_features)
 
-        if config.re:
+        if args.re:
             optical_features_re = "optical-features-re.csv"
-            optical_features_re = os.path.join(config.path, optical_features_re)
+            optical_features_re = os.path.join(args.path, optical_features_re)
 
             if not os.path.exists(optical_features_re):
                 paste_files(headers_re_mean, headers_re_dev, optical_features_re)
@@ -1053,10 +1026,10 @@ def get_extent(raster):
     return extent
 
 
-def process_radar(config, pool):
-    tiles = get_tile_footprints(config.tile_footprints)
+def process_radar(args, pool):
+    tiles = get_tile_footprints(args.tile_footprints)
 
-    products = get_radar_products(config.radar_products)
+    products = get_radar_products(args.radar_products)
     groups = defaultdict(list)
     input_srs = None
     force_input_epsg = None
@@ -1101,7 +1074,7 @@ def process_radar(config, pool):
         tiles_input_srs[tile_id] = geom
 
     groups = sorted(list(groups.items()))
-    ref_map = get_lpis_map(config.lpis_path, 20)
+    ref_map = get_lpis_map(args.lpis_path, 20)
     ref_srs_map = {}
     ref_extent_map = {}
     for (tile_id, path) in ref_map.items():
@@ -1130,7 +1103,7 @@ def process_radar(config, pool):
         if tile_ref is None or tile_srs is None or tile_extent is None:
             continue
 
-        output = os.path.join(config.path, group.format(config.site_id))
+        output = os.path.join(args.path, group.format(args.site_id))
         temp = os.path.splitext(output)[0] + "_TMP.tif"
 
         epsg_code = tiles[group.tile_id][1]
@@ -1201,7 +1174,7 @@ def process_radar(config, pool):
         if tile_ref is None:
             continue
 
-        output = os.path.join(config.path, group.format(config.site_id))
+        output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
 
         composite = BackscatterMonthlyComposite(
@@ -1221,7 +1194,7 @@ def process_radar(config, pool):
         if pair.vv is None or pair.vh is None:
             continue
 
-        output = os.path.join(config.path, group.format(config.site_id))
+        output = os.path.join(args.path, group.format(args.site_id))
 
         statistics = WeeklyRatioStatistics(output, pair.vv, pair.vh, tile_ref)
         backscater_ratio_statistics.append(statistics)
@@ -1234,7 +1207,7 @@ def process_radar(config, pool):
         if tile_ref is None:
             continue
 
-        output = os.path.join(config.path, group.format(config.site_id))
+        output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
 
         pair.vv.sort()
@@ -1256,7 +1229,7 @@ def process_radar(config, pool):
         if tile_ref is None:
             continue
 
-        output = os.path.join(config.path, group.format(config.site_id))
+        output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
 
         composite = CoherenceMonthlyComposite(
@@ -1271,7 +1244,7 @@ def process_radar(config, pool):
         if tile_ref is None:
             continue
 
-        output = os.path.join(config.path, group.format(config.site_id))
+        output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
 
         composite = CoherenceSeasonComposite(
@@ -1349,12 +1322,6 @@ def generate_headers(
 
 def main():
     parser = argparse.ArgumentParser(description="Crop type processor")
-    parser.add_argument(
-        "-c",
-        "--config-file",
-        default="/etc/sen2agri/sen2agri.conf",
-        help="configuration file location",
-    )
     parser.add_argument("-s", "--site-id", type=int, help="site ID to filter by")
     parser.add_argument(
         "-m", "--mode", required=True, choices=["optical", "sar"], help="mode"
@@ -1378,9 +1345,8 @@ def main():
 
     args = parser.parse_args()
 
-    config = Config(args)
     cpu_count = multiprocessing.cpu_count()
-    if config.mode == "optical":
+    if args.mode == "optical":
         if not args.optical_products:
             print("--optical-products is required with -m optical")
             sys.exit(1)
@@ -1394,10 +1360,10 @@ def main():
             sys.exit(1)
         pool = multiprocessing.dummy.Pool(cpu_count)
 
-    if config.mode == "optical":
-        process_optical(config, pool, SATELLITE_ID_SENTINEL2)
+    if args.mode == "optical":
+        process_optical(args, pool, SATELLITE_ID_SENTINEL2)
     else:
-        process_radar(config, pool)
+        process_radar(args, pool)
 
 
 if __name__ == "__main__":
