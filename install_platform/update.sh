@@ -496,7 +496,7 @@ else
 
     echo "Updating R packages..."
     Rscript - <<- EOF
-    packages <- c("e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily", "caTools", "tidyverse", "data.table")
+    packages <- c("arrow", "e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily", "caTools", "tidyverse", "data.table")
     diff <- setdiff(packages, rownames(installed.packages()))
     if (length(diff) > 0) {
         install.packages(diff, repos = c(CRAN = "https://cran.rstudio.com"))

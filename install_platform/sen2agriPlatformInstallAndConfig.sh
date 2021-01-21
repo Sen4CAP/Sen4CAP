@@ -495,7 +495,7 @@ function install_RPMs()
    ##########################################################
 
    ##install a couple of packages
-   yum -y install gdal-python python-psycopg2 gd
+   yum -y install gdal-python python-psycopg2 python-dateutil gd
 
    ##install gdal 2.3 from the local repository
    yum -y install ../rpm_binaries/gdal-local-*.centos7.x86_64.rpm
@@ -552,7 +552,7 @@ function install_additional_packages()
         # Install R
         yum install -y R-devel libcurl-devel openssl-devel libxml2-devel
         Rscript - <<- EOF
-        packages <- c("e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily", "caTools", "tidyverse", "data.table")
+        packages <- c("arrow", "e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily", "caTools", "tidyverse", "data.table")
         diff <- setdiff(packages, rownames(installed.packages()))
         if (length(diff) > 0) {
             install.packages(diff, repos = c(CRAN = "https://cran.rstudio.com"))
