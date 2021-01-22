@@ -359,6 +359,8 @@ function config_docker()
         sleep 1
     done
 
+    docker pull lnicola/sen2agri-processors
+    
     cd ..
 }
 #-----------------------------------------------------------#

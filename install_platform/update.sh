@@ -308,6 +308,8 @@ function setup_containers() {
     cd docker
     docker-compose up -d
     cd ..
+    
+    docker pull lnicola/sen2agri-processors
 }
 
 function migrate_to_docker() {
@@ -372,7 +374,7 @@ function create_and_config_slurm_qos()
 }
 
 function update_maja_gipp() {
-    VAL=$(psql -qtAX -U admin ${DB_NAME} -c "select value from config where key = 'processor.l2a.maja.gipp-path'")
+    VAL=$(psql -qtAX -U admin ${DB_NAME} -c "select value from config where key = 'processor.l2a.maja.gipp-path' and site_id is null")
     if [ ! -z $VAL ] ; then
         if [ -d $VAL ] ; then
             echo "Key processor.l2a.maja.gipp-path found with value ${VAL}. Copying UserConfiguration into this location ..."
