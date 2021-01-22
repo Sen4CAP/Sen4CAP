@@ -495,7 +495,8 @@ print("Start validation and confusion matrix")
 
 start.time <- Sys.time()
 
-data_valid_final_red_plus <- read_feather(data_valid_final_red_plus_file, as_data_frame=TRUE)
+data_valid_final_red_plus <- read_feather(data_valid_final_red_plus_file)
+file.remove(data_valid_final_red_plus_file)
 predict_Ranger_trees=predict(Ranger_trees, data_valid_final_red_plus)
 
 end.time <- Sys.time()
@@ -799,6 +800,7 @@ print("Start prediction")
 start.time <- Sys.time()
 
 data_predict_red <- read_feather(data_predict_red_file)
+file.remove(data_predict_red_file)
 predict_Ranger_trees=predict(Ranger_trees,data_predict_red)
 
 end.time <- Sys.time()
@@ -825,6 +827,7 @@ predict.2class=colnames(predictions)[predict.which2max]
 predict.2class=ifelse(predict.class==predict.2class,colnames(predictions)[apply(predictions, 1, function(x) which(x==sort(x,partial=n-1)[n-1])[2])],predict.2class)
 
 parcels_predict <- read_feather(parcels_predict_file)
+file.remove(parcels_predict_file)
 Predict_classif=data.frame(parcels_predict$NewID,parcels_predict$CTnumL4A,predict.class,round(predict.max,digits=3),predict.2class,round(predict.2max,digits=3))
 colnames(Predict_classif)=c("NewID",'CT_decl','CT_pred_1','CT_conf_1','CT_pred_2','CT_conf_2')
 
