@@ -110,12 +110,12 @@ NewStepList NdviHandler::GetSteps(EventProcessingContext &ctx, const JobSubmitte
                                                                      resolutionStr);
 
         // add these steps to the steps list to be submitted
-        steps.append(genMonoDateMskFagsTask.CreateStep("GenerateLaiMonoDateMaskFlags", genMonoDateMskFagsArgs));
+        steps.append(CreateTaskStep(genMonoDateMskFagsTask, "GenerateLaiMonoDateMaskFlags", genMonoDateMskFagsArgs));
 
         const QStringList &ndviRviExtractionArgs = GetNdviRviExtractionNewArgs(prdTileInfo.tileFile, monoDateMskFlgsFileName,
                                                                      singleNdviFile,
                                                                      resolutionStr, laiCfgFile);
-        steps.append(ndviRviExtractorTask.CreateStep("NdviRviExtractionNew", ndviRviExtractionArgs));
+        steps.append(CreateTaskStep(ndviRviExtractorTask, "NdviRviExtractionNew", ndviRviExtractionArgs));
 
 
         // save the NDVI file name list
@@ -129,12 +129,12 @@ NewStepList NdviHandler::GetSteps(EventProcessingContext &ctx, const JobSubmitte
     QStringList productFormatterArgs = GetNdviProductFormatterArgs(
                 ndviProductFormatterTask, ctx, event, prdTilesInfosList,
                 ndviList, flgsList);
-    steps.append(ndviProductFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+    steps.append(CreateTaskStep(ndviProductFormatterTask, "ProductFormatter", productFormatterArgs));
 
     if(bRemoveTempFiles) {
         TaskToSubmit &cleanupTemporaryFilesTask = allTasksList[curTaskIdx++];
         // add also the cleanup step
-        steps.append(cleanupTemporaryFilesTask.CreateStep("CleanupTemporaryFiles", cleanupTemporaryFilesList));
+        steps.append(CreateTaskStep(cleanupTemporaryFilesTask, "CleanupTemporaryFiles", cleanupTemporaryFilesList));
     }
 
     return steps;
@@ -203,7 +203,7 @@ void NdviHandler::SubmitEndOfNdviTask(EventProcessingContext &ctx,
     TaskToSubmit endOfJobDummyTask{"end-of-job", {}};
     endOfJobDummyTask.parentTasks.append(prdFormatterTasksListRef);
     SubmitTasks(ctx, event.jobId, {endOfJobDummyTask});
-    ctx.SubmitSteps({endOfJobDummyTask.CreateStep("EndOfJob", QStringList())});
+    ctx.SubmitSteps({CreateTaskStep(endOfJobDummyTask, "EndOfJob", QStringList())});
 
 }
 
@@ -276,7 +276,7 @@ void NdviHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
                 // we assume that all the tiles from the product are from the same satellite
                 // in this case, we get only once the satellite Id for all tiles
                 if(satId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
-                    satId = GetSatIdForTile(siteTiles, tileId);
+                    satId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
                     // ignore tiles for which the satellite id cannot be determined
                     if(satId != ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
                         break;

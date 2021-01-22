@@ -73,9 +73,9 @@ void PhenoNdviHandler::HandleNewTilesList(EventProcessingContext &ctx,
                                       };
 
     globalExecInfos.allStepsList = {
-        ndviMaskSeriesExtractorTask.CreateStep("NdviMaskSeriesExtractor", bandsExtractorArgs),
-        metricsEstimationTask.CreateStep("PhenologicalNDVIMetrics", metricsEstimationArgs),
-        metricsSplitterTask.CreateStep("PhenoMetricsSplitter", metricsSplitterArgs),
+        CreateTaskStep(ndviMaskSeriesExtractorTask, "NdviMaskSeriesExtractor", bandsExtractorArgs),
+        CreateTaskStep(metricsEstimationTask, "PhenologicalNDVIMetrics", metricsEstimationArgs),
+        CreateTaskStep(metricsSplitterTask, "PhenoMetricsSplitter", metricsSplitterArgs),
     };
 
     PhenoProductFormatterParams &productFormatterParams = globalExecInfos.prodFormatParams;
@@ -121,7 +121,7 @@ void PhenoNdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     QStringList productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, event, listProducts, listParams);
 
     // add these steps to the steps list to be submitted
-    allSteps.append(productFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+    allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
     ctx.SubmitSteps(allSteps);
 }
 

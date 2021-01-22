@@ -50,7 +50,7 @@ void GrasslandMowingHandler::CreateSteps(GrasslandMowingExecConfig &cfg, QList<T
     TaskToSubmit &genInputShpTask = allTasksList[curTaskIdx++];
     const QString &inputShpLocation = genInputShpTask.GetFilePath("SEN4CAP_L4B_GeneratedInputShp.shp");
     const QStringList &inShpGenArgs = GetInputShpGeneratorArgs(cfg, inputShpLocation);
-    steps.append(genInputShpTask.CreateStep("MowingInputShpGenerator", inShpGenArgs));
+    steps.append(CreateTaskStep(genInputShpTask, "MowingInputShpGenerator", inShpGenArgs));
 
     // It is assumed that the product formatter task it is the last one in the list
     TaskToSubmit &productFormatterTask = allTasksList[allTasksList.size()-1];
@@ -65,7 +65,7 @@ void GrasslandMowingHandler::CreateSteps(GrasslandMowingExecConfig &cfg, QList<T
         const QString &s2OutDir = s2MowingDetectionTask.GetFilePath("SEN4CAP_L4B_S2_OutputWorkingData");
         const QStringList &s2MowingDetectionArgs = GetMowingDetectionArgs(cfg, L3B, inputShpLocation,
                                                                           s2OutDir, s2MowingDetectionOutFile);
-        steps.append(s2MowingDetectionTask.CreateStep("S2MowingDetection", s2MowingDetectionArgs));
+        steps.append(CreateTaskStep(s2MowingDetectionTask, "S2MowingDetection", s2MowingDetectionArgs));
 
         productFormatterFiles += s2MowingDetectionOutFile;
         // add also the dbf, prj and shx files
@@ -93,7 +93,7 @@ void GrasslandMowingHandler::CreateSteps(GrasslandMowingExecConfig &cfg, QList<T
         const QString &s1OutDir = s1MowingDetectionTask.GetFilePath("SEN4CAP_L4B_S1_OutputWorkingData");
         const QStringList &s1MowingDetectionArgs = GetMowingDetectionArgs(cfg, L2_S1, s1InputShpLocation,
                                                                           s1OutDir, s1MowingDetectionOutFile);
-        steps.append(s1MowingDetectionTask.CreateStep("S1MowingDetection", s1MowingDetectionArgs));
+        steps.append(CreateTaskStep(s1MowingDetectionTask, "S1MowingDetection", s1MowingDetectionArgs));
 
         productFormatterFiles += s1MowingDetectionOutFile;
         // add also the dbf, prj and shx files
@@ -112,7 +112,7 @@ void GrasslandMowingHandler::CreateSteps(GrasslandMowingExecConfig &cfg, QList<T
     }
 
     const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, productFormatterFiles);
-    steps.append(productFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+    steps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
 }
 
 bool GrasslandMowingHandler::CheckInputParameters(GrasslandMowingExecConfig &cfg, QString &err) {

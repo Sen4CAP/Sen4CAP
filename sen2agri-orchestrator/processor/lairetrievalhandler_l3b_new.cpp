@@ -57,7 +57,7 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(EventProcessingContext 
             outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
         }
     }
-    outAllTasksList.append({"lai-processor-product-formatter", {}});
+    outAllTasksList.append({"product-formatter", {}});
     if(bRemoveTempFiles) {
         outAllTasksList.append(TaskToSubmit{ "files-remover", {} });
     }
@@ -225,12 +225,12 @@ NewStepList LaiRetrievalHandlerL3BNew::GetStepsForMonodateLai(EventProcessingCon
     }
     TaskToSubmit &laiMonoProductFormatterTask = allTasksList[curTaskIdx++];
     QStringList productFormatterArgs = GetLaiMonoProductFormatterArgs(laiMonoProductFormatterTask, ctx, event, tileResultFileInfos);
-    steps.append(laiMonoProductFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+    steps.append(CreateTaskStep(laiMonoProductFormatterTask, "ProductFormatter", productFormatterArgs));
 
     if(bRemoveTempFiles) {
         TaskToSubmit &cleanupTemporaryFilesTask = allTasksList[curTaskIdx++];
         // add also the cleanup step
-        steps.append(cleanupTemporaryFilesTask.CreateStep("CleanupTemporaryFiles", cleanupTemporaryFilesList));
+        steps.append(CreateTaskStep(cleanupTemporaryFilesTask, "CleanupTemporaryFiles", cleanupTemporaryFilesList));
     }
 
     return steps;
@@ -247,7 +247,7 @@ int LaiRetrievalHandlerL3BNew::GetStepsForStatusFlags(QList<TaskToSubmit> &allTa
                                                                  tileResultFileInfo.statusFlagsFileResampled,
                                                                  tileResultFileInfo.resolutionStr);
     // add these steps to the steps list to be submitted
-    steps.append(genMonoDateMskFagsTask.CreateStep("GenerateLaiMonoDateMaskFlags", genMonoDateMskFagsArgs));
+    steps.append(CreateTaskStep(genMonoDateMskFagsTask, "GenerateLaiMonoDateMaskFlags", genMonoDateMskFagsArgs));
     cleanupTemporaryFilesList.append(tileResultFileInfo.statusFlagsFile);
     cleanupTemporaryFilesList.append(tileResultFileInfo.statusFlagsFileResampled);
 
@@ -264,7 +264,7 @@ int LaiRetrievalHandlerL3BNew::GetStepsForNdvi(QList<TaskToSubmit> &allTasksList
                                                                  tileResultFileInfo.statusFlagsFile,
                                                                  tileResultFileInfo.ndviFile,
                                                                  tileResultFileInfo.resolutionStr, laiCfgFile);
-    steps.append(ndviRviExtractorTask.CreateStep("NdviRviExtractionNew", ndviRviExtractionArgs));
+    steps.append(CreateTaskStep(ndviRviExtractorTask, "NdviRviExtractionNew", ndviRviExtractionArgs));
     // save the file to be sent to product formatter
     cleanupTemporaryFilesList.append(tileResultFileInfo.ndviFile);
 
@@ -288,10 +288,10 @@ int LaiRetrievalHandlerL3BNew::GetStepsForAnglesCreation(QList<TaskToSubmit> &al
     const QStringList &gdalBuildAnglesVrtArgs = GetGdalBuildAnglesVrtArgs(anglesSmallResNoDataFileName, anglesVrtFileName);
     const QStringList &gdalResampleAnglesArgs = GetGdalTranslateResampleAnglesArgs(anglesVrtFileName, tileResultFileInfo.anglesFile);
 
-    steps.append(createAnglesTask.CreateStep("CreateAnglesRaster", createAnglesArgs));
-    steps.append(gdalTranslateNoDataTask.CreateStep("gdal_translate", gdalSetAnglesNoDataArgs));
-    steps.append(anglesCreateVrtTask.CreateStep("gdalbuildvrt", gdalBuildAnglesVrtArgs));
-    steps.append(anglesResampleTask.CreateStep("gdal_translate", gdalResampleAnglesArgs));
+    steps.append(CreateTaskStep(createAnglesTask, "CreateAnglesRaster", createAnglesArgs));
+    steps.append(CreateTaskStep(gdalTranslateNoDataTask, "gdal_translate", gdalSetAnglesNoDataArgs));
+    steps.append(CreateTaskStep(anglesCreateVrtTask, "gdalbuildvrt", gdalBuildAnglesVrtArgs));
+    steps.append(CreateTaskStep(anglesResampleTask, "gdal_translate", gdalResampleAnglesArgs));
     cleanupTemporaryFilesList.append(anglesSmallResFileName);
     cleanupTemporaryFilesList.append(anglesSmallResNoDataFileName);
     cleanupTemporaryFilesList.append(anglesVrtFileName);
@@ -312,7 +312,7 @@ int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(QList<TaskToSubmit> &allTas
     const QStringList &BIProcessorArgs = GetLaiProcessorArgs(tileResultFileInfo.tileFile, tileResultFileInfo.anglesFile,
                                                                     tileResultFileInfo.resolutionStr, laiCfgFile,
                                                                     BIFileName, indexName);
-    steps.append(biProcessorTask.CreateStep("BVLaiNewProcessor" + indexNameCaps, BIProcessorArgs));
+    steps.append(CreateTaskStep(biProcessorTask, "BVLaiNewProcessor" + indexNameCaps, BIProcessorArgs));
 
     const auto & domainFlagsFileName = biDomainFlagsTask.GetFilePath(indexNameCaps + "_out_domain_flags.tif");
     const auto & correctedBIFileName = biDomainFlagsTask.GetFilePath(indexNameCaps + "_corrected_mono_date.tif");
@@ -320,10 +320,10 @@ int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(QList<TaskToSubmit> &allTas
                                                                 laiCfgFile, indexName,
                                                                 domainFlagsFileName,  correctedBIFileName,
                                                                 tileResultFileInfo.resolutionStr);
-    steps.append(biDomainFlagsTask.CreateStep("Generate" + indexNameCaps + "InDomainQualityFlags", outDomainFlagsArgs));
+    steps.append(CreateTaskStep(biDomainFlagsTask, "Generate" + indexNameCaps + "InDomainQualityFlags", outDomainFlagsArgs));
 
     const QStringList &quantifyFcoverImageArgs = GetQuantifyImageArgs(correctedBIFileName, quantifiedBIFileName);
-    steps.append(quantifyBIImageTask.CreateStep("Quantify"+indexNameCaps + "Image", quantifyFcoverImageArgs));
+    steps.append(CreateTaskStep(quantifyBIImageTask, "Quantify"+indexNameCaps + "Image", quantifyFcoverImageArgs));
     // save the file to be sent to product formatter
     if (indexName == "fapar") {
         tileResultFileInfo.faparDomainFlagsFile = domainFlagsFileName;
@@ -351,7 +351,7 @@ int LaiRetrievalHandlerL3BNew::GetStepsForInDomainFlags(QList<TaskToSubmit> &all
     const QStringList &inDomainFlagsArgs = GetGenerateInputDomainFlagsArgs(tileResultFileInfo.tileFile,
                                                                 laiCfgFile, tileResultFileInfo.inDomainFlagsFile,
                                                                 tileResultFileInfo.resolutionStr);
-    steps.append(inputDomainTask.CreateStep("GenerateInDomainQualityFlags", inDomainFlagsArgs));
+    steps.append(CreateTaskStep(inputDomainTask, "GenerateInDomainQualityFlags", inDomainFlagsArgs));
 
     return curTaskIdx;
 }
@@ -411,7 +411,7 @@ void LaiRetrievalHandlerL3BNew::SubmitEndOfLaiTask(EventProcessingContext &ctx,
     // add the end of lai job that will perform the cleanup
     QList<std::reference_wrapper<const TaskToSubmit>> endOfJobParents;
     for(const TaskToSubmit &task: allTasksList) {
-        if(task.moduleName == "lai-processor-product-formatter" ||
+        if(task.moduleName == "product-formatter" ||
                 task.moduleName == "files-remover") {
             endOfJobParents.append(task);
         }
@@ -421,7 +421,7 @@ void LaiRetrievalHandlerL3BNew::SubmitEndOfLaiTask(EventProcessingContext &ctx,
     TaskToSubmit endOfJobDummyTask{"end-of-job", {}};
     endOfJobDummyTask.parentTasks.append(endOfJobParents);
     SubmitTasks(ctx, event.jobId, {endOfJobDummyTask});
-    ctx.SubmitSteps({endOfJobDummyTask.CreateStep("EndOfJob", QStringList())});
+    ctx.SubmitSteps({CreateTaskStep(endOfJobDummyTask, "EndOfJob", QStringList())});
 
 }
 
@@ -501,7 +501,7 @@ void LaiRetrievalHandlerL3BNew::HandleTaskFinishedImpl(EventProcessingContext &c
         // Now remove the job folder containing temporary files
         RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
     }
-    if ((event.module == "lai-processor-product-formatter")) {
+    if ((event.module == "product-formatter")) {
         QString prodName = GetProductFormatterProductName(ctx, event);
         QString productFolder = GetProductFormatterOutputProductPath(ctx, event);
         if((prodName != "") && ProcessorHandlerHelper::IsValidHighLevelProduct(productFolder)) {
@@ -519,7 +519,7 @@ void LaiRetrievalHandlerL3BNew::HandleTaskFinishedImpl(EventProcessingContext &c
                 // we assume that all the tiles from the product are from the same satellite
                 // in this case, we get only once the satellite Id for all tiles
                 if(satId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
-                    satId = GetSatIdForTile(siteTiles, tileId);
+                    satId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
                     // ignore tiles for which the satellite id cannot be determined
                     if(satId != ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
                         break;

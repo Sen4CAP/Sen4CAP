@@ -8,6 +8,7 @@
 #include "json_conversions.hpp"
 #include "logger.hpp"
 #include "s4c_utils.hpp"
+#include "stepexecutiondecorator.h"
 
 #define MDB1_DEF_TS_ROOT          "/mnt/archive/marker_database_files/mdb1/{site}/{year}/"
 #define MDB1_DEF_DATA_EXTR_ROOT   "/mnt/archive/marker_database_files/mdb1/{site}/{year}/data_extraction/"
@@ -82,7 +83,7 @@ void S4CMarkersDB1DataExtractStepsBuilder::CreateSteps(const MarkerType &marker,
                 dataExtrDirs.append(dataExtrDirName);
             }
             const QStringList &dataExtractionArgs = GetDataExtractionArgs("NewID", prdMarkerInfo, dataExtrDirName);
-            steps.append(dataExtractionTask.CreateStep("Markers1Extractor", dataExtractionArgs));
+            steps.append(StepExecutionDecorator::GetInstance()->CreateTaskStep(MDB1_PROC_SHORT_NAME, dataExtractionTask, "Markers1Extractor", dataExtractionArgs));
         }
     }
 }

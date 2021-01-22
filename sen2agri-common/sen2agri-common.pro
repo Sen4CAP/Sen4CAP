@@ -16,7 +16,8 @@ SOURCES += \
     stopwatch.cpp \
     dbus_future_utils.cpp \
     json_conversions.cpp \
-    configuration.cpp
+    configuration.cpp \
+    json_utils.cpp
 
 HEADERS += \
     model.hpp \
@@ -28,4 +29,5 @@ HEADERS += \
     stopwatch.hpp \
     dbus_future_utils.hpp \
     json_conversions.hpp \
-    configuration.hpp
+    configuration.hpp \
+    json_utils.hpp

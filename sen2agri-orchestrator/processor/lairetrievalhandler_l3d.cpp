@@ -80,7 +80,7 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3D::GetL3BMapTiles(Even
 
             // TODO: see if a limitation is needed based on the satellite ID (only S2?)
 
-            ProcessorHandlerHelper::SatelliteIdType tileSatId = GetSatIdForTile(siteTiles, tileId);
+            ProcessorHandlerHelper::SatelliteIdType tileSatId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
             if(!retL3bMapTiles.contains(tileId)) {
                 TileTemporalFilesInfo newTileInfos;
                 newTileInfos.tileId = tileId;

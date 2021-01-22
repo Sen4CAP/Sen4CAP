@@ -160,9 +160,9 @@ NewStepList LaiRetrievalHandlerMultiDateBase::GetStepsForMultiDateReprocessing(
     const QStringList &mskFlagsTimeSeriesBuilderArgs = GetTimeSeriesBuilderArgs(monoDateMskFlagsLaiFileNames2,
                                                                                  allMskFlagsTimeSeriesFileName, mainMsksImg, true);
 
-    steps.append(imgTimeSeriesBuilderTask.CreateStep("TimeSeriesBuilder", timeSeriesBuilderArgs));
-    steps.append(errTimeSeriesBuilderTask.CreateStep("TimeSeriesBuilder", errTimeSeriesBuilderArgs));
-    steps.append(mskFlagsTimeSeriesBuilderTask.CreateStep("TimeSeriesBuilder", mskFlagsTimeSeriesBuilderArgs));
+    steps.append(CreateTaskStep(imgTimeSeriesBuilderTask, "TimeSeriesBuilder", timeSeriesBuilderArgs));
+    steps.append(CreateTaskStep(errTimeSeriesBuilderTask, "TimeSeriesBuilder", errTimeSeriesBuilderArgs));
+    steps.append(CreateTaskStep(mskFlagsTimeSeriesBuilderTask, "TimeSeriesBuilder", mskFlagsTimeSeriesBuilderArgs));
 
     TaskToSubmit &profileReprocTask = allTasksList[curTaskIdx++];
     TaskToSubmit &profileReprocSplitTask = allTasksList[curTaskIdx++];
@@ -176,8 +176,8 @@ NewStepList LaiRetrievalHandlerMultiDateBase::GetStepsForMultiDateReprocessing(
                                                                          reprocTimeSeriesFileName, listDates);
     QStringList reprocProfileSplitterArgs = GetReprocProfileSplitterArgs(reprocTimeSeriesFileName, reprocFileListFileName,
                                                                          reprocFlagsFileListFileName, listDates);
-    steps.append(profileReprocTask.CreateStep("ProfileReprocessing", profileReprocessingArgs));
-    steps.append(profileReprocSplitTask.CreateStep("ReprocessedProfileSplitter2", reprocProfileSplitterArgs));
+    steps.append(CreateTaskStep(profileReprocTask, "ProfileReprocessing", profileReprocessingArgs));
+    steps.append(CreateTaskStep(profileReprocSplitTask, "ReprocessedProfileSplitter2", reprocProfileSplitterArgs));
 
     if(bRemoveTempFiles) {
         TaskToSubmit &cleanupTemporaryFilesTask = allTasksList[curTaskIdx++];
@@ -186,7 +186,7 @@ NewStepList LaiRetrievalHandlerMultiDateBase::GetStepsForMultiDateReprocessing(
         cleanupTemporaryFilesList.append(allMskFlagsTimeSeriesFileName);
         cleanupTemporaryFilesList.append(reprocTimeSeriesFileName);
         // add also the cleanup step
-        steps.append(cleanupTemporaryFilesTask.CreateStep("CleanupTemporaryFiles", cleanupTemporaryFilesList));
+        steps.append(CreateTaskStep(cleanupTemporaryFilesTask, "CleanupTemporaryFiles", cleanupTemporaryFilesList));
     }
 
     productFormatterParams.laiReprocParams.fileLaiReproc = reprocFileListFileName;
@@ -237,14 +237,14 @@ NewStepList LaiRetrievalHandlerMultiDateBase::GetStepsForCompactMultiDateReproce
 
     const QStringList &reprocProfileSplitterArgs = GetReprocProfileSplitterArgs(reprocTimeSeriesFileName, reprocFileListFileName,
                                                                          reprocFlagsFileListFileName, listDates);
-    steps.append(profileReprocTask.CreateStep("ProfileReprocessing", profileReprocessingArgs));
-    steps.append(profileReprocSplitTask.CreateStep("ReprocessedProfileSplitter2", reprocProfileSplitterArgs));
+    steps.append(CreateTaskStep(profileReprocTask, "ProfileReprocessing", profileReprocessingArgs));
+    steps.append(CreateTaskStep(profileReprocSplitTask, "ReprocessedProfileSplitter2", reprocProfileSplitterArgs));
 
     if(bRemoveTempFiles) {
         TaskToSubmit &cleanupTemporaryFilesTask = allTasksList[curTaskIdx++];
         cleanupTemporaryFilesList.append(reprocTimeSeriesFileName);
         // add also the cleanup step
-        steps.append(cleanupTemporaryFilesTask.CreateStep("CleanupTemporaryFiles", cleanupTemporaryFilesList));
+        steps.append(CreateTaskStep(cleanupTemporaryFilesTask, "CleanupTemporaryFiles", cleanupTemporaryFilesList));
     }
 
     productFormatterParams.laiReprocParams.fileLaiReproc = reprocFileListFileName;
@@ -441,7 +441,7 @@ bool LaiRetrievalHandlerMultiDateBase::AddTileFileInfo(EventProcessingContext &c
     const QString &tileDir = mapL3BTiles[tileId];
     if(tileDir.length() == 0) {
         // get the primary satellite from the received tile and the received product
-        ProcessorHandlerHelper::SatelliteIdType l3bPrdSatId = GetSatIdForTile(siteTiles, mapL3BTiles.keys().at(0));
+        ProcessorHandlerHelper::SatelliteIdType l3bPrdSatId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, mapL3BTiles.keys().at(0));
         QList<ProcessorHandlerHelper::SatelliteIdType> listSatIds = {satId, l3bPrdSatId};
         ProcessorHandlerHelper::SatelliteIdType primarySatId = ProcessorHandlerHelper::GetPrimarySatelliteId(listSatIds);
         // if is primary satellite only, then add intersecting tiles from the product
@@ -539,7 +539,7 @@ void LaiRetrievalHandlerMultiDateBase::SubmitEndOfLaiTask(EventProcessingContext
     TaskToSubmit endOfJobDummyTask{"end-of-job", {}};
     endOfJobDummyTask.parentTasks.append(prdFormatterTasksListRef);
     SubmitTasks(ctx, event.jobId, {endOfJobDummyTask});
-    ctx.SubmitSteps({endOfJobDummyTask.CreateStep("EndOfJob", QStringList())});
+    ctx.SubmitSteps({CreateTaskStep(endOfJobDummyTask, "EndOfJob", QStringList())});
 }
 
 void LaiRetrievalHandlerMultiDateBase::SubmitL3BMapTiles(EventProcessingContext &ctx,
@@ -583,7 +583,7 @@ void LaiRetrievalHandlerMultiDateBase::SubmitL3BMapTiles(EventProcessingContext 
         const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx,
                                               event, l3bMapTiles, realL2AMetaFiles, listParams);
         // add these steps to the steps list to be submitted
-        allSteps.append(productFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+        allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
         ctx.SubmitSteps(allSteps);
     } else {
         Logger::error(QStringLiteral("Request for executing but no products were found for execution. Ignored ..."));
@@ -597,7 +597,7 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerMultiDateBase::FilterSec
     QMap<QString, ProcessorHandlerHelper::SatelliteIdType> mapTilesSats;
     // iterate the tiles of the newest L3B product
     for(const auto &tileId : mapTiles.keys()) {
-        ProcessorHandlerHelper::SatelliteIdType tileSatId = GetSatIdForTile(siteTiles, tileId);
+        ProcessorHandlerHelper::SatelliteIdType tileSatId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
         // ignore tiles for which the satellite id cannot be determined
         if(tileSatId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
             continue;

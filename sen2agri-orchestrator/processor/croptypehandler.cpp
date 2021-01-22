@@ -91,7 +91,7 @@ NewStepList CropTypeHandler::CreateSteps(EventProcessingContext &ctx, const JobS
     TaskToSubmit &cropTypeTask = allTasksList[curTaskIdx++];
 
     QStringList corpTypeArgs = GetCropTypeTaskArgs(ctx, event, cfg, listProducts, cropTypeTask);
-    allSteps.append(cropTypeTask.CreateStep("CropTypeFused", corpTypeArgs));
+    allSteps.append(CreateTaskStep(cropTypeTask, "CropTypeFused", corpTypeArgs));
     return allSteps;
 }
 

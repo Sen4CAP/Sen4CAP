@@ -111,7 +111,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
         const auto &masksFile = maskHandler.GetFilePath("all_masks_file.tif");
         QStringList maskHandlerArgs = { "MaskHandler", "-xml",         inputProduct, "-out",
                                         masksFile,     "-sentinelres", resolutionStr };
-        steps.append(maskHandler.CreateStep("MaskHandler", maskHandlerArgs));
+        steps.append(CreateTaskStep(maskHandler, "MaskHandler", maskHandlerArgs));
         cleanupTemporaryFilesList.append(masksFile);
 
         TaskToSubmit &compositePreprocessing = allTasksList[nCurTaskIdx++];
@@ -143,7 +143,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
             compositePreprocessingArgs.append("-pmxml");
             compositePreprocessingArgs.append(primaryTileMetadata);
         }
-        steps.append(compositePreprocessing.CreateStep("CompositePreprocessing", compositePreprocessingArgs));
+        steps.append(CreateTaskStep(compositePreprocessing, "CompositePreprocessing", compositePreprocessingArgs));
 
         TaskToSubmit &weightAot = allTasksList[nCurTaskIdx++];
         SubmitTasks(ctx, cfg.jobId, {weightAot});
@@ -162,7 +162,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
                                       aotResImg,       "-waotmin", cfg.weightAOTMin, "-waotmax",
                                       cfg.weightAOTMax,    "-aotmax",  cfg.AOTMax,       "-out",
                                       outWeightAotFile };
-        steps.append(weightAot.CreateStep("WeightAOT", weightAotArgs));
+        steps.append(CreateTaskStep(weightAot, "WeightAOT", weightAotArgs));
         cleanupTemporaryFilesList.append(outWeightAotFile);
 
         // Weight on clouds Step
@@ -171,7 +171,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
                                           "-incldmsk",      cldResImg,        "-coarseres",
                                           cfg.coarseRes,        "-sigmasmallcld", cfg.sigmaSmallCloud,
                                           "-sigmalargecld", cfg.sigmaLargeCloud,  "-out", outWeightCldFile };
-        steps.append(weightOnClouds.CreateStep("WeightOnClouds", weightOnCloudArgs));
+        steps.append(CreateTaskStep(weightOnClouds, "WeightOnClouds", weightOnCloudArgs));
         cleanupTemporaryFilesList.append(outWeightCldFile);
 
         // Total weight Step
@@ -181,7 +181,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
                                         outWeightCldFile, "-l3adate",       cfg.l3aSynthesisDate,
                                         "-halfsynthesis", cfg.synthalf,         "-wdatemin",
                                         cfg.weightDateMin,    "-out",           outTotalWeighFile };
-        steps.append(totalWeight.CreateStep("TotalWeight", totalWeightArgs));
+        steps.append(CreateTaskStep(totalWeight, "TotalWeight", totalWeightArgs));
         cleanupTemporaryFilesList.append(outTotalWeighFile);
 
         // Update Synthesis Step
@@ -208,7 +208,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
             // normally this will not be created in intermedaiate steps
             //cleanupTemporaryFilesList.append(prevL3ARgbFile);
         }
-        steps.append(updateSynthesis.CreateStep("UpdateSynthesis", updateSynthesisArgs));
+        steps.append(CreateTaskStep(updateSynthesis, "UpdateSynthesis", updateSynthesisArgs));
         cleanupTemporaryFilesList.append(outL3AResultFile);
 
         // Composite Splitter Step
@@ -231,7 +231,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
             compositeSplitterArgs.append("-outrgb");
             compositeSplitterArgs.append(outL3AResultRgbFile);
         }
-        steps.append(compositeSplitter.CreateStep("CompositeSplitter", compositeSplitterArgs));
+        steps.append(CreateTaskStep(compositeSplitter, "CompositeSplitter", compositeSplitterArgs));
 
         // save the created L3A product file for the next product creation
         prevL3AProdRefls = outL3AResultReflsFile;
@@ -243,7 +243,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
         if(!cfg.keepJobFiles) {
             TaskToSubmit &cleanupTemporaryFiles = allTasksList[nCurTaskIdx++];
             SubmitTasks(ctx, cfg.jobId, {cleanupTemporaryFiles});
-            steps.append(cleanupTemporaryFiles.CreateStep("CleanupTemporaryFiles", cleanupTemporaryFilesList));
+            steps.append(CreateTaskStep(cleanupTemporaryFiles, "CleanupTemporaryFiles", cleanupTemporaryFilesList));
         }
     }
 
@@ -391,7 +391,7 @@ void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     QStringList productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, cfg, listProducts, listParams);
 
     // add these steps to the steps list to be submitted
-    allSteps.append(productFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+    allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
     ctx.SubmitSteps(allSteps);
 }
 

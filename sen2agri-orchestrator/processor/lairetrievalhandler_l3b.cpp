@@ -201,26 +201,17 @@ NewStepList LaiRetrievalHandlerL3B::GetStepsToGenModel(const std::map<QString, Q
                 bvSamplesFile = globalSampleFile;
             }
             const QStringList &InverseModelLearningArgs = GetInverseModelLearningArgs(trainingFile, curXml, modelFile, errEstModelFile, modelsFolder, configParameters);
-            steps.append(bvInputVariableGenerationTask.CreateStep("BVInputVariableGeneration", BVInputVariableGenerationArgs));
+            steps.append(CreateTaskStep(bvInputVariableGenerationTask, "BVInputVariableGeneration", BVInputVariableGenerationArgs));
 
-            // Use the new configurable version or the old one
-            //if (useLaiBandsCfg) {
-                const QStringList &ProSailSimulatorArgs = GetProSailSimulatorNewArgs(curXml, bvSamplesFile, rsrCfgFile, simuReflsFile,
-                                                                                     anglesFile, laiCfgFile);
-                steps.append(prosailSimulatorTask.CreateStep("ProSailSimulatorNew", ProSailSimulatorArgs));
+            const QStringList &ProSailSimulatorArgs = GetProSailSimulatorNewArgs(curXml, bvSamplesFile, rsrCfgFile, simuReflsFile,
+                                                                                 anglesFile, laiCfgFile);
+            steps.append(CreateTaskStep(prosailSimulatorTask, "ProSailSimulatorNew", ProSailSimulatorArgs));
 
-                const QStringList &TrainingDataGeneratorArgs = GetTrainingDataGeneratorNewArgs(curXml, bvSamplesFile, simuReflsFile,
-                                                                                               trainingFile, laiCfgFile);
-                steps.append(trainingDataGeneratorTask.CreateStep("TrainingDataGeneratorNew", TrainingDataGeneratorArgs));
-//            } else {
-//                const QStringList &ProSailSimulatorArgs = GetProSailSimulatorArgs(curXml, bvSamplesFile, rsrCfgFile, simuReflsFile, anglesFile, configParameters);
-//                steps.append(prosailSimulatorTask.CreateStep("ProSailSimulator", ProSailSimulatorArgs));
+            const QStringList &TrainingDataGeneratorArgs = GetTrainingDataGeneratorNewArgs(curXml, bvSamplesFile, simuReflsFile,
+                                                                                           trainingFile, laiCfgFile);
+            steps.append(CreateTaskStep(trainingDataGeneratorTask, "TrainingDataGeneratorNew", TrainingDataGeneratorArgs));
 
-//                const QStringList &TrainingDataGeneratorArgs = GetTrainingDataGeneratorArgs(curXml, bvSamplesFile, simuReflsFile, trainingFile);
-//                steps.append(trainingDataGeneratorTask.CreateStep("TrainingDataGenerator", TrainingDataGeneratorArgs));
-//            }
-
-            steps.append(inverseModelLearningTask.CreateStep("InverseModelLearning", InverseModelLearningArgs));
+            steps.append(CreateTaskStep(inverseModelLearningTask, "InverseModelLearning", InverseModelLearningArgs));
             curIdx += MODEL_GEN_TASKS_PER_PRODUCT;
         }
         curIdx += LAI_TASKS_PER_PRODUCT;
@@ -286,13 +277,13 @@ NewStepList LaiRetrievalHandlerL3B::GetStepsForMonodateLai(EventProcessingContex
                                                                      resolutionStr);
 
         // add these steps to the steps list to be submitted
-        steps.append(genMonoDateMskFagsTask.CreateStep("GenerateLaiMonoDateMaskFlags", genMonoDateMskFagsArgs));
+        steps.append(CreateTaskStep(genMonoDateMskFagsTask, "GenerateLaiMonoDateMaskFlags", genMonoDateMskFagsArgs));
 
         const QStringList &ndviRviExtractionArgs = GetNdviRviExtractionNewArgs(prdTileInfo.tileFile, monoDateMskFlgsFileName,
                                                                      ftsFile,
                                                                      singleNdviFile,
                                                                      resolutionStr, laiCfgFile);
-        steps.append(ndviRviExtractorTask.CreateStep("NdviRviExtractionNew", ndviRviExtractionArgs));
+        steps.append(CreateTaskStep(ndviRviExtractorTask, "NdviRviExtractionNew", ndviRviExtractionArgs));
 
         QStringList bvImageInvArgs = GetBvImageInvArgs(ftsFile, monoDateMskFlgsResFileName, prdTileInfo.tileFile, modelsFolder, monoDateLaiFileName);
         QStringList bvErrImageInvArgs = GetBvErrImageInvArgs(ftsFile, monoDateMskFlgsResFileName, prdTileInfo.tileFile, modelsFolder, monoDateErrFileName);
@@ -305,10 +296,10 @@ NewStepList LaiRetrievalHandlerL3B::GetStepsForMonodateLai(EventProcessingContex
         laiErrList.append(quantifiedErrFileName);
         laiFlgsList.append(monoDateMskFlgsResFileName);
 
-        steps.append(bvImageInversionTask.CreateStep("BVImageInversion", bvImageInvArgs));
-        steps.append(bvErrImageInversionTask.CreateStep("BVImageInversion", bvErrImageInvArgs));
-        steps.append(quantifyImageTask.CreateStep("QuantifyImage", quantifyImageArgs));
-        steps.append(quantifyErrImageTask.CreateStep("QuantifyImage", quantifyErrImageArgs));
+        steps.append(CreateTaskStep(bvImageInversionTask, "BVImageInversion", bvImageInvArgs));
+        steps.append(CreateTaskStep(bvErrImageInversionTask, "BVImageInversion", bvErrImageInvArgs));
+        steps.append(CreateTaskStep(quantifyImageTask, "QuantifyImage", quantifyImageArgs));
+        steps.append(CreateTaskStep(quantifyErrImageTask, "QuantifyImage", quantifyErrImageArgs));
 
         cleanupTemporaryFilesList.append(monoDateMskFlgsFileName);
         cleanupTemporaryFilesList.append(ftsFile);
@@ -323,12 +314,12 @@ NewStepList LaiRetrievalHandlerL3B::GetStepsForMonodateLai(EventProcessingContex
     QStringList productFormatterArgs = GetLaiMonoProductFormatterArgs(
                 laiMonoProductFormatterTask, ctx, event, prdTilesInfosList,
                 ndviList, laiList, laiErrList, laiFlgsList);
-    steps.append(laiMonoProductFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+    steps.append(CreateTaskStep(laiMonoProductFormatterTask, "ProductFormatter", productFormatterArgs));
 
     if(bRemoveTempFiles) {
         TaskToSubmit &cleanupTemporaryFilesTask = allTasksList[curTaskIdx++];
         // add also the cleanup step
-        steps.append(cleanupTemporaryFilesTask.CreateStep("CleanupTemporaryFiles", cleanupTemporaryFilesList));
+        steps.append(CreateTaskStep(cleanupTemporaryFilesTask, "CleanupTemporaryFiles", cleanupTemporaryFilesList));
     }
 
     return steps;
@@ -404,7 +395,7 @@ void LaiRetrievalHandlerL3B::SubmitEndOfLaiTask(EventProcessingContext &ctx,
     TaskToSubmit endOfJobDummyTask{"end-of-job", {}};
     endOfJobDummyTask.parentTasks.append(prdFormatterTasksListRef);
     SubmitTasks(ctx, event.jobId, {endOfJobDummyTask});
-    ctx.SubmitSteps({endOfJobDummyTask.CreateStep("EndOfJob", QStringList())});
+    ctx.SubmitSteps({CreateTaskStep(endOfJobDummyTask, "EndOfJob", QStringList())});
 
 }
 
@@ -492,7 +483,7 @@ void LaiRetrievalHandlerL3B::HandleTaskFinishedImpl(EventProcessingContext &ctx,
                 // we assume that all the tiles from the product are from the same satellite
                 // in this case, we get only once the satellite Id for all tiles
                 if(satId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
-                    satId = GetSatIdForTile(siteTiles, tileId);
+                    satId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
                     // ignore tiles for which the satellite id cannot be determined
                     if(satId != ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
                         break;

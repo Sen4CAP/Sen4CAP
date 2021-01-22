@@ -130,7 +130,7 @@ NewStepList CropMaskHandler::CreateSteps(EventProcessingContext &ctx, const JobS
     TaskToSubmit &cropMaskTask = allTasksList[curTaskIdx++];
 
     QStringList corpTypeArgs = GetCropTypeTaskArgs(ctx, event, cfg, listProducts, cropMaskTask);
-    allSteps.append(cropMaskTask.CreateStep("CropMaskFused", corpTypeArgs));
+    allSteps.append(CreateTaskStep(cropMaskTask, "CropMaskFused", corpTypeArgs));
     return allSteps;
 }
 

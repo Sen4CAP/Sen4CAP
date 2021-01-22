@@ -56,7 +56,8 @@ SOURCES += main.cpp \
     executorclient/executorproxy.cpp \
     executorclient/dbusexecutorproxy.cpp \
     executorclient/httpexecutorproxy.cpp \
-    executorclient/executorproxyfactory.cpp
+    executorclient/executorproxyfactory.cpp \
+    stepexecutiondecorator.cpp
 
 HEADERS += \
     pch.hpp \
@@ -92,7 +93,8 @@ HEADERS += \
     executorclient/dbusexecutorproxy.hpp \
     executorclient/httpexecutorproxy.hpp \
     executorclient/executorproxy.hpp \
-    executorclient/executorproxyfactory.h
+    executorclient/executorproxyfactory.h \
+    stepexecutiondecorator.h
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \

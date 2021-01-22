@@ -12,6 +12,7 @@ class S4CCropTypeHandler : public ProcessorHandler
         QDateTime startDate;
         QDateTime endDate;
         QStringList tileIds;
+        QStringList filterProductNames;
 
         QMap<QString, QString> mapCfgValues;
 
@@ -31,7 +32,11 @@ private:
     QList<std::reference_wrapper<TaskToSubmit>> CreateTasks(QList<TaskToSubmit> &outAllTasksList);
     NewStepList CreateSteps(EventProcessingContext &ctx, const JobSubmittedEvent &event, QList<TaskToSubmit> &allTasksList,
                             const CropTypeJobConfig &cfg);
-    QStringList GetCropTypeTaskArgs(const CropTypeJobConfig &cfg, const QString &prdTargetDir,  const QString &workingPath);
+    QStringList GetExtractParcelsTaskArgs(const CropTypeJobConfig &cfg,const QString &parcelsPath,
+                                          const QString &lutPath, const QString &tilesPath,
+                                          const QString &opticalPath, const QString &radarPath,
+                                          const QString &lpisPath);
+    QStringList GetCropTypeTaskArgs(const CropTypeJobConfig &cfg, const QString &prdTargetDir,  const QString &workingPath, const QString &parcelsPath, const QString &lutPath, const QString &tilesPath, const QString &opticalPath, const QString &radarPath, const QString &lpisPath);
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx,
                                         const JobSubmittedEvent &event, const QString &tmpPrdDir,
                                         const QDateTime &minDate, const QDateTime &maxDate);

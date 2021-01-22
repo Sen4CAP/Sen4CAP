@@ -122,7 +122,7 @@ void AgricPracticesHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,
         TaskToSubmit &productFormatterTask = allTasksList[curTaskIdx++];
         const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, jobCfg,
                                                                           productFormatterFiles);
-        steps.append(productFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+        steps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
 
         const auto & productFormatterPrdFileIdFile = productFormatterTask.GetFilePath("prd_infos.txt");
 
@@ -131,7 +131,7 @@ void AgricPracticesHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,
         }
         TaskToSubmit &exportCsvToShpProductTask = allTasksList[curTaskIdx++];
         const QStringList &exportCsvToShpProductArgs = GetExportProductLauncherArgs(jobCfg, productFormatterPrdFileIdFile);
-        steps.append(exportCsvToShpProductTask.CreateStep("export-product-launcher", exportCsvToShpProductArgs));
+        steps.append(CreateTaskStep(exportCsvToShpProductTask, "export-product-launcher", exportCsvToShpProductArgs));
     }
 }
 
@@ -283,7 +283,7 @@ QString AgricPracticesHandler::CreateStepsForExportL4CMarkers(const AgricPractic
                                                      "--add-no-data-rows", QString::number(jobCfg.siteCfg.bMarkersAddNoDataRows),
                                                      "-o", exportedFile
                                                 };
-    steps.append(exportTask.CreateStep("export-l4c-markers", exportL4CMarkersProductArgs));
+    steps.append(CreateTaskStep(exportTask, "export-l4c-markers", exportL4CMarkersProductArgs));
     return exportedFile;
 }
 
@@ -557,7 +557,7 @@ QString AgricPracticesHandler::CreateStepsForFilesMerge(const AgricPracticesJobP
     TaskToSubmit &mergeTask = allTasksList[curTaskIdx++];
     const QString &mergedFile = mergeTask.GetFilePath(BuildMergeResultFileName(jobCfg.siteCfg.country, jobCfg.siteCfg.year, prdType));
     const QStringList &mergeArgs = GetFilesMergeArgs(dataExtrDirs, mergedFile, jobCfg.maxDate);
-    steps.append(mergeTask.CreateStep("Markers1CsvMerge", mergeArgs));
+    steps.append(CreateTaskStep(mergeTask, "Markers1CsvMerge", mergeArgs));
 
     return mergedFile;
 }
@@ -576,7 +576,7 @@ QStringList AgricPracticesHandler::CreateTimeSeriesAnalysisSteps(const AgricPrac
         const QStringList &timeSeriesAnalysisArgs = GetTimeSeriesAnalysisArgs(jobCfg, practice,
                                                                               jobCfg.siteCfg.practices.value(practice),
                                                                               mergedFiles, timeSeriesExtrDir);
-        steps.append(timeSeriesAnalysisTask.CreateStep("TimeSeriesAnalysis", timeSeriesAnalysisArgs));
+        steps.append(CreateTaskStep(timeSeriesAnalysisTask, "TimeSeriesAnalysis", timeSeriesAnalysisArgs));
 
         // Add the expected files to the productFormatterFiles
         const QString &tsaExpPractice = GetTsaExpectedPractice(practice);

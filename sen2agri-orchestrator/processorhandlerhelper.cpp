@@ -5,6 +5,7 @@
 #include "qdatetime.h"
 #include "qjsonobject.h"
 #include "logger.hpp"
+#include "json_utils.hpp"
 
 //#define NDVI_PRD_NAME_REGEX R"(S2AGRI_L3B_SNDVI_A(\d{8}T\d{6})_.+\.TIF)"
 //#define S1_L2A_PRD_NAME_REGEX   R"(SEN4CAP_L2A_.+_V(\d{8}T\d{6})_(\d{8}T\d{6})_.+\.tif)"
@@ -1043,33 +1044,12 @@ QString ProcessorHandlerHelper::GetStringConfigValue(const QJsonObject &paramete
 
 bool ProcessorHandlerHelper::GetParameterValueAsInt(const QJsonObject &parameters, const QString &key,
                                               int &outVal) {
-    bool bRet = false;
-    if(parameters.contains(key)) {
-        // first try to get it as string
-        const auto &value = parameters[key];
-        if(value.isDouble()) {
-            outVal = value.toInt();
-            bRet = true;
-        }
-        if(value.isString()) {
-            outVal = value.toString().toInt(&bRet);
-        }
-    }
-    return bRet;
+    return getJsonValueAsInt(parameters, key, outVal);
 }
 
 bool ProcessorHandlerHelper::GetParameterValueAsString(const QJsonObject &parameters, const QString &key,
                                               QString &outVal) {
-    bool bRet = false;
-    if(parameters.contains(key)) {
-        // first try to get it as string
-        const auto &value = parameters[key];
-        if(value.isString()) {
-            outVal = value.toString();
-            bRet = true;
-        }
-    }
-    return bRet;
+    return getJsonValueAsString(parameters, key, outVal);
 }
 
 TQStrQStrMap ProcessorHandlerHelper::FilterConfigParameters(const TQStrQStrMap &configParameters,
@@ -1124,5 +1104,19 @@ QDateTime ProcessorHandlerHelper::GetLocalDateTime(const QString &strTime) {
         dateTime = dateTime.addSecs(-3600);
     }
     return dateTime;
+}
+
+ProcessorHandlerHelper::SatelliteIdType ProcessorHandlerHelper::GetSatIdForTile(const QMap<SatelliteIdType, TileList> &mapSatTiles, const QString &tileId)
+{
+    for(const auto &satId : mapSatTiles.keys())
+    {
+        const TileList &listTiles = mapSatTiles.value(satId);
+        for(const Tile &tile: listTiles) {
+            if(tile.tileId == tileId) {
+                return satId;
+            }
+        }
+    }
+    return SATELLITE_ID_TYPE_UNKNOWN;
 }
 

@@ -7,6 +7,7 @@
 
 #include "schedulingcontext.h"
 #include "logger.hpp"
+#include "stepexecutiondecorator.h"
 
 bool removeDir(const QString & dirName)
 {
@@ -359,6 +360,16 @@ bool ProcessorHandler::GetBestSeasonToMatchDate(SchedulingContext &ctx, int site
     return false;
 }
 
+QStringList ProcessorHandler::GetL2AInputProductNames(const JobSubmittedEvent &event) {
+    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
+    const auto &inputProducts = parameters["input_products"].toArray();
+    QStringList listProducts;
+    for (const auto &inputProduct : inputProducts) {
+        listProducts.append(inputProduct.toString());
+    }
+    return listProducts;
+}
+
 QStringList ProcessorHandler::GetL2AInputProducts(EventProcessingContext &ctx,
                                 const JobSubmittedEvent &event) {
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
@@ -419,18 +430,6 @@ QStringList ProcessorHandler::GetL2AInputProductsTiles(EventProcessingContext &c
     QMap<QString, QStringList> map;
     Q_UNUSED(map);
     return GetL2AInputProductsTiles(ctx, event, map);
-}
-
-QString ProcessorHandler::GetL2AProductForTileMetaFile(const QMap<QString, QStringList> &mapProductToTilesMetaFiles,
-                                     const QString &tileMetaFile) {
-    for(const auto &prd : mapProductToTilesMetaFiles.keys()) {
-        const QStringList &prdTilesList = mapProductToTilesMetaFiles[prd];
-        for(const QString &strTileMeta: prdTilesList) {
-            if(strTileMeta == tileMetaFile)
-                return prd;
-        }
-    }
-    return "";
 }
 
 QMap<QString, TileTemporalFilesInfo> ProcessorHandler::GroupTiles(
@@ -506,21 +505,6 @@ QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> ProcessorHandler::GetSit
     return retMap;
 }
 
-ProcessorHandlerHelper::SatelliteIdType ProcessorHandler::GetSatIdForTile(const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &mapSatTiles,
-                                                                       const QString &tileId)
-{
-    for(const auto &satId : mapSatTiles.keys())
-    {
-        const TileList &listTiles = mapSatTiles.value(satId);
-        for(const Tile &tile: listTiles) {
-            if(tile.tileId == tileId) {
-                return satId;
-            }
-        }
-    }
-    return ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN;
-}
-
 bool ProcessorHandler::IsCloudOptimizedGeotiff(const std::map<QString, QString> &configParameters) {
     const QStringList &tokens = processorDescr.shortName.split('_');
     const QString &strKey = "processor." + tokens[0] + ".cloud_optimized_geotiff_output";
@@ -530,82 +514,8 @@ bool ProcessorHandler::IsCloudOptimizedGeotiff(const std::map<QString, QString> 
     return bIsCog;
 }
 
-bool ProcessorHandler::CheckL1CInputs(SchedulingContext &ctx, const ConfigurationParameterValueMap &mapCfg,
-                                      const QString &l1cAvailDaysKey, int siteId,
-                                      const QDateTime &seasonStartDate, const QDateTime &qScheduledDate) {
-    int l1cAvailabilityDates = mapCfg[l1cAvailDaysKey].value.toInt();
-
-    // if the first days of the season, then don't check the L1C availability
-    if(seasonStartDate.daysTo(qScheduledDate) > l1cAvailabilityDates) {
-        ConfigurationParameterValueMap emptyMap;
-        const ConfigurationParameterValueMap &l8DwnEnabled = ctx.GetConfigurationParameters(QString("downloader.l8.enabled"), siteId, emptyMap);
-        const ConfigurationParameterValueMap &l8Enabled = ctx.GetConfigurationParameters(QString("l8.enabled"), siteId, emptyMap);
-        const ConfigurationParameterValueMap &s2DwnEnabled = ctx.GetConfigurationParameters(QString("downloader.s2.enabled"), siteId, emptyMap);
-        const ConfigurationParameterValueMap &s2Enabled = ctx.GetConfigurationParameters(QString("s2.enabled"), siteId, emptyMap);
-        SatellitesList listSats;
-        if (s2DwnEnabled["downloader.s2.enabled"].value == "true" && s2Enabled["s2.enabled"].value == "true") {
-            listSats.append(static_cast<int>(Satellite::Sentinel2));
-        }
-        if (l8DwnEnabled["downloader.l8.enabled"].value == "true" && l8Enabled["l8.enabled"].value == "true") {
-            listSats.append(static_cast<int>(Satellite::Landsat8));
-        }
-        // no satellite enabled - site might be disabled
-        if (listSats.size() == 0) {
-            Logger::warn(QStringLiteral("Orchestrator scheduling: Cannot launch scheduled job for site %1 as there are no satellites enabled "
-                                        "for the interval %2 - %3").
-                         arg(siteId).arg(seasonStartDate.toString("yyyy-MM-dd HH:mm:ss")).arg(qScheduledDate.toString("yyyy-MM-dd HH:mm:ss")));
-            return false;
-        }
-        StatusesList statuses = {1, 2, 5, 6};
-        // Get the l1c products with status 2, 5 and 6 from the last N days interval
-        const L1CProductList &l1cPrds = ctx.GetL1CProducts(siteId, listSats, statuses, qScheduledDate.addDays(-l1cAvailabilityDates), qScheduledDate);
-        // do not schedule the job if no L1C products available
-        if (l1cPrds.size() == 0) {
-            Logger::warn(QStringLiteral("Orchestrator scheduling: Cannot launch scheduled job for site %1 as there are no products downloaded "
-                                        "for the interval %2 - %3").
-                         arg(siteId).arg(seasonStartDate.toString("yyyy-MM-dd HH:mm:ss")).arg(qScheduledDate.toString("yyyy-MM-dd HH:mm:ss")));
-            return false;
-        }
-        // iterate the products and see how many are with each of the status
-        int notProcessedYet = 0;
-        int processed = 0;
-        for (const L1CProduct &l1cPrd: l1cPrds) {
-            switch (l1cPrd.statusId) {
-                case 1:
-                case 2:
-                case 7:
-                    notProcessedYet++;
-                    break;
-                case 5:
-                case 6:
-                    processed++;
-                    break;
-                default : break;
-            }
-        }
-        if (notProcessedYet > 0) {
-            Logger::warn(QStringLiteral("Orchestrator scheduling: Cannot launch scheduled job for site %1 as there are still "
-                                        "products with status 1, 2 or 7 for the interval %2 - %3").
-                         arg(siteId).arg(seasonStartDate.toString("yyyy-MM-dd HH:mm:ss")).arg(qScheduledDate.toString("yyyy-MM-dd HH:mm:ss")));
-            return false;
-        }
-        // otherwise, if we have only statuses 5 and 6, we just return true
-    }
-    return true;
-}
-
-/*
-ProductList GetInsertedOrCreatedProducts(int siteId, const ProductType &productType, const QDateTime &startDate, const QDateTime &endDate,
-                                         const QDateTime &seasonStartDate, const QDateTime &seasonEndDate)
+NewStep ProcessorHandler::CreateTaskStep(TaskToSubmit &task, const QString &stepName, const QStringList &stepArgs)
 {
-    ProductList retList;
-    const ProductList &prdsInserted = ctx.GetProductsByInsertedTime(siteId, (int)productType, startDate, endDate);
-    QDateTime endOfPrdsDate = seasonEndDate.addDays(1);
-    for (const Product &prd: prdsInserted) {
-        if (prd.created >= seasonStartDate && prd.created <=endOfPrds) {
-
-        }
-    }
-    const ProductList &prdsCreated = ctx.GetProducts(siteId, (int)productType, startDate, endDate);
+    return StepExecutionDecorator::GetInstance()->CreateTaskStep(this->processorDescr.shortName, task, stepName, stepArgs);
 }
-*/
+

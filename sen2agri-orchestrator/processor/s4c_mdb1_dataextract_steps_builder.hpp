@@ -3,6 +3,7 @@
 #include "processorhandler.hpp"
 #include "s4c_utils.hpp"
 
+#define MDB1_PROC_SHORT_NAME "s4c_mdb1"
 #define MDB1_CFG_PREFIX     "processor.s4c_mdb1."
 #define LPIS_PATH_CFG_KEY   "processor.lpis.path"
 

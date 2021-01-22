@@ -109,7 +109,7 @@ void S4CMarkersDB1Handler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     TaskToSubmit endOfJobDummyTask{"end-of-job", {}};
     endOfJobDummyTask.parentTasks.append(allTasksListRef2);
     SubmitTasks(ctx, evt.jobId, {endOfJobDummyTask});
-    jobCfg.pCtx->SubmitSteps({endOfJobDummyTask.CreateStep("EndOfJob", QStringList())});
+    jobCfg.pCtx->SubmitSteps({CreateTaskStep(endOfJobDummyTask, "EndOfJob", QStringList())});
 }
 
 void S4CMarkersDB1Handler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
@@ -247,7 +247,7 @@ QString S4CMarkersDB1Handler::GetShortNameForProductType(const ProductType &prdT
     }
 }
 
-bool S4CMarkersDB1Handler::CheckExecutionPreconditions(ExecutionContextBase *pCtx, const std::map<QString, QString> &configParameters,
+bool S4CMarkersDB1Handler::CheckExecutionPreconditions(ExecutionContextBase *pCtx, const std::map<QString, QString> &,
                                                         int siteId, const QString &siteShortName, QString &errMsg) {
     errMsg = "";
     // We take it the last LPIS product for this site.
@@ -267,7 +267,7 @@ QString S4CMarkersDB1Handler::CreateStepsForFilesMerge(const MarkerType &markerT
     TaskToSubmit &mergeTask = allTasksList[curTaskIdx++];
     const QString &mergedFile = mergeTask.GetFilePath(BuildMergeResultFileName(markerType));
     const QStringList &mergeArgs = GetFilesMergeArgs(dataExtrDirs, mergedFile);
-    steps.append(mergeTask.CreateStep("Markers1CsvMerge", mergeArgs));
+    steps.append(CreateTaskStep(mergeTask, "Markers1CsvMerge", mergeArgs));
 
     return mergedFile;
 }
@@ -277,7 +277,7 @@ QString S4CMarkersDB1Handler::CreateStepsForMdb2Export(const MarkerType &markerT
     TaskToSubmit &mdb2ExtractTask = allTasksList[curTaskIdx++];
     const QString &mdb2ExtractFile = mdb2ExtractTask.GetFilePath(BuildMdb2FileName(markerType));
     const QStringList &mdb2ExtractArgs =  { "Markers2Extractor", "-in", mergedFile, "-out", mdb2ExtractFile };
-    steps.append(mdb2ExtractTask.CreateStep("Markers2Extractor", mdb2ExtractArgs));
+    steps.append(CreateTaskStep(mdb2ExtractTask, "Markers2Extractor", mdb2ExtractArgs));
 
     return mdb2ExtractFile;
 }
@@ -302,8 +302,9 @@ QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobC
         executionInfosFile.close();
     } catch (...) {
     }
-    QStringList exportArgs = { "--in", inputFile, "--out", exportedFile };
-    steps.append(exportTask.CreateStep("MarkersDB1Export", exportArgs));
+    QStringList exportArgs = { "--in", inputFile, "--out", exportedFile,
+                               "--int32-columns", "NewID"};
+    steps.append(CreateTaskStep(exportTask, "MarkersDB1Export", exportArgs));
 
     return exportedFile;
 }

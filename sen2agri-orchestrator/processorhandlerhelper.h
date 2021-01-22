@@ -135,6 +135,7 @@ public:
     // static int GuessYear(const QDateTime &startDateTime, const QDateTime &endDateTime);
     static QDateTime GetDateTimeFromString(const QString &strTime);
     static QDateTime GetLocalDateTime(const QString &strTime);
+    static SatelliteIdType GetSatIdForTile(const QMap<SatelliteIdType, TileList> &mapSatTiles, const QString &tileId);
 
 private:
     static QMap<QString, L2MetaTileNameInfos> m_mapSensorL2ATileMetaFileInfos;

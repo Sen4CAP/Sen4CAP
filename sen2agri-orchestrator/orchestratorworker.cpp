@@ -306,20 +306,26 @@ getExecutorStepList(EventProcessingContext &ctx, int processorId, int jobId, con
     auto modulePathsEnd = std::end(modulePaths);
     for (const auto &s : steps) {
         auto arguments = getStepArguments(s);
-
         QString processorPath;
-        auto it = modulePaths.find(s.module);
-        if (it == modulePathsEnd) {
-            // we did not find it configured and the first item in the arguments seems like a path.
-            // In this case we use the first argument as processor path and remove it from arguments
-            if (arguments.size() > 0 && arguments.at(0).value.startsWith('/')) {
-                processorPath = arguments.at(0).value;
-                arguments.removeFirst();
-            } else {
-                processorPath = "otbcli";
-            }
+
+        // check if the command was not already decorated with docker command
+        if (arguments.size() > 0 && arguments.at(0).value == "docker") {
+            processorPath = arguments.at(0).value;
+            arguments.removeFirst();
         } else {
-            processorPath = it->second;
+            auto it = modulePaths.find(s.module);
+            if (it == modulePathsEnd) {
+                // we did not find it configured and the first item in the arguments seems like a path.
+                // In this case we use the first argument as processor path and remove it from arguments
+                if (arguments.size() > 0 && arguments.at(0).value.startsWith('/')) {
+                    processorPath = arguments.at(0).value;
+                    arguments.removeFirst();
+                } else {
+                    processorPath = "otbcli";
+                }
+            } else {
+                processorPath = it->second;
+            }
         }
 
         stepsToSubmit.append({ processorId, s.taskId, processorPath, s.stepName, arguments });

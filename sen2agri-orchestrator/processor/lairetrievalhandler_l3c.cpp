@@ -189,7 +189,7 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(Even
         // we assume that all the tiles from the product are from the same satellite
         // in this case, we get only once the satellite Id for all tiles
         if(tileSatId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
-            tileSatId = GetSatIdForTile(siteTiles, tileId);
+            tileSatId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
             // ignore tiles for which the satellite id cannot be determined
             if(tileSatId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
                 Logger::debug(QStringLiteral("The satellite ID cannot be extracted for tileId %1 (nb. site tiles is %2)").arg(tileId).arg(siteTiles.size()));

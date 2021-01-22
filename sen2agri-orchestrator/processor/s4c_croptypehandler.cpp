@@ -30,12 +30,10 @@ S4CCropTypeHandler::S4CCropTypeHandler()
 QList<std::reference_wrapper<TaskToSubmit>>
 S4CCropTypeHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList)
 {
-    outAllTasksList.append(TaskToSubmit{ "s4c-crop-type", {} });
-    outAllTasksList.append(TaskToSubmit{ "product-formatter", {} });
-
-    // product formatter to wait for the crop type script
-    outAllTasksList[1].parentTasks.append(outAllTasksList[0]);
-    outAllTasksList.append(TaskToSubmit{ "export-product-launcher", { outAllTasksList[1] } });
+    outAllTasksList.append(TaskToSubmit{ "s4c-l4a-extract-parcels", {} });
+    outAllTasksList.append(TaskToSubmit{ "s4c-crop-type", { outAllTasksList[0] } });
+    outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[1]} });
+    outAllTasksList.append(TaskToSubmit{ "export-product-launcher", { outAllTasksList[2] } });
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     for (TaskToSubmit &task : outAllTasksList) {
@@ -51,31 +49,78 @@ NewStepList S4CCropTypeHandler::CreateSteps(EventProcessingContext &ctx,
 {
     int curTaskIdx = 0;
     NewStepList allSteps;
+    TaskToSubmit &extractParcelsTask = allTasksList[curTaskIdx++];
     TaskToSubmit &cropTypeTask = allTasksList[curTaskIdx++];
     TaskToSubmit &prdFormatterTask = allTasksList[curTaskIdx++];
+
+    const QString &parcelsPath = extractParcelsTask.GetFilePath("parcels.csv");
+    const QString &lutPath = extractParcelsTask.GetFilePath("lut.csv");
+    const QString &tilesPath = extractParcelsTask.GetFilePath("tiles.csv");
+    const QString &opticalPath = extractParcelsTask.GetFilePath("optical.csv");
+    const QString &radarPath = extractParcelsTask.GetFilePath("radar.csv");
+    const QString &lpisPath = extractParcelsTask.GetFilePath("lpis.txt");
+
     const QString &workingPath = cropTypeTask.GetFilePath("");
     const QString &prdFinalFilesDir = prdFormatterTask.GetFilePath("");
 
-    QStringList corpTypeArgs = GetCropTypeTaskArgs(cfg, prdFinalFilesDir, workingPath);
-    allSteps.append(cropTypeTask.CreateStep("S4CCropType", corpTypeArgs));
+    const QStringList &extractParcelsArgs = GetExtractParcelsTaskArgs(cfg, parcelsPath, lutPath, tilesPath,
+                                                                      opticalPath, radarPath, lpisPath);
+    allSteps.append(CreateTaskStep(extractParcelsTask, "S4CCropTypeExtractParcels", extractParcelsArgs));
+
+    const QStringList &cropTypeArgs = GetCropTypeTaskArgs(cfg, prdFinalFilesDir, workingPath, parcelsPath,
+                                                          lutPath, tilesPath,
+                                                          opticalPath, radarPath, lpisPath);
+    allSteps.append(CreateTaskStep(cropTypeTask, "S4CCropType", cropTypeArgs));
 
     const QStringList &productFormatterArgs = GetProductFormatterArgs(
         prdFormatterTask, ctx, event, prdFinalFilesDir, cfg.startDate, cfg.endDate);
-    allSteps.append(prdFormatterTask.CreateStep("ProductFormatter", productFormatterArgs));
+    allSteps.append(CreateTaskStep(prdFormatterTask, "ProductFormatter", productFormatterArgs));
 
     const auto &productFormatterPrdFileIdFile = prdFormatterTask.GetFilePath("prd_infos.txt");
     TaskToSubmit &exportCsvToShpProductTask = allTasksList[curTaskIdx++];
     const QStringList &exportCsvToShpProductArgs = { "-f", productFormatterPrdFileIdFile, "-o",
                                                      "CropType.gpkg" };
     allSteps.append(
-        exportCsvToShpProductTask.CreateStep("export-product-launcher", exportCsvToShpProductArgs));
+        CreateTaskStep(exportCsvToShpProductTask, "export-product-launcher", exportCsvToShpProductArgs));
 
     return allSteps;
 }
 
+QStringList S4CCropTypeHandler::GetExtractParcelsTaskArgs(const CropTypeJobConfig &cfg,
+                                                    const QString &parcelsPath, const QString &lutPath,
+                                                    const QString &tilesPath, const QString &opticalPath,
+                                                    const QString &radarPath,  const QString &lpisPath)
+{
+    QStringList extractParcelsArgs = { "-s",
+                                 QString::number(cfg.siteId),
+                                 "--season-start",
+                                 cfg.startDate.toString("yyyy-MM-dd"),
+                                 "--season-end",
+                                 cfg.endDate.toString("yyyy-MM-dd"),
+                                 "--tiles" };
+    extractParcelsArgs += cfg.tileIds;
+
+    if (cfg.filterProductNames.size() > 0) {
+        extractParcelsArgs += "--products";
+        extractParcelsArgs.append(cfg.filterProductNames);
+    }
+    extractParcelsArgs.append("--");
+    extractParcelsArgs.append(parcelsPath);
+    extractParcelsArgs.append(lutPath);
+    extractParcelsArgs.append(tilesPath);
+    extractParcelsArgs.append(opticalPath);
+    extractParcelsArgs.append(radarPath);
+    extractParcelsArgs.append(lpisPath);
+
+    return extractParcelsArgs;
+}
+
 QStringList S4CCropTypeHandler::GetCropTypeTaskArgs(const CropTypeJobConfig &cfg,
                                                     const QString &prdTargetDir,
-                                                    const QString &workingPath)
+                                                    const QString &workingPath,
+                                                    const QString &parcelsPath, const QString &lutPath,
+                                                    const QString &tilesPath, const QString &opticalPath,
+                                                    const QString &radarPath,  const QString &lpisPath)
 {
 
     QStringList cropTypeArgs = { "-s",
@@ -89,8 +134,30 @@ QStringList S4CCropTypeHandler::GetCropTypeTaskArgs(const CropTypeJobConfig &cfg
                                  "--out-path",
                                  prdTargetDir,
                                  "--tiles" };
-
     cropTypeArgs += cfg.tileIds;
+
+    if (cfg.filterProductNames.size() > 0) {
+        cropTypeArgs += "--products";
+        cropTypeArgs.append(cfg.filterProductNames);
+    }
+
+    cropTypeArgs += "--parcels";
+    cropTypeArgs += parcelsPath;
+
+    cropTypeArgs += "--lut";
+    cropTypeArgs += lutPath;
+
+    cropTypeArgs += "--tile-footprints";
+    cropTypeArgs += tilesPath;
+
+    cropTypeArgs += "--optical-products";
+    cropTypeArgs += opticalPath;
+
+    cropTypeArgs += "--radar-products";
+    cropTypeArgs += radarPath;
+
+    cropTypeArgs += "--lpis";
+    cropTypeArgs += lpisPath;
 
     for (const QString &cfgKey : m_cfgKeys) {
         auto it = cfg.mapCfgValues.find(cfgKey);
@@ -201,6 +268,7 @@ void S4CCropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     CropTypeJobConfig cfg;
     cfg.jobId = event.jobId;
     cfg.siteId = event.siteId;
+    cfg.filterProductNames = GetL2AInputProductNames(event);
 
     for (QString cfgKey : m_cfgKeys) {
         cfg.mapCfgValues.insert(

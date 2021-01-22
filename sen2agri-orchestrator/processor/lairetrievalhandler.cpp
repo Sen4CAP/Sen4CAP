@@ -30,9 +30,9 @@ void LaiRetrievalHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
 
     if (IsNewLaiMonoDateVersion(configParameters)) {
-        m_l3bHandlerNew.HandleJobSubmittedImpl(ctx, event);
+        m_l3bHandlerNew.HandleJobSubmitted(ctx, event);
     } else {
-        m_l3bHandler.HandleJobSubmittedImpl(ctx, event);
+        m_l3bHandler.HandleJobSubmitted(ctx, event);
     }
 }
 
