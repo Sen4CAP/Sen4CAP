@@ -72,6 +72,7 @@ def main():
 
     outdir = os.path.dirname(args.output)
     if outdir:
+        # FIXME: just use makedirs(exist_ok=True) in Python 3
         try:
             os.makedirs(outdir)
         except OSError as exc:  # Guard against race condition

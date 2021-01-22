@@ -387,7 +387,7 @@ class SiteContext(object):
             )
             return False
 
-        if not os.path.isdir(self.working_dir):
+        if not os.path.isdir(self.working_dir) and not create_recursive_dirs(self.working_dir):
             print(
                 "(launcher err) Invalid processing context working_dir: {}".format(
                     self.working_dir

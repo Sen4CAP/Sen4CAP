@@ -20,6 +20,7 @@ _____________________________________________________________________________
 from __future__ import print_function
 from __future__ import with_statement
 from __future__ import absolute_import
+import errno
 import subprocess
 import os
 import sys
@@ -27,7 +28,6 @@ import time, datetime
 import pipes
 import shutil
 import osr
-import re
 import glob
 import gdal
 
@@ -61,7 +61,7 @@ def remove_dir_content(directory):
         try:
             if os.path.isfile(content_path):
                 os.unlink(content_path)
-            elif os.path.isdir(content_path): 
+            elif os.path.isdir(content_path):
                 shutil.rmtree(content_path)
         except Exception as e:
             print(" Can NOT remove directory content {} due to: {}.".format(directory, e))
@@ -112,13 +112,13 @@ def manage_log_file(location, log_filename):
     except Exception as e:
         print("Error in manage_log_file: exception {} !".format(e))
 
-def log(location, info, log_filename = ""):    
+def log(location, info, log_filename = ""):
     try:
         if DEBUG:
             print("{}:[{}]:{}".format(str(datetime.datetime.now()), os.getpid(), str(info)))
             sys.stdout.flush()
-        if len(location) > 0 and len(log_filename) > 0: 
-            log_path = os.path.join(location, log_filename)   
+        if len(location) > 0 and len(log_filename) > 0:
+            log_path = os.path.join(location, log_filename)
             log = open(log_path, 'a')
             log.write("{}:[{}]:{}\n".format(str(datetime.datetime.now()), os.getpid(), str(info)))
             log.close()
@@ -144,15 +144,24 @@ def run_command(cmd_array, log_path = "", log_filename = "", fake_command = Fals
     log(log_path, "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str), log_filename)
     return res
 
+
 def create_recursive_dirs(dir_name):
+    # FIXME: just use makedirs(exist_ok=True) in Python 3
     if not os.path.exists(dir_name):
         try:
             os.makedirs(dir_name)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
+                return False
+            else:
+                return True
         except Exception as e:
             print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
             return False
 
     return True
+
 
 def remove_dir(directory):
     try:
@@ -161,6 +170,7 @@ def remove_dir(directory):
         print("Can not remove directory {} due to: {}.".format(directory, e))
         return False
     return True
+
 
 def copy_directory(src, dest):
     try:
@@ -174,7 +184,7 @@ def copy_directory(src, dest):
         print("Directory not copied. Error: {}".format(e))
         return False
     return True
-    
+
 
 ### IMG related operations
 
