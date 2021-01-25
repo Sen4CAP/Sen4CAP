@@ -542,7 +542,7 @@ class L2aMaster(object):
             cmd.extend(containers)
             run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 
-        os._exit(1)
+        os._exit(0)
 
     def run(self):
         sleeping_workers = []
