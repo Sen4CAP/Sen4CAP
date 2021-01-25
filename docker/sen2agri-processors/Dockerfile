@@ -12,7 +12,7 @@ RUN yum -y install yum-utils epel-release https://download.postgresql.org/pub/re
              if (length(diff) > 0) {\n\
                  install.packages(diff, repos = c(CRAN = "https://cran.rstudio.com"))\n\
              }' | Rscript - && \
-    pip install --upgrade pip && \
+    pip install pip==20.3.4 && \
     pip install pyarrow
 
 COPY *.rpm /
