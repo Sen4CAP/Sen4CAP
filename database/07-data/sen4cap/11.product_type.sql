@@ -66,4 +66,19 @@ VALUES
 INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
-(20, 's4c_mdb4','Sen4CAP Marker Database PR4', false);
+(20, 's4c_mdb_l4a_opt_main','Sen4CAP L4A Optical Main Features', false);
+
+INSERT INTO product_type
+(id, name, description, is_raster)
+VALUES
+(21, 's4c_mdb_l4a_opt_re','Sen4CAP L4A Optical Red-Edge Features', false);
+
+INSERT INTO product_type
+(id, name, description, is_raster)
+VALUES
+(22, 's4c_mdb_l4a_sar_main','Sen4CAP L4A SAR Main Features', false);
+
+INSERT INTO product_type
+(id, name, description, is_raster)
+VALUES
+(23, 's4c_mdb_l4a_sar_temp','Sen4CAP L4A SAR Temporal Features', false);
