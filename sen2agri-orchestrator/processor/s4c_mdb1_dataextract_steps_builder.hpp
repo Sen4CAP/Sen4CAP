@@ -38,7 +38,7 @@ class S4CMarkersDB1DataExtractStepsBuilder
 {
 public:
     S4CMarkersDB1DataExtractStepsBuilder();
-    void Initialize(EventProcessingContext &ctx, const JobSubmittedEvent &evt, const QStringList &markersEnabled = {});
+    void Initialize(const QString &parentProc, EventProcessingContext &ctx, const JobSubmittedEvent &evt, const QStringList &markersEnabled = {});
     void CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx) const;
     void CreateSteps(const MarkerType &marker, QList<TaskToSubmit> &allTasksList, NewStepList &steps, int &curTaskIdx, QStringList &dataExtrDirs) const;
     QList<MarkerType> GetEnabledMarkers() const;
@@ -72,6 +72,7 @@ private:
     JobSubmittedEvent event;
     QJsonObject parameters;
     std::map<QString, QString> configParameters;
+    QString parentProcessorName;
 
     // parameters used for data extraction step
     bool isScheduledJob;

@@ -233,7 +233,10 @@ enum class ProductType {
     S4MDB1ProductTypeId = 17,
     S4MDB2ProductTypeId = 18,
     S4MDB3ProductTypeId = 19,
-    S4MDB4ProductTypeId = 20
+    S4MDBL4AOptMainProductTypeId = 20,
+    S4MDBL4AOptReProductTypeId = 21,
+    S4MDBL4ASarMainProductTypeId = 22,
+    S4MDBL4ASarTempProductTypeId = 23
 };
 
 QDBusArgument &operator<<(QDBusArgument &argument, const ProductType &productType);

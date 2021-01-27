@@ -198,13 +198,14 @@ void AbstractResourceManagerItf::HandleStepEndedMsg(RequestParamsExecutionInfos 
             jobExecInfos.strStdErrText = "empty err log";
         }
         jobExecInfos.strExitCode = QString::number(nExitCode);
+        bool bNotifyOrchestrator = true;
+        if (nExitCode == 0) {
+            bNotifyOrchestrator = PersistenceItfModule::GetInstance()->MarkStepFinished(nTaskId, strStepName, jobExecInfos);
+        } else {
+            PersistenceItfModule::GetInstance()->MarkStepFailed(nTaskId, strStepName, jobExecInfos);
+        }
         // Send the statistic infos to the persistence interface module
-        // TODO: Here according to the exitCode should be executed MarkStepFinished if nExitCode == 0 and MarkStepFailed otherwise.
-        //       the problem is that MarkStepFailed is marking also job as Failed which is not always OK (we might
-        //      have some steps that could fail without making the whole job failed => ex. processing 99 tiles OK but
-        //       for one the processing is failing)
-        if (PersistenceItfModule::GetInstance()->MarkStepFinished(nTaskId, strStepName,
-                                                                  jobExecInfos)) {
+        if (bNotifyOrchestrator) {
             OrchestratorClientFactory::GetOrchestratorClient(
                         *PersistenceItfModule::GetInstance()->GetDBProvider())->NotifyEventsAvailable();
         }

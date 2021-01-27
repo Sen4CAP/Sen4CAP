@@ -85,7 +85,7 @@ void S4CMarkersDB1Handler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &evt)
 {
     S4CMarkersDB1DataExtractStepsBuilder dataExtrStepsBuilder;
-    dataExtrStepsBuilder.Initialize(ctx, evt);
+    dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, evt);
 
     MDB1JobPayload jobCfg(&ctx, evt);
     // initialize the payload min and max date

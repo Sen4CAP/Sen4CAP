@@ -139,7 +139,7 @@ void AgricPracticesHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &evt)
 {
     S4CMarkersDB1DataExtractStepsBuilder dataExtrStepsBuilder;
-    dataExtrStepsBuilder.Initialize(ctx, evt, {"NDVI", "AMP", "COHE"});
+    dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, evt, {"NDVI", "AMP", "COHE"});
 
     AgricPracticesJobPayload jobCfg(&ctx, evt);
     dataExtrStepsBuilder.GetDataExtractionInterval(jobCfg.minDate, jobCfg.maxDate);

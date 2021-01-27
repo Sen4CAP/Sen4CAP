@@ -90,14 +90,10 @@ StepExecutionDecorator::UpdateCommandForDocker(const QString &taskName, const QS
     QStringList dockerStepList = {"docker", "run", "--rm", "-u",
                                   QString::number(getuid()) + ":" + QString::number(getgid()) };
     // add also the additional mounts
-    if (additionalMounts.size() > 0) {
-        const QStringList &mounts = additionalMounts.split(",");
-        for (const QString &mount: mounts) {
-            if (mount.contains(':')) {
-                dockerStepList.append("-v");
-                dockerStepList.append(mount);
-            }
-        }
+    const QStringList &mounts = EnsureUniqueDockerMounts(additionalMounts);
+    for (const QString &mount: mounts) {
+        dockerStepList.append("-v");
+        dockerStepList.append(mount);
     }
     dockerStepList.append(dockerImage);
 
@@ -152,6 +148,28 @@ QString StepExecutionDecorator::GetAllDockerMounts(const QString &procName, cons
     return allMounts;
 }
 
+QString NormalizeMountDirName(const QString &dir) {
+    QString retDir = dir.trimmed();
+    return retDir.remove(QRegExp("([.|/]+)$"));
+}
+
+QStringList StepExecutionDecorator::EnsureUniqueDockerMounts(const QString &additionalMounts) {
+    QStringList retList;
+    if (additionalMounts.size() > 0) {
+        const QStringList &mounts = additionalMounts.split(",");
+        for (const QString &mount: mounts) {
+            const QStringList &mountParts = mount.split(':');
+            if (mountParts.size() == 2) {
+                const QString &newMount = NormalizeMountDirName(mountParts[0]) +
+                        ":" + NormalizeMountDirName(mountParts[1]);
+                if (!retList.contains(newMount)) {
+                    retList.append(newMount);
+                }
+            }
+        }
+    }
+    return retList;
+}
 
 QString StepExecutionDecorator::GetDockerAdditionalMounts(const QString &procName, const QString &taskName) {
     QString mounts;
@@ -201,7 +219,12 @@ QString StepExecutionDecorator::GetArchiverRootPath() {
     QString archPathKey(QStringLiteral("archiver.archive_path"));
     const auto &parameters = dbProvider.GetConfigurationParameters(archPathKey);
     QString archiverPath = GetParamValue(parameters, archPathKey, "/mnt/archive");
-    archiverPath = archiverPath.section("{",0,0);
+    if (archiverPath.contains('{')) {
+        archiverPath = archiverPath.section("{",0,0);
+        // remove also the last / character, no matter if there is or isn't something after it
+        int pos = archiverPath.lastIndexOf(QChar('/'));
+        archiverPath = archiverPath.left(pos);
+    }
 
     return archiverPath;
 }
@@ -229,7 +252,12 @@ QString StepExecutionDecorator::GetScratchPathRoot(const QString &procName)
     Q_ASSERT(val != "");
 
     val = QDir::cleanPath(val) + QDir::separator();
-    val = val.split('{', QString::SkipEmptyParts).at(0);
+    if (val.contains('{')) {
+        val = val.split('{', QString::SkipEmptyParts).at(0);
+        // remove also the last / character, no matter if there is or isn't something after it
+        int pos = val.lastIndexOf(QChar('/'));
+        val = val.left(pos);
+    }
 
     return val;
 }

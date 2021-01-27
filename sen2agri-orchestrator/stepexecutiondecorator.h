@@ -23,6 +23,7 @@ private:
     QString GetArchiverRootPath();
     bool IsDockerEnabledForStep(const QString &procName, const QString &taskName);
     QString GetAllDockerMounts(const QString &procName, const QString &mounts);
+    QStringList EnsureUniqueDockerMounts(const QString &mounts);
     QString GetDockerAdditionalMounts(const QString &procName, const QString &taskName);
     QString GetOrchestratorStepConfigValue(const QString &procName, const QString &taskName, const QString &key, QString &foundRoot);
     QString GetParamValue(const ConfigurationParameterValueList &parameters, const QString &key, const QString &defVal);

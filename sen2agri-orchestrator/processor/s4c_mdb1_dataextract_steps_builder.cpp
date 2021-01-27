@@ -56,6 +56,8 @@ QString S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionDir(int year, con
 
 void S4CMarkersDB1DataExtractStepsBuilder::CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx) const
 {
+    Logger::info(QStringLiteral("MDB1 Create tasks: having a number of %1 tasks to add").arg(fileInfos.size()));
+
     // create for all products of this marker the data extraction tasks, if needed
     for(int i  = 0; i<fileInfos.size(); i++) {
         if (fileInfos[i].markerInfo.marker == marker.marker) {
@@ -83,12 +85,13 @@ void S4CMarkersDB1DataExtractStepsBuilder::CreateSteps(const MarkerType &marker,
                 dataExtrDirs.append(dataExtrDirName);
             }
             const QStringList &dataExtractionArgs = GetDataExtractionArgs("NewID", prdMarkerInfo, dataExtrDirName);
-            steps.append(StepExecutionDecorator::GetInstance()->CreateTaskStep(MDB1_PROC_SHORT_NAME, dataExtractionTask, "Markers1Extractor", dataExtractionArgs));
+            steps.append(StepExecutionDecorator::GetInstance()->CreateTaskStep(parentProcessorName, dataExtractionTask,
+                                                                               "Markers1Extractor", dataExtractionArgs));
         }
     }
 }
 
-void S4CMarkersDB1DataExtractStepsBuilder::Initialize(EventProcessingContext &ctx, const JobSubmittedEvent &evt,
+void S4CMarkersDB1DataExtractStepsBuilder::Initialize(const QString &parentProc, EventProcessingContext &ctx, const JobSubmittedEvent &evt,
                                                       const QStringList &markersEnabled)
 {
     allMarkerFileTypes = {{"NDVI", ProductType::L3BProductTypeId, "NDVI"},
@@ -97,6 +100,8 @@ void S4CMarkersDB1DataExtractStepsBuilder::Initialize(EventProcessingContext &ct
                             {"FCOVER", ProductType::L3BProductTypeId, "FCOVERMONO"},
                             {"AMP", ProductType::S4CS1L2AmpProductTypeId, "AMP"},
                             {"COHE", ProductType::S4CS1L2CoheProductTypeId, "COHE"}};
+
+    parentProcessorName = parentProc;
     pCtx = &ctx;
     event = evt;
     parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
@@ -174,6 +179,7 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
             // also because one L3B contains several markers
             const QStringList &l3bPrds = S4CUtils::GetInputProducts(*(pCtx), event, ProductType::L3BProductTypeId,
                                                                     prdMinDate, prdMaxDate, isScheduledJob);
+            Logger::info(QStringLiteral("Extracted a number of %1 L3B products").arg(l3bPrds.size()));
             if (l3bPrds.size() > 0) {
                 for (const auto &marker: enabledMarkers) {
                     if (marker.prdType == ProductType::L3BProductTypeId) {
@@ -194,6 +200,7 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
             if (marker.prdType != ProductType::L3BProductTypeId) {
                 const QStringList &tiffFiles = S4CUtils::GetInputProducts(*(pCtx), event, marker.prdType,
                                                   prdMinDate, prdMaxDate, isScheduledJob);
+                Logger::info(QStringLiteral("Extracted a number of %1 %2 products").arg(tiffFiles.size()).arg(marker.marker));
                 for (const auto &tiffFile : tiffFiles) {
                     const QDateTime &prdDate = ExtractDateFromRegex(tiffFile, S1_REGEX, S1_REGEX_DATE_IDX, S1_REGEX_DATE2_IDX);
                     if (prdDate.isValid()) {
@@ -202,7 +209,12 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
                 }
             }
         }
+    } else {
+        Logger::error(QStringLiteral("No enabled markers for job %1!!!").arg(event.jobId));
     }
+
+    Logger::info(QStringLiteral("A total number of %1 tiff files will be processed").arg(fileInfos.size()));
+
     // Update the dates used by the product formatter
     if (!this->prdMinDate.isValid()) {
         this->prdMinDate = prdMinDate;
@@ -262,6 +274,7 @@ QMap<int, LpisInfos> S4CMarkersDB1DataExtractStepsBuilder::ExtractLpisInfos() {
             lpisInfo.productDate = lpisPrd.created;
             lpisInfo.insertedDate = lpisPrd.inserted;
             lpisInfos[lpisInfo.productDate.date().year()] = lpisInfo;
+            Logger::info(QStringLiteral("MDB1: Using LPIS %1 for year %2").arg(lpisPrd.fullPath).arg(lpisInfo.productDate.date().year()));
         }
     }
 
@@ -272,11 +285,15 @@ void S4CMarkersDB1DataExtractStepsBuilder::RemoveNoLpisProducts() {
     auto const pred = [this](const PrdMarkerInfo &prdInfo){
         QMap<int, LpisInfos>::const_iterator i = lpisInfos.find(prdInfo.prdFileInfo.prdTime.date().year());
         if (i == lpisInfos.end()) {
+            Logger::info(QStringLiteral("MDB1: Product %1 not processed as there is no LPIS for product year %2").
+                         arg(prdInfo.prdFileInfo.inFilePath).arg(prdInfo.prdFileInfo.prdTime.date().year()));
             return true;
         }
         return false;
     };
+    int prevFileInfos = fileInfos.size();
     fileInfos.erase(std::remove_if(fileInfos.begin(), fileInfos.end(), pred), fileInfos.end());
+    Logger::info(QStringLiteral("Removed a number of %1 products that do not have a year corresponding to an LPIS").arg(prevFileInfos - fileInfos.size()));
 }
 
 QStringList S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionArgs(const QString &uidField,
