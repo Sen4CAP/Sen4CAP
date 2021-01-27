@@ -274,22 +274,22 @@ def main():
         sar_temporal = None
 
     if optical_features:
-        ipc_file = "features/optical-features.ipc"
+        ipc_file = os.path.join(args.working_path, "features/optical-features.ipc")
         command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", optical_features, "-o", ipc_file, "--int32-columns", "NewID"]
         run_command(command)
         optical_features = ipc_file
     if optical_re_features:
-        ipc_file = "features/optical-features-re.ipc"
+        ipc_file = os.path.join(args.working_path, "features/optical-features-re.ipc")
         command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", optical_re_features, "-o", ipc_file, "--int32-columns", "NewID"]
         run_command(command)
         optical_re_features = ipc_file
     if sar_features:
-        ipc_file = "features/sar-features.ipc"
+        ipc_file = os.path.join(args.working_path, "features/sar-features.ipc")
         command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", sar_features, "-o", ipc_file, "--int32-columns", "NewID"]
         run_command(command)
         sar_features = ipc_file
     if sar_temporal:
-        ipc_file = "features/optical-features.ipc"
+        ipc_file = os.path.join(args.working_path, "features/optical-features.ipc")
         command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", sar_temporal, "-o", ipc_file, "--int32-columns", "NewID"]
         run_command(command)
         sar_temporal = ipc_file
