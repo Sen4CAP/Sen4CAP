@@ -383,8 +383,6 @@ def main():
     )
 
     args = parser.parse_args()
-    dir(args)
-    print(args)
 
     config = Config(args)
 
