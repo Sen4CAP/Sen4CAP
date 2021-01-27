@@ -21,10 +21,10 @@ esac
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
-if [ -z ${USE_SNAP8_DOCKER} ] ; then 
+if [ -z ${USE_SNAP8_DOCKER} ] ; then
     USE_SNAP_8_DOCKER=0
 else
-    if [[ "$USE_SNAP8_DOCKER" == "1" || "$USE_SNAP8_DOCKER" == "true" ]] ; then 
+    if [[ "$USE_SNAP8_DOCKER" == "1" || "$USE_SNAP8_DOCKER" == "true" ]] ; then
         USE_SNAP_8_DOCKER=1
     fi
 fi
@@ -308,8 +308,10 @@ function setup_containers() {
     cd docker
     docker-compose up -d
     cd ..
-    
+
     docker pull lnicola/sen2agri-processors
+    docker pull lnicola/sen2agri-l2a-processors
+    docker pull lnicola/sen2agri-dem
 }
 
 function migrate_to_docker() {
