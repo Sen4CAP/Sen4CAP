@@ -98,7 +98,7 @@ def main():
         "--standalone", action="store_true", help="standalone mode"
     )
     parser.add_argument(
-        "--parcels", help="parcels file"
+        "--parcels", required=False, help="parcels file"
     )
     parser.add_argument("--lut", required=False, help="LUT file")
     parser.add_argument("--tile-footprints", required=False, help="tile footprints")
