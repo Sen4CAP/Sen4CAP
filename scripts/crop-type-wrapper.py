@@ -245,6 +245,8 @@ def main():
 
         run_command(command)
 
+    tiles = list(tiles)
+
     if args.mode != "s1-only":
         os.rename("optical/optical-features.csv", "features/optical-features.csv")
     if args.mode == "both":
