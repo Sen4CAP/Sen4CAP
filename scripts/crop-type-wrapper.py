@@ -326,7 +326,7 @@ def main():
     run_command(command)
 
     if args.outputs:
-        csvfile = open(args.output, 'w', newline='')
+        csvfile = open(args.outputs, 'w')
         writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
         writer.writerow(["product_type_id", "name", "path", "created_timestamp", "tiles"])
     else:
