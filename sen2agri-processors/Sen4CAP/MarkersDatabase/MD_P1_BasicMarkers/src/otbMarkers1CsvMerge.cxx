@@ -208,7 +208,7 @@ private:
         const OutputHeader &header = BuildOutputHeader(infoFiles);
         if (header.header.size() == 0) {
             // do not create the file if header cannot be created
-            otbAppLogFATAL(<<"No header was possible to be buid from the provided input files!");
+            otbAppLogFATAL(<<"No header was possible to be built from the provided input files!");
         }
 
         std::ofstream outFileStream;
