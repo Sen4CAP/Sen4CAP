@@ -2,9 +2,14 @@
 from __future__ import print_function
 
 import argparse
+import csv
+from datetime import datetime
+import dateutil.parser
+import errno
 import os
 import os.path
 import pipes
+import shutil
 import subprocess
 import sys
 
@@ -26,6 +31,37 @@ def check_file(p):
         if f.readline() and f.readline():
             return True
     return False
+
+
+def makedirs2(path):
+    # FIXME: just use makedirs(exist_ok=True) in Python 3
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
+
+def read_optical_products_tiles(file):
+    tiles = set()
+    with open(file, 'r') as file:
+        # skip headers
+        reader = csv.reader(file)
+        next(reader)
+        for row in reader:
+            tiles.add(row[3])
+    return tiles
+
+
+def read_radar_products_tiles(file):
+    tiles = set()
+    with open(file, 'r') as file:
+        reader = csv.reader(file)
+        # skip headers
+        next(reader)
+        for row in reader:
+            tiles.add(row[1])
+    return tiles
 
 
 def main():
@@ -105,6 +141,8 @@ def main():
     parser.add_argument("--optical-products", required=False, help="optical products")
     parser.add_argument("--radar-products", required=False, help="radar products")
     parser.add_argument("--lpis-path", required=False, help="LPIS path file")
+    parser.add_argument("--target-path", required=False, help="Target directory for marker products")
+    parser.add_argument("--outputs", required=False, help="Output marker products CSV")
     args = parser.parse_args()
 
     current_path = os.getcwd()
@@ -141,9 +179,20 @@ def main():
         command += ["-s", args.site_id]
         command += ["--season-start", args.season_start]
         command += ["--season-end", args.season_end]
+        if args.tiles:
+            command += ["--tiles", args.tiles]
+        if args.products:
+            command += ["--tiles", args.products]
         command += [parcels, lut, tile_footprints, optical_products, radar_products, lpis_path]
 
         run_command(command)
+
+        parcels = os.path.abspath(parcels)
+        lut = os.path.abspath(lut)
+        tile_footprints = os.path.abspath(tile_footprints)
+        optical_products = os.path.abspath(optical_products)
+        radar_products = os.path.abspath(radar_products)
+        lpis_path = os.path.abspath(lpis_path)
     else:
         if not args.parcels or not args.lut or not args.tile_footprints or not args.optical_products or not args.radar_products or not args.lpis_path:
             print("The input files are required when not using `--standalone`")
@@ -159,7 +208,9 @@ def main():
     with open(lpis_path, "rt") as f:
         lpis_path = f.readline().strip()
 
+    tiles = set()
     if args.mode != "s1-only":
+        tiles |= read_optical_products_tiles(optical_products)
         os.chdir("optical")
 
         command = []
@@ -175,6 +226,7 @@ def main():
         os.chdir("..")
 
     if args.mode != "s2-only":
+        tiles |= read_optical_products_tiles(radar_products)
         os.chdir("sar")
         command = []
         command += ["crop-type-parcels.py"]
@@ -211,13 +263,34 @@ def main():
     sar_temporal = os.path.join(args.working_path, "features/sar-temporal.csv")
 
     if args.mode == "s1-only" or not check_file(optical_features):
-        optical_features = "0"
+        optical_features = None
     if args.mode != "both" or not check_file(optical_re_features):
-        optical_re_features = "0"
+        optical_re_features = None
     if args.mode == "s2-only" or not check_file(sar_features):
-        sar_features = "0"
+        sar_features = None
     if args.mode == "s2-only" or not check_file(sar_temporal):
-        sar_temporal = "0"
+        sar_temporal = None
+
+    if optical_features:
+        ipc_file = "features/optical-features.ipc"
+        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", optical_features, "-o", ipc_file, "--int32-columns", "NewID"]
+        run_command(command)
+        optical_features = ipc_file
+    if optical_re_features:
+        ipc_file = "features/optical-features-re.ipc"
+        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", optical_re_features, "-o", ipc_file, "--int32-columns", "NewID"]
+        run_command(command)
+        optical_re_features = ipc_file
+    if sar_features:
+        ipc_file = "features/sar-features.ipc"
+        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", sar_features, "-o", ipc_file, "--int32-columns", "NewID"]
+        run_command(command)
+        sar_features = ipc_file
+    if sar_temporal:
+        ipc_file = "features/optical-features.ipc"
+        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", sar_temporal, "-o", ipc_file, "--int32-columns", "NewID"]
+        run_command(command)
+        sar_temporal = ipc_file
 
     if args.mode == "s2-only":
         args.min_s1_pix = 0
@@ -227,10 +300,10 @@ def main():
     command = []
     command += ["crop_type.R"]
     command += [args.out_path + "/"]
-    command += [sar_features]
-    command += [optical_features]
-    command += [optical_re_features]
-    command += [sar_temporal]
+    command += [sar_features or "0"]
+    command += [optical_features or "0"]
+    command += [optical_re_features or "0"]
+    command += [sar_temporal or "0"]
     command += [parcels]
     command += ["CTnumL4A"]
     command += [args.lc]
@@ -251,6 +324,38 @@ def main():
     command += [lut]
 
     run_command(command)
+
+    if args.outputs:
+        csvfile = open(args.output, 'w', newline='')
+        writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(["product_type_id", "name", "path", "created_timestamp", "tiles"])
+    else:
+        csvfile = None
+        writer = None
+
+    if args.target_path:
+        season_start = dateutil.parser.parse(args.season_start).strftime("%Y%m%d")
+        season_end = dateutil.parser.parse(args.season_end).strftime("%Y%m%d")
+        now = datetime.now()
+        now_pp = now.strftime("%Y-%m-%d %H:%M:%S")
+        now = now.strftime("%Y%m%dT%H%M%S")
+        feature_files = [optical_features, optical_re_features, sar_features, sar_temporal]
+        infixes = ["OPT_MAIN", "OPT_RE", "SAR_MAIN", "SAR_RE"]
+        product_types = [20, 21, 22, 23]
+        for (features, infix, product_type) in zip(feature_files, infixes, product_types):
+            if features:
+                product_name = "SEN4CAP_MDB_L4A_{}_V{}_{}_{}".format(infix, season_start, season_end, now)
+                product_dir = os.path.join(args.target_path, product_name)
+                makedirs2(product_dir)
+                product_path = os.path.join(product_dir, product_name + ".ipc")
+                shutil.move(features, product_path)
+                shutil.move(features + ".idx", product_path + ".idx")
+                print(product_path)
+                if writer:
+                    writer.writerow([product_type, product_name, product_dir, now_pp, tiles])
+
+    if csvfile:
+        csvfile.close()
 
 
 if __name__ == "__main__":
