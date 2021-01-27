@@ -226,7 +226,7 @@ def main():
         os.chdir("..")
 
     if args.mode != "s2-only":
-        tiles |= read_optical_products_tiles(radar_products)
+        tiles |= read_radar_products_tiles(radar_products)
         os.chdir("sar")
         command = []
         command += ["crop-type-parcels.py"]
