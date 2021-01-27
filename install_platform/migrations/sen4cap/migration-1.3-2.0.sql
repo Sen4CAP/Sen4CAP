@@ -43,14 +43,20 @@ begin
         
             -- Product types and processor IDs changes
             _statement := $str$    
-                INSERT INTO product_type (id, name, description, is_raster) VALUES (17, 's4c_mdb1','Sen4CAP Marker Database PR1', 'false')
-                        on conflict(id) DO UPDATE SET id = 17, name = 's4c_mdb1', description = 'Sen4CAP Marker Database PR1', is_raster = 'false';
-                INSERT INTO product_type (id, name, description, is_raster) VALUES (18, 's4c_mdb2','Sen4CAP Marker Database PR2', 'false')
-                        on conflict(id) DO UPDATE SET id = 18, name = 's4c_mdb2', description = 'Sen4CAP Marker Database PR2', is_raster = 'false';
-                INSERT INTO product_type (id, name, description, is_raster) VALUES (19, 's4c_mdb3','Sen4CAP Marker Database PR3', 'false')
-                        on conflict(id) DO UPDATE SET id = 19, name = 's4c_mdb3', description = 'Sen4CAP Marker Database PR3', is_raster = 'false';
-                INSERT INTO product_type (id, name, description, is_raster) VALUES (20, 's4c_mdb4','Sen4CAP Marker Database PR4', 'false')
-                        on conflict(id) DO UPDATE SET id = 20, name = 's4c_mdb4', description = 'Sen4CAP Marker Database PR4', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (17, 's4c_mdb1','Sen4CAP Marker Database Basic StdDev/Mean', 'false')
+                        on conflict(id) DO UPDATE SET id = 17, name = 's4c_mdb1', description = 'Sen4CAP Marker Database Basic StdDev/Mean', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (18, 's4c_mdb2','Sen4CAP Marker Database AMP VV/VH Ratio', 'false')
+                        on conflict(id) DO UPDATE SET id = 18, name = 's4c_mdb2', description = 'Sen4CAP Marker Database AMP VV/VH Ratio', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (19, 's4c_mdb3','Sen4CAP Marker Database L4C M1-M5', 'false')
+                        on conflict(id) DO UPDATE SET id = 19, name = 's4c_mdb3', description = 'Sen4CAP Marker Database L4C M1-M5', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (20, 's4c_mdb_l4a_opt_main','Sen4CAP L4A Optical Main Features', false)
+                        on conflict(id) DO UPDATE SET id = 20, name = 's4c_mdb_l4a_opt_main', description = 'Sen4CAP L4A Optical Main Features', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (21, 's4c_mdb_l4a_opt_re','Sen4CAP L4A Optical Red-Edge Features', false) 
+                        ON conflict DO nothing;
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (22, 's4c_mdb_l4a_sar_main','Sen4CAP L4A SAR Main Features', false)
+                        ON conflict DO nothing;
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (23, 's4c_mdb_l4a_sar_temp','Sen4CAP L4A SAR Temporal Features', false)
+                        ON conflict DO nothing;
                 
                 UPDATE product_type SET name = 'l3b' WHERE id = 3;
                 UPDATE product_type SET description = 'L3B LAI mono-date product' WHERE id = 3;
@@ -773,6 +779,8 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.export-product-launcher.use_docker', NULL, '0', '2021-01-20 11:44:25.330355+00') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-l4a-extract-parcels.use_docker', NULL, '0', '2021-01-20 18:50:52.244303+00') ON conflict DO nothing;
                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-l4a-extract-parcels', NULL, 'extract-parcels.py', '2021-01-15 22:39:08.407059+02') ON conflict DO nothing;
+               
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -814,7 +822,7 @@ begin
                 INSERT INTO config_category VALUES (26, 'S4C Marker database 1', 4, true) ON conflict DO nothing;
                 
                 -- Tillage processor keys               
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable or disable tillage monitoring', 'bool', false, 20, true, 'Enable or disable tillage monitoring') ON conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable or disable tillage monitoring', 'int', false, 20, true, 'Enable or disable tillage monitoring') ON conflict(key) DO UPDATE SET type = 'int';
                 
                 -- Marker database keys                
                 INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.slurm_qos', 'Slurm QOS for MDB1 processor', 'string', true, 8) ON conflict DO nothing;

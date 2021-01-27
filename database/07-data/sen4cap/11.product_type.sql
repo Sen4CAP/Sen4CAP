@@ -51,17 +51,17 @@ VALUES
 INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
-(17, 's4c_mdb1','Sen4CAP Marker Database PR1', false);
+(17, 's4c_mdb1','Sen4CAP Marker Database Basic StdDev/Mean', false);
 
 INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
-(18, 's4c_mdb2','Sen4CAP Marker Database PR2', false);
+(18, 's4c_mdb2','Sen4CAP Marker Database AMP VV/VH Ratio', false);
 
 INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
-(19, 's4c_mdb3','Sen4CAP Marker Database PR3', false);
+(19, 's4c_mdb3','Sen4CAP Marker Database L4C M1-M5', false);
 
 INSERT INTO product_type
 (id, name, description, is_raster)

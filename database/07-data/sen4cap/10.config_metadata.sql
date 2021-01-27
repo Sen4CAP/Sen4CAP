@@ -167,7 +167,7 @@ INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'path where the S
 INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'working directory', 'string', false, 2);
 
 -- Tillage processor keys               
-INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable or disable tillage monitoring', 'bool', false, 20, true, 'Enable or disable tillage monitoring');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable or disable tillage monitoring', 'int', false, 20, true, 'Enable or disable tillage monitoring');
 
 -- Marker database keys                
 INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.slurm_qos', 'Slurm QOS for MDB1 processor', 'string', true, 8);
@@ -188,6 +188,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.cohe_enabled', 'COHE mar
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.lai_enabled', 'LAI markers extraction enabled', 'bool', true, 26);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fapar_enabled', 'FAPAR markers extraction enabled', 'bool', true, 26);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fcover_enabled', 'FCOVER markers extraction enabled', 'bool', true, 26);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.data_extr_dir', 'Location for the MDB1 data extration files', 'string', true, 26);
 
 -- Executor/orchestrator/scheduler changes
 INSERT INTO config_metadata VALUES ('general.inter-proc-com-type', 'Type of the interprocess communication', 'string', false, 1);

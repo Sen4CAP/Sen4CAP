@@ -360,6 +360,8 @@ function config_docker()
     done
 
     docker pull lnicola/sen2agri-processors
+    docker pull lnicola/sen2agri-l2a-processors
+    docker pull lnicola/sen2agri-dem
     
     cd ..
 }
