@@ -9,19 +9,14 @@ import subprocess
 import sys
 
 
-def run_command(args, env=None, retry=False):
+def run_command(args, env=None):
     args = list(map(str, args))
     cmd_line = " ".join(map(pipes.quote, args))
 
-    retries = 5 if retry else 1
-    while retries > 0:
-        retries -= 1
-        print(cmd_line)
-        result = subprocess.call(args, env=env)
-        if result != 0:
-            print("Exit code: {}".format(result))
-        else:
-            break
+    print(cmd_line)
+    result = subprocess.call(args, env=env)
+    if result != 0:
+        raise RuntimeError("Command `{}` failed with exit code {}".format(cmd_line, result))
 
 
 def check_file(p):
