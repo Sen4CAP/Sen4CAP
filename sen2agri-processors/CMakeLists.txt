@@ -80,6 +80,7 @@ install(FILES ../scripts/insert_l2a_product_to_db.py
               ../scripts/arrow/extract_l4c_markers_wrapper.py
               ../scripts/arrow/run_csv_to_ipc.sh
               ../scripts/arrow/csv_to_ipc.py
+              ../scripts/arrow/ipc_to_csv.py
         DESTINATION usr/bin/
 	    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                     GROUP_READ GROUP_EXECUTE
