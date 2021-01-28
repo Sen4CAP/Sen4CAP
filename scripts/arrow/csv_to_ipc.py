@@ -33,7 +33,7 @@ def get_type_for_column(args, field_name):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create a new column with aggredated values from other columns.")
+    parser = argparse.ArgumentParser(description="Converts a CSV file to the Apache Arrow format")
     parser.add_argument('-i', '--input', help="The input CSV file")
     parser.add_argument('-o', '--output', help="The output IPC file")
     parser.add_argument('-c', '--int8-columns', default="", help="Int8 columns")
