@@ -178,37 +178,44 @@ class FmaskProcessor(object):
         return None
 
     def extract_from_archive_if_needed(self, archive_file):
-        # create the temporary path where the archive will be extracted
-        archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-        if os.path.exists(archives_dir) == False:
-            os.makedirs(archives_dir)
-        create_recursive_dirs(archives_dir)
-        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-        extracted_file_path = None
-        # check if the file is indeed an archive
-        # exception raised only if the archive_file does not exist
-        try:
-            if zipfile.is_zipfile(archive_file):
-                extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
-        except Exception as e:
-            extracted_file_path = None
-        try:
-            if tarfile.is_tarfile(archive_file):
-                extracted_file_path = self.untar(extracted_archive_dir, archive_file)
-        except Exception as e:
-            extracted_file_path = None
-        if extracted_file_path is not None:
-            self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-            return True, extracted_file_path
-        # this isn't and archive, so no need for the temporary directory
-        self.launcher_log(
-            "This wasn't an archive, so continue as is. Deleting {}".format(
-                extracted_archive_dir
+        if os.path.isdir(archive_file):
+            self.launcher_log(
+                "This wasn't an archive, so continue as is."
             )
-        )
-        remove_dir(extracted_archive_dir)
-
-        return False, archive_file
+            return False, archive_file
+        else:
+            archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
+            if zipfile.is_zipfile(archive_file):
+                if create_recursive_dirs(archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
+                        extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
+                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.launcher_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.launcher_log("Can NOT create arhive dir.")
+                    return False, None
+            elif tarfile.is_tarfile(archive_file):
+                if create_recursive_dirs(archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
+                        extracted_file_path = self.untar(extracted_archive_dir, archive_file)
+                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.launcher_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.launcher_log("Can NOT create arhive dir.")
+                    return False, None
+            else:
+                self.launcher_log(
+                    "This wasn't an zip or tar archive, can NOT use input product."
+                )
+                return False, None
 
     def validate_input_product_dir(self):
         # First check if the product path actually exists
@@ -264,7 +271,10 @@ class FmaskProcessor(object):
                 self.context.worker_id, self.lin.product_id
             )
         )
-        return self.validate_input_product_dir()
+        if self.lin.path is not None:
+            return self.validate_input_product_dir()
+        else:
+            return False
 
     def fmask_setup(self):
         # determine the name of the fmask output dir
@@ -658,13 +668,13 @@ class FMaskMaster(object):
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     unprocessed_tile = db_get_unprocessed_tile()
-                    #tmp
-                    print(" <<<<<<< {} {} >>>>>>>".format(unprocessed_tile, len(sleeping_workers)))
-                    #tmp
                     if unprocessed_tile is not None:
-                        #tmp
-                        print(" <<<<<<<< Am intrat >>>>>>>>>")
-                        #tmp
+                        processing_context = db_get_processing_context()
+                        site_context = processing_context.get_site_context(
+                            unprocessed_tile.site_id
+                        )
+                        site_context.get_site_info()
+                        site_context_valid = site_context.is_valid()
                         valid_tile = unprocessed_tile.is_valid()
                         if valid_tile == False:
                             print(
@@ -682,12 +692,6 @@ class FMaskMaster(object):
                                 unprocessed_tile, "Invalid tile information."
                             )
                             continue
-
-                        processing_context = ProcessingContext()
-                        site_context = processing_context.get_site_context(
-                            unprocessed_tile.site_id
-                        )
-                        site_context_valid = site_context.is_valid()
 
                         if site_context_valid == False:
                             print(
@@ -841,36 +845,40 @@ class Tile(object):
 class SiteContext(object):
     def __init__(self):
         self.site_id = None
-        self.site_short_name = None
         self.base_abs_path = None
-        self.output_path = None
-        self.working_dir = None
+        self.output_path = ""
+        self.working_dir = ""
+
+    def get_site_info(self):
+        self.site_short_name = db_get_site_short_name(self.site_id)
+        if "{site}" in self.output_path:
+            self.output_path = self.output_path.replace("{site}", self.site_short_name)
 
     def is_valid(self):
         if len(self.output_path) == 0:
             print(
-                "(launcher error) Invalid processing context output_path: {}.".format(
+                "(launcher error) <master>: Invalid processing context output_path: {}.".format(
                     self.output_path
                 )
             )
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) Invalid processing context output_path: {}.".format(
+                "(launcher error) <master>: Invalid processing context output_path: {}.".format(
                     self.output_path
                 ),
                 LAUNCHER_LOG_FILE_NAME,
             )
             return False
 
-        if not os.path.isdir(self.working_dir):
+        if not os.path.isdir(self.working_dir) and not create_recursive_dirs(self.working_dir):
             print(
-                "(launcher error) Invalid processing context working_dir: {}".format(
+                "(launcher error) <master>: Invalid processing context working_dir: {}".format(
                     self.working_dir
                 )
             )
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) Invalid processing context working_dir: {}".format(
+                "(launcher error) <master>: Invalid processing context working_dir: {}".format(
                     self.working_dir
                 ),
                 LAUNCHER_LOG_FILE_NAME,
@@ -882,19 +890,43 @@ class SiteContext(object):
 class ProcessingContext(object):
     def __init__(self):
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
-        self.output_path = {"default": "/mnt/archive/fmask_def/{site}/fmask/"}
-        self.working_dir = {"default": "/mnt/archive/fmask_tmp/"}
+        self.output_path = {"default": ""}
+        self.working_dir = {"default": ""}
+        self.num_workers = 2
 
     def get_site_context(self, site_id):
         site_context = SiteContext()
 
         site_context.base_abs_path = self.base_abs_path
-        site_context.site_id = site_id
-        site_context.site_short_name = db_get_site_short_name(site_id)
-        site_context.output_path = self.output_path['default'].replace("{site}", site_context.site_short_name)
-        site_context.working_dir = self.working_dir['default']
+        site_context.site_id = site_id      
+        if site_id in self.working_dir:
+            site_context.working_dir = self.working_dir[site_id]
+        else:
+            site_context.working_dir = self.working_dir["default"]
+        if site_id in self.output_path:
+            site_context.output_path = self.output_path[site_id]
+        else:
+            site_context.output_path = self.output_path["default"]
 
         return site_context
+
+    def add_parameter(self, row):
+        if len(row) == 3 and row[0] is not None and row[2] is not None:
+            parameter = row[0]
+            site = row[1]
+            value = row[2]
+            if parameter == "processor.fmask.optical.num-workers":
+                self.num_workers = int(value)
+            elif parameter == "processor.fmask.working-dir":
+                if site is not None:
+                    self.working_dir[site] = value
+                else:
+                    self.working_dir["default"] = value
+            elif parameter == "processor.fmask.optical.output-path":
+                if site is not None:
+                    self.output_path[site] = value
+                else:
+                    self.output_path["default"] = value
 
 class FMaskConfig(object):
     def __init__(self, output_path, working_dir):
@@ -1114,9 +1146,6 @@ def db_get_unprocessed_tile():
     products_db.cursor.execute("select * from sp_start_fmask_l1_tile_processing();")
     tile_info = products_db.cursor.fetchall()
     if tile_info == []:
-        #tmp
-        print("########## NU  ESTE NICI UN PRODUS DISPONIBIL #############")
-        #tmp
         return None
     else:
         return Tile(tile_info[0])
@@ -1148,6 +1177,17 @@ def db_get_site_short_name(site_id):
         return rows[0][0]
     else:
         return None
+
+@db_fetch
+def db_get_processing_context():
+
+    processing_context = ProcessingContext()
+    products_db.cursor.execute("select * from sp_get_parameters('processor.fmask.')")
+    rows = products_db.cursor.fetchall()
+    for row in rows:
+        processing_context.add_parameter(row)
+
+    return processing_context
 
 @db_update
 def db_postrun_update(input_prod, fmask_prod):
@@ -1204,7 +1244,7 @@ def db_postrun_update(input_prod, fmask_prod):
                                %(orbit_type_id)s :: smallint,
                                %(downloader_history_id)s :: integer)""",
                                 {
-                                    "product_type_id" : 15,
+                                    "product_type_id" : 25,
                                     "processor_id" : 1,
                                     "satellite_id" : sat_id,
                                     "site_id" : site_id,
@@ -1241,7 +1281,6 @@ def db_prerun_update(tile, reason):
 
 parser = argparse.ArgumentParser(description="Launcher for FMASK script")
 parser.add_argument('-c', '--config', default="/etc/sen2agri/sen2agri.conf", help="configuration file")
-parser.add_argument('-p', '--processes-number', type = int, default=4, help="Number of products to be processed at the same time.")
 args = parser.parse_args()
 
 # get the db configuration from cfg file
@@ -1255,31 +1294,37 @@ if not products_db.loadConfig(args.config):
     sys.exit(1)
 
 # get the processing context
-default_processing_context = ProcessingContext()
-
-# woking dir operations
-# create working dir
-if not os.path.isdir(default_processing_context.working_dir['default']) and not create_recursive_dirs(
-    default_processing_context.working_dir['default']
-):
+default_processing_context = db_get_processing_context()
+if default_processing_context is None:
     log(
         LAUNCHER_LOG_DIR,
-        "Could not create the work base directory {}".format(
-            default_processing_context.working_dir['default']
+        "Could not load the processing context from database",
+        LAUNCHER_LOG_FILE_NAME,
+    )
+    sys.exit(1)
+
+if default_processing_context.num_workers < 1:
+    print(
+        "(launcher err) <master>: Invalid processing context num_workers: {}".format(
+            default_processing_context.num_workers
+        )
+    )
+    log(
+        LAUNCHER_LOG_DIR,
+        "(launcher err) <master>: Invalid processing context num_workers: {}".format(
+                    default_processing_context.num_workers
         ),
         LAUNCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
 
-# delete all the temporary content from a previous run
-remove_dir_content(default_processing_context.working_dir['default'])
-# create directory for the eventual archives like l1c products
-create_recursive_dirs(os.path.join(default_processing_context.working_dir['default'], ARCHIVES_DIR_NAME))
+# delete all the temporary content from working dir from a previous run
+remove_dir_content(default_processing_context.working_dir["default"])
 
 # clear pending tiless
 db_clear_pending_tiles()
-fmask_master = FMaskMaster(args.processes_number)
+fmask_master = FMaskMaster(default_processing_context.num_workers)
 fmask_master.run()
 
-if DEBUG == False:
-    remove_dir_content("{}/".format(default_processing_context.working_dir['default']))
+if not DEBUG:
+    remove_dir_content("{}/".format(default_processing_context.working_dir["default"]))
