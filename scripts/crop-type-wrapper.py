@@ -337,10 +337,10 @@ def main():
 
     if args.target_path:
         season_start = dateutil.parser.parse(args.season_start).strftime("%Y%m%d")
-        season_end = dateutil.parser.parse(args.season_end).strftime("%Y%m%d")
-        now = datetime.now()
-        now_pp = now.strftime("%Y-%m-%d %H:%M:%S")
-        now = now.strftime("%Y%m%dT%H%M%S")
+        season_end = dateutil.parser.parse(args.season_end)
+        created_timestamp = season_end.strftime("%Y-%m-%d %H:%M:%S")
+        season_end = season_end.strftime("%Y%m%d")
+        now = datetime.now().strftime("%Y%m%dT%H%M%S")
         feature_files = [optical_features, optical_re_features, sar_features, sar_temporal]
         infixes = ["OPT_MAIN", "OPT_RE", "SAR_MAIN", "SAR_RE"]
         product_types = [20, 21, 22, 23]
@@ -354,7 +354,7 @@ def main():
                 shutil.move(features + ".idx", product_path + ".idx")
                 print(product_path)
                 if writer:
-                    writer.writerow([product_type, product_name, product_dir, now_pp, tiles])
+                    writer.writerow([product_type, product_name, product_path, created_timestamp, tiles])
 
     if csvfile:
         csvfile.close()
