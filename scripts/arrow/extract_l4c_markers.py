@@ -149,7 +149,7 @@ def merge_all_mdb_csv_files(config, all_mdb_csv_files) :
     return out_merged_file
 
 def export_to_ipc_file(config, csv_merged_file) :
-    command = [EXPORT_TO_IPC_SCRIPT, "--in", csv_merged_file, "--out", config.output, "--int8-columns", "\d{8}_M[1-5]$" ]
+    command = [EXPORT_TO_IPC_SCRIPT, "--in", csv_merged_file, "--out", config.output, "--int32-columns", "NewID", "--int8-columns", "\d{8}_M[1-5]$" ]
     run_command(command)
 
 def cleanup_mdb_csv_files(mdb_csv_files, merged_file) :
