@@ -1,6 +1,6 @@
 FROM centos:centos7
 
-LABEL name='sen2agri-services' \
+LABEL name='processors' \
     maintainer='Laurentiu Nicola <laurentiu.nicola@c-s.ro>'
 
 RUN yum -y install \
@@ -17,7 +17,6 @@ RUN yum -y install \
     python-psycopg2 \
     python-dateutil \
     R \
-    R-devel \
     libcurl \
     openssl \
     libxml2 \
