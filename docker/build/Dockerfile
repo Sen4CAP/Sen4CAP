@@ -60,3 +60,4 @@ COPY entry.sh /
 COPY install-fpm.sh /
 
 RUN scl enable rh-ruby23 /install-fpm.sh
+RUN yum -y install git
