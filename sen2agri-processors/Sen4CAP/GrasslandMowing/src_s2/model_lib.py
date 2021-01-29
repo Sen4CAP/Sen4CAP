@@ -14,11 +14,7 @@ import time
 from datetime import date
 import pheno_func
 
-try:
-    from osgeo import gdal
-except ImportError:
-    import gdal
-from osgeo import ogr
+from osgeo import ogr, gdal
 gdal.UseExceptions()
 ogr.UseExceptions()
 

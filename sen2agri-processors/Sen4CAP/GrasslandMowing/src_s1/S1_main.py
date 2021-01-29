@@ -17,11 +17,7 @@ import S1_gmd
 import dateutil.parser
 import datetime
 
-try:
-    from osgeo import gdal
-except ImportError:
-    import gdal
-from osgeo import ogr
+from osgeo import ogr, gdal
 gdal.UseExceptions()
 ogr.UseExceptions()
 
