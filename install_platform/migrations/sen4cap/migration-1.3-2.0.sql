@@ -23,26 +23,26 @@ begin
                     id smallint not null primary key,
                     name text not null
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS severity(
                     id smallint not null primary key,
                     name text not null
                 );
-                
+
                 INSERT INTO severity(id, name) VALUES (1, 'Debug'), (2, 'Info'), (3, 'Warning'), (4, 'Error'), (5, 'Fatal') ON conflict DO nothing;
-                
+
                 ALTER TABLE log DROP CONSTRAINT IF EXISTS fk_log_component;
                 ALTER TABLE log ADD CONSTRAINT fk_log_component FOREIGN KEY(component_id) REFERENCES component(id);
                 ALTER TABLE log DROP CONSTRAINT IF EXISTS fk_log_severity;
                 ALTER TABLE log ADD CONSTRAINT fk_log_severity FOREIGN KEY(severity) REFERENCES severity(id);
-                
-                
+
+
             $str$;
             raise notice '%', _statement;
             execute _statement;
-        
+
             -- Product types and processor IDs changes
-            _statement := $str$    
+            _statement := $str$
                 INSERT INTO product_type (id, name, description, is_raster) VALUES (17, 's4c_mdb1','Sen4CAP Marker Database Basic StdDev/Mean', 'false')
                         on conflict(id) DO UPDATE SET id = 17, name = 's4c_mdb1', description = 'Sen4CAP Marker Database Basic StdDev/Mean', is_raster = 'false';
                 INSERT INTO product_type (id, name, description, is_raster) VALUES (18, 's4c_mdb2','Sen4CAP Marker Database AMP VV/VH Ratio', 'false')
@@ -51,13 +51,13 @@ begin
                         on conflict(id) DO UPDATE SET id = 19, name = 's4c_mdb3', description = 'Sen4CAP Marker Database L4C M1-M5', is_raster = 'false';
                 INSERT INTO product_type (id, name, description, is_raster) VALUES (20, 's4c_mdb_l4a_opt_main','Sen4CAP L4A Optical Main Features', false)
                         on conflict(id) DO UPDATE SET id = 20, name = 's4c_mdb_l4a_opt_main', description = 'Sen4CAP L4A Optical Main Features', is_raster = 'false';
-                INSERT INTO product_type (id, name, description, is_raster) VALUES (21, 's4c_mdb_l4a_opt_re','Sen4CAP L4A Optical Red-Edge Features', false) 
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (21, 's4c_mdb_l4a_opt_re','Sen4CAP L4A Optical Red-Edge Features', false)
                         ON conflict DO nothing;
                 INSERT INTO product_type (id, name, description, is_raster) VALUES (22, 's4c_mdb_l4a_sar_main','Sen4CAP L4A SAR Main Features', false)
                         ON conflict DO nothing;
                 INSERT INTO product_type (id, name, description, is_raster) VALUES (23, 's4c_mdb_l4a_sar_temp','Sen4CAP L4A SAR Temporal Features', false)
                         ON conflict DO nothing;
-                
+
                 UPDATE product_type SET name = 'l3b' WHERE id = 3;
                 UPDATE product_type SET description = 'L3B LAI mono-date product' WHERE id = 3;
                 UPDATE product_type SET id = 12 where id = 4 and name = 's4c_l4a';
@@ -67,20 +67,20 @@ begin
                 UPDATE product_type SET description = 'Sen4CAP L4B Grassland Mowing product' WHERE id = 13;
                 UPDATE product_type SET description = 'Sen4CAP Sen4CAP L4C Agricultural Practices product' WHERE id = 14;
                 UPDATE product_type SET description = 'Sen4CAP L3C LAI Reprocessed product' WHERE id = 16;
-                
+
                 UPDATE product SET product_type_id = 12 WHERE product_type_id = 4 AND full_path LIKE '%s4c_l4a%';
                 UPDATE product SET product_type_id = 13 WHERE product_type_id = 5 AND full_path LIKE '%s4c_l4b%';
                 UPDATE product SET product_type_id = 15 WHERE product_type_id = 6 AND full_path LIKE '%s4c_l4c%';
                 UPDATE product SET product_type_id = 16 WHERE product_type_id = 8 AND full_path LIKE '%s4c_l3c%';
-             
+
                 UPDATE job SET processor_id = 9 WHERE processor_id = 4 and (select short_name from processor where id = 4) = 's4c_l4a';
                 UPDATE job SET processor_id = 10 WHERE processor_id = 5 and (select short_name from processor where id = 5) = 's4c_l4b';
                 UPDATE job SET processor_id = 11 WHERE processor_id = 6 and (select short_name from processor where id = 6) = 's4c_l4c';
-             
+
                 UPDATE scheduled_task SET processor_id = 9 WHERE processor_id = 4 and (select short_name from processor where id = 4) = 's4c_l4a';
                 UPDATE scheduled_task SET processor_id = 10 WHERE processor_id = 5 and (select short_name from processor where id = 5) = 's4c_l4b';
                 UPDATE scheduled_task SET processor_id = 11 WHERE processor_id = 6 and (select short_name from processor where id = 6) = 's4c_l4c';
-               
+
                 UPDATE processor SET id = 9 where id = 4 and short_name = 's4c_l4a';
                 UPDATE processor SET id = 10 where id = 5 and short_name = 's4c_l4b';
                 UPDATE processor SET id = 11 where id = 6 and short_name = 's4c_l4c';
@@ -88,13 +88,13 @@ begin
                 UPDATE product SET processor_id = 9 WHERE processor_id = 4 AND full_path LIKE '%s4c_l4a%';
                 UPDATE product SET processor_id = 10 WHERE processor_id = 5 AND full_path LIKE '%s4c_l4b%';
                 UPDATE product SET processor_id = 11 WHERE processor_id = 6 AND full_path LIKE '%s4c_l4c%';
-             
+
                 INSERT INTO processor (id, name, short_name, label) VALUES (14, 'S4C Marker Database PR1','s4c_mdb1', 'MD_PR1 &mdash; Marker Database PR1') on conflict DO nothing;
 
             $str$;
             raise notice '%', _statement;
             execute _statement;
-                
+
             _statement := $str$
                 create or replace function sp_clear_pending_l1_tiles()
                 returns void
@@ -175,7 +175,7 @@ begin
 
                     return sp_update_l1_tile_status(_downloader_history_id);
                 end;
-                $$ language plpgsql volatile;            
+                $$ language plpgsql volatile;
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -447,7 +447,7 @@ begin
                                 _prev_l2a_path;
                     end if;
                 end;
-                $$ language plpgsql volatile;            
+                $$ language plpgsql volatile;
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -510,7 +510,7 @@ begin
                         return false;
                     end if;
                 end;
-                $$ language plpgsql volatile;            
+                $$ language plpgsql volatile;
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -615,7 +615,7 @@ begin
                                     1 :: smallint,
                                     '{}' :: json);
                     end if;
-                    
+
                     if _processor_id is null or _processor_name = 's4c_l4a' then
                         perform sp_insert_scheduled_task(
                                     _site_name || '_' || _season_name || '_S4C_L4A' :: character varying,
@@ -706,9 +706,9 @@ begin
                 UPDATE config SET key = 'processor.l2a.optical.cog-tiffs' WHERE key = 'demmaccs.cog-tiffs';
                 UPDATE config SET key = 'processor.l2a.maja.remove-sre' WHERE key = 'demmaccs.remove-sre';
                 UPDATE config SET key = 'processor.l2a.maja.remove-fre' WHERE key = 'demmaccs.remove-fre';
-                
+
                 DELETE FROM config WHERE key = 'processor.l2a.s2.retry-interval';
-            
+
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.s2.implementation', NULL, 'maja', '2020-09-07 14:17:52.846794+03') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.optical.max-retries', NULL, '3', '2020-09-15 16:02:27.164968+03') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.optical.num-workers', NULL, '4', '2020-09-07 14:36:37.906825+03') ON conflict DO nothing;
@@ -727,7 +727,7 @@ begin
 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('downloader.use.esa.l2a', NULL, 'false', '2019-12-16 14:56:57.501918+02') ON conflict DO nothing;
 
-                -- Tillage processor keys               
+                -- Tillage processor keys
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.tillage_monitoring', NULL, '0', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
 
                 -- Marker database keys
@@ -765,10 +765,10 @@ begin
 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.http-server.listen-port', NULL, '8083', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.http-server.listen-ip', NULL, '127.0.0.1', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
-            
+
                 -- Use processors in local or docker
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.use_docker', NULL, '1', '2021-01-14 12:11:21.800537+00') ON conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'lnicola/sen2agri-processors', '2021-01-14 12:11:21.800537+00') ON conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'sen4cap/processors', '2021-01-14 12:11:21.800537+00') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_add_mounts', NULL, '', '2021-01-21 10:23:12.993537+00') ON conflict DO nothing;
 
                 -- Use local versions of the scripts for the following taks
@@ -778,9 +778,9 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.extract-l4c-markers.use_docker', NULL, '0', '2021-01-20 11:44:25.330355+00') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.export-product-launcher.use_docker', NULL, '0', '2021-01-20 11:44:25.330355+00') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-l4a-extract-parcels.use_docker', NULL, '0', '2021-01-20 18:50:52.244303+00') ON conflict DO nothing;
-               
+
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-l4a-extract-parcels', NULL, 'extract-parcels.py', '2021-01-15 22:39:08.407059+02') ON conflict DO nothing;
-               
+
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -815,16 +815,16 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.l2a.srtm-path', 'Path to the DEM dataset', 'directory', false, 2) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'Path to the SWBD dataset', 'directory', false, 2) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'Working directory', 'string', false, 2) ON conflict DO nothing;
-                
+
                 INSERT INTO config_metadata VALUES ('downloader.use.esa.l2a', 'Enable S2 L2A ESA products download', 'bool', false, 15) ON conflict DO nothing;
-                
-                -- Marker database new config category                
+
+                -- Marker database new config category
                 INSERT INTO config_category VALUES (26, 'S4C Marker database 1', 4, true) ON conflict DO nothing;
-                
-                -- Tillage processor keys               
+
+                -- Tillage processor keys
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable or disable tillage monitoring', 'int', false, 20, true, 'Enable or disable tillage monitoring') ON conflict(key) DO UPDATE SET type = 'int';
-                
-                -- Marker database keys                
+
+                -- Marker database keys
                 INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.slurm_qos', 'Slurm QOS for MDB1 processor', 'string', true, 8) ON conflict DO nothing;
 
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_amp', 'The list of AMP products', 'select', FALSE, 26, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10}') ON conflict DO nothing;
@@ -832,12 +832,12 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_ndvi', 'The list of NDVI products', 'select', FALSE, 26, TRUE, 'Available NDVI input files', '{"name":"inputFiles_NDVI[]","product_type_id":3}') ON conflict DO nothing;
 
                 INSERT INTO config_metadata VALUES ('general.scratch-path.s4c_mdb1', 'Path for S4C MDB1 temporary files', 'string', false, 1) ON conflict DO nothing;
-                
+
                 INSERT INTO config_metadata VALUES ('executor.module.path.extract-l4c-markers', 'Script for extracting L4C markers', 'file', true, 8) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('executor.module.path.mdb-csv-to-ipc-export', 'Script for extracting markers csv to IPC file', 'file', true, 8) ON conflict DO nothing;
-                
+
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.markers_add_no_data_rows', 'Add in markers parcel rows containg only NA/NA1/NR', 'bool', true, 20, true, 'Add in markers parcel rows containg only NA/NA1/NR') ON conflict DO nothing;
-                
+
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.sched_prds_hist_file', 'File where the list of the scheduled L4Cs is kept', 'string', true, 26) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.ndvi_enabled', 'NDVI markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_enabled', 'AMP markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
@@ -846,16 +846,16 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fapar_enabled', 'FAPAR markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fcover_enabled', 'FCOVER markers extraction enabled', 'bool', true, 26) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.data_extr_dir', 'Location for the MDB1 data extration files', 'string', true, 26) ON conflict DO nothing;
-                
+
                 -- Executor/orchestrator/scheduler changes
                 INSERT INTO config_metadata VALUES ('general.inter-proc-com-type', 'Type of the interprocess communication', 'string', false, 1) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('executor.resource-manager.name', 'Executor resource manager name', 'string', false, 1) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('executor.http-server.listen-ip', 'Executor HTTP listen ip', 'string', false, 1) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('executor.http-server.listen-port', 'Executor HTTP listen port', 'string', false, 1) ON conflict DO nothing;
-                
+
                 INSERT INTO config_metadata VALUES ('orchestrator.http-server.listen-ip', 'Orchestrator HTTP listen ip', 'string', false, 1) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('orchestrator.http-server.listen-port', 'Orchestrator HTTP listen port', 'string', false, 1) ON conflict DO nothing;
-                
+
             $str$;
             raise notice '%', _statement;
             execute _statement;

@@ -359,10 +359,10 @@ function config_docker()
         sleep 1
     done
 
-    docker pull lnicola/sen2agri-processors
+    docker pull sen4cap/processors
     docker pull lnicola/sen2agri-l2a-processors
     docker pull lnicola/sen2agri-dem
-    
+
     cd ..
 }
 #-----------------------------------------------------------#
@@ -702,7 +702,7 @@ function check_paths()
 
             echo "Copying UserConfiguration into maja gipp location ..."
             cp -fR ./config/maja/UserConfiguration ${l1c_processor_gipp_destination}
-            
+
         else
             echo "Cannot find $l1c_processor_name GIPP files in the distribution, please copy them to $l1c_processor_gipp_destination"
         fi

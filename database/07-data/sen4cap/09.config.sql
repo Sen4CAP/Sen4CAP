@@ -106,7 +106,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.l1c
 
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l4a.reference_data_dir', NULL, 'N/A', '2019-02-19 11:09:58.820032+02');
 
--- S4C L4A configuration 
+-- S4C L4A configuration
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4a.lc', NULL, '1234', '2019-02-19 11:09:58.820032+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4a.mode', NULL, 'both', '2019-02-19 11:09:58.820032+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4a.min-s2-pix', NULL, '3', '2019-02-19 11:09:58.820032+02');
@@ -129,7 +129,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_cohe', NULL, 'N/A', '2019-02-18 15:28:41.060339+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_ndvi', NULL, 'N/A', '2019-02-18 15:27:41.861613+02');
 
--- S4C L4B configuration 
+-- S4C L4B configuration
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.cfg_upload_dir',  NULL, '/mnt/archive/upload/grassland_mowing_cfg/{site}', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.default_config_path', NULL, '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/src_ini/S4C_L4B_Default_Config.cfg', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.gen_input_shp_path', NULL, '/mnt/archive/grassland_mowing_files/{site}/{year}/InputShp/SEN4CAP_L4B_GeneratedInputShp.shp', '2019-10-18 15:27:41.861613+02');
@@ -145,7 +145,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.end_date',  NULL, '', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.s1_s2_startdate_diff',  NULL, '0', '2020-10-02 15:27:41.861613+02');
 
--- S4C L4C configuration 
+-- S4C L4C configuration
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.cfg_upload_dir',  NULL, '/mnt/archive/upload/agric_practices_files/{site}/config', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.ts_input_tables_upload_root_dir',  NULL, '/mnt/archive/upload/agric_practices_files/{site}/ts_input_tables', '2019-10-18 15:27:41.861613+02');
 
@@ -155,11 +155,11 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.ts_input_tables_dir', NULL, '/mnt/archive/agric_practices_files/{site}/{year}/ts_input_tables/{practice}', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.filter_ids_path', NULL, '/mnt/archive/agric_practices_files/{site}/{year}/ts_input_tables/FilterIds/Sen4CAP_L4C_FilterIds.csv', '2019-10-18 15:27:41.861613+02');
 
-                                          
+
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.practices', NULL, 'NA', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.country', NULL, 'CNTRY', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.tsa_min_acqs_no', NULL, '15', '2019-10-18 15:27:41.861613+02');
-                                          
+
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.use_prev_prd', NULL, '1', '2019-10-18 15:27:41.861613+02');
 
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.sub_steps', NULL, 'ALL,DataExtraction,CatchCrop,Fallow,NFC,HarvestOnly,AllTimeSeriesAnalysis', '2019-04-12 14:56:57.501918+02');
@@ -171,7 +171,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c
 
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.execution_operation', NULL, 'ALL', '2019-04-12 14:56:57.501918+02');
 
--- LPIS configuration 
+-- LPIS configuration
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.lpis.upload_path', NULL, '/mnt/archive/upload/lpis/{site}', '2019-10-11 16:15:00.0+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.lpis.lut_upload_path', NULL, '/mnt/archive/upload/LUT/{site}', '2019-10-11 16:15:00.0+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.lpis.path', NULL, '/mnt/archive/lpis/{site}/{year}', '2019-06-11 16:15:00.0+02');
@@ -263,7 +263,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.http
 
 -- Use processors in local or docker
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.use_docker', NULL, '1', '2021-01-14 12:11:21.800537+00');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'lnicola/sen2agri-processors', '2021-01-14 12:11:21.800537+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'sen4cap/processors', '2021-01-14 12:11:21.800537+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_add_mounts', NULL, '', '2021-01-21 10:23:12.993537+00');
 
 -- Use local versions of the scripts for the following taks
@@ -274,4 +274,3 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestra
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.export-product-launcher.use_docker', NULL, '0', '2021-01-20 11:44:25.330355+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-l4a-extract-parcels.use_docker', NULL, '0', '2021-01-20 18:50:52.244303+00');
 
- 

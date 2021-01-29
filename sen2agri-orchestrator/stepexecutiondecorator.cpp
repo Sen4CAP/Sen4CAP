@@ -86,7 +86,7 @@ QStringList
 StepExecutionDecorator::UpdateCommandForDocker(const QString &taskName, const QStringList &arguments, const QString& dockerImage, const QString &additionalMounts)
 {
     // add the docker command parameters
-    // docker run --rm -u 1003:1003 -v /mnt/archive:/mnt/archive -v /mnt/scratch:/mnt/scratch lnicola/sen2agri-processors crop-type-wrapper.py
+    // docker run --rm -u 1003:1003 -v /mnt/archive:/mnt/archive -v /mnt/scratch:/mnt/scratch sen4cap/processors crop-type-wrapper.py
     QStringList dockerStepList = {"docker", "run", "--rm", "-u",
                                   QString::number(getuid()) + ":" + QString::number(getgid()) };
     // add also the additional mounts
