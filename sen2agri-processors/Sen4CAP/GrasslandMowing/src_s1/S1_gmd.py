@@ -9,7 +9,10 @@ import scipy
 import scipy.interpolate
 import scipy.ndimage as ndimage
 
-import gdal
+try:
+    from osgeo import gdal
+except ImportError:
+    import gdal
 from osgeo import osr, ogr
 gdal.UseExceptions()
 ogr.UseExceptions()
