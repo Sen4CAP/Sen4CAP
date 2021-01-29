@@ -56,8 +56,8 @@ RUN groupadd -g $gid $group && \
     useradd -u $uid -g $gid -G wheel $user && \
     echo "%wheel        ALL=(ALL)       NOPASSWD: ALL" > /etc/sudoers.d/wheel
 
-COPY entry.sh /
 COPY install-fpm.sh /
-
 RUN scl enable rh-ruby23 /install-fpm.sh
 RUN yum -y install git
+
+COPY entry.sh /
