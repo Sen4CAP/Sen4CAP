@@ -45,11 +45,11 @@ private:
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
 
 private:
-    QString CreateStepsForFilesMerge(const MarkerType &markerType, const QStringList &dataExtrDirs,
+    QString CreateStepsForFilesMerge(const QStringList &dataExtrDirs,
                                   NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
-    QString CreateStepsForMdb2Export(const MarkerType &markerType, const QString &mergedFile,
+    QString CreateStepsForMdb2Export(const QString &mergedFile,
                                   NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
-    QString CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const MarkerType &marker, const QString &inputFile,
+    QString CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const QString &inputFile,
                                     NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx, const QString &prdType);
     ProductList GetLpisProduct(ExecutionContextBase *pCtx, int siteId);
 
@@ -58,8 +58,6 @@ private:
 
     bool CheckExecutionPreconditions(ExecutionContextBase *pCtx, const std::map<QString, QString> &configParameters, int siteId,
                                         const QString &siteShortName, QString &errMsg);
-    QString BuildMergeResultFileName(const MarkerType &markerType);
-    QString BuildMdb2FileName(const MarkerType &markerType);
     QStringList GetFilesMergeArgs(const QStringList &listInputPaths, const QString &outFileName);
 };
 

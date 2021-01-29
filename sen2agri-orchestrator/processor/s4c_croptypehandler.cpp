@@ -7,8 +7,6 @@
 #include "processorhandlerhelper.h"
 #include "s4c_croptypehandler.hpp"
 
-#define L4A_CT_CFG_PREFIX "processor.s4c_l4a."
-
 S4CCropTypeHandler::S4CCropTypeHandler()
 {
     m_cfgKeys = QStringList() << "lc"
@@ -61,14 +59,15 @@ NewStepList S4CCropTypeHandler::CreateSteps(EventProcessingContext &ctx,
     const QString &lpisPath = extractParcelsTask.GetFilePath("lpis.txt");
 
     const QString &workingPath = cropTypeTask.GetFilePath("");
+    const QString &outMarkerFilesInfos = cropTypeTask.GetFilePath("markers_product_infos.csv");
     const QString &prdFinalFilesDir = prdFormatterTask.GetFilePath("");
 
     const QStringList &extractParcelsArgs = GetExtractParcelsTaskArgs(cfg, parcelsPath, lutPath, tilesPath,
                                                                       opticalPath, radarPath, lpisPath);
     allSteps.append(CreateTaskStep(extractParcelsTask, "S4CCropTypeExtractParcels", extractParcelsArgs));
 
-    const QStringList &cropTypeArgs = GetCropTypeTaskArgs(cfg, prdFinalFilesDir, workingPath, parcelsPath,
-                                                          lutPath, tilesPath,
+    const QStringList &cropTypeArgs = GetCropTypeTaskArgs(cfg, prdFinalFilesDir, workingPath, outMarkerFilesInfos,
+                                                          parcelsPath, lutPath, tilesPath,
                                                           opticalPath, radarPath, lpisPath);
     allSteps.append(CreateTaskStep(cropTypeTask, "S4CCropType", cropTypeArgs));
 
@@ -92,18 +91,21 @@ QStringList S4CCropTypeHandler::GetExtractParcelsTaskArgs(const CropTypeJobConfi
                                                     const QString &radarPath,  const QString &lpisPath)
 {
     QStringList extractParcelsArgs = { "-s",
-                                 QString::number(cfg.siteId),
+                                 QString::number(cfg.event.siteId),
                                  "--season-start",
                                  cfg.startDate.toString("yyyy-MM-dd"),
                                  "--season-end",
-                                 cfg.endDate.toString("yyyy-MM-dd"),
-                                 "--tiles" };
-    extractParcelsArgs += cfg.tileIds;
+                                 cfg.endDate.toString("yyyy-MM-dd")};
+    if (cfg.tileIds.size() > 0) {
+        extractParcelsArgs += "--tiles";
+        extractParcelsArgs.append(cfg.tileIds);
+    }
 
     if (cfg.filterProductNames.size() > 0) {
         extractParcelsArgs += "--products";
         extractParcelsArgs.append(cfg.filterProductNames);
     }
+
     extractParcelsArgs.append("--");
     extractParcelsArgs.append(parcelsPath);
     extractParcelsArgs.append(lutPath);
@@ -117,14 +119,14 @@ QStringList S4CCropTypeHandler::GetExtractParcelsTaskArgs(const CropTypeJobConfi
 
 QStringList S4CCropTypeHandler::GetCropTypeTaskArgs(const CropTypeJobConfig &cfg,
                                                     const QString &prdTargetDir,
-                                                    const QString &workingPath,
+                                                    const QString &workingPath,const QString &outMarkerFilesInfos,
                                                     const QString &parcelsPath, const QString &lutPath,
                                                     const QString &tilesPath, const QString &opticalPath,
                                                     const QString &radarPath,  const QString &lpisPath)
 {
 
     QStringList cropTypeArgs = { "-s",
-                                 QString::number(cfg.siteId),
+                                 QString::number(cfg.event.siteId),
                                  "--season-start",
                                  cfg.startDate.toString("yyyy-MM-dd"),
                                  "--season-end",
@@ -133,31 +135,22 @@ QStringList S4CCropTypeHandler::GetCropTypeTaskArgs(const CropTypeJobConfig &cfg
                                  workingPath,
                                  "--out-path",
                                  prdTargetDir,
-                                 "--tiles" };
-    cropTypeArgs += cfg.tileIds;
-
-    if (cfg.filterProductNames.size() > 0) {
-        cropTypeArgs += "--products";
-        cropTypeArgs.append(cfg.filterProductNames);
-    }
-
-    cropTypeArgs += "--parcels";
-    cropTypeArgs += parcelsPath;
-
-    cropTypeArgs += "--lut";
-    cropTypeArgs += lutPath;
-
-    cropTypeArgs += "--tile-footprints";
-    cropTypeArgs += tilesPath;
-
-    cropTypeArgs += "--optical-products";
-    cropTypeArgs += opticalPath;
-
-    cropTypeArgs += "--radar-products";
-    cropTypeArgs += radarPath;
-
-    cropTypeArgs += "--lpis";
-    cropTypeArgs += lpisPath;
+                                 "--parcels",
+                                 parcelsPath,
+                                 "--lut",
+                                 lutPath,
+                                 "--tile-footprints",
+                                 tilesPath,
+                                 "--optical-products",
+                                 opticalPath,
+                                 "--radar-products",
+                                 radarPath,
+                                 "--lpis",
+                                 lpisPath,
+                                 "--target-path",
+                                 GetFinalProductFolder(*(cfg.pCtx), cfg.event.jobId, cfg.event.siteId),
+                                 "--outputs",
+                                 outMarkerFilesInfos};
 
     for (const QString &cfgKey : m_cfgKeys) {
         auto it = cfg.mapCfgValues.find(cfgKey);
@@ -261,37 +254,12 @@ bool S4CCropTypeHandler::GetL2AProductsInterval(const QMap<QString, QStringList>
 void S4CCropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                                 const JobSubmittedEvent &event)
 {
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    std::map<QString, QString> configParameters =
-        ctx.GetJobConfigurationParameters(event.jobId, L4A_CT_CFG_PREFIX);
-
-    CropTypeJobConfig cfg;
-    cfg.jobId = event.jobId;
-    cfg.siteId = event.siteId;
-    cfg.filterProductNames = GetL2AInputProductNames(event);
-
-    for (QString cfgKey : m_cfgKeys) {
-        cfg.mapCfgValues.insert(
-            cfgKey, ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
-                                                                 cfgKey, L4A_CT_CFG_PREFIX));
-    }
-
-    QStringList listProducts;
-    bool ret = GetStartEndDatesFromProducts(ctx, event, cfg.startDate, cfg.endDate, listProducts);
-    if (!ret || listProducts.size() == 0) {
-        // try to get the start and end date if they are given
-        ctx.MarkJobFailed(event.jobId);
-        throw std::runtime_error(
-            QStringLiteral(
-                "No products provided at input or no products available in the specified interval")
-                .toStdString());
-    }
-
-    cfg.tileIds = GetTileIdsFromProducts(ctx, event, listProducts);
+    CropTypeJobConfig cfg(&ctx, event, m_cfgKeys);
+    UpdateJobConfigParameters(cfg);
 
     QList<TaskToSubmit> allTasksList;
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList);
-    SubmitTasks(ctx, cfg.jobId, allTasksListRef);
+    SubmitTasks(ctx, cfg.event.jobId, allTasksListRef);
     NewStepList allSteps = CreateSteps(ctx, event, allTasksList, cfg);
     ctx.SubmitSteps(allSteps);
 }
@@ -299,7 +267,10 @@ void S4CCropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
 void S4CCropTypeHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
                                                 const TaskFinishedEvent &event)
 {
-    if (event.module == "product-formatter") {
+    if (event.module == "s4c-crop-type") {
+        HandleMarkerProductsAvailable(ctx, event);
+
+    } else if (event.module == "product-formatter") {
         QString prodName = GetProductFormatterProductName(ctx, event);
         QString productFolder =
             GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
@@ -380,9 +351,12 @@ ProcessorJobDefinitionParams S4CCropTypeHandler::GetProcessingDefinitionImpl(
 
     QDateTime startDate = seasonStartDate;
     QDateTime endDate = qScheduledDate;
-    // get the last created Crop Mask
-    params.productList =
-        ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
+    // do not pass anymore the product list but the dates
+    params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
+                                 "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}");
+
     // Normally, we need at least 1 product available, the crop mask and the shapefile in order to
     // be able to create a S4C L4A product but if we do not return here, the schedule block waiting
     // for products (that might never happen)
@@ -410,6 +384,39 @@ ProcessorJobDefinitionParams S4CCropTypeHandler::GetProcessingDefinitionImpl(
     return params;
 }
 
+
+void S4CCropTypeHandler::UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdate)
+{
+    if(IsScheduledJobRequest(cfgToUpdate.parameters)) {
+        QString strStartDate, strEndDate;
+        if (ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "start_date", strStartDate) &&
+            ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "end_date", strEndDate) &&
+            cfgToUpdate.parameters.contains("input_products") && cfgToUpdate.parameters["input_products"].toArray().size() == 0) {
+            cfgToUpdate.isScheduled = true;
+            cfgToUpdate.startDate = ProcessorHandlerHelper::GetDateTimeFromString(strStartDate);
+            cfgToUpdate.endDate = ProcessorHandlerHelper::GetDateTimeFromString(strEndDate);
+        }
+    } else {
+        const QStringList &filterProductNames = GetL2AInputProductNames(cfgToUpdate.event);
+        cfgToUpdate.SetFilteringProducts(filterProductNames);
+
+        QStringList listProducts;
+        bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, listProducts);
+        if (!ret || listProducts.size() == 0) {
+            // try to get the start and end date if they are given
+            cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
+            throw std::runtime_error(
+                QStringLiteral(
+                    "No products provided at input or no products available in the specified interval")
+                    .toStdString());
+        }
+
+        cfgToUpdate.tileIds = GetTileIdsFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, listProducts);
+
+    }
+}
+
+
 QStringList S4CCropTypeHandler::GetTileIdsFromProducts(EventProcessingContext &ctx,
                                                        const JobSubmittedEvent &event,
                                                        const QStringList &listProducts)
@@ -425,4 +432,72 @@ QStringList S4CCropTypeHandler::GetTileIdsFromProducts(EventProcessingContext &c
         tilesList.append(tileId);
     }
     return tilesList;
+}
+
+bool S4CCropTypeHandler::IsScheduledJobRequest(const QJsonObject &parameters) {
+    int jobVal;
+    return ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1);
+}
+
+void S4CCropTypeHandler::HandleMarkerProductsAvailable(EventProcessingContext &ctx,
+                                                    const TaskFinishedEvent &event) {
+    const QString &outMarkerInfos = ctx.GetOutputPath(event.jobId, event.taskId, event.module, this->processorDescr.shortName) + "markers_product_infos.csv";
+    QFile file( outMarkerInfos );
+    if (file.open(QIODevice::ReadOnly))
+    {
+        Logger::info(QStringLiteral("S4C L4A: Extracting the marker files for site id = %1 from %2")
+                          .arg(event.siteId)
+                          .arg(outMarkerInfos));
+        QTextStream in(&file);
+        QString defFootprint("POLYGON((0.0 0.0, 0.0 0.0, 0.0 0.0, 0.0 0.0, 0.0 0.0))");
+        int i = 0;
+        std::map<QString, int> mapHeader = {{"product_type_id", -1}, {"name", -1}, {"path", -1}, {"created_timestamp", -1}, {"tiles", -1}};
+        while (!in.atEnd())
+        {
+            const QString &curLine = in.readLine();
+            const QStringList &items = curLine.split(',');
+            // we expect to have product_type_id, name, full_path, created_timestamp, tiles
+            if (i == 0) {
+                for(int j = 0; j<items.size(); j++) {
+                    mapHeader[items[j]] = j;
+                }
+                i++;
+            } else {
+                int productTypeIdx = mapHeader["product_type_id"];
+                int nameIdx = mapHeader["name"];
+                int pathIdx = mapHeader["path"];
+                int creationTimeIdx = mapHeader["created_timestamp"];
+                int tilesIdx = mapHeader["tiles"];
+                if (productTypeIdx >= 0 && productTypeIdx < items.size() &&
+                        nameIdx >= 0 && nameIdx < items.size() &&
+                        pathIdx >= 0 && pathIdx < items.size() &&
+                        creationTimeIdx >= 0 && creationTimeIdx < items.size() &&
+                        tilesIdx >= 0 && tilesIdx < items.size()) {
+
+                    // extract the tiles
+                    QString tilesStr = items[tilesIdx].trimmed();
+                    tilesStr.remove('[').remove(']');
+                    const QStringList &tiles = tilesStr.split(',');
+                    TileIdList tileIds;
+                    for (QString tile: tiles) {
+                        tileIds.append(tile.remove('\''));
+                    }
+
+                    Logger::info(QStringLiteral("S4C L4A: Inserting markers product with name = %1, full path = %2")
+                                      .arg(items[nameIdx])
+                                      .arg(items[pathIdx]));
+
+                    ctx.InsertProduct({ (ProductType)items[productTypeIdx].toInt(), event.processorId,
+                                                event.siteId, event.jobId, items[pathIdx], QDateTime::fromString(items[creationTimeIdx], "yyyy-MM-dd HH:mm:ss"),
+                                                items[nameIdx], QString(), defFootprint,
+                                                std::experimental::nullopt, TileIdList() });
+                } else {
+                    Logger::error(QStringLiteral("S4C L4A: One of required headers was not found in the markers products file with name = %1!").arg(outMarkerInfos));
+                }
+            }
+        }
+        file.close();
+    } else {
+        Logger::error(QStringLiteral("S4C L4A: Markers products file with name = %1 does not exist!").arg(outMarkerInfos));
+    }
 }

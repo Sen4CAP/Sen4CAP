@@ -17,33 +17,35 @@ void S4CMarkersDB1Handler::CreateTasks(QList<TaskToSubmit> &outAllTasksList, con
 {
     int curTaskIdx = 0;
     const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
+    QList<int> dataExtrTaskIdxs;
     for (const auto &marker: enabledMarkers) {
         // Create data extraction tasks if needed
         int minDataExtrIndex = curTaskIdx;
         dataExtrStepsBuilder.CreateTasks(marker, outAllTasksList, curTaskIdx);
         int maxDataExtrIndex = curTaskIdx-1;
 
-        // tasks for merge and export
-        outAllTasksList.append(TaskToSubmit{ "mdb1-csv-merge", {} });
-        int mergeTaskIdx = curTaskIdx++;
-        // if at least one task was added for the data extraction for this marker, then add it in the parrent list
+        // if at least one task was added for the data extraction for this marker, then add it in the parrent list for merge task
         if (minDataExtrIndex <= maxDataExtrIndex) {
             for (int i = minDataExtrIndex; i <= maxDataExtrIndex; i++) {
-                outAllTasksList[mergeTaskIdx].parentTasks.append(outAllTasksList[i]);
+                dataExtrTaskIdxs.append(i);
             }
         }
-        outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[mergeTaskIdx]} });
-        curTaskIdx++;
-        // Markers DB 2 are computed only for AMP
-        if (marker.marker == "AMP") {
-            // Add also the tasks to create the markers database 2.
-            // These can be performed in parallel with the export to IPC of MDB1
-            outAllTasksList.append(TaskToSubmit{ "mdb2-csv-extract", {outAllTasksList[mergeTaskIdx]} });
-            int exportMdb2TaskIdx = curTaskIdx++;
-            outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[exportMdb2TaskIdx]} });
-            curTaskIdx++;
-        }
     }
+    // tasks for merge and export
+    outAllTasksList.append(TaskToSubmit{ "mdb1-csv-merge", {} });
+    int mergeTaskIdx = curTaskIdx++;
+    for (int i: dataExtrTaskIdxs) {
+        outAllTasksList[mergeTaskIdx].parentTasks.append(outAllTasksList[i]);
+    }
+    outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[mergeTaskIdx]} });
+    curTaskIdx++;
+
+    // Markers DB 2 are computed only for AMP
+    // Add also the tasks to create the markers database 2.
+    // These can be performed in parallel with the export to IPC of MDB1
+    outAllTasksList.append(TaskToSubmit{ "mdb2-csv-extract", {outAllTasksList[mergeTaskIdx]} });
+    int exportMdb2TaskIdx = curTaskIdx++;
+    outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[exportMdb2TaskIdx]} });
 }
 
 void S4CMarkersDB1Handler::CreateSteps(QList<TaskToSubmit> &allTasksList, const MDB1JobPayload &jobCfg,
@@ -53,32 +55,32 @@ void S4CMarkersDB1Handler::CreateSteps(QList<TaskToSubmit> &allTasksList, const 
     const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
 
     // if only data extraction is needed, then we create the filter ids step into the general configured directory
+    QStringList allDataExtrDirs;
     for (const auto &marker: enabledMarkers) {
         QStringList dataExtrDirs;
         // Create the data extraction steps if needed
         dataExtrStepsBuilder.CreateSteps(marker, allTasksList, steps, curTaskIdx, dataExtrDirs);
+        allDataExtrDirs.append(dataExtrDirs);
 
         // If scheduled jobs, force adding the data extraction directories for all markers as data extraction source
         if (jobCfg.isScheduledJob) {
             // add a data extraction dir corresponding to the scheduled date which is saved as jobCfg.maxPrdDate
             const QString &dataExtrDirName = dataExtrStepsBuilder.GetDataExtractionDir(marker.marker);
-            if (!dataExtrDirs.contains(dataExtrDirName)) {
+            if (!allDataExtrDirs.contains(dataExtrDirName)) {
                 QDir().mkpath(dataExtrDirName);
-                dataExtrDirs.append(dataExtrDirName);
+                allDataExtrDirs.append(dataExtrDirName);
             }
         }
-        // Steps to merge and create the MDB1 IPC
-        const QString &mergedFile = CreateStepsForFilesMerge(marker, dataExtrDirs, steps,
-                                                                 allTasksList, curTaskIdx);
-        CreateStepsForExportIpc(jobCfg, marker, mergedFile, steps, allTasksList, curTaskIdx, "MDB1");
-
-        if (marker.marker == "AMP") {
-            // Steps to merge and create the MDB2 IPC
-            const QString &exportedFile = CreateStepsForMdb2Export(marker, mergedFile, steps,
-                                                                   allTasksList, curTaskIdx);
-            CreateStepsForExportIpc(jobCfg, marker, exportedFile, steps, allTasksList, curTaskIdx, "MDB2");
-        }
     }
+    // Steps to merge and create the MDB1 IPC
+    const QString &mergedFile = CreateStepsForFilesMerge(allDataExtrDirs, steps,
+                                                             allTasksList, curTaskIdx);
+    CreateStepsForExportIpc(jobCfg, mergedFile, steps, allTasksList, curTaskIdx, "MDB1");
+
+    // Steps to merge and create the MDB2 IPC
+    const QString &exportedFile = CreateStepsForMdb2Export(mergedFile, steps,
+                                                           allTasksList, curTaskIdx);
+    CreateStepsForExportIpc(jobCfg, exportedFile, steps, allTasksList, curTaskIdx, "MDB2");
 }
 
 void S4CMarkersDB1Handler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
@@ -261,28 +263,27 @@ bool S4CMarkersDB1Handler::CheckExecutionPreconditions(ExecutionContextBase *pCt
     return true;
 }
 
-QString S4CMarkersDB1Handler::CreateStepsForFilesMerge(const MarkerType &markerType,
-                              const QStringList &dataExtrDirs, NewStepList &steps,
+QString S4CMarkersDB1Handler::CreateStepsForFilesMerge(const QStringList &dataExtrDirs, NewStepList &steps,
                               QList<TaskToSubmit> &allTasksList, int &curTaskIdx) {
     TaskToSubmit &mergeTask = allTasksList[curTaskIdx++];
-    const QString &mergedFile = mergeTask.GetFilePath(BuildMergeResultFileName(markerType));
+    const QString &mergedFile = mergeTask.GetFilePath("MDB1_Extracted_Data.csv");
     const QStringList &mergeArgs = GetFilesMergeArgs(dataExtrDirs, mergedFile);
     steps.append(CreateTaskStep(mergeTask, "Markers1CsvMerge", mergeArgs));
 
     return mergedFile;
 }
 
-QString S4CMarkersDB1Handler::CreateStepsForMdb2Export(const MarkerType &markerType, const QString &mergedFile,
+QString S4CMarkersDB1Handler::CreateStepsForMdb2Export(const QString &mergedFile,
                                 NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx) {
     TaskToSubmit &mdb2ExtractTask = allTasksList[curTaskIdx++];
-    const QString &mdb2ExtractFile = mdb2ExtractTask.GetFilePath(BuildMdb2FileName(markerType));
+    const QString &mdb2ExtractFile = mdb2ExtractTask.GetFilePath("MDB1_Extracted_Data_VVVH.csv");
     const QStringList &mdb2ExtractArgs =  { "Markers2Extractor", "-in", mergedFile, "-out", mdb2ExtractFile };
     steps.append(CreateTaskStep(mdb2ExtractTask, "Markers2Extractor", mdb2ExtractArgs));
 
     return mdb2ExtractFile;
 }
 
-QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const MarkerType &marker, const QString &inputFile,
+QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const QString &inputFile,
                               NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx, const QString &prdType) {
 
     TaskToSubmit &exportTask = allTasksList[curTaskIdx++];
@@ -291,8 +292,8 @@ QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobC
     const QString &strTimePeriod = QString("%1_%2").arg(jobCfg.minDate.toString("yyyyMMdd"),
                                                         jobCfg.maxDate.toString("yyyyMMdd"));
     const QString &creationDateStr = QDateTime::currentDateTime().toString("yyyyMMddTHHmmss");
-    const QString &prdName = QString("%1_%2_S%3_V%4_%5_%6").arg("SEN4CAP", prdType, QString::number(jobCfg.event.siteId), strTimePeriod,
-                                                                  creationDateStr, marker.marker);
+    const QString &prdName = QString("SEN4CAP_%1_S%2_V%3_%4").arg(prdType, QString::number(jobCfg.event.siteId), strTimePeriod,
+                                                                  creationDateStr);
     const QString &exportedFile = QString("%1/%2/%3.ipc").arg(targetFolder, prdName, prdName);
     const auto &outPropsPath = exportTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
     std::ofstream executionInfosFile;
@@ -307,16 +308,6 @@ QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobC
     steps.append(CreateTaskStep(exportTask, "MarkersDB1Export", exportArgs));
 
     return exportedFile;
-}
-
-QString S4CMarkersDB1Handler::BuildMergeResultFileName(const MarkerType &markerType)
-{
-    return QString(markerType.marker).append("_Extracted_Data.csv");
-}
-
-QString S4CMarkersDB1Handler::BuildMdb2FileName(const MarkerType &markerType)
-{
-    return QString(markerType.marker).append("_Extracted_Data_VVVH.csv");
 }
 
 QStringList S4CMarkersDB1Handler::GetFilesMergeArgs(const QStringList &listInputPaths, const QString &outFileName)
