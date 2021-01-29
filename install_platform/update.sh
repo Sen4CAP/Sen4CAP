@@ -309,7 +309,7 @@ function setup_containers() {
     docker-compose up -d
     cd ..
 
-    docker pull sen4cap/processors
+    docker pull sen4cap/processors:2.0.0
     docker pull lnicola/sen2agri-l2a-processors
     docker pull lnicola/sen2agri-dem
 }

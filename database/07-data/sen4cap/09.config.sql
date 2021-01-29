@@ -263,7 +263,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.http
 
 -- Use processors in local or docker
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.use_docker', NULL, '1', '2021-01-14 12:11:21.800537+00');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'sen4cap/processors', '2021-01-14 12:11:21.800537+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'sen4cap/processors:2.0.0', '2021-01-14 12:11:21.800537+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_add_mounts', NULL, '', '2021-01-21 10:23:12.993537+00');
 
 -- Use local versions of the scripts for the following taks
