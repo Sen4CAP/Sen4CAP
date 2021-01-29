@@ -50,7 +50,7 @@ function compile_SEN2AGRI_app()
 
    ##compile the sources
    qmake-qt5 $SOURCES_DIR_PATH
-   make
+   make -j$(nproc)
 
    ##install
    INSTALL_ROOT=${APP_INSTALL_PATH} make install
