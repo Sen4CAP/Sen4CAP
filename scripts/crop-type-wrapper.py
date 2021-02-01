@@ -289,7 +289,7 @@ def main():
         run_command(command)
         sar_features = ipc_file
     if sar_temporal:
-        ipc_file = os.path.join(args.working_path, "features/optical-features.ipc")
+        ipc_file = os.path.join(args.working_path, "features/sar-temporal.ipc")
         command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", sar_temporal, "-o", ipc_file, "--int32-columns", "NewID"]
         run_command(command)
         sar_temporal = ipc_file
