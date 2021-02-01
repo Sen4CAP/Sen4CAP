@@ -470,7 +470,7 @@ class FmaskProcessor(object):
         script_command.append(str(self.lin.product_id))
         if self.context.fmask_threshold != '':
             script_command.append("-t")
-            script_command.append(self.lin.fmask_threshold)
+            script_command.append(self.context.fmask_threshold)
 
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
@@ -610,7 +610,7 @@ class FMaskContext(object):
     def __init__(self, site_context, worker_id, tile):
         self.working_dir = site_context.working_dir
         self.output_path = site_context.output_path
-        if Tile.satellite_id == SENTINEL2_SATELLITE_ID:
+        if tile.satellite_id == SENTINEL2_SATELLITE_ID:
             self.fmask_threshold = site_context.fmask_threshold_s2
         elif tile.satellite_id == LANDSAT8_SATELLITE_ID:
             self.fmask_threshold = site_context.fmask_threshold_l8
