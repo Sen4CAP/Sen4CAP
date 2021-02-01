@@ -39,6 +39,7 @@ import signal
 import traceback
 from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 from psycopg2.sql import NULL
+from sen2agri_common_db import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
 from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, delete_file_if_match, get_footprint, run_command
 from fmask_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from fmask_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
@@ -47,9 +48,14 @@ ARCHIVES_DIR_NAME = "archives"
 LAUNCHER_LOG_DIR = "/tmp/"
 LAUNCHER_LOG_FILE_NAME = "fmask_launcher.log"
 FMASK_EXTRACTOR = "fmask_extractor.py"
-DATABASE_FMASK_OUTPUT_PATH = "fmask.output-path"
-DATABASE_FMASK_WORKING_DIR = "fmask.working-dir"
-DATABASE_FMASK_THRESHOLD = "fmask.threshold"
+DATABASE_FMASK_NUM_WORKERS = "processor.fmask.optical.num-workers"
+DATABASE_FMASK_OUTPUT_PATH = "processor.fmask.optical.output-path"
+DATABASE_FMASK_WORKING_DIR = "processor.fmask.working-dir"
+DATABASE_FMASK_THRESHOLD = "processor.fmask.optical.threshold"
+DATABASE_FMASK_THRESHOLD_S2 = "processor.fmask.optical.threshold.s2"
+DATABASE_FMASK_THRESHOLD_L8 = "processor.fmask.optical.threshold.l8"
+
+
 MAX_CLOUD_COVERAGE = 90.0
 
 
@@ -462,8 +468,7 @@ class FmaskProcessor(object):
         script_command.append("False")
         script_command.append("--product-id")
         script_command.append(str(self.lin.product_id))
-        fmask_threshold = db_get_fmask_threshold(self.lin.site_id)
-        if fmask_threshold is not None:
+        if self.context.fmask_threshold != '':
             script_command.append("-t")
             script_command.append(self.lin.fmask_threshold)
 
@@ -602,9 +607,15 @@ class FmaskProcessor(object):
         return self.lin, self.fmask
 
 class FMaskContext(object):
-    def __init__(self, site_context, worker_id):
+    def __init__(self, site_context, worker_id, tile):
         self.working_dir = site_context.working_dir
         self.output_path = site_context.output_path
+        if Tile.satellite_id == SENTINEL2_SATELLITE_ID:
+            self.fmask_threshold = site_context.fmask_threshold_s2
+        elif tile.satellite_id == LANDSAT8_SATELLITE_ID:
+            self.fmask_threshold = site_context.fmask_threshold_l8
+        else:
+            self.fmask_threshold = site_context.fmask_threshold
         self.worker_id = worker_id
         self.processor_log_dir = FMASK_LOG_DIR
         self.processor_log_file = FMASK_LOG_FILE_NAME
@@ -816,7 +827,7 @@ class FmaskWorker(threading.Thread):
             )
         )
 
-        fmask_context = FMaskContext(site_context, self.worker_id)
+        fmask_context = FMaskContext(site_context, self.worker_id, tile)
         fmask_processor = FmaskProcessor(fmask_context, tile)
         lin, fmask = fmask_processor.run()
         del fmask_processor
@@ -848,6 +859,9 @@ class SiteContext(object):
         self.base_abs_path = None
         self.output_path = ""
         self.working_dir = ""
+        self.fmask_threshold = ''
+        self.fmask_threshold_s2 = ''
+        self.fmask_threshold_l8 = ''
 
     def get_site_info(self):
         self.site_short_name = db_get_site_short_name(self.site_id)
@@ -893,6 +907,9 @@ class ProcessingContext(object):
         self.output_path = {"default": ""}
         self.working_dir = {"default": ""}
         self.num_workers = 2
+        self.fmask_threshold = {"default": ''}
+        self.fmask_threshold_s2 = {"default": ''}
+        self.fmask_threshold_l8 = {"default": ''}
 
     def get_site_context(self, site_id):
         site_context = SiteContext()
@@ -907,6 +924,19 @@ class ProcessingContext(object):
             site_context.output_path = self.output_path[site_id]
         else:
             site_context.output_path = self.output_path["default"]
+        if site_id in self.fmask_threshold:
+            site_context.fmask_threshold = self.fmask_threshold[site_id]
+        else:
+            site_context.fmask_threshold = self.fmask_threshold["default"]
+        if site_id in self.fmask_threshold_s2:
+            site_context.fmask_threshold_s2 = self.fmask_threshold_s2[site_id]
+        else:
+            site_context.fmask_threshold_s2 = self.fmask_threshold_s2["default"]
+        if site_id in self.fmask_threshold_l8:
+            site_context.fmask_threshold_l8 = self.fmask_threshold_l8[site_id]
+        else:
+            site_context.fmask_threshold_l8 = self.fmask_threshold_l8["default"]
+        
 
         return site_context
 
@@ -915,18 +945,33 @@ class ProcessingContext(object):
             parameter = row[0]
             site = row[1]
             value = row[2]
-            if parameter == "processor.fmask.optical.num-workers":
+            if parameter == DATABASE_FMASK_NUM_WORKERS:
                 self.num_workers = int(value)
-            elif parameter == "processor.fmask.working-dir":
+            elif parameter == DATABASE_FMASK_WORKING_DIR:
                 if site is not None:
                     self.working_dir[site] = value
                 else:
                     self.working_dir["default"] = value
-            elif parameter == "processor.fmask.optical.output-path":
+            elif parameter == DATABASE_FMASK_OUTPUT_PATH:
                 if site is not None:
                     self.output_path[site] = value
                 else:
                     self.output_path["default"] = value
+            elif parameter == DATABASE_FMASK_THRESHOLD:
+                if site is not None:
+                    self.fmask_threshold[site] = value
+                else:
+                    self.fmask_threshold["default"] = value
+            elif parameter == DATABASE_FMASK_THRESHOLD_S2:
+                if site is not None:
+                    self.fmask_threshold_s2[site] = value
+                else:
+                    self.fmask_threshold_s2["default"] = value
+            elif parameter == DATABASE_FMASK_THRESHOLD_L8:
+                if site is not None:
+                    self.fmask_threshold_l8[site] = value
+                else:
+                    self.fmask_threshold_l8["default"] = value
 
 class FMaskConfig(object):
     def __init__(self, output_path, working_dir):
@@ -939,27 +984,26 @@ class FMaskConfig(object):
 
 class Database(object):
     def __init__(self, log_file=None):
+        self.conn = None
+        self.cursor = None
         self.server_ip = ""
         self.database_name = ""
         self.user = ""
         self.password = ""
-        self.is_connected = False;
         self.log_file = log_file
 
     def database_connect(self):
-        if self.is_connected:
+        if self.conn:
             print("(launcher info) <master>: Database is already connected.")
             return True
         connectString = "dbname='{}' user='{}' host='{}' password='{}'".format(self.database_name, self.user, self.server_ip, self.password)
         try:
             self.conn = psycopg2.connect(connectString)
             self.cursor = self.conn.cursor()
-            self.is_connected = True
         except:
             exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
             # Exit the script and print an error telling what happened.
             print("(launcher error) <master>: Database connection failed!\n ->{}".format(exceptionValue))
-            self.is_connected = False
             return False
         return True
 
@@ -967,9 +1011,11 @@ class Database(object):
         try:
             if self.conn:
                 self.conn.close()
-                self.is_connected = False
         except Exception as e:
             print("(launcher error) <master>: Can NOT close database connection due to: {}".format(e))
+        finally:
+            self.conn = None
+            self.cursor = None
 
 
     def loadConfig(self, configFile):
@@ -1043,13 +1089,14 @@ def db_update(db_func):
                     max_sleep *= 2
                     nb_retries -= 1
                     continue
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to update db".format(
-                        threading.currentThread().getName(), e.pgcode
-                    ),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
+                else:
+                    log(
+                        LAUNCHER_LOG_DIR,
+                        "{}: Exception {} when trying to update db".format(
+                            threading.currentThread().getName(), e.pgcode
+                        ),
+                        LAUNCHER_LOG_FILE_NAME,
+                    )
                 raise
             except Exception as e:
                 products_db.conn.rollback()
@@ -1112,11 +1159,12 @@ def db_fetch(db_func):
                     max_sleep *= 2
                     nb_retries -= 1
                     continue
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e.pgcode, db_func.__name__),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
+                else:
+                    log(
+                        LAUNCHER_LOG_DIR,
+                        "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e.pgcode, db_func.__name__),
+                        LAUNCHER_LOG_FILE_NAME,
+                    )
                 raise
             except Exception as e:
                 products_db.conn.rollback()
@@ -1149,16 +1197,6 @@ def db_get_unprocessed_tile():
         return None
     else:
         return Tile(tile_info[0])
-
-@db_fetch
-def db_get_fmask_threshold(site_id):
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    products_db.cursor.execute("select value from sp_get_parameters('{}') where site_id is null or site_id = {} order by site_id limit 1".format(DATABASE_FMASK_THRESHOLD, site_id))
-    rows = products_db.cursor.fetchall()
-    if rows and isinstance(rows[0], int):
-        return rows[0]
-    else:
-        return None
 
 @db_fetch
 def db_clear_pending_tiles():
