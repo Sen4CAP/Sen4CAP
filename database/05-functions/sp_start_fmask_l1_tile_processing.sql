@@ -57,12 +57,9 @@ begin
         where not exists (
             select *
             from fmask_history
-            where fmask_history.satellite_id = downloader_history.satellite_id
-              and (status_id = 1 or -- processing
-                   retry_count < 3 and status_id = 2 -- failed
-              )
-              and fmask_history.downloader_history_id = downloader_history.id
-        ) and downloader_history.status_id in (2, 5, 7) -- downloaded, processing
+            where fmask_history.downloader_history_id = downloader_history.id
+        )
+        and downloader_history.status_id in (2, 5, 7) -- downloaded, processing
         and site.enabled
         and downloader_history.satellite_id in (1, 2) -- sentinel2, landsat8
         order by satellite_id, product_date
