@@ -182,7 +182,10 @@ def run_command(args, env=None, retry=False):
     while retries > 0:
         retries -= 1
         print(cmd_line)
-        result = subprocess.call(args, env=env)
+        if env:
+            result = subprocess.call(args, env=env)
+        else:
+            result = subprocess.call(args)
         if result != 0:
             print("Exit code: {}".format(result))
         else:
@@ -216,7 +219,7 @@ def extract_optical_features(
     dev = os.path.join(path, dev)
     count = os.path.join(path, count)
 
-    env = {}
+    env = os.environ.copy()
     env["ITK_USE_THREADPOOL"] = str(1)
     env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(4)
     env["OTB_MAX_RAM_HINT"] = str(256)
@@ -792,7 +795,7 @@ class WeeklyComposite(object):
         self.inputs = inputs
 
     def run(self):
-        env = {}
+        env = os.environ.copy()
         env["ITK_USE_THREADPOOL"] = str(1)
         env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(2)
         env["OTB_MAX_RAM_HINT"] = str(1024)
@@ -854,7 +857,7 @@ class WeeklyRatioStatistics(object):
         self.tile_ref = tile_ref
 
     def run(self):
-        env = {}
+        env = os.environ.copy()
         env["ITK_USE_THREADPOOL"] = str(1)
         env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(2)
         env["OTB_MAX_RAM_HINT"] = str(1024)
@@ -885,7 +888,7 @@ class BackscatterMonthlyComposite(object):
         self.inputs = inputs
 
     def run(self):
-        env = {}
+        env = os.environ.copy()
         env["ITK_USE_THREADPOOL"] = str(1)
         env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(2)
         env["OTB_MAX_RAM_HINT"] = str(1024)
@@ -923,7 +926,7 @@ class CoherenceMonthlyComposite(object):
         self.inputs = inputs
 
     def run(self):
-        env = {}
+        env = os.environ.copy()
         env["ITK_USE_THREADPOOL"] = str(1)
         env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(2)
         env["OTB_MAX_RAM_HINT"] = str(1024)
@@ -960,7 +963,7 @@ class CoherenceSeasonComposite(object):
         self.inputs = inputs
 
     def run(self):
-        env = {}
+        env = os.environ.copy()
         env["ITK_USE_THREADPOOL"] = str(1)
         env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(2)
         env["OTB_MAX_RAM_HINT"] = str(1024)

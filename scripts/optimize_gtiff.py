@@ -78,7 +78,7 @@ def main():
 
     run_command(['gdaladdo', '-q', '-clean', args.input])
 
-    env = {}
+    env = os.environ.copy()
     if args.threaded:
         env['GDAL_NUM_THREADS'] = 'ALL_CPUS'
 
