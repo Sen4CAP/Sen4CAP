@@ -10,7 +10,10 @@
  - When executing seasons from the past, the automatic scheduled jobs might be executed before having all the products pre-processed
  - The L4C jobs are marked as finished with success even if there were no products as input.
  - MAJA still needs to be installed even when using only ESA L2A products from SciHub
-
+ - The old marker products are not overwritten
+ - The L4A markers are computed only when the L4A processor runs
+ - New L4A markers are added for custom jobs
+ - The HTTP API only returns markers from the most recent product
 
 # Change Log
 
