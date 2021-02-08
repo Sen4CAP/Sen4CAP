@@ -98,7 +98,7 @@
 
 ## Compatibility warning
 
-  - The next release will use a newer version of MAJA, which will not be able to work with products from previous versions. If you're using MAJA, you will need to restart the processing of your site from scratch.
+  - The current release can use a newer version of MAJA (version 4) , which will not be able to work with products from previous versions (MAJA 3). If you switch from MAJA 3 to MAJA 4 (see the SUM), you will need to restart the processing of your existing sites from scratch.
 
 # Change Log
 
