@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 _____________________________________________________________________________
@@ -19,21 +19,15 @@ _____________________________________________________________________________
 from __future__ import print_function
 import argparse
 import glob
-import re
 import os
-from os.path import isfile, isdir, join
 import sys
 import time, datetime
-import pipes
 import shutil
-from multiprocessing import Pool
-from sen2agri_common_db import *
-from threading import Thread
-import threading
 import tempfile
+from fmask_commons import log, run_command, create_recursive_dirs, remove_dir
 
-general_log_path = "/tmp/"
-general_log_filename = "demmaccs.log"
+DEFAULT_FMASK_IMAGE_NAME = "fmask"
+
 
 def get_dir_name_from_path(dir_path):
     if dir_path.endswith("/"):
@@ -102,7 +96,6 @@ class DEMMACCSContext(object):
 
 def fmask_launcher(fmask_context):
     product_name = os.path.basename(fmask_context.input[:len(fmask_context.input) - 1]) if fmask_context.input.endswith("/") else os.path.basename(fmask_context.input)
-    sat_id, acquistion_date = get_product_info(product_name)
 
     tile_log_filename = "fmask.log"
     if not clone_product_dir(fmask_context.input, working_dir, fmask_context.output, tile_log_filename) : 
@@ -136,7 +129,6 @@ def fmask_launcher(fmask_context):
         docker_work_dir = prd_name
         fmask_out_location = fmask_working_dir
 
-    #os.chdir(fmask_working_dir) # TODO: asta nu este absolut necesara
     cmd_array = []
     debug = False
     if debug == True:
@@ -145,21 +137,24 @@ def fmask_launcher(fmask_context):
         run_command(cmd_array1, fmask_context.output, tile_log_filename)
         cmd_array += ["cp", "-f", "/mnt/archive/test/fmask/TestFile/L1C_T33UVQ_A019710_20190401T100512_Fmask4.tif", fmask_out_location]
     else :
-        cmd_array += ["docker", 
-                        "run", 
-                        "-it", 
-                        "--rm", 
-                        "-u", 
-                        "{}:{}".format(os.getuid(), os.getgid()),
-                        "-v", "{}:{}".format(fmask_context.input, fmask_context.input), 
-                        "-v", "{}:/work/{}".format(fmask_working_dir, prd_name), 
-                        "--workdir", 
-                        "/work/{}".format(docker_work_dir), 
-                        "fmask"]
+        cmd_array.append("docker")
+        cmd_array.append("run")
+        cmd_array.append("--rm")
+        cmd_array.append("-u")
+        cmd_array.append("{}:{}".format(os.getuid(), os.getgid()))
+        cmd_array.append("-v")
+        cmd_array.append("{}:{}".format(fmask_context.input, fmask_context.input))
+        cmd_array.append("-v")
+        cmd_array.append("{}:/work/{}".format(fmask_working_dir, prd_name))
+        cmd_array.append("--workdir")
+        cmd_array.append("/work/{}".format(docker_work_dir))
+        if args.product_id:
+            cmd_array.append("--name")
+            cmd_array.append("fmask_{}".format(args.product_id))
+        cmd_array.append(args.image_name)
         if fmask_context.threshold != '' and int(fmask_context.threshold) >= 0 and int(fmask_context.threshold) <= 100: 
-            cmd_array += [ "3", "3", "0", fmask_context.threshold ]
+            cmd_array.extend([ "3", "3", "0", fmask_context.threshold ])
             
-    log(fmask_context.output, "sat_id = {} | acq_date = {}".format(sat_id, acquistion_date), tile_log_filename)
     log(fmask_context.output, "Starting FMask in {}".format(fmask_context.input), tile_log_filename)
     log(fmask_context.output, "FMask: {}".format(cmd_array), tile_log_filename)
     if run_command(cmd_array, fmask_context.output, tile_log_filename) != 0:
@@ -203,22 +198,26 @@ def fmask_launcher(fmask_context):
 parser = argparse.ArgumentParser(
     description="Launches FMask for producing cloud/water/snow masks")
 parser.add_argument('input', help="input L1C directory")
+parser.add_argument('output', help="output location")
 parser.add_argument('-w', '--working-dir', required=True,
                     help="working directory")
 parser.add_argument('-t', '--threshold', required=False, default = "", 
-                    help="FMask threshold")
-                    
+                    help="FMask threshold")            
 parser.add_argument('--delete-temp', required=False,
                         help="if set to True, it will delete all the temporary files and directories. Default: True", default="True")
-parser.add_argument('output', help="output location")
+parser.add_argument('--product-id', required=False,
+                    help = "Downloader history id of the input product.")
+parser.add_argument('--image-name', required=False, default = DEFAULT_FMASK_IMAGE_NAME,
+                    help = "The name of the fmask docker image.")
 
 args = parser.parse_args()
+
+general_log_path = args.output
 log_filename = "fmask.log"
 if not create_recursive_dirs(args.output):
     log(general_log_path, "Could not create the output directory", log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
-general_log_path = args.output
 working_dir = tempfile.mkdtemp(dir = args.working_dir)
 #working_dir = "{}/{}".format(args.working_dir[:len(args.working_dir) - 1] if args.working_dir.endswith("/") else args.working_dir, os.getpid())
 
@@ -227,12 +226,11 @@ general_start = time.time()
 
 if not create_recursive_dirs(working_dir):
     log(general_log_path, "Could not create the temporary directory", log_filename)
-    sys.exit(-1)
+    os._exit(1)
 
 start = time.time()
 base_abs_path = os.path.dirname(os.path.abspath(__file__)) + "/"
 product_name = os.path.basename(args.input[:len(args.input) - 1]) if args.input.endswith("/") else os.path.basename(args.input)
-sat_id, acquistion_date = get_product_info(product_name)
 
 print("Creating demmaccs contexts with: input: {} | output {}".format(args.input, args.output))
 fmask_context = DEMMACCSContext(working_dir, args.input, args.output, args.threshold)
@@ -242,10 +240,10 @@ out = fmask_launcher(fmask_context)
 if len(out) >=5:
     processed_tiles.append(out)
 
-sys_exit = int(0)
+exit_code = int(0)
 if len(processed_tiles) == 0:
     log(general_log_path, "FMASK did not processed the L1C product {}".format(args.input), log_filename)
-    sys_exit = 1
+    exit_code = 1
 else:
     log(general_log_path, "FMask processed the following tiles for L1C product {} :".format(args.input), log_filename)
     log(general_log_path, "{}".format(processed_tiles), log_filename)
@@ -257,4 +255,4 @@ if args.delete_temp == "True":
 
 log(general_log_path, "Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), log_filename)
 
-sys.exit(sys_exit)
+os._exit(exit_code)
