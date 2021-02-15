@@ -1,0 +1,9 @@
+[Unit]
+Description=Runs FMask on L2A products
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/share/sen2agri/fmask/fmask_launcher.py
+User=sen2agri-service

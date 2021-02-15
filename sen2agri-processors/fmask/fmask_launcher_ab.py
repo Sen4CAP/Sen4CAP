@@ -54,6 +54,8 @@ DATABASE_FMASK_WORKING_DIR = "processor.fmask.working-dir"
 DATABASE_FMASK_THRESHOLD = "processor.fmask.optical.threshold"
 DATABASE_FMASK_THRESHOLD_S2 = "processor.fmask.optical.threshold.s2"
 DATABASE_FMASK_THRESHOLD_L8 = "processor.fmask.optical.threshold.l8"
+DATABASE_FMASK_EXTRACTOR_IMAGE = "processor.fmask.extractor_image"
+DATABASE_FMASK_IMAGE = "processor.fmask.image"
 
 
 MAX_CLOUD_COVERAGE = 90.0
@@ -468,6 +470,8 @@ class FmaskProcessor(object):
         script_command.append("False")
         script_command.append("--product-id")
         script_command.append(str(self.lin.product_id))
+        script_command.append("--image-name")
+        script_command.append(self.context.fmask_image)
         if self.context.fmask_threshold != '':
             script_command.append("-t")
             script_command.append(self.context.fmask_threshold)
@@ -620,6 +624,8 @@ class FMaskContext(object):
         self.processor_log_dir = FMASK_LOG_DIR
         self.processor_log_file = FMASK_LOG_FILE_NAME
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
+        self.fmask_extractor_image = site_context.fmask_extractor_image
+        self.fmask_image = site_context.fmask_image
 
 class FMaskMaster(object):
     def __init__(self, num_workers):
@@ -679,7 +685,7 @@ class FMaskMaster(object):
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     unprocessed_tile = db_get_unprocessed_tile()
-                    if unprocessed_tile is not None:
+                    if (unprocessed_tile is not None):
                         processing_context = db_get_processing_context()
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
@@ -862,6 +868,8 @@ class SiteContext(object):
         self.fmask_threshold = ''
         self.fmask_threshold_s2 = ''
         self.fmask_threshold_l8 = ''
+        self.fmask_extractor_image = ''
+        self.fmask_image = ''
 
     def get_site_info(self):
         self.site_short_name = db_get_site_short_name(self.site_id)
@@ -910,6 +918,8 @@ class ProcessingContext(object):
         self.fmask_threshold = {"default": ''}
         self.fmask_threshold_s2 = {"default": ''}
         self.fmask_threshold_l8 = {"default": ''}
+        self.fmask_extractor_image = {"default": ''}
+        self.fmask_image = {"default": ''}
 
     def get_site_context(self, site_id):
         site_context = SiteContext()
@@ -936,6 +946,14 @@ class ProcessingContext(object):
             site_context.fmask_threshold_l8 = self.fmask_threshold_l8[site_id]
         else:
             site_context.fmask_threshold_l8 = self.fmask_threshold_l8["default"]
+        if site_id in self.fmask_extractor_image:
+            site_context.fmask_extractor_image = self.fmask_extractor_image[site_id]
+        else:
+            site_context.fmask_extractor_image= self.fmask_extractor_image["default"]
+        if site_id in self.fmask_image:
+            site_context.fmask_image = self.fmask_image[site_id]
+        else:
+            site_context.fmask_image= self.fmask_image["default"]
         
 
         return site_context
@@ -972,6 +990,17 @@ class ProcessingContext(object):
                     self.fmask_threshold_l8[site] = value
                 else:
                     self.fmask_threshold_l8["default"] = value
+            elif  parameter == DATABASE_FMASK_EXTRACTOR_IMAGE:
+                if site is not None:
+                    self.fmask_extractor_image[site] = value
+                else:
+                    self.fmask_extractor_image["default"] = value
+            elif  parameter == DATABASE_FMASK_IMAGE:
+                if site is not None:
+                    self.fmask_image[site] = value
+                else:
+                    self.fmask_image["default"] = value
+            
 
 class FMaskConfig(object):
     def __init__(self, output_path, working_dir):

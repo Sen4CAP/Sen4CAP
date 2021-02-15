@@ -151,7 +151,7 @@ def fmask_launcher(fmask_context):
         if args.product_id:
             cmd_array.append("--name")
             cmd_array.append("fmask_{}".format(args.product_id))
-        cmd_array.append(DEFAULT_FMASK_IMAGE_NAME)
+        cmd_array.append(args.image_name)
         if fmask_context.threshold != '' and int(fmask_context.threshold) >= 0 and int(fmask_context.threshold) <= 100: 
             cmd_array.extend([ "3", "3", "0", fmask_context.threshold ])
             
@@ -207,6 +207,8 @@ parser.add_argument('--delete-temp', required=False,
                         help="if set to True, it will delete all the temporary files and directories. Default: True", default="True")
 parser.add_argument('--product-id', required=False,
                     help = "Downloader history id of the input product.")
+parser.add_argument('--image-name', required=False, default = DEFAULT_FMASK_IMAGE_NAME,
+                    help = "The name of the fmask docker image.")
 
 args = parser.parse_args()
 
