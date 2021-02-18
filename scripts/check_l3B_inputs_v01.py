@@ -49,23 +49,33 @@ class Config(object):
         self.path = args.input
         self.start_date = args.start_date
         self.end_date = args.stop_date
-#        if args.start_date:
-#            self.start_date = parse_date(args.start_date)
-            
-#        if args.stop_date:
-#            self.stop_date = parse_date(args.stop_date)
             
         print ("Start date is {}".format(self.start_date))
         print ("Stop date is {}".format(self.end_date))
+        self.logging = None
         
-        log_dir=os.path.dirname(os.path.realpath(__file__))
-        log_file=os.path.basename(__file__)+".log"
-        
-        logFilePath = log_dir+'/'+ log_file
-        if os.path.exists(logFilePath):
-            os.remove(logFilePath)
-        logging.basicConfig(filename=logFilePath,level=logging.INFO)
-        self.logging = logging
+
+def get_logging(site_id, site_short_name, output_file):
+
+    log_dir=os.path.dirname(os.path.realpath(__file__))
+    if output_file != "" :
+        log_file = output_file
+    else :
+        current_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if site_id != 0 :
+            if site_short_name != None :
+                log_file=current_timestamp+"_"+site_short_name+".log"
+            else :
+                log_file=current_timestamp+"_nosite.log"                      
+        else :
+            log_file=current_timestamp+"_nosite.log"            
+
+    
+    logFilePath = log_dir+'/'+ log_file
+    if os.path.exists(logFilePath):
+        os.remove(logFilePath)
+    logging.basicConfig(filename=logFilePath,level=logging.INFO)
+    return logging
 
 def list_1d(inFolder):
     return os.listdir(inFolder)
@@ -192,6 +202,9 @@ def get_l2a_products_from_db(config, conn):
             l2aTilePaths = fnmatch.filter(files, "S2*_OPER_SSC_L2VALD_*.HDR")
             if len(l2aTilePaths) == 0:
                 l2aTilePaths = fnmatch.filter(files, "L8_TEST_L8C_L2VALD_*.HDR")
+            # if L2A product from ESA    
+            if len(l2aTilePaths) == 0:
+                l2aTilePaths = fnmatch.filter(files, "MTD_MSIL2A.xml")
             
             # if still nothing, check for the MAJA subfolder
             subPath = ""
@@ -260,6 +273,25 @@ def getMissingL2AProducts(config, allL2AHdrFiles, l3bInputs) :
         missingProductPaths.append(missingPrdPath)
     return missingProductPaths
     
+def getSiteShortName(conn, site_id):
+    with conn.cursor() as cursor:
+        query = SQL(
+            """
+            select short_name
+            from site 
+            where id = {}
+            """
+        )
+        query = query.format(Literal(site_id))
+        cursor.execute(query)
+
+        results = cursor.fetchall()
+        conn.commit()
+        
+    if results :   
+        for row in results :
+            return row[0]           
+    
 def main():
 
     parser = argparse.ArgumentParser(description='Extracts the L2A for the processed NDVIs and returns also a list of missing L2A in NDVIs')
@@ -270,6 +302,7 @@ def main():
     
     parser.add_argument('-b', '--start_date', help='start-date: yyyy-mm-dd', default=(datetime.datetime.now() - relativedelta(years=5)).strftime('%Y-%m-%d'))
     parser.add_argument('-f', '--stop_date', help='stop_date: yyyy-mm-dd', default=datetime.datetime.now().strftime( "%Y-%m-%d"))
+    parser.add_argument('-o', '--output_file', default="", help="Output file name")
 
     args = parser.parse_args()
     
@@ -280,30 +313,33 @@ def main():
         return
 
     log_time=datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")       
+    
+    with psycopg2.connect(host=config.host, dbname=config.dbname, user=config.user, password=config.password) as conn:
+        site_short_name = getSiteShortName(conn, config.site_id)
+        config.logging = get_logging(config.site_id, site_short_name, args.output_file)
+        if config.site_id == 0:
+            config.logging.info('[%s]: Start check for %s',log_time,config.path)
 
-    if config.site_id == 0:
-        config.logging.info('[%s]: Start check for %s',log_time,config.path)
+            for (dirpath, _, files) in os.walk(config.path, followlinks=True):
+                for element in fnmatch.filter(files, 'S2AGRI_L3B'+'*'):
+                    (base,ext)=os.path.splitext(element)
+                    base=base.lower()
+                    path=os.path.join(dirpath,element)
+                    if (re.search(r"AUX_DATA", path) != None) and ext.endswith(".xml"):
+                        getFilesFromIPPFile(config, path)
+        else :
+            config.logging.info('[%s]: Start check for site with id %s',log_time,config.site_id)
 
-        for (dirpath, _, files) in os.walk(config.path, followlinks=True):
-            for element in fnmatch.filter(files, 'S2AGRI_L3B'+'*'):
-                (base,ext)=os.path.splitext(element)
-                base=base.lower()
-                path=os.path.join(dirpath,element)
-                if (re.search(r"AUX_DATA", path) != None) and ext.endswith(".xml"):
-                    getFilesFromIPPFile(config, path)
-    else :
-        config.logging.info('[%s]: Start check for site with id %s',log_time,config.site_id)
-        with psycopg2.connect(host=config.host, dbname=config.dbname, user=config.user, password=config.password) as conn:
             l2aFromNdvis = get_aux_files_from_ndvi_products_from_db(config, conn)
-#            for l2aFromNdvi in l2aFromNdvis:
-#                config.logging.info('[%s] Aux file:[ %s ]',log_time,l2aFromNdvi)
+    #            for l2aFromNdvi in l2aFromNdvis:
+    #                config.logging.info('[%s] Aux file:[ %s ]',log_time,l2aFromNdvi)
             allL2AFromDB = get_l2a_products_from_db(config, conn)
-#            for l2aFromDB in allL2AFromDB:
-#                config.logging.info('[%s] L2A prd file:[ %s ]',log_time,l2aFromDB)
+    #            for l2aFromDB in allL2AFromDB:
+    #                config.logging.info('[%s] L2A prd file:[ %s ]',log_time,l2aFromDB)
                 
             missingS2Hdrs = getMissingL2AProducts(config, allL2AFromDB, l2aFromNdvis)
-#            for missingHdr in missingS2Hdrs:
-#                config.logging.info('[%s] MISSING L2A HDR file:[ %s ]',log_time,missingHdr)
+    #            for missingHdr in missingS2Hdrs:
+    #                config.logging.info('[%s] MISSING L2A HDR file:[ %s ]',log_time,missingHdr)
                 
 ###################################################################################################
 if __name__ == '__main__':
