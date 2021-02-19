@@ -81,8 +81,9 @@ private:
     QStringList ExtractCoheProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event, QDateTime &minDate, QDateTime &maxDate);
 
     QStringList GetInputShpGeneratorArgs(grassland_mowing::GrasslandMowingExecConfig &cfg, const QString &outShpFile);
+    QStringList GetExportProductsArgs(grassland_mowing::GrasslandMowingExecConfig &cfg, const QString &l3bPrdsFile, const QString &s1PrdsFile);
     QStringList GetMowingDetectionArgs(grassland_mowing::GrasslandMowingExecConfig &cfg,
-                                       const grassland_mowing::InputProductsType &prdType, const QString &inputShpLocation,
+                                       const grassland_mowing::InputProductsType &prdType, const QString &inputShpLocation, const QString &inputPrdsFile,
                                        const QString &outDataDir, const QString &outFile);
 
     bool IsScheduledJobRequest(const QJsonObject &parameters);

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import os, glob
 import sys
 
@@ -17,6 +19,8 @@ import S1_gmd
 import dateutil.parser
 import datetime
 
+import csv
+
 from osgeo import ogr, gdal
 gdal.UseExceptions()
 ogr.UseExceptions()
@@ -28,11 +32,6 @@ try:
 except ImportError:
     from ConfigParser import ConfigParser
     
-import psycopg2
-from psycopg2.sql import SQL, Literal
-import psycopg2.extras
-
-  
 def run_proc(orbit_list, orbit_type, sarDataGlob, re_compile, segmentsFile,
              new_acq_date, older_acq_date=None,
              outputDir=None, outputShapeFile=None,
@@ -603,154 +602,28 @@ def parse_date(str):
     return datetime.datetime.strptime(str, "%Y-%m-%d").date()
 
 class RadarProduct(object):
-    def __init__(self, dt, name, orbit_type_id, polarization, radar_product_type, path, orbit_id):
+    def __init__(self, name, orbit_type_id, orbit_id, polarization, radar_product_type, path):
         self.name = name
         self.orbit_type_id = orbit_type_id
         self.polarization = polarization
         self.radar_product_type = radar_product_type
         self.path = path
-        self.orbit_id = f'{orbit_id:03}'
-
-        (year, week, _) = dt.isocalendar()
-        self.year = year
-        self.week = week
+        self.orbit_id = orbit_id
 
 class S4CConfig(object):
     def __init__(self, args):
-        parser = ConfigParser()
-        parser.read([args.s4c_config_file])
-
-        self.host = parser.get("Database", "HostName")
-        self.dbname = parser.get("Database", "DatabaseName")
-        self.user = parser.get("Database", "UserName")
-        self.password = parser.get("Database", "Password")
-
-        self.site_id = args.site_id
         self.config_file = args.config_file
         self.input_shape_file = args.input_shape_file
         self.output_data_dir = args.output_data_dir
-        self.new_acq_date = args.new_acq_date
-        self.older_acq_date = args.older_acq_date
-        # self.orbit_list_file = args.orbit_list_file
+        self.end_date = args.end_date
+        self.start_date = args.start_date
         self.seg_parcel_id_attribute = args.seg_parcel_id_attribute
         self.output_shapefile = args.output_shapefile
         self.do_cmpl = args.do_cmpl
         self.test = args.test
-        
-        if args.season_start:
-            self.season_start = parse_date(args.season_start)
-            print("Season_start = ", args.season_start)
-        
-        if args.season_end:        
-            self.season_end = parse_date(args.season_end)
-            print("Season_end = ", args.season_end)            
 
-def get_s1_products(config, conn, prds_list):
-    with conn.cursor() as cursor:
-        prds_names_list=[]
-        if prds_list is None or len(prds_list) == 0 :
-            query = SQL(
-                """
-                with products as (
-                    select product.site_id,
-                        product.name,
-                        case
-                            when substr(split_part(product.name, '_', 4), 2, 8) > substr(split_part(product.name, '_', 5), 1, 8) then substr(split_part(product.name, '_', 4), 2, 8)
-                            else substr(split_part(product.name, '_', 5), 1, 8)
-                        end :: date as date,
-                        coalesce(product.orbit_type_id, 1) as orbit_type_id,
-                        split_part(product.name, '_', 6) as polarization,
-                        product.processor_id,
-                        product.product_type_id,
-                        substr(product.name, length(product.name) - strpos(reverse(product.name), '_') + 2) as radar_product_type,
-                        product.orbit_id,
-                        product.full_path
-                    from product where product.satellite_id = 3 and product.site_id = {}
-                )
-                select products.date,
-                        products.name,
-                        products.orbit_type_id,
-                        products.polarization,
-                        products.radar_product_type,
-                        products.full_path, 
-                        products.orbit_id
-                from products
-                where date between {} and {}
-                order by date;
-                """
-            )
+def getPathsAndOrbits(s4cConfig, products) :
 
-            site_id_filter = Literal(config.site_id)
-            start_date_filter = Literal(config.season_start)
-            end_date_filter = Literal(config.season_end)
-            query = query.format(site_id_filter, start_date_filter, end_date_filter)
-            # print(query.as_string(conn))
-        else :
-            for prd in prds_list:
-                prds_names_list.append(os.path.splitext(os.path.basename(prd))[0])
-                
-            if len (prds_names_list) > 1:
-                prdsSubstr = tuple(prds_names_list)
-            else :
-                prdsSubstr = "('{}')".format(prds_names_list[0])
-        
-            query= """
-                with products as (
-                    select product.site_id,
-                        product.name,
-                        case
-                            when substr(split_part(product.name, '_', 4), 2, 8) > substr(split_part(product.name, '_', 5), 1, 8) then substr(split_part(product.name, '_', 4), 2, 8)
-                            else substr(split_part(product.name, '_', 5), 1, 8)
-                        end :: date as date,
-                        coalesce(product.orbit_type_id, 1) as orbit_type_id,
-                        split_part(product.name, '_', 6) as polarization,
-                        product.processor_id,
-                        product.product_type_id,
-                        substr(product.name, length(product.name) - strpos(reverse(product.name), '_') + 2) as radar_product_type,
-                        product.orbit_id,
-                        product.full_path
-                    from product where product.satellite_id = 3 and product.name in {}
-                )
-                select products.date,
-                        products.name,
-                        products.orbit_type_id,
-                        products.polarization,
-                        products.radar_product_type,
-                        products.full_path, 
-                        products.orbit_id
-                from products
-                order by date;""".format(prdsSubstr)
-            #print(query)
-        
-        # execute the query
-        cursor.execute(query)            
-            
-        results = cursor.fetchall()
-        conn.commit()
-
-        products = []
-        # We are performing this search to have a warning on not present products but also to have the same order of products as in the inputs
-        if len(prds_names_list) > 0 :
-            for i in range(len(prds_names_list)):
-                prd_name = prds_names_list[i]
-                prd = prds_list[i]
-                prdAdded = False
-                for (dt, name, orbit_type_id, polarization, radar_product_type, full_path, orbit_id) in results:
-                    if os.path.splitext(os.path.basename(prd_name))[0] == name : 
-                        products.append(RadarProduct(dt, name, orbit_type_id, polarization, radar_product_type, os.path.normpath(prd), orbit_id))
-                        prdAdded = True
-                        break
-                if prdAdded == False :
-                    print ("Product {} was not found in the database!!!".format(prd))
-        else :
-            for (dt, name, orbit_type_id, polarization, radar_product_type, full_path, orbit_id) in results:
-                products.append(RadarProduct(dt, name, orbit_type_id, polarization, radar_product_type, full_path, orbit_id))
-
-        return products
-
-def getPathsAndOrbits(s4cConfig, conn, input_products_list) :
-    products = get_s1_products(s4cConfig, conn, input_products_list)
-    
     print ("Config file is {}".format(s4cConfig.config_file))
     
     config = configparser.ConfigParser()
@@ -811,22 +684,29 @@ def getPathsAndOrbits(s4cConfig, conn, input_products_list) :
 
     return data_x_detection, orbit_list, orbit_type_list
 
+def read_s1_products(file):
+    products = []
+    with open(file, 'r') as file:
+        reader = csv.reader(file)
+        # skip headers
+        next(reader)
+        for row in reader:
+            # name,orbit_type_id,orbit_id,polarization,radar_product_type,full_path
+            products.append(RadarProduct(row[0], row[1], row[2], row[3], row[4], row[5]))
+    return products
+
 def main() :
     parser = argparse.ArgumentParser(description="Executes grassland mowing S1 detection")
-    parser.add_argument('-c', '--s4c-config-file', default='/etc/sen2agri/sen2agri.conf', help="Sen4CAP system configuration file location")
-    parser.add_argument('-s', '--site-id', help="The site id")
+    parser.add_argument('-p', "--s1-products-file", help="File containing the S1 products tiff files")
     parser.add_argument('-f', '--config-file', default = "/usr/share/sen2agri/S4C_L4B_GrasslandMowing/config.ini", help="Grassland mowing parameters configuration file location")
     parser.add_argument('-i', '--input-shape-file', help="The input shapefile GSAA")
     parser.add_argument('-o', '--output-data-dir', help="Output data directory")
-    parser.add_argument('-e', '--new-acq-date', help="The new acquisition date")
-    parser.add_argument('-b', '--older-acq-date', help="The older acquisition date")
-    # parser.add_argument('-l', '--orbit-list-file', help="The orbit list file")    # NOT USED ANYMORE - ORBITS DETECTED FROM THE DATABASE
+    parser.add_argument('-e', '--end-date', help="The new acquisition date")
+    parser.add_argument('-b', '--start-date', help="The older acquisition date")
     parser.add_argument('-l', '--input-products-list', nargs='+', help="The list of S1 L2 products")   
     parser.add_argument('-a', '--seg-parcel-id-attribute', help="The SEQ unique ID attribute name", default="NewID")
     parser.add_argument('-x', '--output-shapefile', help="Output shapefile")
     parser.add_argument('-m', '--do-cmpl', help="Run compliancy")
-    parser.add_argument('--season-start', help="Season start")
-    parser.add_argument('--season-end', help="Season end")
     parser.add_argument('-t', '--test', help="Run test")
     
     args = parser.parse_args()
@@ -836,74 +716,20 @@ def main() :
     if not os.path.isfile(args.input_shape_file) : 
         print("ERROR: the file for input-shape-file does not exists!!! Exiting ... ")
         sys.exit(1)
+
+    products = read_s1_products(args.s1_products_file)
     
-    with psycopg2.connect(host=s4cConfig.host, dbname=s4cConfig.dbname, user=s4cConfig.user, password=s4cConfig.password) as conn:
-        data_x_detection, orbit_list, orbit_type_list = getPathsAndOrbits(s4cConfig, conn, args.input_products_list)
-        print("orbit_list to use:", orbit_list)
-        print("orbit_type_list to use", orbit_type_list)
-        
-        ret, _ = main_run(s4cConfig.config_file, s4cConfig.input_shape_file, data_x_detection, s4cConfig.output_data_dir, s4cConfig.new_acq_date, 
-                       older_acq_date = s4cConfig.older_acq_date, orbit_list = orbit_list, orbit_type_list=orbit_type_list,
-                       seg_parcel_id_attribute = s4cConfig.seg_parcel_id_attribute, outputShapeFile=s4cConfig.output_shapefile,
-                       do_cmpl=s4cConfig.do_cmpl, test=s4cConfig.test)
+    data_x_detection, orbit_list, orbit_type_list = getPathsAndOrbits(s4cConfig, products)
+    print("orbit_list to use:", orbit_list)
+    print("orbit_type_list to use", orbit_type_list)
+    
+    ret, _ = main_run(s4cConfig.config_file, s4cConfig.input_shape_file, data_x_detection, s4cConfig.output_data_dir, s4cConfig.end_date, 
+                   older_acq_date = s4cConfig.start_date, orbit_list = orbit_list, orbit_type_list=orbit_type_list,
+                   seg_parcel_id_attribute = s4cConfig.seg_parcel_id_attribute, outputShapeFile=s4cConfig.output_shapefile,
+                   do_cmpl=s4cConfig.do_cmpl, test=s4cConfig.test)
 
 if __name__== "__main__":
 
     os.environ['SHAPE_ENCODING'] = "utf-8"
     
     main()
-
-#if __name__== "__main__":
-#    if len(sys.argv)==11:
-#        config_file = sys.argv[1]
-#        input_shape_file = sys.argv[2]
-#        output_data_dir =  sys.argv[3]
-#        new_acq_date =   sys.argv[4]
-#        older_acq_date =  sys.argv[5]
-#        orbit_list_file = sys.argv[6]
-#        seg_parcel_id_attribute = sys.argv[7]
-#        outputShapeFile = sys.argv[8]
-#        do_cmpl_str = sys.argv[9]
-#        if do_cmpl_str == "True":
-#            do_cmpl = True
-#        elif do_cmpl_str == "False":
-#            do_cmpl = False
-#        else:
-#            print("do_cmpl par invalid")
-#        test = np.bool(sys.argv[10])
-#        if test == "True":
-#            test = True
-#        elif test == "False":
-#            test = False
-#        else:
-#            print("test par invalid")
-#        print("do_cmpl", do_cmpl)
-#        print("test", test)
-#    else:
-#        print("Expected input:")
-#        print("1) config_file")
-#        print("2) input_shape_file")
-#        print("3) output_data_dir")
-#        print("4) new_acq_date")
-#        print("5) older_acq_date")
-#        print("6) orbit_list_file")
-#        print("7) seg_parcel_id_attribute")
-#        print("8) outputShapeFile")
-#        print("9) do_cmpl")
-#        print("10) test")
-#        raise Exception("Just 10 arguments are expected.", len(sys.argv)-1, "arguments are passed.")
-#
-#    config = configparser.ConfigParser()
-#    config.read(orbit_list_file)
-#
-#    orbit_list = list(map(str.strip, config['orbits']['orbit_list'].split(',')))
-#    orbit_type_list = list(map(str.strip, config['orbits']['orbit_type_list'].split(',')))
-#    print("orbit_list:", orbit_list)
-#    print("orbit_type_list", orbit_type_list)
-#
-#    ret, _ = main_run(config_file, input_shape_file, output_data_dir, new_acq_date,
-#                      older_acq_date = older_acq_date, orbit_list=orbit_list, orbit_type_list=orbit_type_list,
-#                      seg_parcel_id_attribute = seg_parcel_id_attribute, outputShapeFile=outputShapeFile,
-#                      do_cmpl=do_cmpl, test=test)
-    
-

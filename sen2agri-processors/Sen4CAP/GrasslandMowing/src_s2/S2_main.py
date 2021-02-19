@@ -1,6 +1,10 @@
+#!/usr/bin/env python
+
 import os, glob
 import sys
 
+import argparse
+import fnmatch
 import re
 import configparser
 import ast
@@ -15,6 +19,8 @@ import fusion
 import compliancy
 import S2_gmd
 
+import csv
+
 import dateutil.parser
 import datetime
 
@@ -23,18 +29,11 @@ gdal.UseExceptions()
 osr.UseExceptions()
 ogr.UseExceptions()
 
-import argparse
 try:
     from configparser import ConfigParser
 except ImportError:
     from ConfigParser import ConfigParser
     
-import psycopg2
-from psycopg2.sql import SQL, Literal
-import psycopg2.extras
-import fnmatch
-
-
 def run_proc(tile_number, S2DataGlob, re_compile, segmentsFile,
              new_acq_date, older_acq_date=None,
              outputDir=None, modelDir=None, outputShapeFile=None,
@@ -759,187 +758,45 @@ def parse_date(str):
     return datetime.datetime.strptime(str, "%Y-%m-%d").date()
 
 class NdviProduct(object):
-    def __init__(self, dt, tile_id, path):
+    def __init__(self, tile_id, path):
         self.tile_id = tile_id
         self.path = path
 
-        (year, week, _) = dt.isocalendar()
-        self.year = year
-        self.week = week
-
 class S4CConfig(object):
     def __init__(self, args):
-        parser = ConfigParser()
-        parser.read([args.s4c_config_file])
 
-        self.host = parser.get("Database", "HostName")
-        self.dbname = parser.get("Database", "DatabaseName")
-        self.user = parser.get("Database", "UserName")
-        self.password = parser.get("Database", "Password")
-
-        self.site_id = args.site_id
         self.config_file = args.config_file
         self.input_shape_file = args.input_shape_file
         self.output_data_dir = args.output_data_dir
-        self.new_acq_date = args.new_acq_date
-        self.older_acq_date = args.older_acq_date
-        # self.orbit_list_file = args.orbit_list_file
+        self.end_date = args.end_date
+        self.start_date = args.start_date
         self.seg_parcel_id_attribute = args.seg_parcel_id_attribute
         self.output_shapefile = args.output_shapefile
         self.do_cmpl = args.do_cmpl
         self.test = args.test
         
-        self.input_products_list = None
-        if args.input_products_list:
-            self.input_products_list = args.input_products_list
-
-        self.prds_are_tif = int(args.prds_are_tif)
-           
-        if args.season_start:
-            self.season_start = parse_date(args.season_start)
-            print("Season_start = ", args.season_start)
-        
-        if args.season_end:        
-            self.season_end = parse_date(args.season_end)
-            print("Season_end = ", args.season_end)            
-
-def get_s2_products_from_tiffs(config):
+def read_l3b_products(file):
     products = []
-    l3b_file_regex = "(S2AGRI_L3B_([A-Z]{5,11})_A([0-9]{8})T([0-9]{6})_T([0-9]{2}[A-Z]{3})\.)"
-    regex = re.compile(l3b_file_regex)
-    for tifFilePath in config.input_products_list:
-        tifFileName = os.path.basename(tifFilePath)
-        result = regex.match(tifFileName)
-        if result and len(result.groups()) == 5:
-            dt_str = "{}T{}".format(result.group(3), result.group(4))
-            dt = datetime.datetime.strptime(dt_str, '%Y%m%dT%H%M%S')
-            products.append(NdviProduct(dt, result.group(5), tifFilePath))
-    
+    with open(file, 'r') as file:
+        # skip headers
+        reader = csv.reader(file)
+        next(reader)
+        for row in reader:
+            # tile,full_path
+            products.append(NdviProduct(row[0], row[1]))
     return products
-    
-def get_s2_products(config, conn):
-    with conn.cursor() as cursor:
-        if config.input_products_list is None or len(config.input_products_list) == 0 :
-            print ("Extracting NDVI infos from the database for the whole season interval!!!")
-            query = SQL(
-                """
-                with products as (
-                    select product.site_id,
-                        product.name,
-                        product.created_timestamp as date,
-                        product.processor_id,
-                        product.product_type_id,
-                        product.full_path,
-                        product.tiles
-                    from product
-                    where product.site_id = {}
-                        and product.product_type_id = 3
-                )
-                select products.date,
-                        products.tiles,
-                        products.full_path
-                from products
-                where date between {} and {}
-                order by date;
-                """
-            )
-
-            site_id_filter = Literal(config.site_id)
-            start_date_filter = Literal(config.season_start)
-            end_date_filter = Literal(config.season_end)
-            query = query.format(site_id_filter, start_date_filter, end_date_filter)
-            # print(query.as_string(conn))
-        else :
-            print ("config.prds_are_tif = {}".format(config.prds_are_tif))
-            if config.prds_are_tif == 1 : 
-                print ("Extracting NDVI infos from TIF files!!!")            
-                return get_s2_products_from_tiffs(config)
-            
-            print ("Extracting NDVI infos from the database for the list of products!!!")
-            # Otherwise, get the products from DB and extract the tiffs
-            if len (config.input_products_list) > 1:
-                prdsSubstr = tuple(config.input_products_list)
-            else :
-                prdsSubstr = "('{}')".format(config.input_products_list[0])
-        
-            query= """
-                   with products as (
-                    select product.site_id,
-                        product.name,
-                        product.created_timestamp as date,
-                        product.processor_id,
-                        product.product_type_id,
-                        product.full_path,
-                        product.tiles
-                    from product
-                    where product.site_id = {} and product.product_type_id = 3 and product.full_path in {}
-                )
-                select products.date,
-                        products.tiles,
-                        products.full_path
-                from products
-                order by date;""".format(config.site_id, prdsSubstr)
-            #print(query)
-        
-        # execute the query
-        cursor.execute(query)            
-            
-        results = cursor.fetchall()
-        conn.commit()
-
-        products = []
-        for (dt, tiles, full_path) in results:
-            # print ("Handling product : {} with tiles {} ...".format(full_path, tiles))
-            tilesPath = os.path.join(full_path, "TILES")
-            try:
-                tilesDirs = os.listdir(tilesPath)
-            except:
-                print("Product {} found in DB but not on disk".format(full_path))
-                continue       
-                
-            for tile in tiles :   
-                # print ("Handling tile {} for product : {} ...".format(tile, full_path))
-                # print ("TILE DIRS: {} ...".format(tilesDirs))
-                
-                # Ignore the L8 tiles
-                if re.match("\d{6}", tile) :
-                    print ("Ignoring L8 tile {}".format(tile))
-                    continue
-                tilePaths = fnmatch.filter(tilesDirs, "S2AGRI_L3B_A*_T{}".format(tile))
-                if len(tilePaths) == 1:
-                    subPath = tilePaths[0]
-                    fullTilePath = os.path.join(tilesPath, subPath)
-                    tileImgDataPath = os.path.join(fullTilePath, "IMG_DATA")
-                    try:
-                        tileDirFiles = os.listdir(tileImgDataPath)
-                    except:
-                        print("Expected L3B product structure found but the path {} does not exists".format(tileImgDataPath))
-                        continue
-                    prdFiles = fnmatch.filter(tileDirFiles, "S2AGRI_L3B_S*_A*_T{}.TIF".format(tile))
-                    for prdFile in prdFiles:
-                        # print ("Using product tif: {} ...".format(os.path.join(tileImgDataPath, prdFile)))
-                        products.append(NdviProduct(dt, tile, os.path.join(tileImgDataPath, prdFile)))
-                
-                
-        return products
 
 def main() :
     parser = argparse.ArgumentParser(description="Executes grassland mowing S2 detection")
-    parser.add_argument('-c', '--s4c-config-file', default='/etc/sen2agri/sen2agri.conf', help="Sen4CAP system configuration file location")
-    parser.add_argument('-s', '--site-id', help="The site id")
     parser.add_argument('-f', '--config-file', default = "/usr/share/sen2agri/S4C_L4B_GrasslandMowing/config.ini", help="Grassland mowing parameters configuration file location")
+    parser.add_argument('-p', "--l3b-products-file", help="File containing the L3B products tiff files")
     parser.add_argument('-i', '--input-shape-file', help="The input shapefile GSAA")
     parser.add_argument('-o', '--output-data-dir', help="Output data directory")
-    parser.add_argument('-e', '--new-acq-date', help="The new acquisition date")
-    parser.add_argument('-b', '--older-acq-date', help="The older acquisition date")
-    # parser.add_argument('-l', '--orbit-list-file', help="The orbit list file")    # NOT USED ANYMORE - ORBITS DETECTED FROM THE DATABASE
-    parser.add_argument('-l', '--input-products-list', nargs='+', help="The list of L3B products")   
-    parser.add_argument('--prds-are-tif', help="Specify that the products in the input-product-list are actually the TIF files", type=int, default="0")
+    parser.add_argument('-e', '--end-date', help="The new acquisition date")
+    parser.add_argument('-b', '--start-date', help="The older acquisition date")
     parser.add_argument('-a', '--seg-parcel-id-attribute', help="The SEQ unique ID attribute name", default="NewID")
     parser.add_argument('-x', '--output-shapefile', help="Output shapefile")
     parser.add_argument('-m', '--do-cmpl', help="Run compliancy")
-    parser.add_argument('--season-start', help="Season start")
-    parser.add_argument('--season-end', help="Season end")
     parser.add_argument('-t', '--test', help="Run test")
     
     args = parser.parse_args()
@@ -950,75 +807,24 @@ def main() :
         print("ERROR: the file for input-shape-file does not exists!!! Exiting ... ")
         sys.exit(1)
     
-    with psycopg2.connect(host=s4cConfig.host, dbname=s4cConfig.dbname, user=s4cConfig.user, password=s4cConfig.password) as conn:
-        products = get_s2_products(s4cConfig, conn)
-        
-        tile_list = []
-        data_x_detection = []
-        for product in products:
-            data_x_detection.append(product.path) 
-            if product.tile_id not in tile_list:
-                tile_list.append(product.tile_id)
+    products = read_l3b_products(args.l3b_products_file)
+    
+    tile_list = []
+    data_x_detection = []
+    for product in products:
+        data_x_detection.append(product.path) 
+        if product.tile_id not in tile_list:
+            tile_list.append(product.tile_id)
 
-        print("tile_list:", tile_list)
-        
-        ret, _ = main_run(s4cConfig.config_file, s4cConfig.input_shape_file, data_x_detection, data_x_detection, s4cConfig.output_data_dir, s4cConfig.new_acq_date,
-                       older_acq_date = s4cConfig.older_acq_date, tile_list=tile_list,
-                       seg_parcel_id_attribute = s4cConfig.seg_parcel_id_attribute, outputShapeFile=s4cConfig.output_shapefile,
-                       do_cmpl=s4cConfig.do_cmpl, test=s4cConfig.test)
+    print("tile_list:", tile_list)
+    
+    ret, _ = main_run(s4cConfig.config_file, s4cConfig.input_shape_file, data_x_detection, data_x_detection, s4cConfig.output_data_dir, s4cConfig.end_date,
+                   older_acq_date = s4cConfig.start_date, tile_list=tile_list,
+                   seg_parcel_id_attribute = s4cConfig.seg_parcel_id_attribute, outputShapeFile=s4cConfig.output_shapefile,
+                   do_cmpl=s4cConfig.do_cmpl, test=s4cConfig.test)
         
 if __name__== "__main__":
 
     os.environ['SHAPE_ENCODING'] = "utf-8"
     
     main()
-    
-#    if len(sys.argv)==11:
-#        config_file = sys.argv[1]
-#        input_shape_file = sys.argv[2]
-#        output_data_dir =  sys.argv[3]
-#        new_acq_date =   sys.argv[4]
-#        older_acq_date =  sys.argv[5]
-#        tile_list_file = sys.argv[6]
-#        seg_parcel_id_attribute = sys.argv[7]
-#        outputShapeFile = sys.argv[8]
-#        do_cmpl_str = sys.argv[9]
-#        if do_cmpl_str == "True":
-#            do_cmpl = True
-#        elif do_cmpl_str == "False":
-#            do_cmpl = False
-#        else:
-#            print("do_cmpl par invalid")
-#        test = np.bool(sys.argv[10])
-#        if test == "True":
-#            test = True
-#        elif test == "False":
-#            test = False
-#        else:
-#            print("test par invalid")
-#        print("do_cmpl", do_cmpl)
-#        print("test", test)
-#    else:
-#        print("Expected input:")
-#        print("1) config_file")
-#        print("2) input_shape_file")
-#        print("3) output_data_dir")
-#        print("4) new_acq_date")
-#        print("5) older_acq_date")
-#        print("6) tile_list_file")
-#        print("7) seg_parcel_id_attribute")
-#        print("8) outputShapeFile")
-#        print("9) do_cmpl")
-#        print("10) test")
-#        raise Exception("Just 10 arguments are expected.", len(sys.argv)-1, "arguments are passed.")
-#
-#    config = configparser.ConfigParser()
-#    config.read(tile_list_file)
-#    tile_list = list(map(str.strip, config['tiles']['tile_list'].split(',')))
-#    print("tile_list:", tile_list)
-#
-#    ret, _ = main_run(config_file, input_shape_file, output_data_dir, new_acq_date,
-#                   older_acq_date = older_acq_date, tile_list=tile_list,
-#                   seg_parcel_id_attribute = seg_parcel_id_attribute, outputShapeFile=outputShapeFile,
-#                   do_cmpl=do_cmpl, test=test)
-

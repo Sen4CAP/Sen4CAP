@@ -29,20 +29,20 @@ case $key in
     shift # past argument
     shift # past value
     ;;
-    -c|--s4c-config-file)
-    s4c_config_file="$2"
-    IS_INSIDE_INPUT_PRDS_LIST=0
-    shift # past argument
-    shift # past value
-    ;;
-    -s|--site-id)
-    site_id="$2"
-    IS_INSIDE_INPUT_PRDS_LIST=0
-    shift # past argument
-    shift # past value
-    ;;
     -f|--config-file)
     config_file="$2"
+    oS_INSIDE_INPUT_PRDS_LIST=0
+    shift # past argument
+    shift # past value
+    ;;
+    --l3b-products-file)
+    l3b_products_file="$2"
+    IS_INSIDE_INPUT_PRDS_LIST=0
+    shift # past argument
+    shift # past value
+    ;;
+    --s1-products-file)
+    s1_products_file="$2"
     IS_INSIDE_INPUT_PRDS_LIST=0
     shift # past argument
     shift # past value
@@ -71,16 +71,6 @@ case $key in
     shift # past argument
     shift # past value
     ;;
-    -l|--input-products-list)
-    IS_INSIDE_INPUT_PRDS_LIST=1
-    shift # past argument
-    ;;
-    --prds-are-tif)
-    prds_are_tif="$2"
-    IS_INSIDE_INPUT_PRDS_LIST=0
-    shift # past argument
-    shift # past argument
-    ;;
     -a|--seg-parcel-id-attribute)
     seg_parcel_id_attribute="$2"
     IS_INSIDE_INPUT_PRDS_LIST=0
@@ -106,19 +96,6 @@ case $key in
     shift # past value
     ;;
 
-    --season-start)
-    season_start="$2"
-    IS_INSIDE_INPUT_PRDS_LIST=0
-    shift # past argument
-    shift # past value
-    ;;
-    --season-end)
-    season_end="$2"
-    IS_INSIDE_INPUT_PRDS_LIST=0
-    shift # past argument
-    shift # past value
-    ;;
-    
     *)    # unknown option
     POSITIONAL+=("$1") # save it in an array for later
     if [ "$IS_INSIDE_INPUT_PRDS_LIST" == "1" ] ; then
@@ -133,8 +110,6 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 
 #echo "conda_user   = ${conda_user}"
 #echo "script_path   = ${script_path}"
-#echo "s4c_config_file   = ${s4c_config_file}"
-#echo "site_id   = ${site_id}"
 #echo "config_file   = ${config_file}"
 #echo "input_shape_file   = ${input_shape_file}"
 #echo "output_data_dir   = ${output_data_dir}"
@@ -144,11 +119,7 @@ set -- "${POSITIONAL[@]}" # restore positional parameters
 #echo "output_shapefile   = ${output_shapefile}"
 #echo "do_cmpl   = ${do_cmpl}"
 #echo "test   = ${test}"
-#echo "season_start   = ${season_start}"
-#echo "season_end   = ${season_end}"
 #
-#echo "input-products-list = ${input_products_list}"
-
 
 if [ -z ${script_path} ] ; then
     echo "No script-path provided!" && usage
@@ -173,14 +144,6 @@ else
     fi
 fi 
 
-if [ -z ${s4c_config_file} ] ; then
-    echo "The parameter s4c-config-file defining the database parameters was not provided!"
-    echo "The default /etc/sen2agri/sen2agri.conf will be used"
-    s4c_config_file="/etc/sen2agri/sen2agri.conf"
-fi 
-if [ -z ${site_id} ] ; then
-    echo "No site-id provided!" && usage
-fi 
 if [ -z ${config_file} ] ; then
     echo "No config-file provided!" && usage
 fi 
@@ -209,12 +172,6 @@ if [ -z ${test} ] ; then
     echo "No test provided!" && usage
 fi 
 
-if [ -z ${season_start} ] || [ -z ${season_end} ] ; then
-    if [[ -z ${input_products_list} || ${#input_products_list[@]} == 0 ]] ; then
-        echo "You should provide either input-files-list or both season-start and season-end!" && usage
-    fi 
-fi 
-
 if [ $USER == ${conda_user} ] ; then
     echo "Activating conda sen4cap for user $USER"
     CONDA_CMD="source ~/.bashrc && conda activate sen4cap"
@@ -225,21 +182,17 @@ else
     CMD_TERM="'"
 fi    
 
-PRDS_ARE_TIFF_CMD=""
-if [ ! -z ${prds_are_tif} ] ; then
-    PRDS_ARE_TIFF_CMD="--prds-are-tif ${prds_are_tif}"
+L3B_PRDS_FILE=""
+if [ ! -z ${l3b_products_file} ] ; then
+    L3B_PRDS_FILE="--l3b-products-file ${l3b_products_file}"
 fi
 
-PY_CMD="python ${script_path} --s4c-config-file ${s4c_config_file} --site-id ${site_id} --config-file ${config_file} --input-shape-file ${input_shape_file} --output-data-dir ${output_data_dir} --new-acq-date ${new_acq_date} --older-acq-date ${older_acq_date} --seg-parcel-id-attribute ${seg_parcel_id_attribute} --output-shapefile ${output_shapefile} --do-cmpl ${do_cmpl} --test ${test} ${PRDS_ARE_TIFF_CMD}"
-if [ -z ${input_products_list} ] ; then
-    PY_CMD="${PY_CMD} --season-start ${season_start} --season-end ${season_end}"
-else 
-    PY_CMD="${PY_CMD} --input-products-list"
-    for input_prd in "${input_products_list[@]}"
-    do
-       PY_CMD="${PY_CMD} ${input_prd}"
-    done
+S1_PRDS_FILE=""
+if [ ! -z ${s1_products_file} ] ; then
+    S1_PRDS_FILE="--s1-products-file ${s1_products_file}"
 fi
+
+PY_CMD="python ${script_path} --config-file ${config_file} ${L3B_PRDS_FILE} ${S1_PRDS_FILE} --input-shape-file ${input_shape_file} --output-data-dir ${output_data_dir} --new-acq-date ${new_acq_date} --older-acq-date ${older_acq_date} --seg-parcel-id-attribute ${seg_parcel_id_attribute} --output-shapefile ${output_shapefile} --do-cmpl ${do_cmpl} --test ${test}"
 
 CMD="${CONDA_CMD} && ${PY_CMD}"
 CMD="${CMD}${CMD_TERM}"

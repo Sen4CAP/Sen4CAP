@@ -21,16 +21,20 @@ void GrasslandMowingHandler::CreateTasks(GrasslandMowingExecConfig &cfg,
     outAllTasksList.append(TaskToSubmit{ "s4c-grassland-gen-input-shp", {} });
     curTaskIdx++;
 
+    // Create task for creating the input shapefile
+    outAllTasksList.append(TaskToSubmit{ "s4c-grassland-extract-products", {} });
+    curTaskIdx++;
+
     QList<int> prdFormatterParentTasks;
     if (cfg.inputPrdsType & L3B) {
         prdFormatterParentTasks.append(curTaskIdx++);
-        outAllTasksList.append(TaskToSubmit{ "s4c-grassland-mowing", {outAllTasksList[0]} });
+        outAllTasksList.append(TaskToSubmit{ "s4c-grassland-mowing", {outAllTasksList[0], outAllTasksList[1]} });
     }
     if (cfg.inputPrdsType & L2_S1) {
         // if we have also the S2, then put this task to be executed after the previous one
         prdFormatterParentTasks.append(curTaskIdx++);
         outAllTasksList.append(TaskToSubmit{ "s4c-grassland-mowing",
-                         {((cfg.inputPrdsType & L3B) ? outAllTasksList[1] : outAllTasksList[0])} });
+                         {((cfg.inputPrdsType & L3B) ? outAllTasksList[2] : outAllTasksList[0]), outAllTasksList[1]} });
     }
 
     int productFormatterIdx = curTaskIdx++;
@@ -48,22 +52,29 @@ void GrasslandMowingHandler::CreateSteps(GrasslandMowingExecConfig &cfg, QList<T
     QStringList productFormatterFiles;
 
     TaskToSubmit &genInputShpTask = allTasksList[curTaskIdx++];
+
     const QString &inputShpLocation = genInputShpTask.GetFilePath("SEN4CAP_L4B_GeneratedInputShp.shp");
     const QStringList &inShpGenArgs = GetInputShpGeneratorArgs(cfg, inputShpLocation);
     steps.append(CreateTaskStep(genInputShpTask, "MowingInputShpGenerator", inShpGenArgs));
+
+    TaskToSubmit &exportPrdsTask = allTasksList[curTaskIdx++];
+    const QString &l3bPrdsFile = exportPrdsTask.GetFilePath("l3b_products.csv");
+    const QString &s1PrdsFile = exportPrdsTask.GetFilePath("s1_products.csv");
+    const QStringList &exportPrdsArgs = GetExportProductsArgs(cfg, l3bPrdsFile, s1PrdsFile);
+    steps.append(CreateTaskStep(exportPrdsTask, "ExportProducts", exportPrdsArgs));
 
     // It is assumed that the product formatter task it is the last one in the list
     TaskToSubmit &productFormatterTask = allTasksList[allTasksList.size()-1];
 
     QString s1InputShpLocation = inputShpLocation;
     if (cfg.inputPrdsType & L3B) {
-        QString outShpFileName = ((cfg.inputPrdsType & L3B) ?
+        QString outShpFileName = ((cfg.inputPrdsType & L2_S1) ?
                                       "SEN4CAP_L4B_S1_S2_MowingDetection" :
                                       "SEN4CAP_L4B_S2_MowingDetection");
         TaskToSubmit &s2MowingDetectionTask = allTasksList[curTaskIdx++];
         const QString &s2MowingDetectionOutFile = productFormatterTask.GetFilePath(outShpFileName + ".shp");
         const QString &s2OutDir = s2MowingDetectionTask.GetFilePath("SEN4CAP_L4B_S2_OutputWorkingData");
-        const QStringList &s2MowingDetectionArgs = GetMowingDetectionArgs(cfg, L3B, inputShpLocation,
+        const QStringList &s2MowingDetectionArgs = GetMowingDetectionArgs(cfg, L3B, inputShpLocation, l3bPrdsFile,
                                                                           s2OutDir, s2MowingDetectionOutFile);
         steps.append(CreateTaskStep(s2MowingDetectionTask, "S2MowingDetection", s2MowingDetectionArgs));
 
@@ -91,7 +102,7 @@ void GrasslandMowingHandler::CreateSteps(GrasslandMowingExecConfig &cfg, QList<T
         TaskToSubmit &s1MowingDetectionTask = allTasksList[curTaskIdx++];
         const QString &s1MowingDetectionOutFile = productFormatterTask.GetFilePath(outShpFileName + ".shp");
         const QString &s1OutDir = s1MowingDetectionTask.GetFilePath("SEN4CAP_L4B_S1_OutputWorkingData");
-        const QStringList &s1MowingDetectionArgs = GetMowingDetectionArgs(cfg, L2_S1, s1InputShpLocation,
+        const QStringList &s1MowingDetectionArgs = GetMowingDetectionArgs(cfg, L2_S1, s1InputShpLocation, s1PrdsFile,
                                                                           s1OutDir, s1MowingDetectionOutFile);
         steps.append(CreateTaskStep(s1MowingDetectionTask, "S1MowingDetection", s1MowingDetectionArgs));
 
@@ -311,8 +322,9 @@ ProcessorJobDefinitionParams GrasslandMowingHandler::GetProcessingDefinitionImpl
     InputProductsType prdType = all;
     if(requestOverrideCfgValues.contains("product_type")) {
         const ConfigurationParameterValue &productType = requestOverrideCfgValues["product_type"];
-        params.jsonParameters.append(", \"input_product_types\": \"" + productType.value + "\"}");
-        prdType = GrasslandMowingExecConfig::GetInputProductsType(productType.value);
+        const QString &trimmedPrdTypeVal = productType.value.trimmed();
+        params.jsonParameters.append(", \"input_product_types\": \"" + trimmedPrdTypeVal + "\"}");
+        prdType = GrasslandMowingExecConfig::GetInputProductsType(trimmedPrdTypeVal);
     } else {
         params.jsonParameters.append("}");
     }
@@ -370,35 +382,69 @@ QStringList GrasslandMowingHandler::ExtractCoheProducts(EventProcessingContext &
 QStringList GrasslandMowingHandler::GetInputShpGeneratorArgs(GrasslandMowingExecConfig &cfg,
                                                              const QString &outShpFile)
 {
-    const QString &pyScriptPath = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
-                                                                          "gen_shp_py_script", L4B_GM_CFG_PREFIX);
-
-    QStringList retArgs =  {"-s", QString::number(cfg.siteId),
-            "-y", cfg.year,
-            "-o", outShpFile};
-    if (pyScriptPath.size() > 0) {
-        retArgs += "-p";
-        retArgs += pyScriptPath;
-    }
+    QStringList retArgs =  {"--site-id", QString::number(cfg.siteId),
+            "--year", cfg.year,
+            "--path", outShpFile};
     if (cfg.ctNumFilter.size() > 0) {
-        retArgs += "-f";
+        retArgs += "--filter-ctnum";
         retArgs += cfg.ctNumFilter;
     }
 
     if (cfg.additionalCols.size() > 0) {
-        retArgs += "-a";
+        retArgs += "--add-decl-cols";
         retArgs += cfg.additionalCols;
     }
 
     return retArgs;
 }
 
-QStringList GrasslandMowingHandler::GetMowingDetectionArgs(GrasslandMowingExecConfig &cfg, const InputProductsType &prdType,
-                                                           const QString &inputShpLocation,
-                                                           const QString &outDataDir,
-                                                           const QString &outFile)
+QStringList GrasslandMowingHandler::GetExportProductsArgs(GrasslandMowingExecConfig &cfg, const QString &l3bPrdsFile, const QString &s1PrdsFile)
 {
-    const QString keyScript = (prdType == L2_S1) ? "s1_py_script" : "s2_py_script";
+    //-s 22 --season-start 2020-04-01 --season-end 2020-10-30 --out-s1-products-file ./s1_files.txt --out-l3b-products-file ./l3b_files.txt
+
+    QStringList retArgs =  {"--site-id",
+                            QString::number(cfg.siteId)
+                           };
+    if (cfg.inputPrdsType & L3B) {
+        retArgs += "--out-l3b-products-file";
+        retArgs += l3bPrdsFile;
+    }
+    if (cfg.inputPrdsType & L2_S1) {
+        retArgs += "--out-s1-products-file";
+        retArgs += s1PrdsFile;
+    }
+
+    if (cfg.isScheduled) {
+        retArgs += "--season-start";
+        retArgs += cfg.seasonStartDate.toString("yyyy-MM-dd");
+        retArgs += "--season-end";
+        retArgs += cfg.seasonEndDate.toString("yyyy-MM-dd");
+    } else {
+        if (cfg.inputPrdsType & L3B) {
+            retArgs += "--l3b-products";
+            retArgs += cfg.l3bPrds;
+        }
+        if (cfg.inputPrdsType & L2_S1) {
+            retArgs += "--s1-products";
+            retArgs += cfg.s1Prds;
+        }
+    }
+
+    return retArgs;
+}
+
+
+QStringList GrasslandMowingHandler::GetMowingDetectionArgs(GrasslandMowingExecConfig &cfg, const InputProductsType &prdType,
+                                                           const QString &inputShpLocation, const QString &inputPrdsFile,
+                                                           const QString &outDataDir, const QString &outFile)
+{
+    QString keyScript("s2_py_script");
+    QString inputPrdsFilePrefix("--l3b-products-file");
+    if (prdType == L2_S1) {
+        keyScript = "s1_py_script";
+        inputPrdsFilePrefix = "--s1-products-file";
+    }
+
     const QString &scriptToInvoke = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
                                                                                  keyScript, L4B_GM_CFG_PREFIX);
     QString segParcelIdAttrName = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
@@ -416,8 +462,8 @@ QStringList GrasslandMowingHandler::GetMowingDetectionArgs(GrasslandMowingExecCo
     }
 
     QStringList retArgs = {
-                            "--script-path", scriptToInvoke,
-                            "--site-id", QString::number(cfg.siteId),
+                            /*"--script-path", */ scriptToInvoke,
+                            inputPrdsFilePrefix, inputPrdsFile,
                             "--config-file", cfg.l4bCfgFile,
                             "--input-shape-file", inputShpLocation,
                             "--output-data-dir", outDataDir,
@@ -429,15 +475,6 @@ QStringList GrasslandMowingHandler::GetMowingDetectionArgs(GrasslandMowingExecCo
                             "--test", "True"
                       };
 
-    if (cfg.isScheduled) {
-        retArgs += "--season-start";
-        retArgs += cfg.seasonStartDate.toString("yyyy-MM-dd");
-        retArgs += "--season-end";
-        retArgs += cfg.seasonEndDate.toString("yyyy-MM-dd");
-    } else {
-        retArgs += "--input-products-list";
-        retArgs += (prdType == L2_S1) ? cfg.s1Prds : cfg.l3bPrds;
-    }
     return retArgs;
 }
 
@@ -541,9 +578,10 @@ QString GrasslandMowingHandler::GetStringValue(const QSettings &settings, const 
 // ###################### GrasslandMowingExecConfig functions ############################
 InputProductsType GrasslandMowingExecConfig::GetInputProductsType(const QString &str)
 {
-    if (QString::compare(str, "S1", Qt::CaseInsensitive) == 0) {
+    const QString &trimmedStr = str.trimmed();
+    if (QString::compare(trimmedStr, "S1", Qt::CaseInsensitive) == 0) {
         return L2_S1;
-    } else if (QString::compare(str, "S2", Qt::CaseInsensitive) == 0) {
+    } else if (QString::compare(trimmedStr, "S2", Qt::CaseInsensitive) == 0) {
         return L3B;
     }
     return all;
