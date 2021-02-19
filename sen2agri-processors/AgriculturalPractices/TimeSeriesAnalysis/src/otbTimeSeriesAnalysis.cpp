@@ -777,7 +777,7 @@ private:
 
     double GetTLCohThrBase() {
         double CohThrBase = 0.05;
-        if (HasValue("cohthrbase")) {
+        if (HasValue("tlcohthrbase")) {
             CohThrBase = GetParameterFloat("tlcohthrbase");
         }
         return CohThrBase;

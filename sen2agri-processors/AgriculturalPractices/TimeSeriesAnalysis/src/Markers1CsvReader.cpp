@@ -176,7 +176,7 @@ bool Markers1CsvReader::ExtractHeaderInfos(const std::string &hdrLine, int year)
             stdDevColName = colInfo.fullColName;
             boost::replace_all(stdDevColName, "_mean", "_stdev");
             ptrdiff_t pos = std::distance(headerItems.begin(), std::find(headerItems.begin(), headerItems.end(), stdDevColName));
-            if(pos < m_header.size()) {
+            if(pos < (int)m_header.size()) {
                 // update both this column and the stdev column with the mapping indices
                 colInfo.stdDevMeanColMap.stdDevColIdx = pos;
                 m_header[pos].stdDevMeanColMap.meanColIdx = i;
@@ -320,7 +320,7 @@ bool Markers1CsvReader::ExtractInfosFromLine(const std::string &fileLine, const 
             continue;
         }
         if (colInfo.stdDevMeanColMap.meanColIdx == -1 || colInfo.stdDevMeanColMap.stdDevColIdx == -1 ||
-                colInfo.stdDevMeanColMap.stdDevColIdx >= lineElems.size()) {
+                colInfo.stdDevMeanColMap.stdDevColIdx >= (int)lineElems.size()) {
             // ignore columns that do not have both stddev and mean values as they are not usable
             continue;
         }
