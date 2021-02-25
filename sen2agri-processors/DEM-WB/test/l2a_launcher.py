@@ -1866,7 +1866,7 @@ class Maja(L2aProcessor):
         self.l2a_log("Valid L2a product = {}".format(l2a_ok))
 
         #post-processing
-        if l2a_ok and self.get_l2a_footprint():
+        if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
             print(
                 "\n(launcher info) <worker {}>: Footprint computed: {}".format(
                     self.context.worker_id, self.l2a.footprint)
