@@ -602,16 +602,15 @@ class L2aMaster(object):
                             db_prerun_update(unprocessed_tile, "Invalid site context.")
                             continue
 
-                        if tile_validity and site_context_valid:
-                            worker_id = sleeping_workers.pop()
-                            msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
-                            self.workers[worker_id].worker_q.put(msg_to_worker)
-                            self.in_processing.add(unprocessed_tile.downloader_history_id)
-                            print(
-                                "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
-                                    unprocessed_tile.downloader_history_id, worker_id
-                                )
+                        worker_id = sleeping_workers.pop()
+                        msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
+                        self.workers[worker_id].worker_q.put(msg_to_worker)
+                        self.in_processing.add(unprocessed_tile.downloader_history_id)
+                        print(
+                            "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
+                                unprocessed_tile.downloader_history_id, worker_id
                             )
+                        )
                     else:
                         break
 
@@ -774,11 +773,81 @@ class Tile(object):
         self.site_output_path = ""
 
     def is_valid(self):
+        if (self.downloader_history_id is None):
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for tile {} because downloader history id is incorrect".format(
+                    self.tile_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if (self.site_id is None):
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product {} because site id is incorrect".format(
+                    self.downloader_history_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if (self.satellite_id is None):
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product {} because satellite id is incorrect".format(
+                    self.downloader_history_id, 
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if (self.orbit_id is None):
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product {} because orbit id is incorrect".format(
+                    self.downloader_history_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if (self.tile_id is None) or (len(self.tile_id) == 0):
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product {} because tile id is incorrect".format(
+                    self.downloader_history_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
         if len(self.site_short_name) == 0:
             log(
                 LAUNCHER_LOG_DIR,
-                ": Aborting processing for tile {} because site short name {} is incorrect".format(
-                    self.tile_id, self.site_short_name
+                "Aborting processing for product {} because site short name is incorrect".format(
+                    self.downloader_history_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if not(os.path.exists(self.path)):
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product {} because the path does not exist".format(
+                    self.downloader_history_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if (self.previous_l2a_path is not None) and not(os.path.exists(self.previous_l2a_path)):
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product {} because the previous l2a path does not exist".format(
+                    self.downloader_history_id
                 ),
                 LAUNCHER_LOG_FILE_NAME,
             )
@@ -2481,9 +2550,8 @@ def db_prerun_update(tile, reason):
     downloader_history_id = tile.downloader_history_id
     tile_id = tile.tile_id
     should_retry = True
-    cloud_coverage = None
-    snow_coverage = None
-    site_id = tile.site_id
+    cloud_coverage = 0
+    snow_coverage = 0
 
     products_db.cursor.execute("set transaction isolation level serializable;")
     # updating l1_tile_history
