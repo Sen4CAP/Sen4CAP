@@ -40,7 +40,7 @@ import traceback
 from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 from psycopg2.sql import NULL
 from sen2agri_common_db import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, delete_file_if_match, get_footprint, run_command
+from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, delete_file_if_match, get_footprint, run_command, manage_log_file
 from fmask_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from fmask_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
 
@@ -847,11 +847,39 @@ class Tile(object):
         self.path = tile_info[3]
  
     def is_valid(self):
+        if self.downloader_history_id is None:
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product because the downloader_history_id is incorrect",
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+        
+        if self.site_id is None:
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product with downloaded history id {} because the site_id is incorrect".format(
+                    self.downloader_history_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if self.satellite_id is None:
+            log(
+                LAUNCHER_LOG_DIR,
+                "Aborting processing for product with downloaded history id {} because the satellite_id is incorrect".format(
+                    self.downloader_history_id
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
         if not os.path.exists(self.path):
             log(
                 LAUNCHER_LOG_DIR,
-                ": Aborting processing for product with downloaded history id {} because the path {} is incorrect".format(
-                    self.downloader_history_id, self.path
+                "Aborting processing for product with downloaded history id {} because the path is incorrect".format(
+                    self.downloader_history_id
                 ),
                 LAUNCHER_LOG_FILE_NAME,
             )
@@ -1349,6 +1377,7 @@ def db_prerun_update(tile, reason):
 parser = argparse.ArgumentParser(description="Launcher for FMASK script")
 parser.add_argument('-c', '--config', default="/etc/sen2agri/sen2agri.conf", help="configuration file")
 args = parser.parse_args()
+manage_log_file(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 
 # get the db configuration from cfg file
 products_db = Database()

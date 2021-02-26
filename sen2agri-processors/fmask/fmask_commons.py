@@ -34,16 +34,8 @@ import gdal
 DEBUG = False
 SENTINEL2_SATELLITE_ID = 1
 LANDSAT8_SATELLITE_ID = 2
-UNKNOWN_PROCESSOR_OUTPUT_FORMAT = 0
-MACCS_PROCESSOR_OUTPUT_FORMAT = 1
-THEIA_MUSCATE_OUTPUT_FORMAT = 2
-SEN2COR_PROCESSOR_OUTPUT_FORMAT = 3
-FILES_IN_LANDSAT_L1_PRODUCT = 13
-UNKNOWN_SATELLITE_ID = -1
 FMASK_LOG_DIR = "/tmp/"
 FMASK_LOG_FILE_NAME = "fmask.log"
-SEN2COR_LOG_DIR = "/tmp/"
-SEN2COR_LOG_FILE_NAME = "sen2cor.log"
 DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
 DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 2
 DATABASE_DOWNLOADER_STATUS_FAILED_VALUE = 3
@@ -52,9 +44,6 @@ DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE = 5
 DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE = 6
 MAX_LOG_FILE_SIZE = 419430400 #bytes -> 400 MB
 MAX_NUMBER_OF_KEPT_LOG_FILES = 4 #number of maximum logfiles to be kept
-
-
-default_gdal_image_name = "osgeo/gdal:ubuntu-small-3.1.2"
 
 ### OS related operations
 
@@ -71,6 +60,7 @@ def remove_dir_content(directory):
             return False
     return True
 
+#unused
 def manage_log_file(location, log_filename):
     try:
         log_file = os.path.join(location, log_filename)
@@ -164,19 +154,6 @@ def remove_dir(directory):
         except Exception as e:
             print("Can not remove directory {} due to: {}.".format(directory, e))
             return False
-    return True
-
-def copy_directory(src, dest):
-    try:
-        shutil.copytree(src, dest)
-    # Directories are the same
-    except shutil.Error as e:
-        print("Directory not copied. Error: {}".format(e))
-        return False
-    # Any error saying that the directory doesn't exist
-    except OSError as e:
-        print("Directory not copied. Error: {}".format(e))
-        return False
     return True
 
 def delete_file_if_match(fullFilePath, fileName, regex, fileType) :
