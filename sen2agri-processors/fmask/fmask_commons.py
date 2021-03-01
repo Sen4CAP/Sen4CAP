@@ -1,11 +1,10 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 _____________________________________________________________________________
 
    Program:      Sen2Agri-Processors
    Language:     Python
-   Copyright:    2015-2016, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -59,51 +58,6 @@ def remove_dir_content(directory):
             print(" Can NOT remove directory content {} due to: {}.".format(directory, e))
             return False
     return True
-
-#unused
-def manage_log_file(location, log_filename):
-    try:
-        log_file = os.path.join(location, log_filename)
-        if not os.path.isfile(log_file):
-            print("The logfile {} does not exist yet".format(log_file))
-            return
-        if os.stat(log_file).st_size >= MAX_LOG_FILE_SIZE:
-            print("Log file is bigger than {}".format(MAX_LOG_FILE_SIZE))
-            #take the  current datetime
-            new_log_file = "{}_{}".format(log_file, datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
-            #move the log file with the new name, with datetime at the end
-            print("Log file {} moved to {}".format(log_file, new_log_file))
-            shutil.move(log_file, new_log_file)
-            #check if there are other previous saved log files and delete the oldest one
-            previous_log_files = glob.glob("{}*.log_20*".format(location if location.endswith("/") else location + "/"))
-            while len(previous_log_files) > MAX_NUMBER_OF_KEPT_LOG_FILES:
-                oldest_idx = -1
-                idx = 0
-                oldest_datetime = datetime.datetime.strptime("40000101000001", "%Y%m%d%H%M%S")
-                for log_file in previous_log_files:
-                    underscore_idx = log_file.rfind('_')
-                    if underscore_idx > 0 and underscore_idx + 1 < len(log_file):
-                        str_log_datetime = log_file[underscore_idx + 1:len(log_file)]
-                        if len(str_log_datetime) != 14: #number of digits in the timestamp
-                            idx += 1
-                            continue
-                        log_datetime = datetime.datetime.strptime(str_log_datetime, "%Y%m%d%H%M%S")
-                        if log_datetime <= oldest_datetime:
-                            oldest_datetime = log_datetime
-                            oldest_idx = idx
-                    idx += 1
-                # remove the oldest file if found
-                print("oldest_datetime: {} | oldest_idx: {}" .format(oldest_datetime, oldest_idx))
-                if oldest_idx > -1:
-                    os.remove(previous_log_files[oldest_idx])
-                    print("Log file {} removed".format(previous_log_files[oldest_idx]))
-                else:
-                    break
-                #the main 'if'  can be replaced by 'while', and the following line should
-                #be uncommented. be aware though...it can lead to infinite loop (probably not, but never say never again
-                previous_log_files = glob.glob("{}*.log_20*".format(location if location.endswith("/") else location + "/"))
-    except Exception as e:
-        print("Error in manage_log_file: exception {} !".format(e))
 
 def log(location, info, log_filename = ""):    
     try:

@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen4Cap-Processors
    Language:     Python
-   Copyright:    2015-2020, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -499,62 +499,6 @@ class FmaskProcessor(object):
                 "Can NOT run Fmask script, error code: {}.".format(command_return)
             )
             return False
-
-    def postprocess(self):
-        #remove and compress sre/fre and transform to cog/compressed tiffs
-        for root, dirnames, filenames in os.walk(self.fmask.output_path):
-            for filename in filenames:
-                if filename.endswith((".TIF", ".tif")):
-                    tifFilePath = os.path.join(root, filename)
-                    print("Post-processing {}".format(filename))
-                    if self.context.removeSreFiles:
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*SRE.*\.DBL\.TIF", "SRE"
-                        )
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*_SRE_B.*\.tif", "SRE"
-                        )
-                    elif self.context.removeFreFiles:
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*FRE.*\.DBL\.TIF", "FRE"
-                        )
-                        delete_file_if_match(
-                            tifFilePath, filename, ".*_FRE_B.*\.tif", "FRE"
-                        )
-                    if self.context.compressTiffs or self.context.cogTiffs:
-                        optgtiffArgs = ""
-                        if self.context.compressTiffs:
-                            optgtiffArgs += " --compress"
-                            optgtiffArgs += " DEFLATE"
-                        else:
-                            optgtiffArgs += " --no-compress"
-
-                        if self.context.cogTiffs:
-                            isMask = re.match(r".*_((MSK)|(QLT))_*.\.DBL\.TIF", filename)
-                            if isMask is None:
-                                # check for Fmask mask rasters
-                                isMask = re.match(
-                                    r".*_(CLM|MG2|EDG|DFP)_.*\.tif", filename
-                                )
-                            if isMask is not None:
-                                optgtiffArgs += " --resampler"
-                                optgtiffArgs += " nearest"
-                            else:
-                                optgtiffArgs += " --resampler"
-                                optgtiffArgs += " average"
-                            optgtiffArgs += " --overviews"
-                            optgtiffArgs += " --tiled"
-                        else:
-                            optgtiffArgs += " --no-overviews"
-                            optgtiffArgs += " --strippped"
-                        optgtiffArgs += " "
-                        optgtiffArgs += tifFilePath
-                        print(
-                            "Running optimize_gtiff.py with params {}".format(
-                                optgtiffArgs
-                            )
-                        )
-                        os.system("optimize_gtiff.py" + optgtiffArgs)
 
     def manage_prods_status(
         self, preprocess_succesful, process_succesful, postprocess_succesful

@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen2Agri-Processors
    Language:     Python
-   Copyright:    2015-2016, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -240,7 +240,7 @@ out = fmask_launcher(fmask_context)
 if len(out) >=5:
     processed_tiles.append(out)
 
-exit_code = int(0)
+exit_code = 0
 if len(processed_tiles) == 0:
     log(general_log_path, "FMASK did not processed the L1C product {}".format(args.input), log_filename)
     exit_code = 1
