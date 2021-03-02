@@ -773,7 +773,7 @@ class Tile(object):
         self.site_output_path = ""
 
     def is_valid(self):
-        if (self.downloader_history_id is None):
+        if self.downloader_history_id is None:
             log(
                 LAUNCHER_LOG_DIR,
                 "Aborting processing for tile {} because downloader history id is incorrect".format(
@@ -783,7 +783,7 @@ class Tile(object):
             )
             return False
 
-        if (self.site_id is None):
+        if self.site_id is None:
             log(
                 LAUNCHER_LOG_DIR,
                 "Aborting processing for product {} because site id is incorrect".format(
@@ -793,7 +793,7 @@ class Tile(object):
             )
             return False
 
-        if (self.satellite_id is None):
+        if self.satellite_id is None:
             log(
                 LAUNCHER_LOG_DIR,
                 "Aborting processing for product {} because satellite id is incorrect".format(
@@ -803,7 +803,7 @@ class Tile(object):
             )
             return False
 
-        if (self.orbit_id is None):
+        if self.orbit_id is None:
             log(
                 LAUNCHER_LOG_DIR,
                 "Aborting processing for product {} because orbit id is incorrect".format(
@@ -833,7 +833,7 @@ class Tile(object):
             )
             return False
 
-        if not(os.path.exists(self.path)):
+        if not os.path.exists(self.path):
             log(
                 LAUNCHER_LOG_DIR,
                 "Aborting processing for product {} because the path does not exist".format(
@@ -2550,8 +2550,8 @@ def db_prerun_update(tile, reason):
     downloader_history_id = tile.downloader_history_id
     tile_id = tile.tile_id
     should_retry = True
-    cloud_coverage = 0
-    snow_coverage = 0
+    cloud_coverage = None
+    snow_coverage = None
 
     products_db.cursor.execute("set transaction isolation level serializable;")
     # updating l1_tile_history
