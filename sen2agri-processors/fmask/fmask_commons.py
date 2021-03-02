@@ -168,6 +168,17 @@ def get_footprint(image_filename):
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
 
+#math related operations
+def is_float(n):
+    is_number = True
+    try:
+        num = float(n)
+        # check for "nan" floats
+        is_number = num == num   # or use `math.isnan(num)`
+    except ValueError:
+        is_number = False
+    return is_number
+
 
 
 

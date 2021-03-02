@@ -38,9 +38,8 @@ import subprocess
 import signal
 import traceback
 from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
-from psycopg2.sql import NULL
 from sen2agri_common_db import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, delete_file_if_match, get_footprint, run_command, manage_log_file
+from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, is_float
 from fmask_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from fmask_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
 
@@ -56,6 +55,13 @@ DATABASE_FMASK_THRESHOLD_S2 = "processor.fmask.optical.threshold.s2"
 DATABASE_FMASK_THRESHOLD_L8 = "processor.fmask.optical.threshold.l8"
 DATABASE_FMASK_EXTRACTOR_IMAGE = "processor.fmask.extractor_image"
 DATABASE_FMASK_IMAGE = "processor.fmask.image"
+DATABASE_FMASK_CLOUD_DILATION = 'processor.fmask.optical.dilation.cloud'
+DATABASE_FMASK_CLOUD_SHADOW_DILATION = 'processor.fmask.optical.dilation.cloud-shadow'
+DATABASE_FMASK_SNOW_DILATION = 'processor.fmask.optical.dilation.snow'
+DATABASE_FMASK_COG_TIFFS = 'processor.fmask.optical.cog-tiffs'
+DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
+DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
+DEFAULT_GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.2.0"
 
 
 MAX_CLOUD_COVERAGE = 90.0
@@ -422,24 +428,15 @@ class FmaskProcessor(object):
         except Exception as e:
             self.update_rejection_reason(" Can NOT copy from output path {} to destination product path {} due to: {}".format(self.fmask.output_path, self.fmask.destination_path, e))
 
-    def get_fmask_footprint(self, output_path) :
-        footprint_file_pattern = "*_Fmask4.tif"
-        footprint_file_path = os.path.join(output_path,footprint_file_pattern)
-        footprint_files = glob.glob(footprint_file_path)
-        if len(footprint_files) > 0:
+    def get_fmask_footprint(self, footprint_file) :
+        try:
             wgs84_extent_list = []
-            wgs84_extent_list.append(get_footprint(footprint_files[0])[0])
+            wgs84_extent_list.append(get_footprint(footprint_file)[0])
             self.fmask.footprint = self.get_envelope(wgs84_extent_list)
-            return True
-        else:
-            self.update_rejection_reason(
-                "Can NOT create the footprint, no Fmask4 tif file exists."
-            )
-            self.fmask_log("Can NOT create the footprint, no Fmask4 tif file exists.")
-            return False
+        except Exception as e:
+            self.fmask_log("Exception encouted upon extracting the footprint: {}".format(e))
 
     def run_script(self):
-
         script_command = []
         #docker run
         script_command.append("docker")
@@ -472,10 +469,18 @@ class FmaskProcessor(object):
         script_command.append(str(self.lin.product_id))
         script_command.append("--image-name")
         script_command.append(self.context.fmask_image)
+        if self.context.cloud_dilation != '':
+            script_command.append("--cloud-dilation")
+            script_command.append(self.context.cloud_dilation)    
+        if self.context.cloud_shadow_dilation != '':
+            script_command.append("--cloud-shadow-dilation")
+            script_command.append(self.context.cloud_shadow_dilation)
+        if self.context.snow_dilation != '':
+            script_command.append("--snow-dilation")
+            script_command.append(self.context.snow_dilation) 
         if self.context.fmask_threshold != '':
             script_command.append("-t")
-            script_command.append(self.context.fmask_threshold)
-
+            script_command.append(self.context.fmask_threshold)  
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
   
@@ -501,12 +506,12 @@ class FmaskProcessor(object):
             return False
 
     def manage_prods_status(
-        self, preprocess_succesful, process_succesful, postprocess_succesful
+        self, preprocess_succesful, process_succesful, fmask_file_ok
     ):
         if (
             (preprocess_succesful == True)
             and (process_succesful == True)
-            and (postprocess_succesful == True)
+            and (fmask_file_ok == True)
         ):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
             self.move_to_destination()
@@ -514,10 +519,60 @@ class FmaskProcessor(object):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
             self.lin.should_retry = False #TBD
 
+    def translate(self, fmask_file):
+        try:
+            cmd = []
+            #docker run
+            cmd.append("docker")
+            cmd.append("run")
+            cmd.append("--rm")
+            cmd.append("-u")
+            cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+            cmd.append("-v")
+            cmd.append("{}:{}".format(os.path.abspath(self.fmask.output_path), os.path.abspath(self.fmask.output_path)))
+            cmd.append("--name")
+            cmd.append("gdal_{}".format(self.fmask.product_id))
+            cmd.append(self.context.gdal_image)
+
+            # gdal command
+            cmd.append("gdal_translate")
+            if self.context.cog_tiffs:
+                cmd.append("-f")
+                cmd.append("COG")
+                cmd.append("-co")
+                cmd.append("NUM_THREADS=ALL_CPUS")
+            if self.context.compress_tiffs:
+                cmd.append("-co")
+                cmd.append("COMPRESS=DEFLATE")
+            cmd.append("-co")
+            cmd.append("PREDICTOR=2")
+            cmd.append(fmask_file)
+            fmask_file_tmp = fmask_file[:-4] + "_tmp.tif"
+            cmd.append(fmask_file_tmp)
+
+            fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
+            fmask_log_file = open(fmask_log_path, "a")
+            command_string =""
+            for argument in cmd:
+                command_string = command_string + " " + str(argument)
+            self.fmask_log("Running command: {}".format(command_string))
+            print("Running Fmask, console output can be found at {}".format(fmask_log_path))
+            command_return = subprocess.call(cmd, stdout = fmask_log_file, stderr = fmask_log_file)
+
+            if (command_return == 0) and os.path.isfile(fmask_file_tmp):
+                #to do de sters imaginea veche
+                pass
+            else:
+                self.fmask_log(
+                    "Can NOT run translate Fmask , error code: {}.".format(command_return)
+                )
+        except Exception as e:
+            self.fmask_log("Exception ecounter upon translating fmask image: {}".format(e))
+
     def run(self):
         preprocess_succesful = False
         process_succesful = False
-        postprocess_succesful = False
+        fmask_file_ok = False
 
         # pre-processing
         if self.check_lin() and self.fmask_setup():
@@ -539,18 +594,27 @@ class FmaskProcessor(object):
         )
         self.fmask_log("Successful processing = {}".format(process_succesful))
 
-        # postprocessing
-        if self.get_fmask_footprint(self.fmask.output_path):
-            postprocess_succesful = True
-        print(
-            "\n(launcher info) <worker {}>: Successful post-processing = {}".format(
-                self.context.worker_id, postprocess_succesful
+        #checking the presence of fmask file
+        fmask_file_pattern = "*_Fmask4.tif"
+        fmask_file_path = os.path.join(self.fmask.output_path, fmask_file_pattern)
+        fmask_files = glob.glob(fmask_file_path)
+        if len(fmask_files) == 1:
+            #postprocessing
+            self.get_fmask_footprint(fmask_files[0])
+            if self.context.cog_tiffs or self.context.compress_tiffs:
+                self.translate(fmask_files[0])
+            fmask_file_ok = True
+        else:
+            self.launcher_log(
+                "Exception when locating Fmask4.tif file in: {} ".format(self.fmask.output_path)
             )
-        )
-        self.fmask_log("Successful post-processing = {}".format(postprocess_succesful))
+            self.update_rejection_reason(
+                "Exception when locating Fmask4.tif file in: {} ".format(self.fmask.output_path)
+            )
+            fmask_file_ok = False
 
         self.manage_prods_status(
-            preprocess_succesful, process_succesful, postprocess_succesful
+            preprocess_succesful, process_succesful, fmask_file_ok
         )
         return self.lin, self.fmask
 
@@ -570,6 +634,12 @@ class FMaskContext(object):
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.fmask_extractor_image = site_context.fmask_extractor_image
         self.fmask_image = site_context.fmask_image
+        self.gdal_image = site_context.fmask_gdal_image
+        self.cloud_dilation = site_context.fmask_cloud_dilation
+        self.cloud_shadow_dilation = site_context.fmask_cloud_shadow_dilation
+        self.snow_dilation = site_context.fmask_snow_dilation
+        self.cog_tiffs = site_context.fmask_cog_tiffs
+        self.compress_tiffs = site_context.fmask_compress_tiffs
 
 class FMaskMaster(object):
     def __init__(self, num_workers):
@@ -599,7 +669,7 @@ class FMaskMaster(object):
         containers = []
         cmd.append("docker")
         cmd.append("stop")
-        container_types = ["fmask", "fmask_extractor"]
+        container_types = ["fmask", "fmask_extractor", "gdal"]
         for product_id in self.in_processing:
             for container_type in container_types:
                 containers.append("{}_{}".format(container_type, product_id))
@@ -842,6 +912,13 @@ class SiteContext(object):
         self.fmask_threshold_l8 = ''
         self.fmask_extractor_image = ''
         self.fmask_image = ''
+        self.fmask_gdal_image = ''
+        self.fmask_cloud_dilation = ''
+        self.fmask_cloud_shadow_dilation = ''
+        self.fmask_snow_dilation = ''
+        self.fmask_compress_tiffs = ''
+        self.fmask_cog_tiffs = ''
+        
 
     def get_site_info(self):
         self.site_short_name = db_get_site_short_name(self.site_id)
@@ -879,6 +956,84 @@ class SiteContext(object):
             )
             return False
 
+        if len(self.fmask_image) == 0:
+            print(
+                "(launcher error) <master>: Invalid processing context fmask_image"
+            )
+            log(
+                LAUNCHER_LOG_DIR,
+                "(launcher error) <master>: Invalid processing context fmask_image",
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False    
+        
+        if len(self.fmask_extractor_image) == 0:
+            print(
+                "(launcher error) <master>: Invalid processing context fmask_extractor_image"
+            )
+            log(
+                LAUNCHER_LOG_DIR,
+                "(launcher error) <master>: Invalid processing context fmask_extractor_image.",
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False   
+
+        if len(self.fmask_gdal_image) == 0:
+            print(
+                "(launcher error) <master>: Invalid processing context fmask_gdal_image"
+            )
+            log(
+                LAUNCHER_LOG_DIR,
+                "(launcher error) <master>: Invalid processing context fmask_gdal_image.",
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False
+
+        if not(is_float(self.fmask_threshold)) or (float(self.fmask_threshold) > 100) or (float(self.fmask_threshold) > 100):
+            print(
+                "(launcher error) <master>: Invalid processing context fmask_threshold: {}".format(
+                    self.fmask_threshold
+                )
+            )
+            log(
+                LAUNCHER_LOG_DIR,
+                "(launcher error) <master>: Invalid processing context fmask_threshold: {}.".format(
+                    self.fmask_threshold
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False  
+
+        if not(is_float(self.fmask_threshold_s2)) or (float(self.fmask_threshold_s2) > 100) or (float(self.fmask_threshold_s2) > 100):
+            print(
+                "(launcher error) <master>: Invalid processing context fmask_threshold_s2: {}".format(
+                    self.fmask_threshold_s2
+                )
+            )
+            log(
+                LAUNCHER_LOG_DIR,
+                "(launcher error) <master>: Invalid processing context fmask_threshold_s2: {}.".format(
+                    self.fmask_threshold_s2
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False    
+
+        if not(is_float(self.fmask_threshold_l8)) or (float(self.fmask_threshold_l8) > 100) or (float(self.fmask_threshold_l8) > 100):
+            print(
+                "(launcher error) <master>: Invalid processing context fmask_threshold_l8: {}".format(
+                    self.fmask_threshold_l8
+                )
+            )
+            log(
+                LAUNCHER_LOG_DIR,
+                "(launcher error) <master>: Invalid processing context fmask_threshold_l8: {}.".format(
+                    self.fmask_threshold_l8
+                ),
+                LAUNCHER_LOG_FILE_NAME,
+            )
+            return False       
+
         return True
 
 class ProcessingContext(object):
@@ -892,6 +1047,12 @@ class ProcessingContext(object):
         self.fmask_threshold_l8 = {"default": ''}
         self.fmask_extractor_image = {"default": ''}
         self.fmask_image = {"default": ''}
+        self.fmask_cloud_dilation = {"default": ''}
+        self.fmask_cloud_shadow_dilation = {"default": ''}
+        self.fmask_snow_dilation = {"default": ''}
+        self.fmask_cog_tiffs = {"default": ''}
+        self.fmask_compress_tiffs = {"default":''}
+        self.fmask_gdal_image = {"default":''}
 
     def get_site_context(self, site_id):
         site_context = SiteContext()
@@ -926,6 +1087,30 @@ class ProcessingContext(object):
             site_context.fmask_image = self.fmask_image[site_id]
         else:
             site_context.fmask_image= self.fmask_image["default"]
+        if site_id in self.fmask_cloud_dilation :
+            site_context.fmask_cloud_dilation = self.fmask_cloud_dilation[site_id]
+        else:
+            site_context.fmask_cloud_dilation= self.fmask_cloud_dilation["default"]
+        if site_id in self.fmask_cloud_shadow_dilation :
+            site_context.fmask_cloud_shadow_dilation = self.fmask_cloud_shadow_dilation[site_id]
+        else:
+            site_context.fmask_cloud_shadow_dilation= self.fmask_cloud_shadow_dilation["default"]
+        if site_id in self.fmask_snow_dilation :
+            site_context.fmask_snow_dilation = self.fmask_snow_dilation[site_id]
+        else:
+            site_context.fmask_snow_dilation= self.fmask_snow_dilation["default"]
+        if site_id in self.fmask_cog_tiffs:
+            site_context.fmask_cog_tiggs = self.fmask_cog_tiffs[site_id]
+        else:
+            site_context.fmask_cog_tiffs = self.fmask_cog_tiffs["default"]
+        if site_id in self.fmask_compress_tiffs:
+            site_context.fmask_compress_tiffs = self.fmask_compress_tiffs[site_id]
+        else:
+            site_context.fmask_compress_tiffs = self.fmask_compress_tiffs["default"]
+        if site_id in self.fmask_gdal_image:
+            site_context.fmask_gdal_image = self.fmask_gdal_image[site_id]
+        else:
+            site_context.fmask_gdal_image = self.fmask_gdal_image["default"]
         
 
         return site_context
@@ -972,16 +1157,37 @@ class ProcessingContext(object):
                     self.fmask_image[site] = value
                 else:
                     self.fmask_image["default"] = value
-            
+            elif  parameter == DATABASE_FMASK_CLOUD_DILATION:
+                if site is not None:
+                    self.fmask_cloud_dilation[site] = value
+                else:
+                    self.fmask_cloud_dilation["default"] = value
+            elif  parameter == DATABASE_FMASK_CLOUD_SHADOW_DILATION:
+                if site is not None:
+                    self.fmask_cloud_shadow_dilation[site] = value
+                else:
+                    self.fmask_cloud_shadow_dilation["default"] = value
+            elif  parameter == DATABASE_FMASK_SNOW_DILATION :
+                if site is not None:
+                    self.fmask_snow_dilation[site] = value
+                else:
+                    self.fmask_snow_dilation["default"] = value
+            elif  parameter == DATABASE_FMASK_COG_TIFFS:
+                if site is not None:
+                    self.fmask_cog_tiffs[site] = value
+                else:
+                    self.fmask_cog_tiffs["default"] = value
+            elif  parameter == DATABASE_FMASK_COMPRESS_TIFFS:
+                if site is not None:
+                    self.fmask_compress_tiffs[site] = value
+                else:
+                    self.fmask_compress_tiffs["default"] = value
+            elif  parameter == DATABASE_FMASK_GDAL_IMAGE:
+                if site is not None:
+                    self.fmask_gdal_image[site] = value
+                else:
+                    self.fmask_gdal_image["default"] = value
 
-class FMaskConfig(object):
-    def __init__(self, output_path, working_dir):
-        self.output_path = output_path
-        self.working_dir = working_dir
-        
-        print("Fmask Using configuration:")
-        print("\tOutput path: {}".format(output_path))
-        print("\tWorking_dir: {}".format(working_dir))
 
 class Database(object):
     def __init__(self, log_file=None):
@@ -1321,7 +1527,6 @@ def db_prerun_update(tile, reason):
 parser = argparse.ArgumentParser(description="Launcher for FMASK script")
 parser.add_argument('-c', '--config', default="/etc/sen2agri/sen2agri.conf", help="configuration file")
 args = parser.parse_args()
-manage_log_file(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 
 # get the db configuration from cfg file
 products_db = Database()

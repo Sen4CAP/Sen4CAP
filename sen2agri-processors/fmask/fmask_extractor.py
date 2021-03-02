@@ -87,12 +87,11 @@ def remove_sym_links(filenames, target_directory):
             continue
     return True
 
-class DEMMACCSContext(object):
-    def __init__(self, base_working_dir, l1c_input, l2a_output, threshold):
+class FMaskContext(object):
+    def __init__(self, base_working_dir, l1c_input, l2a_output):
         self.base_working_dir = base_working_dir
         self.input = l1c_input
         self.output = l2a_output
-        self.threshold = threshold
 
 def fmask_launcher(fmask_context):
     product_name = os.path.basename(fmask_context.input[:len(fmask_context.input) - 1]) if fmask_context.input.endswith("/") else os.path.basename(fmask_context.input)
@@ -152,8 +151,22 @@ def fmask_launcher(fmask_context):
             cmd_array.append("--name")
             cmd_array.append("fmask_{}".format(args.product_id))
         cmd_array.append(args.image_name)
-        if fmask_context.threshold != '' and int(fmask_context.threshold) >= 0 and int(fmask_context.threshold) <= 100: 
-            cmd_array.extend([ "3", "3", "0", fmask_context.threshold ])
+        if args.cloud_dilation:
+            cmd_array.append(args.cloud_dilation)
+        else:
+            cmd_array.append("3")
+        if args.cloud_shadow_dilation:
+            cmd_array.append(args.cloud_shadow_dilation)
+        else:
+            cmd_array.append("3")
+        if args.snow_dilation:
+            cmd_array.append(args.snow_dilation)
+        else:
+            cmd_array.append("0")
+        if args.threshold: 
+            cmd_array.append(args.threshold)
+
+
             
     log(fmask_context.output, "Starting FMask in {}".format(fmask_context.input), tile_log_filename)
     log(fmask_context.output, "FMask: {}".format(cmd_array), tile_log_filename)
@@ -209,6 +222,12 @@ parser.add_argument('--product-id', required=False,
                     help = "Downloader history id of the input product.")
 parser.add_argument('--image-name', required=False, default = DEFAULT_FMASK_IMAGE_NAME,
                     help = "The name of the fmask docker image.")
+parser.add_argument('--cloud-dilation', required = False, default = 3,
+                    help = "Number of dilated pixels for cloud")
+parser.add_argument('--cloud-shadow-dilation', required = False, default = 3,
+                    help = "Number of dilated pixels for cloud shadow")
+parser.add_argument('--snow-dilation', required = False, default = 0,
+                    help = "Number of dilated pixels for snow")
 
 args = parser.parse_args()
 
@@ -232,8 +251,8 @@ start = time.time()
 base_abs_path = os.path.dirname(os.path.abspath(__file__)) + "/"
 product_name = os.path.basename(args.input[:len(args.input) - 1]) if args.input.endswith("/") else os.path.basename(args.input)
 
-print("Creating demmaccs contexts with: input: {} | output {}".format(args.input, args.output))
-fmask_context = DEMMACCSContext(working_dir, args.input, args.output, args.threshold)
+print("Creating fmask contexts with: input: {} | output {}".format(args.input, args.output))
+fmask_context = FMaskContext(working_dir, args.input, args.output)
 
 processed_tiles = [] 
 out = fmask_launcher(fmask_context)
