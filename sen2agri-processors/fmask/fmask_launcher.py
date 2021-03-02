@@ -61,11 +61,6 @@ DATABASE_FMASK_SNOW_DILATION = 'processor.fmask.optical.dilation.snow'
 DATABASE_FMASK_COG_TIFFS = 'processor.fmask.optical.cog-tiffs'
 DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
 DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
-DEFAULT_GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.2.0"
-
-
-MAX_CLOUD_COVERAGE = 90.0
-
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -478,9 +473,8 @@ class FmaskProcessor(object):
         if self.context.snow_dilation != '':
             script_command.append("--snow-dilation")
             script_command.append(self.context.snow_dilation) 
-        if self.context.fmask_threshold != '':
-            script_command.append("-t")
-            script_command.append(self.context.fmask_threshold)  
+        script_command.append("-t")
+        script_command.append(self.context.fmask_threshold)  
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
   
@@ -496,7 +490,7 @@ class FmaskProcessor(object):
         if (command_return == 0) and os.path.isdir(self.fmask.output_path):
             return True
         else:
-            self.lin.should_retry = False #TBD
+            self.lin.should_retry = False
             self.update_rejection_reason(
                 "Can NOT run Fmask script, error code: {}.".format(command_return)
             )
@@ -506,11 +500,11 @@ class FmaskProcessor(object):
             return False
 
     def manage_prods_status(
-        self, preprocess_succesful, process_succesful, fmask_file_ok
+        self, preprocess_successful, process_successful, fmask_file_ok
     ):
         if (
-            (preprocess_succesful == True)
-            and (process_succesful == True)
+            (preprocess_successful == True)
+            and (process_successful == True)
             and (fmask_file_ok == True)
         ):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
@@ -560,8 +554,8 @@ class FmaskProcessor(object):
             command_return = subprocess.call(cmd, stdout = fmask_log_file, stderr = fmask_log_file)
 
             if (command_return == 0) and os.path.isfile(fmask_file_tmp):
-                #to do de sters imaginea veche
-                pass
+                os.remove(fmask_file)
+                os.rename(fmask_file_tmp, fmask_file)
             else:
                 self.fmask_log(
                     "Can NOT run translate Fmask , error code: {}.".format(command_return)
@@ -570,29 +564,29 @@ class FmaskProcessor(object):
             self.fmask_log("Exception ecounter upon translating fmask image: {}".format(e))
 
     def run(self):
-        preprocess_succesful = False
-        process_succesful = False
+        preprocess_successful = False
+        process_successful = False
         fmask_file_ok = False
 
         # pre-processing
         if self.check_lin() and self.fmask_setup():
-            preprocess_succesful = True
+            preprocess_successful = True
         print(
             "\n(launcher info) <worker {}>: Successful pre-processing = {}".format(
-                self.context.worker_id, preprocess_succesful
+                self.context.worker_id, preprocess_successful
             )
         )
-        self.fmask_log("Successful pre-processing = {}".format(preprocess_succesful))
+        self.fmask_log("Successful pre-processing = {}".format(preprocess_successful))
 
         # processing
-        if preprocess_succesful:
-            process_succesful = self.run_script()
+        if preprocess_successful:
+            process_successful = self.run_script()
         print(
             "\n(launcher info) <worker {}>: Successful processing = {}".format(
-                self.context.worker_id, process_succesful
+                self.context.worker_id, process_successful
             )
         )
-        self.fmask_log("Successful processing = {}".format(process_succesful))
+        self.fmask_log("Successful processing = {}".format(process_successful))
 
         #checking the presence of fmask file
         fmask_file_pattern = "*_Fmask4.tif"
@@ -614,7 +608,7 @@ class FmaskProcessor(object):
             fmask_file_ok = False
 
         self.manage_prods_status(
-            preprocess_succesful, process_succesful, fmask_file_ok
+            preprocess_successful, process_successful, fmask_file_ok
         )
         return self.lin, self.fmask
 
