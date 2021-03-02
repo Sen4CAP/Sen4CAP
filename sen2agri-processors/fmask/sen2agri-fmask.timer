@@ -1,0 +1,10 @@
+[Unit]
+Description=FMask runner
+
+[Timer]
+Unit=sen2agri-fmask.service
+OnCalendar=minutely
+Persistent=true
+
+[Install]
+WantedBy=timers.target
