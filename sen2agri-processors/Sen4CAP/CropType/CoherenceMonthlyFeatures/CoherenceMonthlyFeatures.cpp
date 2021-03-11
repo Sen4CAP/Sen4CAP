@@ -210,7 +210,7 @@ CoherenceMonthlyFeaturesFilter<TInputImageType, TOutputImageType>
     for (auto &it : inputIts)
       {
       auto inPix = it.Get();
-      if ((!m_UseNoDataValue || inPix != m_NoDataValue) && !std::isnan(inPix))
+      if ((!m_UseNoDataValue || inPix != m_NoDataValue) && inPix > 0)
         {
         sum += inPix;
         values.push_back(inPix);
