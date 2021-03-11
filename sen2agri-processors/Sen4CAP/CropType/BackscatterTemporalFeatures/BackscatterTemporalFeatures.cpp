@@ -190,7 +190,7 @@ BackscatterTemporalFeaturesFilter<TInputImageType, TOutputImageType>
     for (auto &it : inputIts)
       {
       auto inPix = it.Get();
-      if ((!m_UseNoDataValue || inPix != m_NoDataValue) && !std::isnan(inPix))
+      if ((!m_UseNoDataValue || inPix != m_NoDataValue) && inPix > 0)
         {
         sum += inPix;
         sqSum += inPix * inPix;
@@ -199,7 +199,7 @@ BackscatterTemporalFeaturesFilter<TInputImageType, TOutputImageType>
       ++it;
       }
 
-    if (count > 0 && sum > 0)
+    if (count > 0)
       {
       mean = sum / count;
       if (mean > 0)
