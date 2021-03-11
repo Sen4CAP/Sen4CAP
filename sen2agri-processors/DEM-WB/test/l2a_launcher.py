@@ -41,7 +41,7 @@ import grp
 import shutil
 import subprocess
 import signal
-from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, manage_log_file, remove_dir_content, run_command
+from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
 from l2a_commons import DEBUG, MAJA_LOG_DIR, MAJA_LOG_FILE_NAME, SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME
@@ -2628,19 +2628,16 @@ parser.add_argument(
 args = parser.parse_args()
 
 #Create and manage log files
-manage_log_file(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 sen2corlog_path = os.path.join(SEN2COR_LOG_DIR,SEN2COR_LOG_FILE_NAME)
 if os.path.isfile(sen2corlog_path) == False:
     with open(sen2corlog_path, "w") as log_file:
         log_file.write("#### Creation of sen2cor log file ####")
-else:
-    manage_log_file(SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME)
+
 majalog_path = os.path.join(MAJA_LOG_DIR,MAJA_LOG_FILE_NAME)
 if os.path.isfile(majalog_path) == False:
     with open(majalog_path, "w") as log_file:
         log_file.write("#### Creation of maja log file ####")
-else:
-    manage_log_file(MAJA_LOG_DIR, MAJA_LOG_FILE_NAME)
+
 
 # get the db configuration from cfg file
 products_db = Database()

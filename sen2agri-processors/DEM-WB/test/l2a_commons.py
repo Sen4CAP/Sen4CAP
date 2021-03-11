@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen2Agri-Processors
    Language:     Python
-   Copyright:    2015-2016, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -20,7 +20,6 @@ _____________________________________________________________________________
 from __future__ import print_function
 from __future__ import with_statement
 from __future__ import absolute_import
-import errno
 import subprocess
 import os
 import sys
@@ -28,7 +27,6 @@ import time, datetime
 import pipes
 import shutil
 import osr
-import glob
 import gdal
 
 DEBUG = True
@@ -44,14 +42,14 @@ MAJA_LOG_DIR = "/tmp/"
 MAJA_LOG_FILE_NAME = "maja.log"
 SEN2COR_LOG_DIR = "/tmp/"
 SEN2COR_LOG_FILE_NAME = "sen2cor.log"
+FMASK_LOG_DIR = "/tmp/"
+FMASK_LOG_FILE_NAME = "fmask.log"
 DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
 DATABASE_DOWNLOADER_STATUS_DOWNLOADED_VALUE = 2
 DATABASE_DOWNLOADER_STATUS_FAILED_VALUE = 3
 DATABASE_DOWNLOADER_STATUS_ABORTED_VALUE = 4
 DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE = 5
 DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE = 6
-MAX_LOG_FILE_SIZE = 419430400 #bytes -> 400 MB
-MAX_NUMBER_OF_KEPT_LOG_FILES = 4 #number of maximum logfiles to be kept
 
 ### OS related operations
 
@@ -68,49 +66,6 @@ def remove_dir_content(directory):
             return False
     return True
 
-def manage_log_file(location, log_filename):
-    try:
-        log_file = os.path.join(location, log_filename)
-        if not os.path.isfile(log_file):
-            print("The logfile {} does not exist yet".format(log_file))
-            return
-        if os.stat(log_file).st_size >= MAX_LOG_FILE_SIZE:
-            print("Log file is bigger than {}".format(MAX_LOG_FILE_SIZE))
-            #take the  current datetime
-            new_log_file = "{}_{}".format(log_file, datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
-            #move the log file with the new name, with datetime at the end
-            print("Log file {} moved to {}".format(log_file, new_log_file))
-            shutil.move(log_file, new_log_file)
-            #check if there are other previous saved log files and delete the oldest one
-            previous_log_files = glob.glob("{}*.log_20*".format(location if location.endswith("/") else location + "/"))
-            while len(previous_log_files) > MAX_NUMBER_OF_KEPT_LOG_FILES:
-                oldest_idx = -1
-                idx = 0
-                oldest_datetime = datetime.datetime.strptime("40000101000001", "%Y%m%d%H%M%S")
-                for log_file in previous_log_files:
-                    underscore_idx = log_file.rfind('_')
-                    if underscore_idx > 0 and underscore_idx + 1 < len(log_file):
-                        str_log_datetime = log_file[underscore_idx + 1:len(log_file)]
-                        if len(str_log_datetime) != 14: #number of digits in the timestamp
-                            idx += 1
-                            continue
-                        log_datetime = datetime.datetime.strptime(str_log_datetime, "%Y%m%d%H%M%S")
-                        if log_datetime <= oldest_datetime:
-                            oldest_datetime = log_datetime
-                            oldest_idx = idx
-                    idx += 1
-                # remove the oldest file if found
-                print("oldest_datetime: {} | oldest_idx: {}" .format(oldest_datetime, oldest_idx))
-                if oldest_idx > -1:
-                    os.remove(previous_log_files[oldest_idx])
-                    print("Log file {} removed".format(previous_log_files[oldest_idx]))
-                else:
-                    break
-                #the main 'if'  can be replaced by 'while', and the following line should
-                #be uncommented. be aware though...it can lead to infinite loop (probably not, but never say never again
-                previous_log_files = glob.glob("{}*.log_20*".format(location if location.endswith("/") else location + "/"))
-    except Exception as e:
-        print("Error in manage_log_file: exception {} !".format(e))
 
 def log(location, info, log_filename = ""):
     try:
@@ -146,16 +101,9 @@ def run_command(cmd_array, log_path = "", log_filename = "", fake_command = Fals
 
 
 def create_recursive_dirs(dir_name):
-    # FIXME: just use makedirs(exist_ok=True) in Python 3
     if not os.path.exists(dir_name):
         try:
             os.makedirs(dir_name)
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
-                return False
-            else:
-                return True
         except Exception as e:
             print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
             return False
@@ -189,13 +137,6 @@ def copy_directory(src, dest):
 ### IMG related operations
 
 def ReprojectCoords(coords, src_srs, tgt_srs):
-    #trans_coords = []
-    #transform = osr.CoordinateTransformation(src_srs, tgt_srs)
-    #for x, y in coords:
-    #    x, y, z = transform.TransformPoint(x, y)
-    #    trans_coords.append([x, y])
-    #return trans_coords
-
     trans_coords = []
     transform = osr.CoordinateTransformation(src_srs, tgt_srs)
     for x, y in coords:

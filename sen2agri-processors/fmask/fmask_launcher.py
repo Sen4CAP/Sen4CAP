@@ -39,9 +39,9 @@ import signal
 import traceback
 from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 from sen2agri_common_db import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, is_float
-from fmask_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-from fmask_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
+from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command
+from l2a_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
+from l2a_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
 
 ARCHIVES_DIR_NAME = "archives"
 LAUNCHER_LOG_DIR = "/tmp/"
@@ -61,6 +61,16 @@ DATABASE_FMASK_SNOW_DILATION = 'processor.fmask.optical.dilation.snow'
 DATABASE_FMASK_COG_TIFFS = 'processor.fmask.optical.cog-tiffs'
 DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
 DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
+
+def is_float(n):
+    is_number = True
+    try:
+        num = float(n)
+        # check for "nan" floats
+        is_number = num == num   # or use `math.isnan(num)`
+    except ValueError:
+        is_number = False
+    return is_number
 
 class L1CProduct(object):
     def __init__(self, tile):

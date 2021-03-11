@@ -24,7 +24,7 @@ import sys
 import time, datetime
 import shutil
 import tempfile
-from fmask_commons import log, run_command, create_recursive_dirs, remove_dir
+from l2a_commons import log, run_command, create_recursive_dirs, remove_dir
 
 DEFAULT_FMASK_IMAGE_NAME = "fmask"
 

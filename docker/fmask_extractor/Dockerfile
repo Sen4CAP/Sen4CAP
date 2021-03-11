@@ -31,5 +31,5 @@ RUN apt-get clean
 
 WORKDIR /usr/share/fmask
 COPY fmask_extractor.py ./
-COPY fmask_commons.py ./
-RUN chmod 755 fmask_extractor.py fmask_commons.py
+COPY l2a_commons.py ./
+RUN chmod 755 fmask_extractor.py l2a_commons.py

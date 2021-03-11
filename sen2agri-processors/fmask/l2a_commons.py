@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 _____________________________________________________________________________
@@ -26,23 +27,29 @@ import time, datetime
 import pipes
 import shutil
 import osr
-import re
-import glob
 import gdal
 
-DEBUG = False
+DEBUG = True
 SENTINEL2_SATELLITE_ID = 1
 LANDSAT8_SATELLITE_ID = 2
+UNKNOWN_PROCESSOR_OUTPUT_FORMAT = 0
+MACCS_PROCESSOR_OUTPUT_FORMAT = 1
+THEIA_MUSCATE_OUTPUT_FORMAT = 2
+SEN2COR_PROCESSOR_OUTPUT_FORMAT = 3
+FILES_IN_LANDSAT_L1_PRODUCT = 13
+UNKNOWN_SATELLITE_ID = -1
+MAJA_LOG_DIR = "/tmp/"
+MAJA_LOG_FILE_NAME = "maja.log"
+SEN2COR_LOG_DIR = "/tmp/"
+SEN2COR_LOG_FILE_NAME = "sen2cor.log"
 FMASK_LOG_DIR = "/tmp/"
 FMASK_LOG_FILE_NAME = "fmask.log"
 DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
-DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 2
+DATABASE_DOWNLOADER_STATUS_DOWNLOADED_VALUE = 2
 DATABASE_DOWNLOADER_STATUS_FAILED_VALUE = 3
 DATABASE_DOWNLOADER_STATUS_ABORTED_VALUE = 4
 DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE = 5
 DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE = 6
-MAX_LOG_FILE_SIZE = 419430400 #bytes -> 400 MB
-MAX_NUMBER_OF_KEPT_LOG_FILES = 4 #number of maximum logfiles to be kept
 
 ### OS related operations
 
@@ -52,20 +59,21 @@ def remove_dir_content(directory):
         try:
             if os.path.isfile(content_path):
                 os.unlink(content_path)
-            elif os.path.isdir(content_path): 
+            elif os.path.isdir(content_path):
                 shutil.rmtree(content_path)
         except Exception as e:
             print(" Can NOT remove directory content {} due to: {}.".format(directory, e))
             return False
     return True
 
-def log(location, info, log_filename = ""):    
+
+def log(location, info, log_filename = ""):
     try:
         if DEBUG:
             print("{}:[{}]:{}".format(str(datetime.datetime.now()), os.getpid(), str(info)))
             sys.stdout.flush()
-        if len(location) > 0 and len(log_filename) > 0: 
-            log_path = os.path.join(location, log_filename)   
+        if len(location) > 0 and len(log_filename) > 0:
+            log_path = os.path.join(location, log_filename)
             log = open(log_path, 'a')
             log.write("{}:[{}]:{}\n".format(str(datetime.datetime.now()), os.getpid(), str(info)))
             log.close()
@@ -91,6 +99,7 @@ def run_command(cmd_array, log_path = "", log_filename = "", fake_command = Fals
     log(log_path, "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str), log_filename)
     return res
 
+
 def create_recursive_dirs(dir_name):
     if not os.path.exists(dir_name):
         try:
@@ -101,31 +110,33 @@ def create_recursive_dirs(dir_name):
 
     return True
 
+
 def remove_dir(directory):
-    if os.path.isdir(directory):
-        try:
-            shutil.rmtree(directory)
-        except Exception as e:
-            print("Can not remove directory {} due to: {}.".format(directory, e))
-            return False
+    try:
+        shutil.rmtree(directory)
+    except Exception as e:
+        print("Can not remove directory {} due to: {}.".format(directory, e))
+        return False
     return True
 
-def delete_file_if_match(fullFilePath, fileName, regex, fileType) :
-    isMatch = re.match(regex, fileName)
-    if isMatch is not None:
-        print("Deleting {} file {}".format(fileType, fullFilePath))
-        os.remove(fullFilePath)
+
+def copy_directory(src, dest):
+    try:
+        shutil.copytree(src, dest)
+    # Directories are the same
+    except shutil.Error as e:
+        print("Directory not copied. Error: {}".format(e))
+        return False
+    # Any error saying that the directory doesn't exist
+    except OSError as e:
+        print("Directory not copied. Error: {}".format(e))
+        return False
+    return True
+
 
 ### IMG related operations
 
 def ReprojectCoords(coords, src_srs, tgt_srs):
-    #trans_coords = []
-    #transform = osr.CoordinateTransformation(src_srs, tgt_srs)
-    #for x, y in coords:
-    #    x, y, z = transform.TransformPoint(x, y)
-    #    trans_coords.append([x, y])
-    #return trans_coords
-
     trans_coords = []
     transform = osr.CoordinateTransformation(src_srs, tgt_srs)
     for x, y in coords:
@@ -167,32 +178,3 @@ def get_footprint(image_filename):
 
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
-
-#math related operations
-def is_float(n):
-    is_number = True
-    try:
-        num = float(n)
-        # check for "nan" floats
-        is_number = num == num   # or use `math.isnan(num)`
-    except ValueError:
-        is_number = False
-    return is_number
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
