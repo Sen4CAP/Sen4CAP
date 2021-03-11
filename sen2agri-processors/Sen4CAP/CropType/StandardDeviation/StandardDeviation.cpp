@@ -188,7 +188,7 @@ StandardDeviationFilter<TInputImageType, TOutputImageType>
       const auto &inPix = it.Get();
       for (unsigned int i = 0; i < bands; i++)
         {
-        if ((!m_UseNoDataValue || inPix[i] != m_NoDataValue) && !std::isnan(inPix[i]))
+        if ((!m_UseNoDataValue || inPix[i] != m_NoDataValue) && inPix[i] > 0)
           {
           sum += inPix[i];
           sqSum += inPix[i] * inPix[i];
