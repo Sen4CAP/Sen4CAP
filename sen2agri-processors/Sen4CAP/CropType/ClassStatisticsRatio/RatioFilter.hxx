@@ -132,34 +132,24 @@ RatioFilter<TInputImageType, TOutputImageType>
   outPix.SetSize(inputImages / 2);
   while (!outputIt.IsAtEnd())
     {
-    for (int i = 0; i < inputImages; i += 2)
-      {
-      auto &itVV = inputIts[i];
-      auto &itVH = inputIts[i + 1];
+      size_t k = 0;
+      for (int i = 0; i < inputImages; i += 2, k++) {
+          auto &itVV = inputIts[i];
+          auto &itVH = inputIts[i + 1];
 
-      auto inPixVV = itVV.Get();
-      auto inPixVH = itVH.Get();
+          auto inPixVV = itVV.Get();
+          auto inPixVH = itVH.Get();
 
-      if ((!m_UseNoDataValue || inPixVV != m_NoDataValue) && !std::isnan(inPixVV) &&
-          (!m_UseNoDataValue || inPixVH != m_NoDataValue) && !std::isnan(inPixVH))
-        {
-        if (inPixVH == 0)
-          {
-            outPix[i / 2] = zero;
+          if ((!m_UseNoDataValue || inPixVV != m_NoDataValue) && /* !std::isnan(inPixVV) && */
+              (!m_UseNoDataValue || inPixVH != m_NoDataValue) && /* !std::isnan(inPixVH) && */
+              inPixVH > 0 && inPixVV > 0) {
+              outPix[k] = inPixVV / inPixVH;
+          } else {
+              outPix[k] = zero;
           }
-        else
-          {
-          auto ratio = inPixVV / inPixVH;
-          outPix[i / 2] = ratio;
-          }
-        }
-      else
-        {
-        outPix[i / 2] = zero;
-        }
 
-      ++itVV;
-      ++itVH;
+          ++itVV;
+          ++itVH;
       }
 
     outputIt.Set(outPix);
