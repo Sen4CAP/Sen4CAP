@@ -195,7 +195,7 @@ CompositeFilter<TInputImageType, TOutputImageType>
     for (auto &it : inputIts)
       {
       const auto &inPix = it.Get();
-      if ((!m_UseNoDataValue || inPix != m_NoDataValue) && !std::isnan(inPix))
+      if ((!m_UseNoDataValue || inPix != m_NoDataValue) && inPix > 0)
         {
         sum += inPix;
         count++;
