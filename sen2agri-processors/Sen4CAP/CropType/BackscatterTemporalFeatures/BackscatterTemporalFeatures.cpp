@@ -202,9 +202,9 @@ BackscatterTemporalFeaturesFilter<TInputImageType, TOutputImageType>
     if (count > 0 && sum > 0)
       {
       mean = sum / count;
-      if (count > 1)
+      if (mean > 0)
         {
-        auto dev = std::sqrt((sqSum - sum * mean) / (count - 1));
+        auto dev = std::sqrt((sqSum - sum * mean) / count);
         cvar = dev / mean;
         }
       else
