@@ -199,10 +199,10 @@ StandardDeviationFilter<TInputImageType, TOutputImageType>
       }
 
 
-    if (count > 1)
+    if (count > 0)
       {
       auto mean = sum / count;
-      dev = std::sqrt((sqSum - sum * mean) / (count - 1));
+      dev = std::sqrt((sqSum - sum * mean) / count);
       }
     else
       {
