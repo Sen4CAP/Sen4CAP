@@ -20,6 +20,12 @@ _____________________________________________________________________________
 from __future__ import print_function
 from __future__ import with_statement
 from __future__ import absolute_import
+try:
+    from configparser import ConfigParser
+except ImportError:
+    from ConfigParser import ConfigParser
+from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
+from psycopg2.sql import SQL, Literal
 import subprocess
 import os
 import sys
@@ -28,6 +34,8 @@ import pipes
 import shutil
 import osr
 import gdal
+import psycopg2
+import random
 
 DEBUG = True
 SENTINEL2_SATELLITE_ID = 1
@@ -178,3 +186,72 @@ def get_footprint(image_filename):
 
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
+
+### Database related operations
+
+class DBConfig:
+    def __init__(self):
+        self.host = None
+        self.port = None
+        self.user = None
+        self.password = None
+        self.database = None
+
+    def connect(self):
+        return psycopg2.connect(
+            host=self.host,
+            port=self.port,
+            user=self.user,
+            password=self.password,
+            dbname=self.database,
+        )
+
+    @staticmethod
+    def load(config_file, log_dir, log_file_name):
+        config = DBConfig()
+        try:
+            parser = ConfigParser()
+            parser.read([config_file])
+
+            config.host = parser.get("Database", "HostName")
+            #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
+            int(parser.get("Database", "Port", vars={"Port": "5432"}))
+            config.user = parser.get("Database", "UserName")
+            config.password = parser.get("Database", "Password")
+            config.database = parser.get("Database", "DatabaseName")
+        except Exception as e:
+            log(
+                log_dir,
+                 "(launcher err) <master>: Can NOT read db configuration file due to: {}".format(e),
+                log_file_name
+            )
+        finally:
+            return config
+
+
+
+def handle_retries(conn, f, log_dir, log_file):
+    nb_retries = 10
+    max_sleep = 0.1
+
+    while True:
+        try:
+            with conn.cursor() as cursor:
+                ret_val = f(cursor)
+                conn.commit()
+                return ret_val
+        except psycopg2.Error as e:
+            conn.rollback()
+            if (
+                e.pgcode in (SERIALIZATION_FAILURE, DEADLOCK_DETECTED)
+                and nb_retries > 0
+            ):
+                log(log_dir, "Recoverable error {} on database query, retrying".format(e.pgcode), log_file)
+                time.sleep(random.uniform(0, max_sleep))
+                max_sleep *= 2
+                nb_retries -= 1
+                continue
+            raise
+        except Exception as e:
+            conn.rollback()
+            raise
