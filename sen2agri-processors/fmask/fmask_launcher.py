@@ -1197,223 +1197,6 @@ class ProcessingContext(object):
                 else:
                     self.fmask_gdal_image["default"] = value
 
-
-# class Database(object):
-#     def __init__(self, log_file=None):
-#         self.conn = None
-#         self.cursor = None
-#         self.server_ip = ""
-#         self.database_name = ""
-#         self.user = ""
-#         self.password = ""
-#         self.log_file = log_file
-
-#     def database_connect(self):
-#         if self.conn:
-#             print("(launcher info) <master>: Database is already connected.")
-#             return True
-#         connectString = "dbname='{}' user='{}' host='{}' password='{}'".format(self.database_name, self.user, self.server_ip, self.password)
-#         try:
-#             self.conn = psycopg2.connect(connectString)
-#             self.cursor = self.conn.cursor()
-#         except:
-#             exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
-#             # Exit the script and print an error telling what happened.
-#             print("(launcher error) <master>: Database connection failed!\n ->{}".format(exceptionValue))
-#             return False
-#         return True
-
-#     def database_disconnect(self):
-#         try:
-#             if self.conn:
-#                 self.conn.close()
-#         except Exception as e:
-#             print("(launcher error) <master>: Can NOT close database connection due to: {}".format(e))
-#         finally:
-#             self.conn = None
-#             self.cursor = None
-
-
-#     def loadConfig(self, configFile):
-#         try:
-#             with open(configFile, 'r') as config:
-#                 found_section = False
-#                 for line in config:
-#                     line = line.strip(" \n\t\r")
-#                     if found_section and line.startswith('['):
-#                         break
-#                     elif found_section:
-#                         elements = line.split('=')
-#                         if len(elements) == 2:
-#                             if elements[0].lower() == "hostname":
-#                                 self.host = elements[1]
-#                             elif elements[0].lower() == "databasename":
-#                                 self.database_name = elements[1]
-#                             elif elements[0].lower() == "username":
-#                                 self.user = elements[1]
-#                             elif elements[0].lower() == "password":
-#                                 self.password = elements[1]
-#                             else:
-#                                 print("Unkown key for [Database] section")
-#                         else:
-#                             print("Error in config file, found more than on keys, line: {}".format(line))
-#                     elif line == "[Database]":
-#                         found_section = True
-#         except:
-#             print("Error in opening the config file ".format(str(configFile)))
-#             return False
-#         if len(self.host) <= 0 or len(self.database_name) <= 0:
-#             return False
-#         return True
-
-# def db_update(db_func):
-#     def wrapper_db_update(*args, **kwargs):
-#         nb_retries = 10
-#         max_sleep = 0.1
-#         db_updated = False
-#         if not products_db.database_connect():
-#             log(
-#                 LAUNCHER_LOG_DIR,
-#                 "{}: Database connection failed upon updating the database.".format(
-#                     threading.currentThread().getName()
-#                 ),
-#                 LAUNCHER_LOG_FILE_NAME,
-#             )
-#             return db_updated
-#         while True:
-#             try:
-#                 db_func(*args, **kwargs)
-#                 products_db.conn.commit()
-#             except psycopg2.Error as e:
-#                 products_db.conn.rollback()
-#                 if (
-#                     e.pgcode
-#                     in (
-#                         SERIALIZATION_FAILURE,
-#                         DEADLOCK_DETECTED,
-#                     )
-#                     and nb_retries > 0
-#                 ):
-#                     log(
-#                         LAUNCHER_LOG_DIR,
-#                         "{}: Exception {} when trying to update db: SERIALIZATION failure".format(
-#                             threading.currentThread().getName(), e.pgcode
-#                         ),
-#                         LAUNCHER_LOG_FILE_NAME,
-#                     )
-#                     time.sleep(random.uniform(0, max_sleep))
-#                     max_sleep *= 2
-#                     nb_retries -= 1
-#                     continue
-#                 else:
-#                     log(
-#                         LAUNCHER_LOG_DIR,
-#                         "{}: Exception {} when trying to update db".format(
-#                             threading.currentThread().getName(), e.pgcode
-#                         ),
-#                         LAUNCHER_LOG_FILE_NAME,
-#                     )
-#                 raise
-#             except Exception as e:
-#                 products_db.conn.rollback()
-#                 log(
-#                     LAUNCHER_LOG_DIR,
-#                     "{}: Exception {} when trying to update db".format(
-#                         threading.currentThread().getName(), e
-#                     ),
-#                     LAUNCHER_LOG_FILE_NAME,
-#                 )
-#                 raise
-#             else:
-#                 log(
-#                     LAUNCHER_LOG_DIR,
-#                     "(launcher info) <master>: Successful db update by".format(db_func.__name__),
-#                     LAUNCHER_LOG_FILE_NAME,
-#                 )
-#                 db_updated = True
-#                 break
-#             finally:
-#                 products_db.database_disconnect()
-
-#         return db_updated
-
-#     return wrapper_db_update
-
-# def db_fetch(db_func):
-#     def wrapper_db_fetch(*args, **kwargs):
-#         nb_retries = 10
-#         max_sleep = 0.1
-#         ret_val = None
-#         if not products_db.database_connect():
-#             log(
-#                 LAUNCHER_LOG_DIR,
-#                 "(launcher error) <master>: Database connection failed upon fetching from the database.",
-#                 LAUNCHER_LOG_FILE_NAME,
-#             )
-#             return ret_val
-#         while True:
-#             ret_val = None
-#             try:
-#                 ret_val = db_func(*args, **kwargs)
-#                 products_db.conn.commit()
-#             except psycopg2.Error as e:
-#                 products_db.conn.rollback()
-#                 if (
-#                     e.pgcode
-#                     in (
-#                         SERIALIZATION_FAILURE,
-#                         DEADLOCK_DETECTED,
-#                     )
-#                     and nb_retries > 0
-#                 ):
-#                     log(
-#                         LAUNCHER_LOG_DIR,
-#                         "(launcher error) <master>: Exception {} when trying to fetch from db: SERIALIZATION failure".format(e.pgcode),
-#                         LAUNCHER_LOG_FILE_NAME,
-#                     )
-#                     time.sleep(random.uniform(0, max_sleep))
-#                     max_sleep *= 2
-#                     nb_retries -= 1
-#                     continue
-#                 else:
-#                     log(
-#                         LAUNCHER_LOG_DIR,
-#                         "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e.pgcode, db_func.__name__),
-#                         LAUNCHER_LOG_FILE_NAME,
-#                     )
-#                 raise
-#             except Exception as e:
-#                 products_db.conn.rollback()
-#                 log(
-#                     LAUNCHER_LOG_DIR,
-#                     "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e, db_func.__name__),
-#                     LAUNCHER_LOG_FILE_NAME,
-#                 )
-#                 raise
-#             else:
-#                 log(
-#                     LAUNCHER_LOG_DIR,
-#                     "(launcher info) <master>: Successful db fetch by {}".format(db_func.__name__),
-#                     LAUNCHER_LOG_FILE_NAME
-#                 )
-#                 break
-#             finally:
-#                 products_db.database_disconnect()
-
-#         return ret_val
-
-#     return wrapper_db_fetch
-
-# @db_fetch
-# def db_get_unprocessed_tile():
-#     products_db.cursor.execute("set transaction isolation level serializable;")
-#     products_db.cursor.execute("select * from sp_start_fmask_l1_tile_processing();")
-#     tile_info = products_db.cursor.fetchall()
-#     if tile_info == []:
-#         return None
-#     else:
-#         return Tile(tile_info[0])
-
 def db_get_unprocessed_tile(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
@@ -1431,12 +1214,6 @@ def db_get_unprocessed_tile(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LA
         else:
             return Tile(tile_info[0])
 
-# @db_fetch
-# def db_clear_pending_tiles():
-#     products_db.cursor.execute("set transaction isolation level serializable;")
-#     products_db.cursor.execute("select * from sp_clear_pending_fmask_tiles();")
-#     return products_db.cursor.fetchall()
-
 def db_clear_pending_tiles(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
@@ -1448,18 +1225,6 @@ def db_clear_pending_tiles(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAU
     with db_config.connect() as connection:
         (_,) = handle_retries(connection, _run, log_dir, log_file)
         return True
-
-# @db_fetch
-# def db_get_site_short_name(site_id):
-#     products_db.cursor.execute("set transaction isolation level serializable;")
-#     products_db.cursor.execute(
-#         "select short_name from site where id={}".format(site_id)
-#     )
-#     rows = products_db.cursor.fetchall()
-#     if rows != []:
-#         return rows[0][0]
-#     else:
-#         return None
 
 def db_get_site_short_name(db_config, site_id, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
@@ -1478,17 +1243,6 @@ def db_get_site_short_name(db_config, site_id, log_dir = LAUNCHER_LOG_DIR, log_f
         short_name = handle_retries(connection, _run, log_dir, log_file)
         log(log_dir, "get_site_short_name({}) = {}".format(site_id, short_name), log_file)
         return short_name
-
-# @db_fetch
-# def db_get_processing_context():
-
-#     processing_context = ProcessingContext()
-#     products_db.cursor.execute("select * from sp_get_parameters('processor.fmask.')")
-#     rows = products_db.cursor.fetchall()
-#     for row in rows:
-#         processing_context.add_parameter(row)
-
-#     return processing_context
 
 def db_get_processing_context(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
@@ -1509,78 +1263,6 @@ def db_get_processing_context(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = 
             processing_context.add_parameter(param)
         log(log_dir, "Processing context acquired.", log_file)
         return processing_context
-
-# @db_update
-# def db_postrun_update(input_prod, fmask_prod):
-#     processing_status = input_prod.processing_status
-#     downloader_product_id = input_prod.product_id
-#     reason = input_prod.rejection_reason
-#     should_retry = input_prod.should_retry
-#     site_id = input_prod.site_id
-#     full_path = fmask_prod.destination_path
-#     product_name = fmask_prod.name
-#     footprint = fmask_prod.footprint
-#     sat_id = fmask_prod.satellite_id
-#     acquisition_date = fmask_prod.acquisition_date
-
-#     products_db.cursor.execute("set transaction isolation level serializable;")
-
-#     # updating fmask_history
-#     if reason is not None:
-#         products_db.cursor.execute(
-#             """SELECT * FROM sp_mark_fmask_l1_tile_failed(%(downloader_history_id)s :: integer,
-#                                                                                   %(reason)s, 
-#                                                                                   %(should_retry)s :: boolean);""",
-#             {
-#                 "downloader_history_id" : downloader_product_id,
-#                 "reason" : reason,
-#                 "should_retry" : should_retry
-#             }
-#         )
-#     else:
-#         products_db.cursor.execute(
-#             """SELECT * FROM sp_mark_fmask_l1_tile_done(%(downloader_history_id)s :: integer);""",
-#                                  {
-#                                      "downloader_history_id" : downloader_product_id
-#                                  },
-#         )
-
-#     # update product table
-#     if reason is None and (
-#         processing_status == DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-#     ):
-#         products_db.cursor.execute(
-#            """select * from sp_insert_product(%(product_type_id)s :: smallint,
-#                                %(processor_id)s :: smallint,
-#                                %(satellite_id)s :: smallint,
-#                                %(site_id)s :: smallint,
-#                                %(job_id)s :: smallint,
-#                                %(full_path)s :: character varying,
-#                                %(created_timestamp)s :: timestamp,
-#                                %(name)s :: character varying,
-#                                %(quicklook_image)s :: character varying,
-#                                %(footprint)s,
-#                                %(orbit_id)s :: integer,
-#                                %(tiles)s :: json,
-#                                %(orbit_type_id)s :: smallint,
-#                                %(downloader_history_id)s :: integer)""",
-#                                 {
-#                                     "product_type_id" : 25,
-#                                     "processor_id" : 1,
-#                                     "satellite_id" : sat_id,
-#                                     "site_id" : site_id,
-#                                     "job_id" : None,
-#                                     "full_path" : full_path,
-#                                     "created_timestamp" : acquisition_date,
-#                                     "name" : product_name,
-#                                     "quicklook_image" : None, #TBD
-#                                     "footprint" : footprint,
-#                                     "orbit_id" : None,
-#                                     "tiles" : None,
-#                                     "orbit_type_id" : None,
-#                                     "downloader_history_id" : downloader_product_id
-#                                 }
-#         )
 
 def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):   
@@ -1659,25 +1341,6 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_
     
     with db_config.connect() as connection:
         _ = handle_retries(connection, _run, log_dir, log_file)
-
-
-# @db_update
-# def db_prerun_update(tile, reason):
-#     downloader_history_id = tile.downloader_history_id
-#     should_retry = True
-
-#     products_db.cursor.execute("set transaction isolation level serializable;")
-#     # updating  fmask_l1_tile_history
-#     products_db.cursor.execute(
-#         """SELECT * FROM sp_mark_fmask_l1_tile_failed(%(downloader_history_id)s :: integer,
-#                                                                                   %(reason)s, 
-#                                                                                   %(should_retry)s :: boolean);""",
-#         {
-#             "downloader_history_id" : downloader_history_id,
-#             "reason" : reason,
-#             "should_retry" : should_retry
-#         }
-#     )
 
 def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
