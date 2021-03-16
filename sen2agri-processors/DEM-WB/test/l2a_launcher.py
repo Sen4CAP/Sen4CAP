@@ -2125,8 +2125,8 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--docker-image-gdal")
         script_command.append(DEFAULT_GDAL_IMAGE_NAME)
         #tmp only for testing purposes
-        script_command.append("--resolution")
-        script_command.append(str(60))
+        #script_command.append("--resolution")
+        #script_command.append(str(60))
         #tmp
 
         sen2corlog_path = os.path.join(self.l2a.output_path,"sen2cor.log")
@@ -2443,7 +2443,7 @@ def db_clear_pending_tiles(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAU
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_clear_pending_l1_tiles()")
+        q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
         cursor.execute(q2)
         return cursor.fetchall()
 
