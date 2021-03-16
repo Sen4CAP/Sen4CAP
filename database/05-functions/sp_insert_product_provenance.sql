@@ -1,7 +1,7 @@
 create or replace function sp_insert_product_provenance(
     _product_id int,
     _parent_product_id int,
-    _parent_product_date int
+    _parent_product_date timestamp with time zone
 )
 returns void
 as $$
