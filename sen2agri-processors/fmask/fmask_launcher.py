@@ -23,11 +23,6 @@ import threading
 import ogr
 import os
 import Queue
-import ntpath
-import shutil
-import zipfile
-import tarfile
-import tempfile
 import re
 import grp
 import glob
