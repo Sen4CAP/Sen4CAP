@@ -20,7 +20,6 @@ from __future__ import print_function
 import argparse
 import glob
 import os
-import sys
 import time, datetime
 import shutil
 import tempfile

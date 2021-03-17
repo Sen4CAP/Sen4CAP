@@ -20,12 +20,6 @@ _____________________________________________________________________________
 from __future__ import print_function
 from __future__ import with_statement
 from __future__ import absolute_import
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
-from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
-from psycopg2.sql import SQL, Literal
 import subprocess
 import os
 import sys
@@ -34,10 +28,12 @@ import pipes
 import shutil
 import osr
 import gdal
-import psycopg2
-import random
+import ntpath
+import zipfile
+import tarfile
+import tempfile
 
-DEBUG = True
+DEBUG = False
 SENTINEL2_SATELLITE_ID = 1
 LANDSAT8_SATELLITE_ID = 2
 UNKNOWN_PROCESSOR_OUTPUT_FORMAT = 0
@@ -46,18 +42,6 @@ THEIA_MUSCATE_OUTPUT_FORMAT = 2
 SEN2COR_PROCESSOR_OUTPUT_FORMAT = 3
 FILES_IN_LANDSAT_L1_PRODUCT = 13
 UNKNOWN_SATELLITE_ID = -1
-MAJA_LOG_DIR = "/tmp/"
-MAJA_LOG_FILE_NAME = "maja.log"
-SEN2COR_LOG_DIR = "/tmp/"
-SEN2COR_LOG_FILE_NAME = "sen2cor.log"
-FMASK_LOG_DIR = "/tmp/"
-FMASK_LOG_FILE_NAME = "fmask.log"
-DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
-DATABASE_DOWNLOADER_STATUS_DOWNLOADED_VALUE = 2
-DATABASE_DOWNLOADER_STATUS_FAILED_VALUE = 3
-DATABASE_DOWNLOADER_STATUS_ABORTED_VALUE = 4
-DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE = 5
-DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE = 6
 
 ### OS related operations
 
@@ -187,71 +171,113 @@ def get_footprint(image_filename):
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
 
-### Database related operations
+### Archiving operations
 
-class DBConfig:
-    def __init__(self):
-        self.host = None
-        self.port = None
-        self.user = None
-        self.password = None
-        self.database = None
+class ArchiveHandler:
+    def __init__(self, archives_dir, log_dir, log_file_name):
+        self.archives_dir= archives_dir
+        self.log_dir = log_dir
+        self.log_file_name = log_file_name
 
-    def connect(self):
-        return psycopg2.connect(
-            host=self.host,
-            port=self.port,
-            user=self.user,
-            password=self.password,
-            dbname=self.database,
-        )
+    def archive_log(self, info):
+        log(self.log_dir, info, self.log_file_name)
 
-    @staticmethod
-    def load(config_file, log_dir, log_file_name):
-        config = DBConfig()
-        try:
-            parser = ConfigParser()
-            parser.read([config_file])
+    def path_filename(self, path):
+        head, filename = ntpath.split(path)
+        return filename or ntpath.basename(head)
 
-            config.host = parser.get("Database", "HostName")
-            #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
-            int(parser.get("Database", "Port", vars={"Port": "5432"}))
-            config.user = parser.get("Database", "UserName")
-            config.password = parser.get("Database", "Password")
-            config.database = parser.get("Database", "DatabaseName")
-        except Exception as e:
-            log(
-                log_dir,
-                 "(launcher err) <master>: Can NOT read db configuration file due to: {}".format(e),
-                log_file_name
+    def check_if_flat_archive(self, output_dir, archive_filename):
+        dir_content = os.listdir(output_dir)
+        if len(dir_content) == 1 and os.path.isdir(
+            os.path.join(output_dir, dir_content[0])
+        ):
+            return os.path.join(output_dir, dir_content[0])
+        if len(dir_content) > 1:
+            # use the archive filename, strip it from extension
+            product_name, file_ext = os.path.splitext(
+                self.path_filename(archive_filename)
             )
-        finally:
-            return config
+            # handle .tar.gz case
+            if product_name.endswith(".tar"):
+                product_name, file_ext = os.path.splitext(product_name)
+            product_path = os.path.join(output_dir, product_name)
+            if create_recursive_dirs(product_path):
+                # move the list to this directory:
+                for name in dir_content:
+                    shutil.move(
+                        os.path.join(output_dir, name), os.path.join(product_path, name)
+                    )
+                return product_path
 
+        return None
 
-
-def handle_retries(conn, f, log_dir, log_file):
-    nb_retries = 10
-    max_sleep = 0.1
-
-    while True:
+    def unzip(self, output_dir, input_file):
+        self.archive_log("Unzip archive = {} to {}".format(input_file, output_dir))
         try:
-            with conn.cursor() as cursor:
-                ret_val = f(cursor)
-                conn.commit()
-                return ret_val
-        except psycopg2.Error as e:
-            conn.rollback()
-            if (
-                e.pgcode in (SERIALIZATION_FAILURE, DEADLOCK_DETECTED)
-                and nb_retries > 0
-            ):
-                log(log_dir, "Recoverable error {} on database query, retrying".format(e.pgcode), log_file)
-                time.sleep(random.uniform(0, max_sleep))
-                max_sleep *= 2
-                nb_retries -= 1
-                continue
-            raise
+            with zipfile.ZipFile(input_file) as zip_archive:
+                zip_archive.extractall(output_dir)
+                return self.check_if_flat_archive(
+                    output_dir, self.path_filename(input_file)
+                )
         except Exception as e:
-            conn.rollback()
-            raise
+            self.archive_log(
+                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
+            )
+
+        return None
+
+    def untar(self, output_dir, input_file):
+        self.archive_log("Untar archive = {} to {}".format(input_file, output_dir))
+        try:
+            tar_archive = tarfile.open(input_file)
+            tar_archive.extractall(output_dir)
+            tar_archive.close()
+            return self.check_if_flat_archive(
+                output_dir, self.path_filename(input_file)
+            )
+        except Exception as e:
+            self.launcher_log(
+                "Exception when trying to untar file {}:  {} ".format(input_file, e)
+            )
+
+        return None
+
+    def extract_from_archive_if_needed(self, archive_file):
+        if os.path.isdir(archive_file):
+            self.archive_log(
+                "This {} wasn't an archive, so continue as is.".format(archive_file)
+            )
+            return False, archive_file
+        else:
+            if zipfile.is_zipfile(archive_file):
+                if create_recursive_dirs(self.archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=self.archives_dir)
+                        extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
+                        self.archive_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.archive_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.archive_log("Can NOT create arhive dir.")
+                    return False, None
+            elif tarfile.is_tarfile(archive_file):
+                if create_recursive_dirs(self.archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=self.archives_dir)
+                        extracted_file_path = self.untar(extracted_archive_dir, archive_file)
+                        self.archive_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.archive_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.archive_log("Can NOT create arhive dir.")
+                    return False, None
+            else:
+                self.archive_log(
+                    "This wasn't an zip or tar archive, can NOT use input product."
+                )
+                return False, None
+

@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen4Cap-Processors
    Language:     Python
-   Copyright:    2015-2020, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -23,32 +23,34 @@ import re
 import os
 import glob
 import sys
-import time
 import datetime
 import Queue
-from osgeo import ogr
 import threading
-from bs4 import BeautifulSoup as Soup
 import zipfile
 import tarfile
 import tempfile
 import ntpath
-from lxml import etree
-import random
-import psycopg2
-from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
-from psycopg2.sql import SQL, Literal
 import grp
 import shutil
 import subprocess
 import signal
-from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command
+from lxml import etree
+from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
+from psycopg2.sql import SQL
+from bs4 import BeautifulSoup as Soup
+from osgeo import ogr
+from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, ArchiveHandler
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
-from l2a_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
-from l2a_commons import DEBUG, MAJA_LOG_DIR, MAJA_LOG_FILE_NAME, SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
-from l2a_commons import DBConfig, handle_retries
+from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
+from db_commons import DBConfig, handle_retries, db_get_unprocessed_tile, db_clear_pending_tiles, db_get_site_short_name, db_get_processing_context
 
+
+DEBUG = False
+MAJA_LOG_DIR = "/tmp/"
+MAJA_LOG_FILE_NAME = "maja.log"
+SEN2COR_LOG_DIR = "/tmp/"
+SEN2COR_LOG_FILE_NAME = "sen2cor.log"
 MIN_VALID_PIXELS_THRESHOLD = 10.0
 MAX_CLOUD_COVERAGE = 90.0
 LAUNCHER_LOG_DIR = "/tmp/"
@@ -63,7 +65,9 @@ DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
 DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
 DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.8.0-ubuntu-20.04"
 DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/sen2agri-l2a-processors"
-
+DB_CLEAR_PENDING_TILES_FUNC = "sp_clear_pending_l1_tiles"
+DB_GET_UNPROCESSED_TILES_FUNC = "sp_start_l1_tile_processing"
+DB_PROCESSOR_NAME = "l2a"
 
 class ProcessingContext(object):
     def __init__(self):
@@ -499,9 +503,11 @@ class L2aMaster(object):
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-                    unprocessed_tile = db_get_unprocessed_tile(db_config)
-                    if unprocessed_tile is not None:
-                        processing_context = db_get_processing_context(db_config)
+                    tile_info = db_get_unprocessed_tile(db_config, DB_GET_UNPROCESSED_TILES_FUNC, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    if tile_info is not None:
+                        unprocessed_tile = Tile(tile_info)
+                        processing_context = ProcessingContext()
+                        db_get_processing_context(db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
@@ -799,7 +805,7 @@ class Tile(object):
 
     def get_site_info(self, base_output_path):
         db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-        self.site_short_name = db_get_site_short_name(db_config, self.site_id)
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
         self.site_output_path = base_output_path.replace("{site}", self.site_short_name)
 
 
@@ -872,113 +878,6 @@ class L2aProcessor(object):
         hull = geomCol.ConvexHull()
         return hull.ExportToWkt()
 
-    def path_filename(self, path):
-        head, filename = ntpath.split(path)
-        return filename or ntpath.basename(head)
-
-    def check_if_flat_archive(self, output_dir, archive_filename):
-        dir_content = os.listdir(output_dir)
-        if len(dir_content) == 1 and os.path.isdir(
-            os.path.join(output_dir, dir_content[0])
-        ):
-            return os.path.join(output_dir, dir_content[0])
-        if len(dir_content) > 1:
-            # use the archive filename, strip it from extension
-            product_name, file_ext = os.path.splitext(
-                self.path_filename(archive_filename)
-            )
-            # handle .tar.gz case
-            if product_name.endswith(".tar"):
-                product_name, file_ext = os.path.splitext(product_name)
-            product_path = os.path.join(output_dir, product_name)
-            if create_recursive_dirs(product_path):
-                # move the list to this directory:
-                for name in dir_content:
-                    shutil.move(
-                        os.path.join(output_dir, name), os.path.join(product_path, name)
-                    )
-                return product_path
-
-        return None
-
-    def unzip(self, output_dir, input_file):
-        self.launcher_log("Unzip archive = {} to {}".format(input_file, output_dir))
-        try:
-            with zipfile.ZipFile(input_file) as zip_archive:
-                zip_archive.extractall(output_dir)
-                return self.check_if_flat_archive(
-                    output_dir, self.path_filename(input_file)
-                )
-        except Exception as e:
-            self.launcher_log(
-                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
-            )
-            self.update_rejection_reason(
-                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
-            )
-
-        return None
-
-    def untar(self, output_dir, input_file):
-        self.launcher_log("Untar archive = {} to {}".format(input_file, output_dir))
-        try:
-            tar_archive = tarfile.open(input_file)
-            tar_archive.extractall(output_dir)
-            tar_archive.close()
-            return self.check_if_flat_archive(
-                output_dir, self.path_filename(input_file)
-            )
-        except Exception as e:
-            self.launcher_log(
-                "Exception when trying to untar file {}:  {} ".format(input_file, e)
-            )
-            self.update_rejection_reason(
-                "Exception when trying to untar file {}:  {} ".format(input_file, e)
-            )
-
-        return None
-
-    def extract_from_archive_if_needed(self, archive_file):
-        if os.path.isdir(archive_file):
-            self.launcher_log(
-                "This wasn't an archive, so continue as is."
-            )
-            return False, archive_file
-        else:
-            archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-            if zipfile.is_zipfile(archive_file):
-                if create_recursive_dirs(archives_dir):
-                    try:
-                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-                        extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
-                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                        return True, extracted_file_path
-                    except Exception as e:
-                        self.launcher_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
-                        return False, None
-                else:
-                    self.launcher_log("Can NOT create arhive dir.")
-                    return False, None
-            elif tarfile.is_tarfile(archive_file):
-                if create_recursive_dirs(archives_dir):
-                    try:
-                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-                        extracted_file_path = self.untar(extracted_archive_dir, archive_file)
-                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                        return True, extracted_file_path
-                    except Exception as e:
-                        self.launcher_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
-                        return False, None
-                else:
-                    self.launcher_log("Can NOT create arhive dir.")
-                    return False, None
-            else:
-                self.launcher_log(
-                    "This wasn't an zip or tar archive, can NOT use input product."
-                )
-                return False, None
-
-
     def validate_input_product_dir(self):
         # First check if the product path actually exists
         try:
@@ -1025,17 +924,20 @@ class L2aProcessor(object):
                 self.context.worker_id, self.lin.tile_id
             )
         )
-        self.lin.was_archived, self.lin.path = self.extract_from_archive_if_needed(
+        archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
+        archive_handler = ArchiveHandler(archives_dir, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        self.lin.was_archived, self.lin.path = archive_handler.extract_from_archive_if_needed(
             self.lin.db_path
         )
         self.launcher_log(
-                "{}: Ended extract_from_archive_if_needed for tile {}".format(
-                    self.context.worker_id, self.lin.tile_id
+                "{}: Ended extract_from_archive_if_needed for product {}".format(
+                    self.context.worker_id, self.lin.product_id
                 )
             )
         if self.lin.path is not None:
             return self.validate_input_product_dir()
         else:
+            self.update_rejection_reason("Can NOT un-archive {}".format(self.lin.db_path))
             return False
 
     def get_l2a_info(self, product_name):
@@ -2384,74 +2286,6 @@ def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_fi
         _ = handle_retries(connection, _run, log_dir, log_file)
         log(log_dir, "Product with downloader history id {} was rejected because: {}".format(tile.downloader_history_id, reason), log_file)
 
-def db_get_unprocessed_tile(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from sp_start_l1_tile_processing()")
-        cursor.execute(q2)
-        tile_info = cursor.fetchall()
-        return tile_info
-
-    with db_config.connect() as connection:
-        tile_info = handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
-        if tile_info == []:
-            return None
-        else:
-            return Tile(tile_info[0])
-
-def db_get_site_short_name(db_config, site_id, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select short_name from site where id={}").format(Literal(site_id))
-        cursor.execute(q2)
-        cursor_ret = cursor.fetchone()
-        if cursor_ret:
-            (short_name,) = cursor_ret
-            return short_name
-        else:
-            return ""
-
-    with db_config.connect() as connection:
-        short_name = handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "get_site_short_name({}) = {}".format(site_id, short_name), log_file)
-        return short_name
-
-def db_get_processing_context(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from sp_get_parameters('processor.l2a.')")
-        cursor.execute(q2)
-        params = cursor.fetchall()
-        if params:
-            return params
-        else:
-            return None
-
-    with db_config.connect() as connection:
-        params = handle_retries(connection, _run, log_dir, log_file)
-        processing_context = ProcessingContext()
-        for param in params:
-            processing_context.add_parameter(param)
-        log(log_dir, "Processing context acquired.", log_file)
-        return processing_context
-
-def db_clear_pending_tiles(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
-        cursor.execute(q2)
-        return cursor.fetchall()
-
-    with db_config.connect() as connection:
-        (_,) = handle_retries(connection, _run, log_dir, log_file)
-        return True
-
-
 parser = argparse.ArgumentParser(description="Launcher for MAJA/Sen2Cor script")
 parser.add_argument(
     "-c", "--config", default="/etc/sen2agri/sen2agri.conf", help="configuration file"
@@ -2471,7 +2305,8 @@ if os.path.isfile(majalog_path) == False:
 
 # get the processing context
 db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-default_processing_context = db_get_processing_context(db_config)
+default_processing_context = ProcessingContext()
+db_get_processing_context(db_config, default_processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 if default_processing_context is None:
     log(
         LAUNCHER_LOG_DIR,
@@ -2502,7 +2337,7 @@ if not os.path.isdir(default_site_context.working_dir) and not create_recursive_
 remove_dir_content(default_site_context.working_dir)
 
 # clear pending tiless
-_ = db_clear_pending_tiles(db_config)
+db_clear_pending_tiles(db_config, DB_CLEAR_PENDING_TILES_FUNC, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 l2a_master = L2aMaster(default_site_context.num_workers)
 l2a_master.run()
 
