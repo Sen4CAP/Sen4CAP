@@ -29,7 +29,6 @@ import glob
 import subprocess
 import signal
 import traceback
-from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 from psycopg2.sql import SQL
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
 from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, ArchiveHandler
@@ -1091,56 +1090,6 @@ class ProcessingContext(object):
                     self.fmask_gdal_image[site] = value
                 else:
                     self.fmask_gdal_image["default"] = value
-
-# def db_clear_pending_tiles(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
-#     def _run(cursor):
-#         q1 = SQL("set transaction isolation level serializable")
-#         cursor.execute(q1)
-#         q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
-#         cursor.execute(q2)
-#         return cursor.fetchall()
-
-#     with db_config.connect() as connection:
-#         (_,) = handle_retries(connection, _run, log_dir, log_file)
-#         return True
-
-# def db_get_site_short_name(db_config, site_id, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
-#     def _run(cursor):
-#         q1 = SQL("set transaction isolation level serializable")
-#         cursor.execute(q1)
-#         q2 = SQL("select short_name from site where id={}").format(Literal(site_id))
-#         cursor.execute(q2)
-#         cursor_ret = cursor.fetchone()
-#         if cursor_ret:
-#             (short_name,) = cursor_ret
-#             return short_name
-#         else:
-#             return ""
-
-#     with db_config.connect() as connection:
-#         short_name = handle_retries(connection, _run, log_dir, log_file)
-#         log(log_dir, "get_site_short_name({}) = {}".format(site_id, short_name), log_file)
-#         return short_name
-
-# def db_get_processing_context(db_config, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
-#     def _run(cursor):
-#         q1 = SQL("set transaction isolation level serializable")
-#         cursor.execute(q1)
-#         q2 = SQL("select * from sp_get_parameters('processor.fmask.')")
-#         cursor.execute(q2)
-#         params = cursor.fetchall()
-#         if params:
-#             return params
-#         else:
-#             return None
-
-#     with db_config.connect() as connection:
-#         params = handle_retries(connection, _run, log_dir, log_file)
-#         processing_context = ProcessingContext()
-#         for param in params:
-#             processing_context.add_parameter(param)
-#         log(log_dir, "Processing context acquired.", log_file)
-#         return processing_context
 
 def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):   
