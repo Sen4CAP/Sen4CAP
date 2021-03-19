@@ -30,8 +30,8 @@ import grp
 import shutil
 import subprocess
 import signal
+import json
 from lxml import etree
-from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 from psycopg2.sql import SQL
 from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
@@ -439,8 +439,9 @@ class Sen2CorContext(object):
 
 
 class L2aMaster(object):
-    def __init__(self, num_workers):
+    def __init__(self, num_workers, db_config):
         self.num_workers = num_workers
+        self.db_config = db_config
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.in_processing = set()
@@ -491,22 +492,20 @@ class L2aMaster(object):
                 except Queue.Empty:
                     continue
                 if msg_to_master.update_db:
-                    db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-                    db_postrun_update(db_config, msg_to_master.lin, msg_to_master.l2a)
+                    db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a)
                     self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-                    tile_info = db_get_unprocessed_tile(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(self.db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
-                        db_get_processing_context(db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                        db_get_processing_context(self.db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
                         valid_site_context = site_context.is_valid()
-                        unprocessed_tile.get_site_info(site_context.base_output_path)
+                        unprocessed_tile.get_site_info(site_context.base_output_path, self.db_config)
                         valid_tile = unprocessed_tile.is_valid()
 
                         if not valid_tile:
@@ -523,7 +522,7 @@ class L2aMaster(object):
                                 LAUNCHER_LOG_FILE_NAME
                             )
                             db_prerun_update(
-                                db_config, unprocessed_tile, "Invalid tile information."
+                                self.db_config, unprocessed_tile, "Invalid tile information."
                             )
                             continue
 
@@ -540,7 +539,7 @@ class L2aMaster(object):
                                 ),
                                 LAUNCHER_LOG_FILE_NAME
                             )
-                            db_prerun_update(db_config, unprocessed_tile, "Invalid site context.")
+                            db_prerun_update(self.db_config, unprocessed_tile, "Invalid site context.")
                             continue
 
                         worker_id = sleeping_workers.pop()
@@ -713,7 +712,6 @@ class Tile(object):
         self.site_short_name = ""
         self.site_output_path = ""
 
-
     def is_valid(self):
         if self.downloader_history_id is None:
             log(
@@ -797,8 +795,7 @@ class Tile(object):
 
         return True
 
-    def get_site_info(self, base_output_path):
-        db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+    def get_site_info(self, base_output_path, db_config):
         self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
         self.site_output_path = base_output_path.replace("{site}", self.site_short_name)
 
@@ -2142,7 +2139,6 @@ def db_clear_pending_tiles(db_config, log_dir, log_file):
         cursor.execute(q1)
         q2 = SQL("select * from sp_clear_pending_l1_tiles()")
         cursor.execute(q2)
-        return cursor.fetchall()
 
     with db_config.connect() as connection:
         (_,) = handle_retries(connection, _run, log_dir, log_file)
@@ -2255,9 +2251,7 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
                     "quicklook_image": "mosaic.jpg",
                     "footprint": footprint,
                     "orbit_id": orbit_id,
-                    "tiles": "["
-                    + ", ".join(['"' + t + '"' for t in l2a_processed_tiles])
-                    + "]",
+                    "tiles": json.dumps(l2a_processed_tiles),
                     "orbit_type_id": None,
                     "downloader_history_id": downloader_product_id,
                 },
@@ -2359,7 +2353,7 @@ remove_dir_content(default_site_context.working_dir)
 
 # clear pending tiless
 db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-l2a_master = L2aMaster(default_site_context.num_workers)
+l2a_master = L2aMaster(default_site_context.num_workers, db_config)
 l2a_master.run()
 
 if DEBUG == False:

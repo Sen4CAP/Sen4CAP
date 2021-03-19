@@ -68,6 +68,7 @@ class DBConfig:
             config.user = parser.get("Database", "UserName")
             config.password = parser.get("Database", "Password")
             config.database = parser.get("Database", "DatabaseName")
+            config.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
         except Exception as e:
             log(
                 log_dir,
@@ -105,16 +106,14 @@ def handle_retries(conn, f, log_dir, log_file):
 
 def db_get_site_short_name(db_config, site_id, log_dir, log_file):
     def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select short_name from site where id={}").format(Literal(site_id))
-        cursor.execute(q2)
+        q = SQL("select short_name from site where id={}").format(Literal(site_id))
+        cursor.execute(q)
         cursor_ret = cursor.fetchone()
-        if cursor_ret:
+        if cursor_ret is None:
+            return ""
+        else:
             (short_name,) = cursor_ret
             return short_name
-        else:
-            return ""
 
     with db_config.connect() as connection:
         short_name = handle_retries(connection, _run, log_dir, log_file)
@@ -123,11 +122,9 @@ def db_get_site_short_name(db_config, site_id, log_dir, log_file):
 
 def db_get_processing_context(db_config, processing_context, processor_name, log_dir, log_file):
     def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
         filter = "processor.{}.".format(processor_name)
-        q2 = SQL("select * from sp_get_parameters({})").format(Literal(filter))
-        cursor.execute(q2)
+        q = SQL("select * from sp_get_parameters({})").format(Literal(filter))
+        cursor.execute(q)
         return cursor.fetchall()
 
 

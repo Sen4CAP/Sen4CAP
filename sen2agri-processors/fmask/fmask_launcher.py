@@ -528,8 +528,9 @@ class FMaskContext(object):
         self.compress_tiffs = site_context.fmask_compress_tiffs
 
 class FMaskMaster(object):
-    def __init__(self, num_workers):
+    def __init__(self, num_workers, db_config):
         self.num_workers = num_workers
+        self.db_config = db_config
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.in_processing = set()
@@ -580,21 +581,19 @@ class FMaskMaster(object):
                 except Queue.Empty:
                     continue
                 if msg_to_master.update_db:
-                    db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-                    db_postrun_update(db_config, msg_to_master.lin, msg_to_master.fmask)
+                    db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.fmask)
                     self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-                    tile_info = db_get_unprocessed_tile(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(self.db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
-                        db_get_processing_context(db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                        db_get_processing_context(self.db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
-                        site_context.get_site_info()
+                        site_context.get_site_info(self.db_config)
                         site_context_valid = site_context.is_valid()
                         valid_tile = unprocessed_tile.is_valid()
                         if valid_tile == False:
@@ -610,7 +609,7 @@ class FMaskMaster(object):
                                 ),
                             )
                             db_prerun_update(
-                                db_config, unprocessed_tile, "Invalid tile information."
+                                self.db_config, unprocessed_tile, "Invalid tile information."
                             )
                             continue
 
@@ -626,7 +625,7 @@ class FMaskMaster(object):
                                     unprocessed_tile.downloader_history_id
                                 ),
                             )
-                            db_prerun_update(db_config, unprocessed_tile, "Invalid site context.")
+                            db_prerun_update(self.db_config, unprocessed_tile, "Invalid site context.")
                             continue
 
                         if valid_tile and site_context_valid:
@@ -809,9 +808,7 @@ class SiteContext(object):
         self.fmask_compress_tiffs = ''
         self.fmask_cog_tiffs = ''
         
-
-    def get_site_info(self):
-        db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+    def get_site_info(self, db_config):
         self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
         if "{site}" in self.output_path:
             self.output_path = self.output_path.replace("{site}", self.site_short_name)
@@ -1102,7 +1099,6 @@ def db_clear_pending_tiles(db_config, db_func_name, log_dir, log_file):
         cursor.execute(q1)
         q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
         cursor.execute(q2)
-        return cursor.fetchall()
 
     with db_config.connect() as connection:
         (_,) = handle_retries(connection, _run, log_dir, log_file)
@@ -1171,7 +1167,7 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_
                                         "full_path" : full_path,
                                         "created_timestamp" : acquisition_date,
                                         "name" : product_name,
-                                        "quicklook_image" : None, #TBD
+                                        "quicklook_image" : None,
                                         "footprint" : footprint,
                                         "orbit_id" : None,
                                         "tiles" : None,
@@ -1242,7 +1238,7 @@ remove_dir_content(default_processing_context.working_dir["default"])
 
 # clear pending tiless
 db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-fmask_master = FMaskMaster(default_processing_context.num_workers)
+fmask_master = FMaskMaster(default_processing_context.num_workers, db_config)
 fmask_master.run()
 
 if not DEBUG:
