@@ -20,12 +20,6 @@ _____________________________________________________________________________
 from __future__ import print_function
 from __future__ import with_statement
 from __future__ import absolute_import
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
-from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
-from psycopg2.sql import SQL, Literal
 import subprocess
 import os
 import sys
@@ -34,8 +28,6 @@ import pipes
 import shutil
 import osr
 import gdal
-import psycopg2
-import random
 import ntpath
 import zipfile
 import tarfile
@@ -50,12 +42,6 @@ THEIA_MUSCATE_OUTPUT_FORMAT = 2
 SEN2COR_PROCESSOR_OUTPUT_FORMAT = 3
 FILES_IN_LANDSAT_L1_PRODUCT = 13
 UNKNOWN_SATELLITE_ID = -1
-DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
-DATABASE_DOWNLOADER_STATUS_DOWNLOADED_VALUE = 2
-DATABASE_DOWNLOADER_STATUS_FAILED_VALUE = 3
-DATABASE_DOWNLOADER_STATUS_ABORTED_VALUE = 4
-DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE = 5
-DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE = 6
 
 ### OS related operations
 
@@ -72,6 +58,7 @@ def remove_dir_content(directory):
             return False
     return True
 
+
 def log(location, info, log_filename = ""):
     try:
         if DEBUG:
@@ -84,6 +71,7 @@ def log(location, info, log_filename = ""):
             log.close()
     except Exception as e:
         print("Could NOT write inside the log file {} due to: {}".format(log_filename, e))
+
 
 def run_command(cmd_array, log_path = "", log_filename = "", fake_command = False):
     start = time.time()
@@ -103,6 +91,7 @@ def run_command(cmd_array, log_path = "", log_filename = "", fake_command = Fals
     log(log_path, "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str), log_filename)
     return res
 
+
 def create_recursive_dirs(dir_name):
     if not os.path.exists(dir_name):
         try:
@@ -113,6 +102,7 @@ def create_recursive_dirs(dir_name):
 
     return True
 
+
 def remove_dir(directory):
     try:
         shutil.rmtree(directory)
@@ -120,6 +110,7 @@ def remove_dir(directory):
         print("Can not remove directory {} due to: {}.".format(directory, e))
         return False
     return True
+
 
 def copy_directory(src, dest):
     try:
@@ -180,140 +171,9 @@ def get_footprint(image_filename):
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
 
-### Database related operations
-
-class DBConfig:
-    def __init__(self):
-        self.host = None
-        self.port = None
-        self.user = None
-        self.password = None
-        self.database = None
-
-    def connect(self):
-        return psycopg2.connect(
-            host=self.host,
-            port=self.port,
-            user=self.user,
-            password=self.password,
-            dbname=self.database,
-        )
-
-    @staticmethod
-    def load(config_file, log_dir, log_file_name):
-        config = DBConfig()
-        try:
-            parser = ConfigParser()
-            parser.read([config_file])
-
-            config.host = parser.get("Database", "HostName")
-            #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
-            int(parser.get("Database", "Port", vars={"Port": "5432"}))
-            config.user = parser.get("Database", "UserName")
-            config.password = parser.get("Database", "Password")
-            config.database = parser.get("Database", "DatabaseName")
-        except Exception as e:
-            log(
-                log_dir,
-                 "(launcher err) <master>: Can NOT read db configuration file due to: {}".format(e),
-                log_file_name
-            )
-        finally:
-            return config
-
-def handle_retries(conn, f, log_dir, log_file):
-    nb_retries = 10
-    max_sleep = 0.1
-
-    while True:
-        try:
-            with conn.cursor() as cursor:
-                ret_val = f(cursor)
-                conn.commit()
-                return ret_val
-        except psycopg2.Error as e:
-            conn.rollback()
-            if (
-                e.pgcode in (SERIALIZATION_FAILURE, DEADLOCK_DETECTED)
-                and nb_retries > 0
-            ):
-                log(log_dir, "Recoverable error {} on database query, retrying".format(e.pgcode), log_file)
-                time.sleep(random.uniform(0, max_sleep))
-                max_sleep *= 2
-                nb_retries -= 1
-                continue
-            raise
-        except Exception as e:
-            conn.rollback()
-            raise
-
-def db_get_unprocessed_tile(db_config, db_func_name, log_dir, log_file):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from {}()".format(db_func_name))
-        cursor.execute(q2)
-        tile_info = cursor.fetchall()
-        return tile_info
-
-    with db_config.connect() as connection:
-        tile_info = handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
-        if tile_info == []:
-            return None
-        else:
-            return tile_info[0]
-
-def db_clear_pending_tiles(db_config, db_func_name, log_dir, log_file):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from {}()".format(db_func_name))
-        cursor.execute(q2)
-        return cursor.fetchall()
-
-    with db_config.connect() as connection:
-        (_,) = handle_retries(connection, _run, log_dir, log_file)
-
-def db_get_site_short_name(db_config, site_id, log_dir, log_file):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select short_name from site where id={}").format(Literal(site_id))
-        cursor.execute(q2)
-        cursor_ret = cursor.fetchone()
-        if cursor_ret:
-            (short_name,) = cursor_ret
-            return short_name
-        else:
-            return ""
-
-    with db_config.connect() as connection:
-        short_name = handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "get_site_short_name({}) = {}".format(site_id, short_name), log_file)
-        return short_name
-
-def db_get_processing_context(db_config, processing_context, processor_name, log_dir, log_file):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from sp_get_parameters('processor.{}.')".format(processor_name))
-        cursor.execute(q2)
-        params = cursor.fetchall()
-        if params:
-            return params
-        else:
-            return None
-
-    with db_config.connect() as connection:
-        params = handle_retries(connection, _run, log_dir, log_file)
-        for param in params:
-            processing_context.add_parameter(param)
-        log(log_dir, "Processing context acquired.", log_file)
-
 ### Archiving operations
 
-class ArchiveHandler:
+class ArchiveHandler(object):
     def __init__(self, archives_dir, log_dir, log_file_name):
         self.archives_dir= archives_dir
         self.log_dir = log_dir

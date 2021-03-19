@@ -33,7 +33,7 @@ from psycopg2.sql import SQL
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
 from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, ArchiveHandler
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-from db_commons import DBConfig, handle_retries, db_get_unprocessed_tile, db_clear_pending_tiles, db_get_site_short_name, db_get_processing_context
+from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
 DEBUG = True
 FMASK_LOG_DIR = "/tmp/"
@@ -56,19 +56,7 @@ DATABASE_FMASK_SNOW_DILATION = 'processor.fmask.optical.dilation.snow'
 DATABASE_FMASK_COG_TIFFS = 'processor.fmask.optical.cog-tiffs'
 DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
 DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
-DB_CLEAR_PENDING_TILES_FUNC = "sp_clear_pending_fmask_tiles"
-DB_GET_UNPROCESSED_TILES_FUNC = "sp_start_fmask_l1_tile_processing"
 DB_PROCESSOR_NAME = "fmask"
-
-def is_float(n):
-    is_number = True
-    try:
-        num = float(n)
-        # check for "nan" floats
-        is_number = num == num   # or use `math.isnan(num)`
-    except ValueError:
-        is_number = False
-    return is_number
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -598,7 +586,7 @@ class FMaskMaster(object):
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-                    tile_info = db_get_unprocessed_tile(db_config, DB_GET_UNPROCESSED_TILES_FUNC, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
@@ -892,7 +880,7 @@ class SiteContext(object):
             )
             return False
 
-        if not(is_float(self.fmask_threshold)) or (float(self.fmask_threshold) > 100) or (float(self.fmask_threshold) > 100):
+        if (float(self.fmask_threshold) > 100) or (float(self.fmask_threshold) > 100):
             print(
                 "(launcher error) <master>: Invalid processing context fmask_threshold: {}".format(
                     self.fmask_threshold
@@ -907,7 +895,7 @@ class SiteContext(object):
             )
             return False  
 
-        if not(is_float(self.fmask_threshold_s2)) or (float(self.fmask_threshold_s2) > 100) or (float(self.fmask_threshold_s2) > 100):
+        if (float(self.fmask_threshold_s2) > 100) or (float(self.fmask_threshold_s2) > 100):
             print(
                 "(launcher error) <master>: Invalid processing context fmask_threshold_s2: {}".format(
                     self.fmask_threshold_s2
@@ -922,7 +910,7 @@ class SiteContext(object):
             )
             return False    
 
-        if not(is_float(self.fmask_threshold_l8)) or (float(self.fmask_threshold_l8) > 100) or (float(self.fmask_threshold_l8) > 100):
+        if (float(self.fmask_threshold_l8) > 100) or (float(self.fmask_threshold_l8) > 100):
             print(
                 "(launcher error) <master>: Invalid processing context fmask_threshold_l8: {}".format(
                     self.fmask_threshold_l8
@@ -1091,6 +1079,34 @@ class ProcessingContext(object):
                 else:
                     self.fmask_gdal_image["default"] = value
 
+def db_get_unprocessed_tile(db_config, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_start_fmask_l1_tile_processing()")
+        cursor.execute(q2)
+        tile_info = cursor.fetchall()
+        return tile_info
+
+    with db_config.connect() as connection:
+        tile_info = handle_retries(connection, _run, log_dir, log_file)
+        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
+        if tile_info == []:
+            return None
+        else:
+            return tile_info[0]
+
+def db_clear_pending_tiles(db_config, db_func_name, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
+        cursor.execute(q2)
+        return cursor.fetchall()
+
+    with db_config.connect() as connection:
+        (_,) = handle_retries(connection, _run, log_dir, log_file)
+
 def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):   
         processing_status = input_prod.processing_status
@@ -1225,7 +1241,7 @@ if default_processing_context.num_workers < 1:
 remove_dir_content(default_processing_context.working_dir["default"])
 
 # clear pending tiless
-db_clear_pending_tiles(db_config, DB_CLEAR_PENDING_TILES_FUNC, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 fmask_master = FMaskMaster(default_processing_context.num_workers)
 fmask_master.run()
 

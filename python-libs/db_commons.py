@@ -25,7 +25,7 @@ try:
 except ImportError:
     from ConfigParser import ConfigParser
 from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
-from psycopg2.sql import SQL, Literal
+from psycopg2.sql import Identifier, SQL, Literal
 from psycopg2 import Error, connect
 from time import sleep
 from random import uniform
@@ -103,34 +103,6 @@ def handle_retries(conn, f, log_dir, log_file):
             conn.rollback()
             raise
 
-def db_get_unprocessed_tile(db_config, db_func_name, log_dir, log_file):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from {}()".format(db_func_name))
-        cursor.execute(q2)
-        tile_info = cursor.fetchall()
-        return tile_info
-
-    with db_config.connect() as connection:
-        tile_info = handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
-        if tile_info == []:
-            return None
-        else:
-            return tile_info[0]
-
-def db_clear_pending_tiles(db_config, db_func_name, log_dir, log_file):
-    def _run(cursor):
-        q1 = SQL("set transaction isolation level serializable")
-        cursor.execute(q1)
-        q2 = SQL("select * from {}()".format(db_func_name))
-        cursor.execute(q2)
-        return cursor.fetchall()
-
-    with db_config.connect() as connection:
-        (_,) = handle_retries(connection, _run, log_dir, log_file)
-
 def db_get_site_short_name(db_config, site_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
@@ -153,13 +125,11 @@ def db_get_processing_context(db_config, processing_context, processor_name, log
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_get_parameters('processor.{}.')".format(processor_name))
+        filter = "processor.{}.".format(processor_name)
+        q2 = SQL("select * from sp_get_parameters({})").format(Literal(filter))
         cursor.execute(q2)
-        params = cursor.fetchall()
-        if params:
-            return params
-        else:
-            return None
+        return cursor.fetchall()
+
 
     with db_config.connect() as connection:
         params = handle_retries(connection, _run, log_dir, log_file)

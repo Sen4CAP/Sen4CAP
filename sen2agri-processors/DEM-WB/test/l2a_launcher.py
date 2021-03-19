@@ -26,10 +26,6 @@ import sys
 import datetime
 import Queue
 import threading
-import zipfile
-import tarfile
-import tempfile
-import ntpath
 import grp
 import shutil
 import subprocess
@@ -39,11 +35,11 @@ from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 from psycopg2.sql import SQL
 from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
-from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, ArchiveHandler
+from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, ArchiveHandler 
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
-from db_commons import DBConfig, handle_retries, db_get_unprocessed_tile, db_clear_pending_tiles, db_get_site_short_name, db_get_processing_context
+from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
 
 DEBUG = False
@@ -65,8 +61,6 @@ DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
 DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
 DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.8.0-ubuntu-20.04"
 DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/sen2agri-l2a-processors"
-DB_CLEAR_PENDING_TILES_FUNC = "sp_clear_pending_l1_tiles"
-DB_GET_UNPROCESSED_TILES_FUNC = "sp_start_l1_tile_processing"
 DB_PROCESSOR_NAME = "l2a"
 
 class ProcessingContext(object):
@@ -503,7 +497,7 @@ class L2aMaster(object):
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-                    tile_info = db_get_unprocessed_tile(db_config, DB_GET_UNPROCESSED_TILES_FUNC, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
@@ -2142,6 +2136,33 @@ class Sen2Cor(L2aProcessor):
         )
         return self.lin, self.l2a
 
+def db_clear_pending_tiles(db_config, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_clear_pending_l1_tiles()")
+        cursor.execute(q2)
+        return cursor.fetchall()
+
+    with db_config.connect() as connection:
+        (_,) = handle_retries(connection, _run, log_dir, log_file)
+
+def db_get_unprocessed_tile(db_config, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_start_l1_tile_processing()")
+        cursor.execute(q2)
+        tile_info = cursor.fetchall()
+        return tile_info
+
+    with db_config.connect() as connection:
+        tile_info = handle_retries(connection, _run, log_dir, log_file)
+        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
+        if tile_info == []:
+            return None
+        else:
+            return tile_info[0]
 
 def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
@@ -2337,7 +2358,7 @@ if not os.path.isdir(default_site_context.working_dir) and not create_recursive_
 remove_dir_content(default_site_context.working_dir)
 
 # clear pending tiless
-db_clear_pending_tiles(db_config, DB_CLEAR_PENDING_TILES_FUNC, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 l2a_master = L2aMaster(default_site_context.num_workers)
 l2a_master.run()
 
