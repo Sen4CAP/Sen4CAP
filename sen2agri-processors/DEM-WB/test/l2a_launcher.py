@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen4Cap-Processors
    Language:     Python
-   Copyright:    2015-2020, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -23,30 +23,30 @@ import re
 import os
 import glob
 import sys
-import time
 import datetime
 import Queue
-from osgeo import ogr
 import threading
-from bs4 import BeautifulSoup as Soup
-import zipfile
-import tarfile
-import tempfile
-import ntpath
-from lxml import etree
-import random
-import psycopg2
-from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
 import grp
 import shutil
 import subprocess
 import signal
-from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, manage_log_file, remove_dir_content, run_command
+import json
+from lxml import etree
+from psycopg2.sql import SQL
+from bs4 import BeautifulSoup as Soup
+from osgeo import ogr
+from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, ArchiveHandler 
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
-from l2a_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
-from l2a_commons import DEBUG, MAJA_LOG_DIR, MAJA_LOG_FILE_NAME, SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
+from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
+from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
+
+DEBUG = False
+MAJA_LOG_DIR = "/tmp/"
+MAJA_LOG_FILE_NAME = "maja.log"
+SEN2COR_LOG_DIR = "/tmp/"
+SEN2COR_LOG_FILE_NAME = "sen2cor.log"
 MIN_VALID_PIXELS_THRESHOLD = 10.0
 MAX_CLOUD_COVERAGE = 90.0
 LAUNCHER_LOG_DIR = "/tmp/"
@@ -61,72 +61,7 @@ DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
 DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
 DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.8.0-ubuntu-20.04"
 DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/sen2agri-l2a-processors"
-
-
-class Database(object):
-    def __init__(self, log_file=None):
-        self.server_ip = ""
-        self.database_name = ""
-        self.user = ""
-        self.password = ""
-        self.is_connected = False;
-        self.log_file = log_file
-
-    def database_connect(self):
-        if self.is_connected:
-            print("{}: Database is already connected...".format(threading.currentThread().getName()))
-            return True
-        connectString = "dbname='{}' user='{}' host='{}' password='{}'".format(self.database_name, self.user, self.server_ip, self.password)
-        try:
-            self.conn = psycopg2.connect(connectString)
-            self.cursor = self.conn.cursor()
-            self.is_connected = True
-        except:
-            print("Unable to connect to the database")
-            exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
-            # Exit the script and print an error telling what happened.
-            print("Database connection failed!\n ->{}".format(exceptionValue))
-            self.is_connected = False
-            return False
-        return True
-
-    def database_disconnect(self):
-        if self.conn:
-            self.conn.close()
-            self.is_connected = False
-
-    def loadConfig(self, configFile):
-        try:
-            with open(configFile, 'r') as config:
-                found_section = False
-                for line in config:
-                    line = line.strip(" \n\t\r")
-                    if found_section and line.startswith('['):
-                        break
-                    elif found_section:
-                        elements = line.split('=')
-                        if len(elements) == 2:
-                            if elements[0].lower() == "hostname":
-                                self.host = elements[1]
-                            elif elements[0].lower() == "databasename":
-                                self.database_name = elements[1]
-                            elif elements[0].lower() == "username":
-                                self.user = elements[1]
-                            elif elements[0].lower() == "password":
-                                self.password = elements[1]
-                            else:
-                                print("Unkown key for [Database] section")
-                        else:
-                            print("Error in config file, found more than on keys, line: {}".format(line))
-                    elif line == "[Database]":
-                        found_section = True
-        except:
-            print("Error in opening the config file ".format(str(configFile)))
-            return False
-        if len(self.host) <= 0 or len(self.database_name) <= 0:
-            return False
-        return True
-
+DB_PROCESSOR_NAME = "l2a"
 
 class ProcessingContext(object):
     def __init__(self):
@@ -504,8 +439,9 @@ class Sen2CorContext(object):
 
 
 class L2aMaster(object):
-    def __init__(self, num_workers):
+    def __init__(self, num_workers, db_config):
         self.num_workers = num_workers
+        self.db_config = db_config
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.in_processing = set()
@@ -556,21 +492,23 @@ class L2aMaster(object):
                 except Queue.Empty:
                     continue
                 if msg_to_master.update_db:
-                    db_postrun_update(msg_to_master.lin, msg_to_master.l2a)
+                    db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a)
                     self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    unprocessed_tile = db_get_unprocessed_tile()
-                    if unprocessed_tile is not None:
-                        processing_context = db_get_processing_context()
+                    tile_info = db_get_unprocessed_tile(self.db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    if tile_info is not None:
+                        unprocessed_tile = Tile(tile_info)
+                        processing_context = ProcessingContext()
+                        db_get_processing_context(self.db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
-                        site_context_valid = site_context.is_valid()
-                        unprocessed_tile.get_site_info(site_context.base_output_path)
-                        tile_validity = unprocessed_tile.is_valid()
+                        valid_site_context = site_context.is_valid()
+                        unprocessed_tile.get_site_info(site_context.base_output_path, self.db_config)
+                        valid_tile = unprocessed_tile.is_valid()
 
-                        if tile_validity == False:
+                        if not valid_tile:
                             print(
                                 "\n(launcher err) <master>: Product {} has invalid tile info.".format(
                                     unprocessed_tile.downloader_history_id
@@ -581,13 +519,14 @@ class L2aMaster(object):
                                 "(launcher err) <master>: Product {} has invalid tile info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
+                                LAUNCHER_LOG_FILE_NAME
                             )
                             db_prerun_update(
-                                unprocessed_tile, "Invalid tile information."
+                                self.db_config, unprocessed_tile, "Invalid tile information."
                             )
                             continue
 
-                        if site_context_valid == False:
+                        if not valid_site_context:
                             print(
                                 "\n(launcher err) <master>: Product {} has invalid site info.".format(
                                     unprocessed_tile.downloader_history_id
@@ -598,8 +537,9 @@ class L2aMaster(object):
                                 "(launcher err) <master>: Product {} has invalid site info.".format(
                                     unprocessed_tile.downloader_history_id
                                 ),
+                                LAUNCHER_LOG_FILE_NAME
                             )
-                            db_prerun_update(unprocessed_tile, "Invalid site context.")
+                            db_prerun_update(self.db_config, unprocessed_tile, "Invalid site context.")
                             continue
 
                         worker_id = sleeping_workers.pop()
@@ -761,7 +701,7 @@ class L2aWorker(threading.Thread):
 
 
 class Tile(object):
-    def __init__(self, tile_info):
+    def __init__(self, tile_info, base_output_path, db_config):
         self.site_id = tile_info[0]
         self.satellite_id = tile_info[1]
         self.orbit_id = tile_info[2]
@@ -771,6 +711,9 @@ class Tile(object):
         self.previous_l2a_path = tile_info[6]
         self.site_short_name = ""
         self.site_output_path = ""
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        self.site_output_path = base_output_path.replace("{site}", self.site_short_name)
+
 
     def is_valid(self):
         if self.downloader_history_id is None:
@@ -823,7 +766,7 @@ class Tile(object):
             )
             return False
 
-        if len(self.site_short_name) == 0:
+        if self.site_short_name is None:
             log(
                 LAUNCHER_LOG_DIR,
                 "Aborting processing for product {} because site short name is incorrect".format(
@@ -855,8 +798,8 @@ class Tile(object):
 
         return True
 
-    def get_site_info(self, base_output_path):
-        self.site_short_name = db_get_site_short_name(self.site_id)
+    def get_site_info(self, base_output_path, db_config):
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
         self.site_output_path = base_output_path.replace("{site}", self.site_short_name)
 
 
@@ -929,113 +872,6 @@ class L2aProcessor(object):
         hull = geomCol.ConvexHull()
         return hull.ExportToWkt()
 
-    def path_filename(self, path):
-        head, filename = ntpath.split(path)
-        return filename or ntpath.basename(head)
-
-    def check_if_flat_archive(self, output_dir, archive_filename):
-        dir_content = os.listdir(output_dir)
-        if len(dir_content) == 1 and os.path.isdir(
-            os.path.join(output_dir, dir_content[0])
-        ):
-            return os.path.join(output_dir, dir_content[0])
-        if len(dir_content) > 1:
-            # use the archive filename, strip it from extension
-            product_name, file_ext = os.path.splitext(
-                self.path_filename(archive_filename)
-            )
-            # handle .tar.gz case
-            if product_name.endswith(".tar"):
-                product_name, file_ext = os.path.splitext(product_name)
-            product_path = os.path.join(output_dir, product_name)
-            if create_recursive_dirs(product_path):
-                # move the list to this directory:
-                for name in dir_content:
-                    shutil.move(
-                        os.path.join(output_dir, name), os.path.join(product_path, name)
-                    )
-                return product_path
-
-        return None
-
-    def unzip(self, output_dir, input_file):
-        self.launcher_log("Unzip archive = {} to {}".format(input_file, output_dir))
-        try:
-            with zipfile.ZipFile(input_file) as zip_archive:
-                zip_archive.extractall(output_dir)
-                return self.check_if_flat_archive(
-                    output_dir, self.path_filename(input_file)
-                )
-        except Exception as e:
-            self.launcher_log(
-                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
-            )
-            self.update_rejection_reason(
-                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
-            )
-
-        return None
-
-    def untar(self, output_dir, input_file):
-        self.launcher_log("Untar archive = {} to {}".format(input_file, output_dir))
-        try:
-            tar_archive = tarfile.open(input_file)
-            tar_archive.extractall(output_dir)
-            tar_archive.close()
-            return self.check_if_flat_archive(
-                output_dir, self.path_filename(input_file)
-            )
-        except Exception as e:
-            self.launcher_log(
-                "Exception when trying to untar file {}:  {} ".format(input_file, e)
-            )
-            self.update_rejection_reason(
-                "Exception when trying to untar file {}:  {} ".format(input_file, e)
-            )
-
-        return None
-
-    def extract_from_archive_if_needed(self, archive_file):
-        if os.path.isdir(archive_file):
-            self.launcher_log(
-                "This wasn't an archive, so continue as is."
-            )
-            return False, archive_file
-        else:
-            archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-            if zipfile.is_zipfile(archive_file):
-                if create_recursive_dirs(archives_dir):
-                    try:
-                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-                        extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
-                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                        return True, extracted_file_path
-                    except Exception as e:
-                        self.launcher_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
-                        return False, None
-                else:
-                    self.launcher_log("Can NOT create arhive dir.")
-                    return False, None
-            elif tarfile.is_tarfile(archive_file):
-                if create_recursive_dirs(archives_dir):
-                    try:
-                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-                        extracted_file_path = self.untar(extracted_archive_dir, archive_file)
-                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                        return True, extracted_file_path
-                    except Exception as e:
-                        self.launcher_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
-                        return False, None
-                else:
-                    self.launcher_log("Can NOT create arhive dir.")
-                    return False, None
-            else:
-                self.launcher_log(
-                    "This wasn't an zip or tar archive, can NOT use input product."
-                )
-                return False, None
-
-
     def validate_input_product_dir(self):
         # First check if the product path actually exists
         try:
@@ -1082,17 +918,20 @@ class L2aProcessor(object):
                 self.context.worker_id, self.lin.tile_id
             )
         )
-        self.lin.was_archived, self.lin.path = self.extract_from_archive_if_needed(
+        archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
+        archive_handler = ArchiveHandler(archives_dir, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        self.lin.was_archived, self.lin.path = archive_handler.extract_from_archive_if_needed(
             self.lin.db_path
         )
         self.launcher_log(
-                "{}: Ended extract_from_archive_if_needed for tile {}".format(
-                    self.context.worker_id, self.lin.tile_id
+                "{}: Ended extract_from_archive_if_needed for product {}".format(
+                    self.context.worker_id, self.lin.product_id
                 )
             )
         if self.lin.path is not None:
             return self.validate_input_product_dir()
         else:
+            self.update_rejection_reason("Can NOT un-archive {}".format(self.lin.db_path))
             return False
 
     def get_l2a_info(self, product_name):
@@ -2297,219 +2136,96 @@ class Sen2Cor(L2aProcessor):
         )
         return self.lin, self.l2a
 
+def db_clear_pending_tiles(db_config, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_clear_pending_l1_tiles()")
+        cursor.execute(q2)
 
-def db_update(db_func):
-    def wrapper_db_update(*args, **kwargs):
-        nb_retries = 10
-        max_sleep = 0.1
-        db_updated = False
-        if not products_db.database_connect():
-            log(
-                LAUNCHER_LOG_DIR,
-                "{}: Database connection failed upon updating the database.".format(
-                    threading.currentThread().getName()
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+    with db_config.connect() as connection:
+        handle_retries(connection, _run, log_dir, log_file)
+
+def db_get_unprocessed_tile(db_config, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_start_l1_tile_processing()")
+        cursor.execute(q2)
+        tile_info = cursor.fetchone()
+        return tile_info
+
+    with db_config.connect() as connection:
+        tile_info = handle_retries(connection, _run, log_dir, log_file)
+        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
+        return tile_info
+
+def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
+    def _run(cursor):
+        processing_status = input_prod.processing_status
+        downloader_product_id = input_prod.product_id
+        tile_id = input_prod.tile_id
+        reason = input_prod.rejection_reason
+        should_retry = input_prod.should_retry
+        cloud_coverage = l2a_prod.cloud_coverage_assessment
+        snow_coverage = l2a_prod.snow_ice_percentage
+        processor_id = 1
+        site_id = input_prod.site_id
+        l2a_processed_tiles = l2a_prod.processed_tiles
+        full_path = l2a_prod.destination_path
+        product_name = l2a_prod.name
+        footprint = l2a_prod.footprint
+        sat_id = l2a_prod.satellite_id
+        acquisition_date = l2a_prod.acquisition_date
+        orbit_id = l2a_prod.orbit_id
+
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+
+        # updating l1_tile_history
+        if reason is not None:
+            cursor.execute(
+                """SELECT * FROM sp_mark_l1_tile_failed(%(downloader_history_id)s :: integer,
+                                                                                         %(tile_id)s,
+                                                                                         %(reason)s,
+                                                                                         %(should_retry)s :: boolean,
+                                                                                         %(cloud_coverage)s :: integer,
+                                                                                         %(snow_coverage)s :: integer);""",
+                {
+                     "downloader_history_id": downloader_product_id,
+                     "tile_id": tile_id,
+                     "reason": reason,
+                     "should_retry": should_retry,
+                     "cloud_coverage": cloud_coverage,
+                     "snow_coverage": snow_coverage,
+                },
             )
-            return db_updated
-        while True:
-            try:
-                db_func(*args, **kwargs)
-                products_db.conn.commit()
-            except psycopg2.Error as e:
-                products_db.conn.rollback()
-                if (
-                    e.pgcode
-                    in (
-                        SERIALIZATION_FAILURE,
-                        DEADLOCK_DETECTED,
-                    )
-                    and nb_retries > 0
-                ):
-                    log(
-                        LAUNCHER_LOG_DIR,
-                        "{}: Exception {} when trying to update db: SERIALIZATION failure".format(
-                            threading.currentThread().getName(), e.pgcode
-                        ),
-                        LAUNCHER_LOG_FILE_NAME,
-                    )
-                    time.sleep(random.uniform(0, max_sleep))
-                    max_sleep *= 2
-                    nb_retries -= 1
-                    continue
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to update db".format(
-                        threading.currentThread().getName(), e.pgcode
-                    ),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                raise
-            except Exception as e:
-                products_db.conn.rollback()
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to update db".format(
-                        threading.currentThread().getName(), e
-                    ),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                raise
-            else:
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Successful db update".format(threading.currentThread().getName()),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                db_updated = True
-                break
-            finally:
-                products_db.database_disconnect()
-
-        return db_updated
-
-    return wrapper_db_update
-
-
-def db_fetch(db_func):
-    def wrapper_db_fetch(*args, **kwargs):
-        nb_retries = 10
-        max_sleep = 0.1
-        ret_val = None
-        if not products_db.database_connect():
-            log(
-                LAUNCHER_LOG_DIR,
-                "{}: Database connection failed upon updating the database.".format(
-                    threading.currentThread().getName()
-                ),
-                LAUNCHER_LOG_FILE_NAME,
-            )
-            return ret_val
-        while True:
-            ret_val = None
-            try:
-                ret_val = db_func(*args, **kwargs)
-                products_db.conn.commit()
-            except psycopg2.Error as e:
-                products_db.conn.rollback()
-                if (
-                    e.pgcode
-                    in (
-                        SERIALIZATION_FAILURE,
-                        DEADLOCK_DETECTED,
-                    )
-                    and nb_retries > 0
-                ):
-                    log(
-                        LAUNCHER_LOG_DIR,
-                        "{}: Exception {} when trying to fetch from db: SERIALIZATION failure".format(
-                            threading.currentThread().getName(), e.pgcode
-                        ),
-                        LAUNCHER_LOG_FILE_NAME,
-                    )
-                    time.sleep(random.uniform(0, max_sleep))
-                    max_sleep *= 2
-                    nb_retries -= 1
-                    continue
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to fetch from db".format(
-                        threading.currentThread().getName(), e.pgcode
-                    ),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                raise
-            except Exception as e:
-                products_db.conn.rollback()
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to fetch from db".format(
-                        threading.currentThread().getName(), e
-                    ),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                raise
-            else:
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Successful db fetch".format(threading.currentThread().getName()),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                break
-            finally:
-                products_db.database_disconnect()
-
-        return ret_val
-
-    return wrapper_db_fetch
-
-
-@db_update
-def db_postrun_update(input_prod, l2a_prod):
-    processing_status = input_prod.processing_status
-    downloader_product_id = input_prod.product_id
-    tile_id = input_prod.tile_id
-    reason = input_prod.rejection_reason
-    should_retry = input_prod.should_retry
-    cloud_coverage = l2a_prod.cloud_coverage_assessment
-    snow_coverage = l2a_prod.snow_ice_percentage
-    processor_id = 1
-    site_id = input_prod.site_id
-    l1c_id = input_prod.product_id
-    l2a_processed_tiles = l2a_prod.processed_tiles
-    full_path = l2a_prod.destination_path
-    product_name = l2a_prod.name
-    footprint = l2a_prod.footprint
-    sat_id = l2a_prod.satellite_id
-    acquisition_date = l2a_prod.acquisition_date
-    orbit_id = l2a_prod.orbit_id
-
-    products_db.cursor.execute("set transaction isolation level serializable;")
-
-    # updating l1_tile_history
-    if reason is not None:
-        products_db.cursor.execute(
-            """SELECT * FROM sp_mark_l1_tile_failed(%(downloader_history_id)s :: integer,
-                                                                                        %(tile_id)s,
-                                                                                        %(reason)s,
-                                                                                        %(should_retry)s :: boolean,
-                                                                                        %(cloud_coverage)s :: integer,
-                                                                                        %(snow_coverage)s :: integer);""",
-            {
-                "downloader_history_id": downloader_product_id,
-                "tile_id": tile_id,
-                "reason": reason,
-                "should_retry": should_retry,
-                "cloud_coverage": cloud_coverage,
-                "snow_coverage": snow_coverage,
-            },
-        )
-    else:
-        products_db.cursor.execute(
-            """SELECT * FROM sp_mark_l1_tile_done(%(downloader_history_id)s :: integer,
+        else:
+            cursor.execute(
+                """SELECT * FROM sp_mark_l1_tile_done(%(downloader_history_id)s :: integer,
                                                                                     %(tile_id)s,
                                                                                     %(cloud_coverage)s :: integer,
                                                                                     %(snow_coverage)s :: integer);""",
-            {
-                "downloader_history_id": downloader_product_id,
-                "tile_id": tile_id,
-                "cloud_coverage": cloud_coverage,
-                "snow_coverage": snow_coverage,
-            },
+                {
+                    "downloader_history_id": downloader_product_id,
+                    "tile_id": tile_id,
+                    "cloud_coverage": cloud_coverage,
+                    "snow_coverage": snow_coverage,
+                },
+            )
+
+        # update donwloader_history
+        cursor.execute(
+            """update downloader_history set status_id = %(status_id)s :: smallint where id=%(l1c_id)s :: integer;""",
+            {"status_id": processing_status, "l1c_id": downloader_product_id},
         )
 
-    # update donwloader_history
-    products_db.cursor.execute(
-        """update downloader_history set status_id = %(status_id)s :: smallint where id=%(l1c_id)s :: integer;""",
-        {"status_id": processing_status, "l1c_id": downloader_product_id},
-    )
-
-    # update product table
-    if reason is None and (
-        processing_status == DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-    ):
-        products_db.cursor.execute(
-            """select * from sp_insert_product(%(product_type_id)s :: smallint,
+        # update product table
+        if reason is None and (
+            processing_status == DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
+        ):
+            cursor.execute(
+                """select * from sp_insert_product(%(product_type_id)s :: smallint,
                                 %(processor_id)s :: smallint,
                                 %(satellite_id)s :: smallint,
                                 %(site_id)s :: smallint,
@@ -2523,103 +2239,63 @@ def db_postrun_update(input_prod, l2a_prod):
                                 %(tiles)s :: json,
                                 %(orbit_type_id)s :: smallint,
                                 %(downloader_history_id)s :: integer);""",
+                {
+                    "product_type_id": 1,
+                    "processor_id": processor_id,
+                    "satellite_id": sat_id,
+                    "site_id": site_id,
+                    "job_id": None,
+                    "full_path": full_path,
+                    "created_timestamp": acquisition_date,
+                    "name": product_name,
+                    "quicklook_image": "mosaic.jpg",
+                    "footprint": footprint,
+                    "orbit_id": orbit_id,
+                    "tiles": json.dumps(l2a_processed_tiles),
+                    "orbit_type_id": None,
+                    "downloader_history_id": downloader_product_id,
+                },
+            )
+
+    with db_config.connect() as connection:
+        handle_retries(connection, _run, log_dir, log_file)
+
+def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
+    def _run(cursor):
+        processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
+        downloader_history_id = tile.downloader_history_id
+        tile_id = tile.tile_id
+        should_retry = True
+        cloud_coverage = None
+        snow_coverage = None
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        # updating l1_tile_history
+        cursor.execute(
+            """SELECT * FROM sp_mark_l1_tile_failed(%(downloader_history_id)s :: integer,
+                                                                                         %(tile_id)s,
+                                                                                         %(reason)s,
+                                                                                         %(should_retry)s :: boolean,
+                                                                                         %(cloud_coverage)s :: integer,
+                                                                                         %(snow_coverage)s :: integer);""",
             {
-                "product_type_id": 1,
-                "processor_id": processor_id,
-                "satellite_id": sat_id,
-                "site_id": site_id,
-                "job_id": None,
-                "full_path": full_path,
-                "created_timestamp": acquisition_date,
-                "name": product_name,
-                "quicklook_image": "mosaic.jpg",
-                "footprint": footprint,
-                "orbit_id": orbit_id,
-                "tiles": "["
-                + ", ".join(['"' + t + '"' for t in l2a_processed_tiles])
-                + "]",
-                "orbit_type_id": None,
-                "downloader_history_id": downloader_product_id,
+                "downloader_history_id": downloader_history_id,
+                "tile_id": tile_id,
+                "reason": reason,
+                "should_retry": should_retry,
+                "cloud_coverage": cloud_coverage,
+                "snow_coverage": snow_coverage,
             },
         )
+        # update donwloader_history
+        cursor.execute(
+            """update downloader_history set status_id = %(status_id)s :: smallint where id=%(l1c_id)s :: integer;""",
+            {"status_id": processing_status, "l1c_id": downloader_history_id},
+        )
 
-
-@db_update
-def db_prerun_update(tile, reason):
-    processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
-    downloader_history_id = tile.downloader_history_id
-    tile_id = tile.tile_id
-    should_retry = True
-    cloud_coverage = None
-    snow_coverage = None
-
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    # updating l1_tile_history
-    products_db.cursor.execute(
-        """SELECT * FROM sp_mark_l1_tile_failed(%(downloader_history_id)s :: integer,
-                                                                                        %(tile_id)s,
-                                                                                        %(reason)s,
-                                                                                        %(should_retry)s :: boolean,
-                                                                                        %(cloud_coverage)s :: integer,
-                                                                                        %(snow_coverage)s :: integer);""",
-        {
-            "downloader_history_id": downloader_history_id,
-            "tile_id": tile_id,
-            "reason": reason,
-            "should_retry": should_retry,
-            "cloud_coverage": cloud_coverage,
-            "snow_coverage": snow_coverage,
-        },
-    )
-    # update donwloader_history
-    products_db.cursor.execute(
-        """update downloader_history set status_id = %(status_id)s :: smallint where id=%(l1c_id)s :: integer;""",
-        {"status_id": processing_status, "l1c_id": downloader_history_id},
-    )
-
-
-@db_fetch
-def db_get_unprocessed_tile():
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    products_db.cursor.execute("select * from sp_start_l1_tile_processing();")
-    tile_info = products_db.cursor.fetchall()
-    if tile_info == []:
-        return None
-    else:
-        return Tile(tile_info[0])
-
-
-@db_fetch
-def db_get_site_short_name(site_id):
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    products_db.cursor.execute(
-        "select short_name from site where id={}".format(site_id)
-    )
-    rows = products_db.cursor.fetchall()
-    if rows != []:
-        return rows[0][0]
-    else:
-        return None
-
-
-@db_fetch
-def db_get_processing_context():
-
-    processing_context = ProcessingContext()
-    products_db.cursor.execute("select * from sp_get_parameters('processor.l2a.')")
-    rows = products_db.cursor.fetchall()
-    for row in rows:
-        processing_context.add_parameter(row)
-
-    return processing_context
-
-
-@db_fetch
-def db_clear_pending_tiles():
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    products_db.cursor.execute("select * from sp_clear_pending_l1_tiles();")
-    return products_db.cursor.fetchall()
-
+    with db_config.connect() as connection:
+        handle_retries(connection, _run, log_dir, log_file)
+        log(log_dir, "Product with downloader history id {} was rejected because: {}".format(tile.downloader_history_id, reason), log_file)
 
 parser = argparse.ArgumentParser(description="Launcher for MAJA/Sen2Cor script")
 parser.add_argument(
@@ -2628,32 +2304,20 @@ parser.add_argument(
 args = parser.parse_args()
 
 #Create and manage log files
-manage_log_file(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 sen2corlog_path = os.path.join(SEN2COR_LOG_DIR,SEN2COR_LOG_FILE_NAME)
 if os.path.isfile(sen2corlog_path) == False:
     with open(sen2corlog_path, "w") as log_file:
         log_file.write("#### Creation of sen2cor log file ####")
-else:
-    manage_log_file(SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME)
+
 majalog_path = os.path.join(MAJA_LOG_DIR,MAJA_LOG_FILE_NAME)
 if os.path.isfile(majalog_path) == False:
     with open(majalog_path, "w") as log_file:
         log_file.write("#### Creation of maja log file ####")
-else:
-    manage_log_file(MAJA_LOG_DIR, MAJA_LOG_FILE_NAME)
-
-# get the db configuration from cfg file
-products_db = Database()
-if not products_db.loadConfig(args.config):
-    log(
-        LAUNCHER_LOG_DIR,
-        "Could not load the config from configuration file",
-        LAUNCHER_LOG_FILE_NAME,
-    )
-    sys.exit(1)
 
 # get the processing context
-default_processing_context = db_get_processing_context()
+db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+default_processing_context = ProcessingContext()
+db_get_processing_context(db_config, default_processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 if default_processing_context is None:
     log(
         LAUNCHER_LOG_DIR,
@@ -2684,8 +2348,8 @@ if not os.path.isdir(default_site_context.working_dir) and not create_recursive_
 remove_dir_content(default_site_context.working_dir)
 
 # clear pending tiless
-db_clear_pending_tiles()
-l2a_master = L2aMaster(default_site_context.num_workers)
+db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+l2a_master = L2aMaster(default_site_context.num_workers, db_config)
 l2a_master.run()
 
 if DEBUG == False:

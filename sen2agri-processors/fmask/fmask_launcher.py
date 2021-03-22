@@ -17,32 +17,27 @@ _____________________________________________________________________________
 
 """
 from __future__ import print_function
-import psycopg2
 import sys
 import argparse
 import threading
-import time
-import random
 import ogr
 import os
 import Queue
-import ntpath
-import shutil
-import zipfile
-import tarfile
-import tempfile
 import re
 import grp
 import glob
 import subprocess
 import signal
 import traceback
-from psycopg2.errorcodes import SERIALIZATION_FAILURE, DEADLOCK_DETECTED
-from sen2agri_common_db import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from fmask_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, is_float
-from fmask_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-from fmask_commons import DEBUG, FMASK_LOG_DIR, FMASK_LOG_FILE_NAME
+from psycopg2.sql import SQL
+from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
+from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, ArchiveHandler
+from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
+from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
+DEBUG = True
+FMASK_LOG_DIR = "/tmp/"
+FMASK_LOG_FILE_NAME = "fmask.log"
 ARCHIVES_DIR_NAME = "archives"
 LAUNCHER_LOG_DIR = "/tmp/"
 LAUNCHER_LOG_FILE_NAME = "fmask_launcher.log"
@@ -61,6 +56,7 @@ DATABASE_FMASK_SNOW_DILATION = 'processor.fmask.optical.dilation.snow'
 DATABASE_FMASK_COG_TIFFS = 'processor.fmask.optical.cog-tiffs'
 DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
 DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
+DB_PROCESSOR_NAME = "fmask"
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -120,112 +116,6 @@ class FmaskProcessor(object):
         hull = geomCol.ConvexHull()
         return hull.ExportToWkt()
 
-    def path_filename(self, path):
-        head, filename = ntpath.split(path)
-        return filename or ntpath.basename(head)
-
-    def check_if_flat_archive(self, output_dir, archive_filename):
-        dir_content = os.listdir(output_dir)
-        if len(dir_content) == 1 and os.path.isdir(
-            os.path.join(output_dir, dir_content[0])
-        ):
-            return os.path.join(output_dir, dir_content[0])
-        if len(dir_content) > 1:
-            # use the archive filename, strip it from extension
-            product_name, file_ext = os.path.splitext(
-                self.path_filename(archive_filename)
-            )
-            # handle .tar.gz case
-            if product_name.endswith(".tar"):
-                product_name, file_ext = os.path.splitext(product_name)
-            product_path = os.path.join(output_dir, product_name)
-            if create_recursive_dirs(product_path):
-                # move the list to this directory:
-                for name in dir_content:
-                    shutil.move(
-                        os.path.join(output_dir, name), os.path.join(product_path, name)
-                    )
-                return product_path
-
-        return None
-
-    def unzip(self, output_dir, input_file):
-        self.launcher_log("Unzip archive = {} to {}".format(input_file, output_dir))
-        try:
-            with zipfile.ZipFile(input_file) as zip_archive:
-                zip_archive.extractall(output_dir)
-                return self.check_if_flat_archive(
-                    output_dir, self.path_filename(input_file)
-                )
-        except Exception as e:
-            self.launcher_log(
-                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
-            )
-            self.update_rejection_reason(
-                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
-            )
-
-        return None
-
-    def untar(self, output_dir, input_file):
-        self.launcher_log("Untar archive = {} to {}".format(input_file, output_dir))
-        try:
-            tar_archive = tarfile.open(input_file)
-            tar_archive.extractall(output_dir)
-            tar_archive.close()
-            return self.check_if_flat_archive(
-                output_dir, self.path_filename(input_file)
-            )
-        except Exception as e:
-            self.launcher_log(
-                "Exception when trying to untar file {}:  {} ".format(input_file, e)
-            )
-            self.update_rejection_reason(
-                "Exception when trying to untar file {}:  {} ".format(input_file, e)
-            )
-
-        return None
-
-    def extract_from_archive_if_needed(self, archive_file):
-        if os.path.isdir(archive_file):
-            self.launcher_log(
-                "This wasn't an archive, so continue as is."
-            )
-            return False, archive_file
-        else:
-            archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-            if zipfile.is_zipfile(archive_file):
-                if create_recursive_dirs(archives_dir):
-                    try:
-                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-                        extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
-                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                        return True, extracted_file_path
-                    except Exception as e:
-                        self.launcher_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
-                        return False, None
-                else:
-                    self.launcher_log("Can NOT create arhive dir.")
-                    return False, None
-            elif tarfile.is_tarfile(archive_file):
-                if create_recursive_dirs(archives_dir):
-                    try:
-                        extracted_archive_dir = tempfile.mkdtemp(dir=archives_dir)
-                        extracted_file_path = self.untar(extracted_archive_dir, archive_file)
-                        self.launcher_log("Archive extracted to: {}".format(extracted_file_path))
-                        return True, extracted_file_path
-                    except Exception as e:
-                        self.launcher_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
-                        return False, None
-                else:
-                    self.launcher_log("Can NOT create arhive dir.")
-                    return False, None
-            else:
-                self.launcher_log(
-                    "This wasn't an zip or tar archive, can NOT use input product."
-                )
-                return False, None
-
     def validate_input_product_dir(self):
         # First check if the product path actually exists
         try:
@@ -272,7 +162,9 @@ class FmaskProcessor(object):
                 self.context.worker_id, self.lin.product_id
             )
         )
-        self.lin.was_archived, self.lin.path = self.extract_from_archive_if_needed(
+        archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
+        archive_handler = ArchiveHandler(archives_dir, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        self.lin.was_archived, self.lin.path = archive_handler.extract_from_archive_if_needed(
             self.lin.db_path
         )
         self.launcher_log(
@@ -636,8 +528,9 @@ class FMaskContext(object):
         self.compress_tiffs = site_context.fmask_compress_tiffs
 
 class FMaskMaster(object):
-    def __init__(self, num_workers):
+    def __init__(self, num_workers, db_config):
         self.num_workers = num_workers
+        self.db_config = db_config
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.in_processing = set()
@@ -688,17 +581,19 @@ class FMaskMaster(object):
                 except Queue.Empty:
                     continue
                 if msg_to_master.update_db:
-                    db_postrun_update(msg_to_master.lin, msg_to_master.fmask)
+                    db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.fmask)
                     self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    unprocessed_tile = db_get_unprocessed_tile()
-                    if (unprocessed_tile is not None):
-                        processing_context = db_get_processing_context()
+                    tile_info = db_get_unprocessed_tile(self.db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    if tile_info is not None:
+                        unprocessed_tile = Tile(tile_info)
+                        processing_context = ProcessingContext()
+                        db_get_processing_context(self.db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
-                        site_context.get_site_info()
+                        site_context.get_site_info(self.db_config)
                         site_context_valid = site_context.is_valid()
                         valid_tile = unprocessed_tile.is_valid()
                         if valid_tile == False:
@@ -714,7 +609,7 @@ class FMaskMaster(object):
                                 ),
                             )
                             db_prerun_update(
-                                unprocessed_tile, "Invalid tile information."
+                                self.db_config, unprocessed_tile, "Invalid tile information."
                             )
                             continue
 
@@ -730,7 +625,7 @@ class FMaskMaster(object):
                                     unprocessed_tile.downloader_history_id
                                 ),
                             )
-                            db_prerun_update(unprocessed_tile, "Invalid site context.")
+                            db_prerun_update(self.db_config, unprocessed_tile, "Invalid site context.")
                             continue
 
                         if valid_tile and site_context_valid:
@@ -913,9 +808,8 @@ class SiteContext(object):
         self.fmask_compress_tiffs = ''
         self.fmask_cog_tiffs = ''
         
-
-    def get_site_info(self):
-        self.site_short_name = db_get_site_short_name(self.site_id)
+    def get_site_info(self, db_config):
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
         if "{site}" in self.output_path:
             self.output_path = self.output_path.replace("{site}", self.site_short_name)
 
@@ -983,7 +877,7 @@ class SiteContext(object):
             )
             return False
 
-        if not(is_float(self.fmask_threshold)) or (float(self.fmask_threshold) > 100) or (float(self.fmask_threshold) > 100):
+        if (float(self.fmask_threshold) > 100) or (float(self.fmask_threshold) > 100):
             print(
                 "(launcher error) <master>: Invalid processing context fmask_threshold: {}".format(
                     self.fmask_threshold
@@ -998,7 +892,7 @@ class SiteContext(object):
             )
             return False  
 
-        if not(is_float(self.fmask_threshold_s2)) or (float(self.fmask_threshold_s2) > 100) or (float(self.fmask_threshold_s2) > 100):
+        if (float(self.fmask_threshold_s2) > 100) or (float(self.fmask_threshold_s2) > 100):
             print(
                 "(launcher error) <master>: Invalid processing context fmask_threshold_s2: {}".format(
                     self.fmask_threshold_s2
@@ -1013,7 +907,7 @@ class SiteContext(object):
             )
             return False    
 
-        if not(is_float(self.fmask_threshold_l8)) or (float(self.fmask_threshold_l8) > 100) or (float(self.fmask_threshold_l8) > 100):
+        if (float(self.fmask_threshold_l8) > 100) or (float(self.fmask_threshold_l8) > 100):
             print(
                 "(launcher error) <master>: Invalid processing context fmask_threshold_l8: {}".format(
                     self.fmask_threshold_l8
@@ -1182,358 +1076,135 @@ class ProcessingContext(object):
                 else:
                     self.fmask_gdal_image["default"] = value
 
+def db_get_unprocessed_tile(db_config, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_start_fmask_l1_tile_processing()")
+        cursor.execute(q2)
+        tile_info = cursor.fetchone()
+        return tile_info
 
-class Database(object):
-    def __init__(self, log_file=None):
-        self.conn = None
-        self.cursor = None
-        self.server_ip = ""
-        self.database_name = ""
-        self.user = ""
-        self.password = ""
-        self.log_file = log_file
+    with db_config.connect() as connection:
+        tile_info = handle_retries(connection, _run, log_dir, log_file)
+        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
+        return tile_info
 
-    def database_connect(self):
-        if self.conn:
-            print("(launcher info) <master>: Database is already connected.")
-            return True
-        connectString = "dbname='{}' user='{}' host='{}' password='{}'".format(self.database_name, self.user, self.server_ip, self.password)
-        try:
-            self.conn = psycopg2.connect(connectString)
-            self.cursor = self.conn.cursor()
-        except:
-            exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
-            # Exit the script and print an error telling what happened.
-            print("(launcher error) <master>: Database connection failed!\n ->{}".format(exceptionValue))
-            return False
-        return True
+def db_clear_pending_tiles(db_config, log_dir, log_file):
+    def _run(cursor):
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
+        q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
+        cursor.execute(q2)
 
-    def database_disconnect(self):
-        try:
-            if self.conn:
-                self.conn.close()
-        except Exception as e:
-            print("(launcher error) <master>: Can NOT close database connection due to: {}".format(e))
-        finally:
-            self.conn = None
-            self.cursor = None
+    with db_config.connect() as connection:
+        handle_retries(connection, _run, log_dir, log_file)
 
+def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
+    def _run(cursor):   
+        processing_status = input_prod.processing_status
+        downloader_product_id = input_prod.product_id
+        reason = input_prod.rejection_reason
+        should_retry = input_prod.should_retry
+        site_id = input_prod.site_id
+        full_path = fmask_prod.destination_path
+        product_name = fmask_prod.name
+        footprint = fmask_prod.footprint
+        sat_id = fmask_prod.satellite_id
+        acquisition_date = fmask_prod.acquisition_date
 
-    def loadConfig(self, configFile):
-        try:
-            with open(configFile, 'r') as config:
-                found_section = False
-                for line in config:
-                    line = line.strip(" \n\t\r")
-                    if found_section and line.startswith('['):
-                        break
-                    elif found_section:
-                        elements = line.split('=')
-                        if len(elements) == 2:
-                            if elements[0].lower() == "hostname":
-                                self.host = elements[1]
-                            elif elements[0].lower() == "databasename":
-                                self.database_name = elements[1]
-                            elif elements[0].lower() == "username":
-                                self.user = elements[1]
-                            elif elements[0].lower() == "password":
-                                self.password = elements[1]
-                            else:
-                                print("Unkown key for [Database] section")
-                        else:
-                            print("Error in config file, found more than on keys, line: {}".format(line))
-                    elif line == "[Database]":
-                        found_section = True
-        except:
-            print("Error in opening the config file ".format(str(configFile)))
-            return False
-        if len(self.host) <= 0 or len(self.database_name) <= 0:
-            return False
-        return True
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
 
-def db_update(db_func):
-    def wrapper_db_update(*args, **kwargs):
-        nb_retries = 10
-        max_sleep = 0.1
-        db_updated = False
-        if not products_db.database_connect():
-            log(
-                LAUNCHER_LOG_DIR,
-                "{}: Database connection failed upon updating the database.".format(
-                    threading.currentThread().getName()
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+        # updating fmask_history
+        if reason is not None:
+            cursor.execute(
+                """SELECT * FROM sp_mark_fmask_l1_tile_failed(%(downloader_history_id)s :: integer,
+                                                                                          %(reason)s, 
+                                                                                          %(should_retry)s :: boolean);""",
+                    {
+                        "downloader_history_id" : downloader_product_id,
+                        "reason" : reason,
+                        "should_retry" : should_retry
+                    }
+                )
+        else:
+            cursor.execute(
+                """SELECT * FROM sp_mark_fmask_l1_tile_done(%(downloader_history_id)s :: integer);""",
+                                     {
+                                         "downloader_history_id" : downloader_product_id
+                                     },
             )
-            return db_updated
-        while True:
-            try:
-                db_func(*args, **kwargs)
-                products_db.conn.commit()
-            except psycopg2.Error as e:
-                products_db.conn.rollback()
-                if (
-                    e.pgcode
-                    in (
-                        SERIALIZATION_FAILURE,
-                        DEADLOCK_DETECTED,
-                    )
-                    and nb_retries > 0
-                ):
-                    log(
-                        LAUNCHER_LOG_DIR,
-                        "{}: Exception {} when trying to update db: SERIALIZATION failure".format(
-                            threading.currentThread().getName(), e.pgcode
-                        ),
-                        LAUNCHER_LOG_FILE_NAME,
-                    )
-                    time.sleep(random.uniform(0, max_sleep))
-                    max_sleep *= 2
-                    nb_retries -= 1
-                    continue
-                else:
-                    log(
-                        LAUNCHER_LOG_DIR,
-                        "{}: Exception {} when trying to update db".format(
-                            threading.currentThread().getName(), e.pgcode
-                        ),
-                        LAUNCHER_LOG_FILE_NAME,
-                    )
-                raise
-            except Exception as e:
-                products_db.conn.rollback()
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Exception {} when trying to update db".format(
-                        threading.currentThread().getName(), e
-                    ),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                raise
-            else:
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "(launcher info) <master>: Successful db update by".format(db_func.__name__),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                db_updated = True
-                break
-            finally:
-                products_db.database_disconnect()
 
-        return db_updated
-
-    return wrapper_db_update
-
-def db_fetch(db_func):
-    def wrapper_db_fetch(*args, **kwargs):
-        nb_retries = 10
-        max_sleep = 0.1
-        ret_val = None
-        if not products_db.database_connect():
-            log(
-                LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Database connection failed upon fetching from the database.",
-                LAUNCHER_LOG_FILE_NAME,
+        # update product table
+        if reason is None and (
+            processing_status == DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
+        ):
+                cursor.execute(
+                   """select * from sp_insert_product(%(product_type_id)s :: smallint,
+                                   %(processor_id)s :: smallint,
+                                   %(satellite_id)s :: smallint,
+                                   %(site_id)s :: smallint,
+                                   %(job_id)s :: smallint,
+                                   %(full_path)s :: character varying,
+                                   %(created_timestamp)s :: timestamp,
+                                   %(name)s :: character varying,
+                                   %(quicklook_image)s :: character varying,
+                                   %(footprint)s,
+                                   %(orbit_id)s :: integer,
+                                   %(tiles)s :: json,
+                                   %(orbit_type_id)s :: smallint,
+                                   %(downloader_history_id)s :: integer)""",
+                                    {
+                                        "product_type_id" : 25,
+                                        "processor_id" : 1,
+                                        "satellite_id" : sat_id,
+                                        "site_id" : site_id,
+                                        "job_id" : None,
+                                        "full_path" : full_path,
+                                        "created_timestamp" : acquisition_date,
+                                        "name" : product_name,
+                                        "quicklook_image" : None,
+                                        "footprint" : footprint,
+                                        "orbit_id" : None,
+                                        "tiles" : None,
+                                        "orbit_type_id" : None,
+                                        "downloader_history_id" : downloader_product_id
+                                    }
             )
-            return ret_val
-        while True:
-            ret_val = None
-            try:
-                ret_val = db_func(*args, **kwargs)
-                products_db.conn.commit()
-            except psycopg2.Error as e:
-                products_db.conn.rollback()
-                if (
-                    e.pgcode
-                    in (
-                        SERIALIZATION_FAILURE,
-                        DEADLOCK_DETECTED,
-                    )
-                    and nb_retries > 0
-                ):
-                    log(
-                        LAUNCHER_LOG_DIR,
-                        "(launcher error) <master>: Exception {} when trying to fetch from db: SERIALIZATION failure".format(e.pgcode),
-                        LAUNCHER_LOG_FILE_NAME,
-                    )
-                    time.sleep(random.uniform(0, max_sleep))
-                    max_sleep *= 2
-                    nb_retries -= 1
-                    continue
-                else:
-                    log(
-                        LAUNCHER_LOG_DIR,
-                        "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e.pgcode, db_func.__name__),
-                        LAUNCHER_LOG_FILE_NAME,
-                    )
-                raise
-            except Exception as e:
-                products_db.conn.rollback()
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "(launcher error) <master>: Exception {} when trying to fetch from db by {}.".format(e, db_func.__name__),
-                    LAUNCHER_LOG_FILE_NAME,
-                )
-                raise
-            else:
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "(launcher info) <master>: Successful db fetch by {}".format(db_func.__name__),
-                    LAUNCHER_LOG_FILE_NAME
-                )
-                break
-            finally:
-                products_db.database_disconnect()
+    
+    with db_config.connect() as connection:
+        handle_retries(connection, _run, log_dir, log_file)
 
-        return ret_val
+def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
+    def _run(cursor):
+        downloader_history_id = tile.downloader_history_id
+        should_retry = True
 
-    return wrapper_db_fetch
+        q1 = SQL("set transaction isolation level serializable")
+        cursor.execute(q1)
 
-@db_fetch
-def db_get_unprocessed_tile():
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    products_db.cursor.execute("select * from sp_start_fmask_l1_tile_processing();")
-    tile_info = products_db.cursor.fetchall()
-    if tile_info == []:
-        return None
-    else:
-        return Tile(tile_info[0])
-
-@db_fetch
-def db_clear_pending_tiles():
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    products_db.cursor.execute("select * from sp_clear_pending_fmask_tiles();")
-    return products_db.cursor.fetchall()
-
-@db_fetch
-def db_get_site_short_name(site_id):
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    products_db.cursor.execute(
-        "select short_name from site where id={}".format(site_id)
-    )
-    rows = products_db.cursor.fetchall()
-    if rows != []:
-        return rows[0][0]
-    else:
-        return None
-
-@db_fetch
-def db_get_processing_context():
-
-    processing_context = ProcessingContext()
-    products_db.cursor.execute("select * from sp_get_parameters('processor.fmask.')")
-    rows = products_db.cursor.fetchall()
-    for row in rows:
-        processing_context.add_parameter(row)
-
-    return processing_context
-
-@db_update
-def db_postrun_update(input_prod, fmask_prod):
-    processing_status = input_prod.processing_status
-    downloader_product_id = input_prod.product_id
-    reason = input_prod.rejection_reason
-    should_retry = input_prod.should_retry
-    site_id = input_prod.site_id
-    full_path = fmask_prod.destination_path
-    product_name = fmask_prod.name
-    footprint = fmask_prod.footprint
-    sat_id = fmask_prod.satellite_id
-    acquisition_date = fmask_prod.acquisition_date
-
-    products_db.cursor.execute("set transaction isolation level serializable;")
-
-    # updating fmask_history
-    if reason is not None:
-        products_db.cursor.execute(
+        # updating  fmask_l1_tile_history
+        cursor.execute(
             """SELECT * FROM sp_mark_fmask_l1_tile_failed(%(downloader_history_id)s :: integer,
-                                                                                  %(reason)s, 
-                                                                                  %(should_retry)s :: boolean);""",
+                                                                                      %(reason)s, 
+                                                                                      %(should_retry)s :: boolean);""",
             {
-                "downloader_history_id" : downloader_product_id,
+                "downloader_history_id" : downloader_history_id,
                 "reason" : reason,
                 "should_retry" : should_retry
             }
         )
-    else:
-        products_db.cursor.execute(
-            """SELECT * FROM sp_mark_fmask_l1_tile_done(%(downloader_history_id)s :: integer);""",
-                                 {
-                                     "downloader_history_id" : downloader_product_id
-                                 },
-        )
 
-    # update product table
-    if reason is None and (
-        processing_status == DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-    ):
-        products_db.cursor.execute(
-           """select * from sp_insert_product(%(product_type_id)s :: smallint,
-                               %(processor_id)s :: smallint,
-                               %(satellite_id)s :: smallint,
-                               %(site_id)s :: smallint,
-                               %(job_id)s :: smallint,
-                               %(full_path)s :: character varying,
-                               %(created_timestamp)s :: timestamp,
-                               %(name)s :: character varying,
-                               %(quicklook_image)s :: character varying,
-                               %(footprint)s,
-                               %(orbit_id)s :: integer,
-                               %(tiles)s :: json,
-                               %(orbit_type_id)s :: smallint,
-                               %(downloader_history_id)s :: integer)""",
-                                {
-                                    "product_type_id" : 25,
-                                    "processor_id" : 1,
-                                    "satellite_id" : sat_id,
-                                    "site_id" : site_id,
-                                    "job_id" : None,
-                                    "full_path" : full_path,
-                                    "created_timestamp" : acquisition_date,
-                                    "name" : product_name,
-                                    "quicklook_image" : None, #TBD
-                                    "footprint" : footprint,
-                                    "orbit_id" : None,
-                                    "tiles" : None,
-                                    "orbit_type_id" : None,
-                                    "downloader_history_id" : downloader_product_id
-                                }
-        )
-
-@db_update
-def db_prerun_update(tile, reason):
-    downloader_history_id = tile.downloader_history_id
-    should_retry = True
-
-    products_db.cursor.execute("set transaction isolation level serializable;")
-    # updating  fmask_l1_tile_history
-    products_db.cursor.execute(
-        """SELECT * FROM sp_mark_fmask_l1_tile_failed(%(downloader_history_id)s :: integer,
-                                                                                  %(reason)s, 
-                                                                                  %(should_retry)s :: boolean);""",
-        {
-            "downloader_history_id" : downloader_history_id,
-            "reason" : reason,
-            "should_retry" : should_retry
-        }
-    )
 
 parser = argparse.ArgumentParser(description="Launcher for FMASK script")
 parser.add_argument('-c', '--config', default="/etc/sen2agri/sen2agri.conf", help="configuration file")
 args = parser.parse_args()
 
-# get the db configuration from cfg file
-products_db = Database()
-if not products_db.loadConfig(args.config):
-    log(
-        LAUNCHER_LOG_DIR,
-        "Could not load the db config from configuration file",
-        LAUNCHER_LOG_FILE_NAME,
-    )
-    sys.exit(1)
-
 # get the processing context
-default_processing_context = db_get_processing_context()
+db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+default_processing_context = ProcessingContext()
+db_get_processing_context(db_config, default_processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 if default_processing_context is None:
     log(
         LAUNCHER_LOG_DIR,
@@ -1561,8 +1232,8 @@ if default_processing_context.num_workers < 1:
 remove_dir_content(default_processing_context.working_dir["default"])
 
 # clear pending tiless
-db_clear_pending_tiles()
-fmask_master = FMaskMaster(default_processing_context.num_workers)
+db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+fmask_master = FMaskMaster(default_processing_context.num_workers, db_config)
 fmask_master.run()
 
 if not DEBUG:

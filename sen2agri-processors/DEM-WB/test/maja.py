@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen2Agri-Processors
    Language:     Python
-   Copyright:    2015-2016, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software

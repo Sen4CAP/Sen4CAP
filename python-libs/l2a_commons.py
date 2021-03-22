@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen2Agri-Processors
    Language:     Python
-   Copyright:    2015-2016, CS Romania, office@c-s.ro
+   Copyright:    2015-2021, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -20,7 +20,6 @@ _____________________________________________________________________________
 from __future__ import print_function
 from __future__ import with_statement
 from __future__ import absolute_import
-import errno
 import subprocess
 import os
 import sys
@@ -28,10 +27,13 @@ import time, datetime
 import pipes
 import shutil
 import osr
-import glob
 import gdal
+import ntpath
+import zipfile
+import tarfile
+import tempfile
 
-DEBUG = True
+DEBUG = False
 SENTINEL2_SATELLITE_ID = 1
 LANDSAT8_SATELLITE_ID = 2
 UNKNOWN_PROCESSOR_OUTPUT_FORMAT = 0
@@ -40,18 +42,6 @@ THEIA_MUSCATE_OUTPUT_FORMAT = 2
 SEN2COR_PROCESSOR_OUTPUT_FORMAT = 3
 FILES_IN_LANDSAT_L1_PRODUCT = 13
 UNKNOWN_SATELLITE_ID = -1
-MAJA_LOG_DIR = "/tmp/"
-MAJA_LOG_FILE_NAME = "maja.log"
-SEN2COR_LOG_DIR = "/tmp/"
-SEN2COR_LOG_FILE_NAME = "sen2cor.log"
-DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
-DATABASE_DOWNLOADER_STATUS_DOWNLOADED_VALUE = 2
-DATABASE_DOWNLOADER_STATUS_FAILED_VALUE = 3
-DATABASE_DOWNLOADER_STATUS_ABORTED_VALUE = 4
-DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE = 5
-DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE = 6
-MAX_LOG_FILE_SIZE = 419430400 #bytes -> 400 MB
-MAX_NUMBER_OF_KEPT_LOG_FILES = 4 #number of maximum logfiles to be kept
 
 ### OS related operations
 
@@ -68,49 +58,6 @@ def remove_dir_content(directory):
             return False
     return True
 
-def manage_log_file(location, log_filename):
-    try:
-        log_file = os.path.join(location, log_filename)
-        if not os.path.isfile(log_file):
-            print("The logfile {} does not exist yet".format(log_file))
-            return
-        if os.stat(log_file).st_size >= MAX_LOG_FILE_SIZE:
-            print("Log file is bigger than {}".format(MAX_LOG_FILE_SIZE))
-            #take the  current datetime
-            new_log_file = "{}_{}".format(log_file, datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
-            #move the log file with the new name, with datetime at the end
-            print("Log file {} moved to {}".format(log_file, new_log_file))
-            shutil.move(log_file, new_log_file)
-            #check if there are other previous saved log files and delete the oldest one
-            previous_log_files = glob.glob("{}*.log_20*".format(location if location.endswith("/") else location + "/"))
-            while len(previous_log_files) > MAX_NUMBER_OF_KEPT_LOG_FILES:
-                oldest_idx = -1
-                idx = 0
-                oldest_datetime = datetime.datetime.strptime("40000101000001", "%Y%m%d%H%M%S")
-                for log_file in previous_log_files:
-                    underscore_idx = log_file.rfind('_')
-                    if underscore_idx > 0 and underscore_idx + 1 < len(log_file):
-                        str_log_datetime = log_file[underscore_idx + 1:len(log_file)]
-                        if len(str_log_datetime) != 14: #number of digits in the timestamp
-                            idx += 1
-                            continue
-                        log_datetime = datetime.datetime.strptime(str_log_datetime, "%Y%m%d%H%M%S")
-                        if log_datetime <= oldest_datetime:
-                            oldest_datetime = log_datetime
-                            oldest_idx = idx
-                    idx += 1
-                # remove the oldest file if found
-                print("oldest_datetime: {} | oldest_idx: {}" .format(oldest_datetime, oldest_idx))
-                if oldest_idx > -1:
-                    os.remove(previous_log_files[oldest_idx])
-                    print("Log file {} removed".format(previous_log_files[oldest_idx]))
-                else:
-                    break
-                #the main 'if'  can be replaced by 'while', and the following line should
-                #be uncommented. be aware though...it can lead to infinite loop (probably not, but never say never again
-                previous_log_files = glob.glob("{}*.log_20*".format(location if location.endswith("/") else location + "/"))
-    except Exception as e:
-        print("Error in manage_log_file: exception {} !".format(e))
 
 def log(location, info, log_filename = ""):
     try:
@@ -146,16 +93,9 @@ def run_command(cmd_array, log_path = "", log_filename = "", fake_command = Fals
 
 
 def create_recursive_dirs(dir_name):
-    # FIXME: just use makedirs(exist_ok=True) in Python 3
     if not os.path.exists(dir_name):
         try:
             os.makedirs(dir_name)
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
-                return False
-            else:
-                return True
         except Exception as e:
             print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
             return False
@@ -189,13 +129,6 @@ def copy_directory(src, dest):
 ### IMG related operations
 
 def ReprojectCoords(coords, src_srs, tgt_srs):
-    #trans_coords = []
-    #transform = osr.CoordinateTransformation(src_srs, tgt_srs)
-    #for x, y in coords:
-    #    x, y, z = transform.TransformPoint(x, y)
-    #    trans_coords.append([x, y])
-    #return trans_coords
-
     trans_coords = []
     transform = osr.CoordinateTransformation(src_srs, tgt_srs)
     for x, y in coords:
@@ -237,3 +170,114 @@ def get_footprint(image_filename):
 
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
+
+### Archiving operations
+
+class ArchiveHandler(object):
+    def __init__(self, archives_dir, log_dir, log_file_name):
+        self.archives_dir= archives_dir
+        self.log_dir = log_dir
+        self.log_file_name = log_file_name
+
+    def archive_log(self, info):
+        log(self.log_dir, info, self.log_file_name)
+
+    def path_filename(self, path):
+        head, filename = ntpath.split(path)
+        return filename or ntpath.basename(head)
+
+    def check_if_flat_archive(self, output_dir, archive_filename):
+        dir_content = os.listdir(output_dir)
+        if len(dir_content) == 1 and os.path.isdir(
+            os.path.join(output_dir, dir_content[0])
+        ):
+            return os.path.join(output_dir, dir_content[0])
+        if len(dir_content) > 1:
+            # use the archive filename, strip it from extension
+            product_name, file_ext = os.path.splitext(
+                self.path_filename(archive_filename)
+            )
+            # handle .tar.gz case
+            if product_name.endswith(".tar"):
+                product_name, file_ext = os.path.splitext(product_name)
+            product_path = os.path.join(output_dir, product_name)
+            if create_recursive_dirs(product_path):
+                # move the list to this directory:
+                for name in dir_content:
+                    shutil.move(
+                        os.path.join(output_dir, name), os.path.join(product_path, name)
+                    )
+                return product_path
+
+        return None
+
+    def unzip(self, output_dir, input_file):
+        self.archive_log("Unzip archive = {} to {}".format(input_file, output_dir))
+        try:
+            with zipfile.ZipFile(input_file) as zip_archive:
+                zip_archive.extractall(output_dir)
+                return self.check_if_flat_archive(
+                    output_dir, self.path_filename(input_file)
+                )
+        except Exception as e:
+            self.archive_log(
+                "Exception when trying to unzip file {}:  {} ".format(input_file, e)
+            )
+
+        return None
+
+    def untar(self, output_dir, input_file):
+        self.archive_log("Untar archive = {} to {}".format(input_file, output_dir))
+        try:
+            with tarfile.open(input_file) as tar_archive:
+                tar_archive.extractall(output_dir)
+                tar_archive.close()
+                return self.check_if_flat_archive(
+                    output_dir, self.path_filename(input_file)
+                )
+        except Exception as e:
+            self.launcher_log(
+                "Exception when trying to untar file {}:  {} ".format(input_file, e)
+            )
+
+        return None
+
+    def extract_from_archive_if_needed(self, archive_file):
+        if os.path.isdir(archive_file):
+            self.archive_log(
+                "This {} wasn't an archive, so continue as is.".format(archive_file)
+            )
+            return False, archive_file
+        else:
+            if zipfile.is_zipfile(archive_file):
+                if create_recursive_dirs(self.archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=self.archives_dir)
+                        extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
+                        self.archive_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.archive_log("Can NOT extract zip archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.archive_log("Can NOT create arhive dir.")
+                    return False, None
+            elif tarfile.is_tarfile(archive_file):
+                if create_recursive_dirs(self.archives_dir):
+                    try:
+                        extracted_archive_dir = tempfile.mkdtemp(dir=self.archives_dir)
+                        extracted_file_path = self.untar(extracted_archive_dir, archive_file)
+                        self.archive_log("Archive extracted to: {}".format(extracted_file_path))
+                        return True, extracted_file_path
+                    except Exception as e:
+                        self.archive_log("Can NOT extract tar archive {} due to: {}".format(archive_file, e))
+                        return False, None
+                else:
+                    self.archive_log("Can NOT create arhive dir.")
+                    return False, None
+            else:
+                self.archive_log(
+                    "This wasn't an zip or tar archive, can NOT use input product."
+                )
+                return False, None
+
