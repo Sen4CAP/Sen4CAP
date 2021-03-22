@@ -63,11 +63,10 @@ class DBConfig:
             parser.read([config_file])
 
             config.host = parser.get("Database", "HostName")
-            #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
-            int(parser.get("Database", "Port", vars={"Port": "5432"}))
             config.user = parser.get("Database", "UserName")
             config.password = parser.get("Database", "Password")
             config.database = parser.get("Database", "DatabaseName")
+            #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
             config.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
         except Exception as e:
             log(
@@ -110,14 +109,13 @@ def db_get_site_short_name(db_config, site_id, log_dir, log_file):
         cursor.execute(q)
         cursor_ret = cursor.fetchone()
         if cursor_ret is None:
-            return ""
+            return None
         else:
             (short_name,) = cursor_ret
             return short_name
 
     with db_config.connect() as connection:
         short_name = handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "get_site_short_name({}) = {}".format(site_id, short_name), log_file)
         return short_name
 
 def db_get_processing_context(db_config, processing_context, processor_name, log_dir, log_file):

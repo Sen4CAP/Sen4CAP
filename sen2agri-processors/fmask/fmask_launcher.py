@@ -956,17 +956,17 @@ class ProcessingContext(object):
         else:
             site_context.output_path = self.output_path["default"]
         if site_id in self.fmask_threshold:
-            site_context.fmask_threshold = self.fmask_threshold[site_id]
+            site_context.fmask_threshold = float(self.fmask_threshold[site_id])
         else:
-            site_context.fmask_threshold = self.fmask_threshold["default"]
+            site_context.fmask_threshold = float(self.fmask_threshold["default"])
         if site_id in self.fmask_threshold_s2:
-            site_context.fmask_threshold_s2 = self.fmask_threshold_s2[site_id]
+            site_context.fmask_threshold_s2 = float(self.fmask_threshold_s2[site_id])
         else:
-            site_context.fmask_threshold_s2 = self.fmask_threshold_s2["default"]
+            site_context.fmask_threshold_s2 = float(self.fmask_threshold_s2["default"])
         if site_id in self.fmask_threshold_l8:
-            site_context.fmask_threshold_l8 = self.fmask_threshold_l8[site_id]
+            site_context.fmask_threshold_l8 = float(self.fmask_threshold_l8[site_id])
         else:
-            site_context.fmask_threshold_l8 = self.fmask_threshold_l8["default"]
+            site_context.fmask_threshold_l8 = float(self.fmask_threshold_l8["default"])
         if site_id in self.fmask_extractor_image:
             site_context.fmask_extractor_image = self.fmask_extractor_image[site_id]
         else:
@@ -1082,16 +1082,13 @@ def db_get_unprocessed_tile(db_config, log_dir, log_file):
         cursor.execute(q1)
         q2 = SQL("select * from sp_start_fmask_l1_tile_processing()")
         cursor.execute(q2)
-        tile_info = cursor.fetchall()
+        tile_info = cursor.fetchone()
         return tile_info
 
     with db_config.connect() as connection:
         tile_info = handle_retries(connection, _run, log_dir, log_file)
         log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
-        if tile_info == []:
-            return None
-        else:
-            return tile_info[0]
+        return tile_info
 
 def db_clear_pending_tiles(db_config, db_func_name, log_dir, log_file):
     def _run(cursor):
@@ -1101,7 +1098,7 @@ def db_clear_pending_tiles(db_config, db_func_name, log_dir, log_file):
         cursor.execute(q2)
 
     with db_config.connect() as connection:
-        (_,) = handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log_dir, log_file)
 
 def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):   
@@ -1175,11 +1172,9 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_
                                         "downloader_history_id" : downloader_product_id
                                     }
             )
-
-        return True
     
     with db_config.connect() as connection:
-        _ = handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log_dir, log_file)
 
 def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):

@@ -229,12 +229,12 @@ class ArchiveHandler(object):
     def untar(self, output_dir, input_file):
         self.archive_log("Untar archive = {} to {}".format(input_file, output_dir))
         try:
-            tar_archive = tarfile.open(input_file)
-            tar_archive.extractall(output_dir)
-            tar_archive.close()
-            return self.check_if_flat_archive(
-                output_dir, self.path_filename(input_file)
-            )
+            with tarfile.open(input_file) as tar_archive:
+                tar_archive.extractall(output_dir)
+                tar_archive.close()
+                return self.check_if_flat_archive(
+                    output_dir, self.path_filename(input_file)
+                )
         except Exception as e:
             self.launcher_log(
                 "Exception when trying to untar file {}:  {} ".format(input_file, e)

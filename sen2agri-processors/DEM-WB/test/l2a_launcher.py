@@ -701,7 +701,7 @@ class L2aWorker(threading.Thread):
 
 
 class Tile(object):
-    def __init__(self, tile_info):
+    def __init__(self, tile_info, base_output_path, db_config):
         self.site_id = tile_info[0]
         self.satellite_id = tile_info[1]
         self.orbit_id = tile_info[2]
@@ -711,6 +711,9 @@ class Tile(object):
         self.previous_l2a_path = tile_info[6]
         self.site_short_name = ""
         self.site_output_path = ""
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        self.site_output_path = base_output_path.replace("{site}", self.site_short_name)
+
 
     def is_valid(self):
         if self.downloader_history_id is None:
@@ -763,7 +766,7 @@ class Tile(object):
             )
             return False
 
-        if len(self.site_short_name) == 0:
+        if self.site_short_name is None:
             log(
                 LAUNCHER_LOG_DIR,
                 "Aborting processing for product {} because site short name is incorrect".format(
@@ -2141,7 +2144,7 @@ def db_clear_pending_tiles(db_config, log_dir, log_file):
         cursor.execute(q2)
 
     with db_config.connect() as connection:
-        (_,) = handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log_dir, log_file)
 
 def db_get_unprocessed_tile(db_config, log_dir, log_file):
     def _run(cursor):
@@ -2149,16 +2152,13 @@ def db_get_unprocessed_tile(db_config, log_dir, log_file):
         cursor.execute(q1)
         q2 = SQL("select * from sp_start_l1_tile_processing()")
         cursor.execute(q2)
-        tile_info = cursor.fetchall()
+        tile_info = cursor.fetchone()
         return tile_info
 
     with db_config.connect() as connection:
         tile_info = handle_retries(connection, _run, log_dir, log_file)
         log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
-        if tile_info == []:
-            return None
-        else:
-            return tile_info[0]
+        return tile_info
 
 def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
@@ -2257,10 +2257,8 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
                 },
             )
 
-        return True
-
     with db_config.connect() as connection:
-        _ = handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log_dir, log_file)
 
 def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
@@ -2295,10 +2293,8 @@ def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_fi
             {"status_id": processing_status, "l1c_id": downloader_history_id},
         )
 
-        return True
-
     with db_config.connect() as connection:
-        _ = handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log_dir, log_file)
         log(log_dir, "Product with downloader history id {} was rejected because: {}".format(tile.downloader_history_id, reason), log_file)
 
 parser = argparse.ArgumentParser(description="Launcher for MAJA/Sen2Cor script")
