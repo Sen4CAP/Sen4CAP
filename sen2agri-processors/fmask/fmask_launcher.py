@@ -956,17 +956,17 @@ class ProcessingContext(object):
         else:
             site_context.output_path = self.output_path["default"]
         if site_id in self.fmask_threshold:
-            site_context.fmask_threshold = float(self.fmask_threshold[site_id])
+            site_context.fmask_threshold = self.fmask_threshold[site_id]
         else:
-            site_context.fmask_threshold = float(self.fmask_threshold["default"])
+            site_context.fmask_threshold = self.fmask_threshold["default"]
         if site_id in self.fmask_threshold_s2:
-            site_context.fmask_threshold_s2 = float(self.fmask_threshold_s2[site_id])
+            site_context.fmask_threshold_s2 = self.fmask_threshold_s2[site_id]
         else:
-            site_context.fmask_threshold_s2 = float(self.fmask_threshold_s2["default"])
+            site_context.fmask_threshold_s2 = self.fmask_threshold_s2["default"]
         if site_id in self.fmask_threshold_l8:
-            site_context.fmask_threshold_l8 = float(self.fmask_threshold_l8[site_id])
+            site_context.fmask_threshold_l8 = self.fmask_threshold_l8[site_id]
         else:
-            site_context.fmask_threshold_l8 = float(self.fmask_threshold_l8["default"])
+            site_context.fmask_threshold_l8 = self.fmask_threshold_l8["default"]
         if site_id in self.fmask_extractor_image:
             site_context.fmask_extractor_image = self.fmask_extractor_image[site_id]
         else:
@@ -1090,7 +1090,7 @@ def db_get_unprocessed_tile(db_config, log_dir, log_file):
         log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
         return tile_info
 
-def db_clear_pending_tiles(db_config, db_func_name, log_dir, log_file):
+def db_clear_pending_tiles(db_config, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
