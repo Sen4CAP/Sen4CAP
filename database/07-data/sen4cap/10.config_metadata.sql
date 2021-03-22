@@ -166,10 +166,10 @@ INSERT INTO config_metadata VALUES ('processor.l2a.srtm-path', 'path where the S
 INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'path where the SWBD files are to be found', 'directory', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'working directory', 'string', false, 2);
 
--- Tillage processor keys               
+-- Tillage processor keys
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable or disable tillage monitoring', 'int', false, 20, true, 'Enable or disable tillage monitoring');
 
--- Marker database keys                
+-- Marker database keys
 INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.slurm_qos', 'Slurm QOS for MDB1 processor', 'string', true, 8);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_amp', 'The list of AMP products', 'select', FALSE, 26, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10}');
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_cohe', 'The list of COHE products', 'select', FALSE, 26, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11}');
@@ -198,3 +198,5 @@ INSERT INTO config_metadata VALUES ('executor.http-server.listen-port', 'Executo
 INSERT INTO config_metadata VALUES ('orchestrator.http-server.listen-ip', 'Orchestrator HTTP listen ip', 'string', false, 1);
 INSERT INTO config_metadata VALUES ('orchestrator.http-server.listen-port', 'Orchestrator HTTP listen port', 'string', false, 1);
 
+-- Fmask
+INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 2);

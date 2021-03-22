@@ -15,6 +15,37 @@ begin
         raise exception 'Please set the transaction isolation level to serializable.' using errcode = 'UE001';
     end if;
 
+    create temporary table if not exists site_config(
+        key,
+        site_id,
+        value
+    ) as
+    select
+        keys.key,
+        site.id,
+        config.value
+    from site
+    cross join (
+        values
+            ('processor.fmask.enabled'),
+            ('s2.enabled'),
+            ('l8.enabled')
+    ) as keys(key)
+    cross join lateral (
+        select
+            coalesce((
+                select value
+                from config
+                where key = keys.key
+                and config.site_id = site.id
+            ), (
+                select value
+                from config
+                where key = keys.key
+                and config.site_id is null
+            )) as value
+    ) config;
+
     select fmask_history.satellite_id,
            fmask_history.downloader_history_id
     into _satellite_id,
@@ -54,6 +85,27 @@ begin
             _site_id
         from downloader_history
         inner join site on site.id = downloader_history.site_id
+        cross join lateral (
+            select
+                (
+                    select value :: boolean as fmask_enabled
+                    from site_config
+                    where site_config.site_id = downloader_history.site_id
+                    and key = 'processor.fmask.enabled'
+                ),
+                (
+                    select value :: boolean as s2_enabled
+                    from site_config
+                    where site_config.site_id = downloader_history.site_id
+                    and key = 's2.enabled'
+                ),
+                (
+                    select value :: boolean as l8_enabled
+                    from site_config
+                    where site_config.site_id = downloader_history.site_id
+                    and key = 'l8.enabled'
+                )
+        ) config
         where not exists (
             select *
             from fmask_history
@@ -61,7 +113,12 @@ begin
         )
         and downloader_history.status_id in (2, 5, 7) -- downloaded, processing
         and site.enabled
-        and downloader_history.satellite_id in (1, 2) -- sentinel2, landsat8
+        and fmask_enabled
+        and case downloader_history.satellite_id
+            when 1 then config.s2_enabled
+            when 2 then config.l8_enabled
+            else false
+        end
         order by satellite_id, product_date
         limit 1;
 
