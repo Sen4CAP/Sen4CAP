@@ -1,4 +1,6 @@
-create or replace function sp_start_fmask_l1_tile_processing()
+create or replace function sp_start_fmask_l1_tile_processing(
+    _node_id text
+)
 returns table (
     site_id int,
     satellite_id smallint,
@@ -126,11 +128,13 @@ begin
             insert into fmask_history (
                 satellite_id,
                 downloader_history_id,
-                status_id
+                status_id,
+                node_id
             ) values (
                 _satellite_id,
                 _downloader_history_id,
-                1 -- processing
+                1, -- processing
+                _node_id
             );
         end if;
     end if;
