@@ -1,4 +1,6 @@
-create or replace function sp_start_l1_tile_processing()
+create or replace function sp_start_l1_tile_processing(
+    _node_id text,
+)
 returns table (
     site_id int,
     satellite_id smallint,
@@ -225,13 +227,15 @@ begin
                 orbit_id,
                 tile_id,
                 downloader_history_id,
-                status_id
+                status_id,
+                node_id
             ) values (
                 _satellite_id,
                 _orbit_id,
                 _tile_id,
                 _downloader_history_id,
-                1 -- processing
+                1, -- processing
+                _node_id
             );
 
             update downloader_history

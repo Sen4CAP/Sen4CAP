@@ -1,4 +1,6 @@
-create or replace function sp_clear_pending_l1_tiles()
+create or replace function sp_clear_pending_l1_tiles(
+    _node_id text
+)
 returns void
 as
 $$
@@ -12,6 +14,7 @@ begin
     using downloader_history
     where downloader_history.id = l1_tile_history.downloader_history_id
       and l1_tile_history.status_id = 1 -- processing
+      and l1_tile_history.node_id = _node_id
       and downloader_history.satellite_id in (1, 2); -- sentinel2, landsat8
 
     update downloader_history
