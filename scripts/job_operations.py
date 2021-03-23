@@ -19,6 +19,7 @@ import pipes
 import shutil
 import psycopg2
 import psycopg2.errorcodes
+from psycopg2.sql import SQL, Literal, Identifier
 import optparse
 from osgeo import ogr
 from subprocess import Popen, PIPE
@@ -101,6 +102,8 @@ def cancel_slurm_tasks_for_jobs(job_ids) :
                         (output, err) = process.communicate()
                         exit_code = process.wait()
                 
+def reset_failed_jobs(job_ids):
+    l2a_db.reset_failed_jobs(job_ids)
         
 ###########################################################################
 class Config(object):
@@ -244,7 +247,10 @@ class L2AInfo(object):
         if not self.database_connect():
             return False
         try:
-            print("Executing SQL command: {}".format(cmd))
+            if isinstance(cmd, psycopg2.sql.SQL):
+                print("Executing SQL command: {}".format(query.as_string(self.conn)))
+            else:
+                print("Executing SQL command: {}".format(cmd))
             self.cursor.execute(cmd)
             self.conn.commit()
         except Exception, e:
@@ -317,12 +323,69 @@ class L2AInfo(object):
 #                                            '/org/esa/sen2agri/orchestrator')
 #        orchestrator_proxy.NotifyEventsAvailable()
 
+    def get_job_status(self, job_id):
+        status_id = None
+        results = self.executeSqlSelectCmdAllFields("select status_id from job where id = {}".format(job_id))
+        for (status, ) in results: 
+            status_id = status
+        return status_id
 
+    def reset_failed_jobs(self, jobIds):
+        for job_id in jobIds : 
+            job_status = self.get_job_status(job_id)
+            if job_status != 8 :        # and job_status != 7: TODO: Do we need also this one?
+                print ("Job with id {} either does not exist or is not in Error state".format(job_id, job_status))
+                continue 
+            
+            query = SQL(
+                """ UPDATE step
+                        SET status_id = 1, --Submitted
+                            status_timestamp = now()
+                        FROM task
+                        WHERE task.id = step.task_id AND task.job_id = {}
+                                AND step.status_id in (4, 7, 8); -- Running, Cancelled or Failed; """
+            )
+            # TODO : should we consider here (7, 8); -- Canceled or Failed instead of Running, Canceled and Failed ???
+            query = query.format(Literal(job_id))
+            self.executeSqlDeleteCmd(query)
+
+            query = SQL(
+                """ 	UPDATE task
+                        SET status_id = CASE WHEN EXISTS (SELECT * FROM step WHERE step.task_id = task.id AND step.status_id = 6) THEN 4 --Running
+                            ELSE 1 --Submitted
+                        END,
+                        status_timestamp = now()
+                        WHERE task.job_id = {} and status_id in (4, 7, 8); -- Running, Cancelled or Failed """
+            )
+            # TODO : should we consider here only (7, 8); -- Canceled or Failed instead of Running, Canceled and Failed ???
+            job_id_filter = Literal(job_id)
+            query = query.format(Literal(job_id))
+            self.executeSqlDeleteCmd(query)
+
+            query = SQL(
+                """ 	UPDATE job
+                        SET status_id = CASE WHEN EXISTS (SELECT * FROM task WHERE task.job_id = job.id AND status_id IN (4,6)) 
+                                THEN 4 --Running
+                                ELSE 1 --Submitted
+                            END,
+                            status_timestamp = now()
+                        WHERE id = {}
+                                AND status_id in (8); -- Error; """
+            )
+            # TODO : should we consider here only (7, 8); -- Canceled or Failed instead of just Failed ??? Do we need that?
+            
+            query = query.format(Literal(job_id))
+            self.executeSqlDeleteCmd(query)
+        
+            self.executeSqlDeleteCmd("set transaction isolation level repeatable read; select from sp_mark_job_paused({})".format(job_id)) 
+            self.executeSqlDeleteCmd("set transaction isolation level repeatable read; select from sp_mark_job_resumed({})".format(job_id))
+
+    
 parser = argparse.ArgumentParser(
-    description="Script for stopping one or several jobs")
+    description="Script for performing operations on one or several jobs")
 parser.add_argument('-c', '--config', default="/etc/sen2agri/sen2agri.conf", help="configuration file")
-parser.add_argument('-j', '--job_ids', help="The Job id to be stopped")
-parser.add_argument('-o', '--operation', help="The operation to be performed on the jobs (delete/cancel/pause/resume)")
+parser.add_argument('-j', '--job-ids', nargs='+', help="The Job id to be stopped", required=True)
+parser.add_argument('-o', '--operation', help="The operation to be performed on the jobs (delete/cancel/pause/resume/reset_failed/stop_slurm_tasks)", required=True)
 
 args = parser.parse_args()
 
@@ -336,11 +399,10 @@ if (not args.job_ids):
     sys.exit("Please provide the job ids -j or --job_ids!")
     
 if (not args.operation):
-    sys.exit("Please provide the operation -o or --operation with one of the values: delete, cancel, pause or resume!")
+    sys.exit("Please provide the operation -o or --operation with one of the values: delete, cancel, pause, resume, reset_failed or stop_slurm_tasks!")
 
 jobIds = []    
-jobStrIds = args.job_ids.split(', ')
-for jobIdStr in jobStrIds:
+for jobIdStr in args.job_ids:
     jobIds.append(int(jobIdStr))
     
 jobsOperation = args.operation.lower
@@ -359,6 +421,11 @@ elif args.operation == "pause" :
 elif args.operation == "resume" : 
     print("Resuming jobs: {}".format(jobIds))
     resume_jobs(jobIds)
+
+elif args.operation == "reset_failed" : 
+    print("Resetting failed jobs: {}".format(jobIds))
+    reset_failed_jobs(jobIds)
+
 elif args.operation == "stop_slurm_tasks" :     
     print("Stopping slurm tasks for : {}".format(jobIds))
     cancel_slurm_tasks_for_jobs(jobIds)

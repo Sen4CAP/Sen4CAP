@@ -7,7 +7,8 @@ BEGIN
 		SELECT 	PROC.id, 
 			PROC.name,
 			PROC.description, 
-			PROC.short_name
+			PROC.short_name,
+			PROC.required
   		FROM processor PROC
 		WHERE
 			($1 IS NULL OR PROC.id = $1)

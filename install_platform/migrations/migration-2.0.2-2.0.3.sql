@@ -12,8 +12,8 @@ begin
             raise notice 'patching 2.0.2';
             
             INSERT INTO processor (id, name, short_name, label) VALUES (3, 'L3B Vegetation Status','l3b', 'L3B &mdash; LAI/FAPAR/FCOVER/NDVI') on conflict(id) DO UPDATE SET name = 'L3B Vegetation Status', short_name = 'l3b', label = 'L3B &mdash; LAI/FAPAR/FCOVER/NDVI';
-            INSERT INTO processor (id, name, short_name, label) VALUES (4, 'L3E Pheno NDVI metrics','l3e', 'L3E &mdash; Phenology Indices')
-                on conflict(id) DO UPDATE SET name = 'L3E Pheno NDVI metrics', short_name = 'l3e', label = 'L3E &mdash; Phenology Indices';
+            INSERT INTO processor (id, name, short_name, label) VALUES (4, 'S2A L3E Pheno NDVI metrics','l3e', 'S2A L3E &mdash; Phenology Indices')
+                on conflict(id) DO UPDATE SET name = 'S2A L3E Pheno NDVI metrics', short_name = 'l3e', label = 'S2A L3E &mdash; Phenology Indices';
             
             INSERT INTO processor (id, name, short_name, label) VALUES (12, 'S2A L3C LAI N-Days Reprocessing','s2a_l3c', 'S2A L3C &mdash; LAI N-Days Reprocessing') 
                 on conflict(id) DO nothing;

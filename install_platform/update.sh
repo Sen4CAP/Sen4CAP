@@ -310,6 +310,7 @@ function setup_containers() {
     cd ..
 
     docker pull sen4cap/processors:2.0.0
+    docker pull sen4cap/grassland_mowing:2.0.0
     docker pull lnicola/sen2agri-l2a-processors
     docker pull lnicola/sen2agri-dem
 }
@@ -491,39 +492,39 @@ else
 #    echo 'install.packages(c("e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily"), repos = c(CRAN = "https://cran.rstudio.com"))' | Rscript -
 
     # Install Miniconda and the environment for the execution of processors
-    SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
-    cp "${SCRIPTPATH}/../tools/miniconda/Miniconda3-latest-Linux-x86_64.sh" "/mnt/archive/"
-    cp "${SCRIPTPATH}/../tools/miniconda/sen4cap_conda.yml" "/mnt/archive/"
+#    SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
+#    cp "${SCRIPTPATH}/../tools/miniconda/Miniconda3-latest-Linux-x86_64.sh" "/mnt/archive/"
+#    cp "${SCRIPTPATH}/../tools/miniconda/sen4cap_conda.yml" "/mnt/archive/"
 
-    echo "Installing conda ..."
-    if [ -f /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh ] ; then
-        echo "/home/sen2agri-service/miniconda3/etc/profile.d/conda.sh found ..."
-        echo "Miniconda already installed for user sen2agri-service. Nothing to do ..."
-    else
-        sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b"
-        # sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b -p /mnt/archive/sen4cap_miniconda/miniconda3/"
-        # sudo -u sen2agri-service bash -c 'echo ". /mnt/archive/sen4cap_miniconda/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
-        sudo su -l sen2agri-service -c bash -c "conda update -y -n base -c defaults conda"
-        echo "Updating bashrc ..."
-        sudo -u sen2agri-service bash -c 'echo ". /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
-    fi
-    echo "Setting report_errors to false..."
-    sudo su -l sen2agri-service -c bash -c "conda config --set report_errors false"
-    CUR_SEN4CAP_ENV_VAL=$(sudo su -l sen2agri-service -c bash -c "conda info --envs" | grep sen4cap)
-    if [ -z "$CUR_SEN4CAP_ENV_VAL" ]; then
-        echo "Creating sen4cap conda environment ..."
-        sudo su -l sen2agri-service -c bash -c "conda env create --file=/mnt/archive/sen4cap_conda.yml"
-        echo "Printing current environments ..."
-        sudo su -l sen2agri-service -c bash -c "conda info --envs"
-    else
-        echo "sen4cap conda environment already exists. Checking for pyarrow installation ..."
-        sudo su -l sen2agri-service -c bash -c "conda activate sen4cap &&  pip install pyarrow"
-        echo "Environments:"
-        sudo su -l sen2agri-service -c bash -c "conda info --envs"
-    fi
-
-    rm "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh"
-    rm "/mnt/archive/sen4cap_conda.yml"
+#     echo "Installing conda ..."
+#     if [ -f /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh ] ; then
+#         echo "/home/sen2agri-service/miniconda3/etc/profile.d/conda.sh found ..."
+#         echo "Miniconda already installed for user sen2agri-service. Nothing to do ..."
+#     else
+#         sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b"
+#         # sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b -p /mnt/archive/sen4cap_miniconda/miniconda3/"
+#         # sudo -u sen2agri-service bash -c 'echo ". /mnt/archive/sen4cap_miniconda/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
+#         sudo su -l sen2agri-service -c bash -c "conda update -y -n base -c defaults conda"
+#         echo "Updating bashrc ..."
+#         sudo -u sen2agri-service bash -c 'echo ". /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
+#     fi
+#     echo "Setting report_errors to false..."
+#     sudo su -l sen2agri-service -c bash -c "conda config --set report_errors false"
+#     CUR_SEN4CAP_ENV_VAL=$(sudo su -l sen2agri-service -c bash -c "conda info --envs" | grep sen4cap)
+#     if [ -z "$CUR_SEN4CAP_ENV_VAL" ]; then
+#         echo "Creating sen4cap conda environment ..."
+#         sudo su -l sen2agri-service -c bash -c "conda env create --file=/mnt/archive/sen4cap_conda.yml"
+#         echo "Printing current environments ..."
+#         sudo su -l sen2agri-service -c bash -c "conda info --envs"
+#     else
+#         echo "sen4cap conda environment already exists. Checking for pyarrow installation ..."
+#         sudo su -l sen2agri-service -c bash -c "conda activate sen4cap &&  pip install pyarrow"
+#         echo "Environments:"
+#         sudo su -l sen2agri-service -c bash -c "conda info --envs"
+#     fi
+# 
+#     rm "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh"
+#     rm "/mnt/archive/sen4cap_conda.yml"
 
     echo "Updating R packages..."
     Rscript - <<- EOF

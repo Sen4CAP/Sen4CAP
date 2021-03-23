@@ -360,6 +360,7 @@ function config_docker()
     done
 
     docker pull sen4cap/processors:2.0.0
+    docker pull sen4cap/grassland_mowing:2.0.0
     docker pull lnicola/sen2agri-l2a-processors
     docker pull lnicola/sen2agri-dem
 
@@ -563,24 +564,24 @@ function install_additional_packages()
         }
 EOF
 
-        # Install Miniconda and the environment for the execution of processors
-        SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
-        cp "${SCRIPTPATH}/../tools/miniconda/Miniconda3-latest-Linux-x86_64.sh" "/mnt/archive/"
-        cp "${SCRIPTPATH}/../tools/miniconda/sen4cap_conda.yml" "/mnt/archive/"
-
-        sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b"
-      # sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b -p /mnt/archive/sen4cap_miniconda/miniconda3/"
-        sudo -u sen2agri-service bash -c 'echo ". /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
-        sudo su -l sen2agri-service -c bash -c "conda config --set report_errors false"
-        if [ -d "/home/sen2agri-service/miniconda3/envs/sen4cap" ] ; then
-            sudo rm -fR /home/sen2agri-service/miniconda3/envs/sen4cap
-        fi
-        sudo su -l sen2agri-service -c bash -c "conda update -y -n base conda"
-        sudo su -l sen2agri-service -c bash -c "conda env create --file=/mnt/archive/sen4cap_conda.yml"
-        sudo su -l sen2agri-service -c bash -c "conda info --envs"
-
-        rm "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh"
-        rm "/mnt/archive/sen4cap_conda.yml"
+#        # Install Miniconda and the environment for the execution of processors
+#        SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
+#        cp "${SCRIPTPATH}/../tools/miniconda/Miniconda3-latest-Linux-x86_64.sh" "/mnt/archive/"
+#        cp "${SCRIPTPATH}/../tools/miniconda/sen4cap_conda.yml" "/mnt/archive/"
+#
+#        sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b"
+#      # sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b -p /mnt/archive/sen4cap_miniconda/miniconda3/"
+#        sudo -u sen2agri-service bash -c 'echo ". /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
+#        sudo su -l sen2agri-service -c bash -c "conda config --set report_errors false"
+#        if [ -d "/home/sen2agri-service/miniconda3/envs/sen4cap" ] ; then
+#            sudo rm -fR /home/sen2agri-service/miniconda3/envs/sen4cap
+#        fi
+#        sudo su -l sen2agri-service -c bash -c "conda update -y -n base conda"
+#        sudo su -l sen2agri-service -c bash -c "conda env create --file=/mnt/archive/sen4cap_conda.yml"
+#        sudo su -l sen2agri-service -c bash -c "conda info --envs"
+#
+#        rm "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh"
+#        rm "/mnt/archive/sen4cap_conda.yml"
 
     fi
 }

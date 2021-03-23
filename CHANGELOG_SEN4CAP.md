@@ -98,7 +98,7 @@
 
 ## Compatibility warning
 
-  - The current release can use a newer version of MAJA (version 4) , which will not be able to work with products from previous versions (MAJA 3). If you switch from MAJA 3 to MAJA 4 (see the SUM), you will need to restart the processing of your existing sites from scratch.
+  - The current release (Sen4CAP version 2.0) offers you the possibility to use a newer version of MAJA (version 4). If you decide to switch from MAJA version 3 to MAJA version 4 (see the SUM), be aware that the advanced products have not yet been validated with this version 4 and that we advise you not to switch between different versions of MAJA during the processing of your season. You will need to restart the processing of your existing site from scratch.
 
 # Change Log
 

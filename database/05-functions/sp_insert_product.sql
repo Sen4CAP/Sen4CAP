@@ -12,7 +12,8 @@ CREATE OR REPLACE FUNCTION sp_insert_product(
     _orbit_id integer,
     _tiles json,
     _orbit_type_id smallint DEFAULT NULL::smallint,
-    _downloader_history_id integer DEFAULT NULL::integer)
+    _downloader_history_id integer DEFAULT NULL::integer,
+    _parent_product_ids json DEFAULT NULL::json)
   RETURNS integer AS
 $BODY$
 DECLARE return_id product.id%TYPE;
@@ -75,6 +76,14 @@ BEGIN
         )
         RETURNING id INTO return_id;
         
+        IF _parent_product_ids IS NOT NULL THEN
+            WITH parent_infos AS (
+                SELECT id as parent_product_id, created_timestamp as parent_product_date FROM product WHERE id IN (SELECT value::integer FROM json_array_elements_text(_parent_product_ids))
+            )
+            INSERT INTO product_provenance(product_id, parent_product_id, parent_product_date) 
+						SELECT return_id, parent_product_id, parent_product_date from parent_infos;
+        END IF;
+
         INSERT INTO event(
             type_id,
             data,
@@ -90,6 +99,5 @@ BEGIN
 END;
 $BODY$
   LANGUAGE plpgsql VOLATILE;
-ALTER FUNCTION sp_insert_product(smallint, smallint, integer, smallint, integer, character varying, timestamp with time zone, character varying, character varying, geography, integer, json, smallint, integer)
+ALTER FUNCTION sp_insert_product(smallint, smallint, integer, smallint, integer, character varying, timestamp with time zone, character varying, character varying, geography, integer, json, smallint, integer, _parent_product_ids json)
   OWNER TO admin;
-

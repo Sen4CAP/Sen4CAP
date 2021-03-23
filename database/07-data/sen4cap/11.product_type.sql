@@ -82,3 +82,13 @@ INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
 (23, 's4c_mdb_l4a_sar_temp','Sen4CAP L4A SAR Temporal Features', false);
+
+INSERT INTO product_type
+(id, name, description, is_raster)
+VALUES
+(25, 'fmask','Fmask mask product', true);
+
+INSERT INTO product_type
+(id, name, description, is_raster)
+VALUES
+(26, 'l2a_fmask','L2A product with FMask cloud mask', true);

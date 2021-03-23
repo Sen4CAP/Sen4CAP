@@ -4,7 +4,8 @@ create or replace function sp_get_season_scheduled_processors(
 returns table (
     processor_id processor.id%type,
     processor_name processor.name%type,
-    processor_short_name processor.short_name%type
+    processor_short_name processor.short_name%type,
+    required processor.required%type
 ) as
 $$
 begin
@@ -12,7 +13,8 @@ begin
         select
             processor.id,
             processor.name,
-            processor.short_name
+            processor.short_name,
+            processor.required
         from processor
         where exists(select *
                      from scheduled_task

@@ -2,7 +2,7 @@
 	IN user_name character varying,
 	IN email character varying,
 	IN pwd text	
-  )RETURNS character varying AS
+  )RETURNS integer AS
   $BODY$
   DECLARE user_id smallint;
 
