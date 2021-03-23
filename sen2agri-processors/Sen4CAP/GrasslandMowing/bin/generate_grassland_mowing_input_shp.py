@@ -188,7 +188,6 @@ def main():
         print("Existing column names: ".format(schema))
 
         for newField in newFields:
-            dataset.StartTransaction()
             print("Adding new field {}, type {} with default value {}".format(newField.name, newField.type, newField.defVal))
             field_idx = layer.FindFieldIndex(newField.name, False)
             if field_idx != -1:
@@ -200,19 +199,15 @@ def main():
                     continue
 
             layer.CreateField(ogr.FieldDefn(newField.name, newField.type))
-            dataset.CommitTransaction()
 
         print("Setting default values ...")
-        dataset.StartTransaction()        
         for feature in layer:
             for newField in newFields:
                 field_idx = layer.FindFieldIndex(newField.name, False)
                 feature.SetField(field_idx, newField.defVal)
                 
             layer.SetFeature(feature)
-                
-        dataset.CommitTransaction()
-    
+   
     print("Done!")
 
 if __name__ == "__main__":

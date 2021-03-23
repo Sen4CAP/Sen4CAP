@@ -35,6 +35,9 @@ create table product_details_l4c(
     p_s1_gaps text not null,
     h_w_s1_gaps text,
     h_quality text,
-    c_quality text,    
+    c_quality text, 
+    tl_week text,
+    tl_w_start text,
+    tl_w_end text,
     constraint product_details_l4c_pkey primary key(product_id, "NewID")
 );

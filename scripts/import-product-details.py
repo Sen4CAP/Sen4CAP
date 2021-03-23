@@ -227,7 +227,10 @@ def import_agricultural_practices(config, conn, pg_path, product_id, path):
                         p_s1_gaps,
                         h_w_s1_gaps,
                         h_quality,
-                        c_quality
+                        c_quality,
+                        tl_week,
+                        tl_w_start,
+                        tl_w_end
                     )
                     select
                         {},
@@ -266,7 +269,10 @@ def import_agricultural_practices(config, conn, pg_path, product_id, path):
                         p_s1gaps,
                         h_w_s1gaps,
                         h_quality,
-                        c_quality
+                        c_quality,
+                        tl_week,
+                        tl_w_start,
+                        tl_w_end                       
                     from {}
                     """
             ).format(Literal(product_id), Literal(practice_id), Identifier(table_name))

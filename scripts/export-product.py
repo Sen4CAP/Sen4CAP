@@ -270,7 +270,10 @@ def export_agricultural_practices(
                 p_s1_gaps as "P_S1GAPS",
                 h_w_s1_gaps as "H_W_S1_GAPS",
                 h_quality as "H_QUALITY",
-                c_quality as "C_QUALITY"
+                c_quality as "C_QUALITY",
+                tl_week as "TL_WEEK",
+                tl_w_start as "TL_W_START",
+                tl_w_end as "TL_W_END"
             from product_details_l4c ap
             inner join {} lpis on lpis."NewID" = ap."NewID"
             inner join {} lut using (ori_crop)
