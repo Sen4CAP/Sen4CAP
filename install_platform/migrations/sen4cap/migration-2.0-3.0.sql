@@ -10,16 +10,16 @@ begin
 
 -- ---------------------------- TODO --------------------------------------
     -- For existing sites from 2.0 we should run something like the following after filling  the auxdata tables:
-    
+
                 -- INSERT INTO site_auxdata (site_id, auxdata_descriptor_id, year, season_id, auxdata_file_id, file_name, status_id, parameters, output)
                 --         SELECT site_id, auxdata_descriptor_id, year, season_id, auxdata_file_id, file_name, 3, parameters, null -- initially the status is 3=NeedsInput
                 --             FROM sp_get_auxdata_descriptor_instances(1::smallint, 1::smallint, 2021::integer);
 -- ---------------------------- END TODO --------------------------------------
-            
+
             _statement := $str$
-            
+
                 UPDATE config SET value = '/mnt/upload/{site}' WHERE key = 'site.upload-path' AND value = '/mnt/upload/{user}';
-            
+
                 -- Modified existing tables
                 ALTER TABLE processor ADD COLUMN IF NOT EXISTS required BOOLEAN NOT NULL DEFAULT false;
                 UPDATE processor SET required = true WHERE id IN (1, 7, 8); -- l2a, l2-s1, lpis. Others (MDB1)?
@@ -36,7 +36,7 @@ begin
                     CONSTRAINT auxdata_descriptor_pkey PRIMARY KEY (id),
                     CONSTRAINT check_unique_by CHECK ((((unique_by)::text = 'season'::text) OR ((unique_by)::text = 'year'::text)))
                 );
-            
+
                 CREATE TABLE IF NOT EXISTS auxdata_operation (
                     id smallserial NOT NULL,
                     auxdata_descriptor_id smallint NOT NULL,
@@ -51,7 +51,7 @@ begin
                     CONSTRAINT fk_auxdata_descriptor FOREIGN KEY (auxdata_descriptor_id) REFERENCES auxdata_descriptor(id),
                     CONSTRAINT fk_auxdata_operation_processor FOREIGN KEY (processor_id) REFERENCES processor(id)
                 );
-            
+
                 CREATE TABLE IF NOT EXISTS auxdata_operation_file (
                     id smallserial NOT NULL,
                     auxdata_operation_id smallint NOT NULL,
@@ -64,7 +64,7 @@ begin
                     CONSTRAINT u_auxdata_operation_file UNIQUE (auxdata_operation_id, file_order),
                     CONSTRAINT fk_auxdata_file FOREIGN KEY (auxdata_operation_id) REFERENCES auxdata_operation(id)
                 );
-            
+
                 CREATE TABLE IF NOT EXISTS site_auxdata (
                     id smallserial NOT NULL,
                     site_id smallint NOT NULL,
@@ -126,30 +126,30 @@ begin
                 CREATE TRIGGER tr_season_delete
                     BEFORE DELETE ON season
                     FOR EACH ROW
-                    EXECUTE PROCEDURE delete_season_descriptors();    
+                    EXECUTE PROCEDURE delete_season_descriptors();
 
 
                 DROP FUNCTION IF EXISTS sp_get_auxdata_descriptor_instances(smallint, smallint, integer);
                 CREATE OR REPLACE FUNCTION sp_get_auxdata_descriptor_instances(
-                    IN _site_id smallint, 
+                    IN _site_id smallint,
                     IN _season_id smallint,
                     IN _year integer)
                   RETURNS TABLE(site_id smallint, auxdata_descriptor_id smallint, year integer, season_id smallint, auxdata_file_id smallint, file_name character varying, parameters json) AS
                 $BODY$
 
-                BEGIN 
-                    RETURN QUERY 
+                BEGIN
+                    RETURN QUERY
                     WITH last_ops AS (
-                        SELECT ao.auxdata_descriptor_id, MAX(ao.operation_order) AS operation_order 
+                        SELECT ao.auxdata_descriptor_id, MAX(ao.operation_order) AS operation_order
                             FROM auxdata_operation ao
                             GROUP BY ao.auxdata_descriptor_id)
-                    SELECT _site_id as site_id, d.id AS auxdata_descriptor_id, 
-                        CASE WHEN d.unique_by = 'year' THEN _year ELSE null::integer END AS "year", 
-                        CASE WHEN d.unique_by = 'season' THEN null::smallint ELSE _season_id END AS season_id, 
+                    SELECT _site_id as site_id, d.id AS auxdata_descriptor_id,
+                        CASE WHEN d.unique_by = 'year' THEN _year ELSE null::integer END AS "year",
+                        CASE WHEN d.unique_by = 'season' THEN null::smallint ELSE _season_id END AS season_id,
                         f.id AS auxdata_file_id, null::character varying AS "file_name",
-                        (SELECT o2.parameters 
-                            FROM auxdata_operation o2 
-                                JOIN last_ops ON last_ops.auxdata_descriptor_id = o2.auxdata_descriptor_id AND last_ops.operation_order = o2.operation_order 
+                        (SELECT o2.parameters
+                            FROM auxdata_operation o2
+                                JOIN last_ops ON last_ops.auxdata_descriptor_id = o2.auxdata_descriptor_id AND last_ops.operation_order = o2.operation_order
                             WHERE o2.auxdata_descriptor_id = d.id) AS parameters
                     FROM 	auxdata_descriptor d
                         JOIN auxdata_operation o ON o.auxdata_descriptor_id = d.id
@@ -187,8 +187,8 @@ begin
                   COST 100
                   ROWS 1000;
                 ALTER FUNCTION sp_get_season_scheduled_processors(smallint)
-                  OWNER TO postgres;                
-                
+                  OWNER TO postgres;
+
                 DROP FUNCTION IF EXISTS sp_get_processors();
                 CREATE OR REPLACE FUNCTION sp_get_processors()
                 RETURNS TABLE (
@@ -209,7 +209,7 @@ begin
                 END
                 $$
                 LANGUAGE plpgsql
-                STABLE;  
+                STABLE;
 
                 DROP FUNCTION IF EXISTS sp_get_dashboard_processors();
                 CREATE OR REPLACE FUNCTION sp_get_dashboard_processors(processor_id smallint DEFAULT NULL::smallint)
@@ -218,9 +218,9 @@ begin
                 DECLARE return_string text;
                 BEGIN
                     WITH data(id,name,description,short_name) AS (
-                        SELECT 	PROC.id, 
+                        SELECT 	PROC.id,
                             PROC.name,
-                            PROC.description, 
+                            PROC.description,
                             PROC.short_name,
                             PROC.required
                         FROM processor PROC
@@ -234,8 +234,8 @@ begin
                 END
                 $BODY$
                   LANGUAGE plpgsql VOLATILE;
-                  
-                  
+
+
                 DROP FUNCTION IF EXISTS sp_get_dashboard_products_site(integer, integer[], smallint, integer[], timestamp with time zone, timestamp with time zone, character varying[]);
                 CREATE OR REPLACE FUNCTION sp_get_dashboard_products_site(_site_id integer, _product_type_id integer[] DEFAULT NULL::integer[], _season_id smallint DEFAULT NULL::smallint, _satellit_id integer[] DEFAULT NULL::integer[], _since_timestamp timestamp with time zone DEFAULT NULL::timestamp with time zone, _until_timestamp timestamp with time zone DEFAULT NULL::timestamp with time zone, _tiles character varying[] DEFAULT NULL::character varying[])
                  RETURNS SETOF json
@@ -262,7 +262,7 @@ begin
                                 JOIN product_type_names PT ON P.product_type_id = PT.id
                                 JOIN processor PR ON P.processor_id = PR.id
                                 JOIN site S ON P.site_id = S.id
-                            WHERE EXISTS (SELECT * FROM season 
+                            WHERE EXISTS (SELECT * FROM season
                                           WHERE season.site_id = P.site_id AND P.created_timestamp BETWEEN season.start_date AND season.end_date
                                             AND ($3 IS NULL OR season.id = $3))
                                 AND P.site_id = $1
@@ -280,17 +280,17 @@ begin
                   COST 100;
                 ALTER FUNCTION sp_get_dashboard_products_site(integer, integer[], smallint, integer[], timestamp with time zone, timestamp with time zone, character varying[])
                   OWNER TO admin;
-                  
+
 				DROP FUNCTION IF EXISTS sp_set_user_password(character varying, character varying, text);
                 CREATE OR REPLACE FUNCTION sp_set_user_password(
                     IN user_name character varying,
                     IN email character varying,
-                    IN pwd text	
+                    IN pwd text
                 )RETURNS integer AS
                     $BODY$
                     DECLARE user_id smallint;
 
-                    BEGIN 
+                    BEGIN
                         SELECT id into user_id FROM "user" WHERE "user".login = $1 AND "user".email = $2;
 
                         IF user_id IS NOT NULL THEN
@@ -300,7 +300,7 @@ begin
                                      SET password = crypt($3, gen_salt('md5'))
                                      WHERE id = user_id ;--AND password = crypt(user_pwd, password);
                                 RETURN 1;
-                            ELSE 
+                            ELSE
                                 RETURN 0;
                             END IF;
                         ELSE RETURN 2;
@@ -322,7 +322,7 @@ begin
                 INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (5, 'l4c_fl_info', 'L4C FL practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_fl_info', label = 'L4C FL practices infos', unique_by = 'year';
                 INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (6, 'l4c_nfc_info', 'L4C NFC practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_nfc_info', label = 'L4C NFC practices infos', unique_by = 'year';
                 INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (7, 'l4c_na_info', 'L4C NA practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_na_info', label = 'L4C NA practices infos', unique_by = 'year';
-                
+
 
                 INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (1,1,'Upload', null, null,8, null) ON conflict DO nothing ;
                 INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (1,2,'Extract','string[]','{executor.module.path.lpis_list_columns}', 8, null) ON conflict DO nothing;
@@ -333,7 +333,7 @@ begin
                                 {"name": "cropCodeColumn","label": "Crop Code Column","type": "java.lang.String","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": 2,"value": null},
                                 {"name": "year","label": "Year","type": "java.lang.Integer","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
                              }') ON conflict DO nothing;
-                
+
                 -- L4B config parameters
                 INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (2,1,'Upload', null, null,10 , null) ON conflict DO nothing;
                 INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (2,2,'Import', null,'{executor.module.path.l4b_cfg_import}',10,
@@ -347,10 +347,10 @@ begin
                 INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (3,2,'Import', null,'{executor.module.path.l4c_cfg_import}',11,
                             '{"parameters": [
                                 {"name": "practices","label": "Practices","type": "[Ljava.lang.String;","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null},
-                                {"name": "country","label": "Country","type": "[Ljava.lang.String;","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}, 
+                                {"name": "country","label": "Country","type": "[Ljava.lang.String;","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null},
                                 {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
                              }') ON conflict DO nothing;
-                             
+
                 -- L4C practices parameters
                 INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (4,1,'Upload', null, null,11 , null) ON conflict DO nothing;
                 INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (4,2,'Import', null,'{executor.module.path.l4c_practices_import}',11,
@@ -372,29 +372,29 @@ begin
                             '{"parameters": [
                                 {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
                              }') ON conflict DO nothing;
-                
-                
+
+
                 -- Files descriptors
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 1, null, 'LPIS','{zip}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 1 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 2, null, 'LUT','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 1 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                
-                -- L4B 
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+
+                -- L4B
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 1, null, 'L4B Cfg','{cfg}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 2 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
 
-                -- L4C config 
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                -- L4C config
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 1, null, 'L4C Cfg','{cfg}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 3 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
 
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 4 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 5 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 6 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required)
                             (SELECT id, 1, null, 'Practice file', '{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 7 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
 
             $str$;
@@ -405,7 +405,7 @@ begin
             $str$;
             raise notice '%', _statement;
             execute _statement;
-            
+
             _statement := $str$
 
             $str$;
@@ -414,23 +414,23 @@ begin
 
 
             _statement := $str$
-            
+
             $str$;
             raise notice '%', _statement;
             execute _statement;
-            
-            
-            
 
-            
+
+
+
+
             _statement := $str$
             $str$;
             raise notice '%', _statement;
             execute _statement;
-            
+
             -- Data initialization
             _statement := $str$
-                
+
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -444,14 +444,14 @@ begin
 
             _statement := $str$
                 DELETE FROM config WHERE key='executor.module.path.s4c-grassland-mowing';
-                
+
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-grassland-extract-products', NULL, '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/s4c-l4b-extract-products.py', '2021-01-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/s4c-l4b-extract-products.py';
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-extract-products.use_docker', NULL, '0', '2021-01-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '0';
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.docker_image', NULL, 'sen4cap/grassland_mowing', '2021-02-19 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4cap/grassland_mowing';
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.use_docker', NULL, '1', '2021-01-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '1';
-                
+
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-grassland-gen-input-shp',  NULL, '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/generate_grassland_mowing_input_shp.py', '2019-10-18 22:39:08.407059+02')on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/generate_grassland_mowing_input_shp.py';
-                
+
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -522,12 +522,12 @@ begin
                             _downloader_history_id
                         )
                         RETURNING id INTO return_id;
-                        
+
                         IF _parent_product_ids IS NOT NULL THEN
                             WITH parent_infos AS (
                                 SELECT id as parent_product_id, created_timestamp as parent_product_date FROM product WHERE id IN (SELECT value::integer FROM json_array_elements_text(_parent_product_ids))
                             )
-                            INSERT INTO product_provenance(product_id, parent_product_id, parent_product_date) 
+                            INSERT INTO product_provenance(product_id, parent_product_id, parent_product_date)
                                         SELECT return_id, parent_product_id, parent_product_date from parent_infos;
                         END IF;
 
@@ -548,7 +548,7 @@ begin
                   LANGUAGE plpgsql VOLATILE;
                 ALTER FUNCTION sp_insert_product(smallint, smallint, integer, smallint, integer, character varying, timestamp with time zone, character varying, character varying, geography, integer, json, smallint, integer, _parent_product_ids json)
                   OWNER TO admin;
-                
+
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -560,16 +560,16 @@ begin
                     IN downloader_history_ids json DEFAULT NULL::json,
                     IN start_time timestamp with time zone DEFAULT NULL::timestamp with time zone,
                     IN end_time timestamp with time zone DEFAULT NULL::timestamp with time zone)
-                  RETURNS TABLE("ProductId" integer, "ProcessorId" smallint, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying, 
+                  RETURNS TABLE("ProductId" integer, "ProcessorId" smallint, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying,
                                 full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer,
-                                quicklook_image character varying, footprint polygon,  orbit_id integer, tiles character varying[], 
+                                quicklook_image character varying, footprint polygon,  orbit_id integer, tiles character varying[],
                                 downloader_history_id integer) AS
                 $BODY$
                 DECLARE q text;
                 BEGIN
                     q := $sql$
                     SELECT P.id AS ProductId,
-                        P.processor_id AS ProcessorId, 
+                        P.processor_id AS ProcessorId,
                         P.product_type_id AS ProductTypeId,
                         P.site_id AS SiteId,
                         P.satellite_id AS SatId,
@@ -584,7 +584,7 @@ begin
                         P.tiles,
                         P.downloader_history_id
                     FROM product P WHERE TRUE$sql$;
-                    
+
                     IF NULLIF($1, -1) IS NOT NULL THEN
                         q := q || $sql$
                             AND P.site_id = $1$sql$;
@@ -597,7 +597,7 @@ begin
                         q := q || $sql$
                             AND P.downloader_history_id IN (SELECT value::integer FROM json_array_elements_text($3))
                         $sql$;
-                    END IF;		
+                    END IF;
                     IF $4 IS NOT NULL THEN
                         q := q || $sql$
                             AND P.created_timestamp >= $4$sql$;
@@ -610,7 +610,7 @@ begin
                         ORDER BY P.name;$SQL$;
 
                     -- raise notice '%', q;
-                    
+
                     RETURN QUERY
                         EXECUTE q
                         USING $1, $2, $3, $4, $5;
@@ -628,15 +628,15 @@ begin
                     BEGIN
                         RETURN QUERY SELECT product.id, product.downloader_history_id
                         FROM   product
-                        WHERE id IN (SELECT value::integer FROM json_array_elements_text($1) ) AND 
+                        WHERE id IN (SELECT value::integer FROM json_array_elements_text($1) ) AND
                               product.downloader_history_id IS NOT NULL;
                    END;
-                $BODY$  
+                $BODY$
                 LANGUAGE plpgsql VOLATILE
                   COST 100
                   ROWS 1000;
                 ALTER FUNCTION sp_get_product_by_id(integer)
-                  OWNER TO admin;                
+                  OWNER TO admin;
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -644,17 +644,17 @@ begin
 
             _statement := $str$
                 CREATE OR REPLACE FUNCTION sp_get_full_products_by_id(IN _ids json)
-                  RETURNS TABLE(product_id integer, product_type_id smallint, processor_id smallint, satellite_id integer, site_id smallint, name character varying, 
-                                full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer, 
+                  RETURNS TABLE(product_id integer, product_type_id smallint, processor_id smallint, satellite_id integer, site_id smallint, name character varying,
+                                full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer,
                                 quicklook_image character varying, footprint polygon, orbit_id integer, tiles character varying[],
                                downloader_history_id integer) AS
                 $BODY$
                                 BEGIN
-                                    RETURN QUERY SELECT product.id AS product_id, product.product_type_id, product.processor_id, product.satellite_id, product.site_id, product.name, 
+                                    RETURN QUERY SELECT product.id AS product_id, product.product_type_id, product.processor_id, product.satellite_id, product.site_id, product.name,
                                                         product.full_path, product.created_timestamp, product.inserted_timestamp, product.job_id,
                                                         product.quicklook_image, product.footprint, product.orbit_id, product.tiles,
                                                         product.downloader_history_id
-                                                        
+
                                     FROM product
                                     WHERE product.id in (SELECT value::integer FROM json_array_elements_text(_ids));
                                 END;
@@ -663,21 +663,21 @@ begin
                   COST 100
                   ROWS 1000;
                 ALTER FUNCTION sp_get_full_products_by_id(json)
-                  OWNER TO admin;      
+                  OWNER TO admin;
 
-                  
+
                 CREATE OR REPLACE FUNCTION sp_get_full_products_by_name(IN _names json)
-                  RETURNS TABLE(product_id integer, product_type_id smallint, processor_id smallint, satellite_id integer, site_id smallint, name character varying, 
-                                full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer, 
+                  RETURNS TABLE(product_id integer, product_type_id smallint, processor_id smallint, satellite_id integer, site_id smallint, name character varying,
+                                full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer,
                                 quicklook_image character varying, footprint polygon, orbit_id integer, tiles character varying[],
                                downloader_history_id integer) AS
                 $BODY$
                                 BEGIN
-                                    RETURN QUERY SELECT product.id AS product_id, product.product_type_id, product.processor_id, product.satellite_id, product.site_id, product.name, 
+                                    RETURN QUERY SELECT product.id AS product_id, product.product_type_id, product.processor_id, product.satellite_id, product.site_id, product.name,
                                                         product.full_path, product.created_timestamp, product.inserted_timestamp, product.job_id,
                                                         product.quicklook_image, product.footprint, product.orbit_id, product.tiles,
                                                         product.downloader_history_id
-                                                        
+
                                     FROM product
                                     WHERE product.name in (SELECT value::integer FROM json_array_elements_text(_names));
                                 END;
@@ -686,8 +686,8 @@ begin
                   COST 100
                   ROWS 1000;
                 ALTER FUNCTION sp_get_full_products_by_name(json)
-                  OWNER TO admin;                
-                  
+                  OWNER TO admin;
+
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -699,15 +699,15 @@ begin
                     IN _derived_product_type_id smallint,
                     IN _start_time timestamp with time zone DEFAULT NULL::timestamp with time zone,
                     IN _end_time timestamp with time zone DEFAULT NULL::timestamp with time zone)
-                  RETURNS TABLE("ProductId" integer, "ProcessorId" smallint, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying, 
+                  RETURNS TABLE("ProductId" integer, "ProcessorId" smallint, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying,
                                 full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer,
-                                quicklook_image character varying, footprint polygon,  orbit_id integer, tiles character varying[], 
+                                quicklook_image character varying, footprint polygon,  orbit_id integer, tiles character varying[],
                                 downloader_history_id integer) AS
                 $BODY$
                 DECLARE q text;
                 BEGIN
                     q := $sql$
-                        SELECT id, processor_id, product_type_id, site_id, satellite_id, name, 
+                        SELECT id, processor_id, product_type_id, site_id, satellite_id, name,
                                  full_path, created_timestamp, inserted_timestamp, job_id,
                                  quicklook_image, footprint, orbit_id, tiles, downloader_history_id
                              FROM product P WHERE site_id = $1 AND product_type_id IN (SELECT value::smallint FROM json_array_elements_text($2))
@@ -715,15 +715,15 @@ begin
                                 SELECT product_id FROM product_provenance WHERE parent_product_id = id AND
                                        product_id IN (SELECT id FROM product WHERE site_id = $1 AND product_type_id = $3)
                         ) $sql$;
-                        -- SELECT id, processor_id, product_type_id, site_id, satellite_id, name, 
+                        -- SELECT id, processor_id, product_type_id, site_id, satellite_id, name,
                         --         full_path, created_timestamp, inserted_timestamp, job_id,
                         --         quicklook_image, footprint, orbit_id, tiles, downloader_history_id
                         --     FROM product P WHERE site_id = $1 AND product_type_id in (SELECT value::smallint FROM json_array_elements_text($2))
                         --     AND NOT EXISTS (
-                        --         SELECT id FROM product_provenance PV JOIN product P ON P.id = PV.parent_product_id 
+                        --         SELECT id FROM product_provenance PV JOIN product P ON P.id = PV.parent_product_id
                         --         WHERE site_id = $1 AND PV.parent_product_id = id AND P.product_type_id = $3
                         --     )  $sql$;
-                    
+
                     IF $4 IS NOT NULL THEN
                         q := q || $sql$
                             AND P.created_timestamp >= $4$sql$;
@@ -736,7 +736,7 @@ begin
                         ORDER BY P.name;$SQL$;
 
                     -- raise notice '%', q;
-                    
+
                     RETURN QUERY
                         EXECUTE q
                         USING $1, $2, $3, $4, $5;
@@ -754,15 +754,15 @@ begin
                     IN _derived_product_type_id smallint,
                     IN _start_time timestamp with time zone DEFAULT NULL::timestamp with time zone,
                     IN _end_time timestamp with time zone DEFAULT NULL::timestamp with time zone)
-                  RETURNS TABLE("ProductId" integer, "ProcessorId" smallint, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying, 
+                  RETURNS TABLE("ProductId" integer, "ProcessorId" smallint, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying,
                                 full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer,
-                                quicklook_image character varying, footprint polygon,  orbit_id integer, tiles character varying[], 
+                                quicklook_image character varying, footprint polygon,  orbit_id integer, tiles character varying[],
                                 downloader_history_id integer) AS
                 $BODY$
                 DECLARE q text;
                 BEGIN
                     q := $sql$
-                        SELECT id, processor_id, product_type_id, site_id, satellite_id, name, 
+                        SELECT id, processor_id, product_type_id, site_id, satellite_id, name,
                                  full_path, created_timestamp, inserted_timestamp, job_id,
                                  quicklook_image, footprint, orbit_id, tiles, downloader_history_id
                              FROM product P WHERE site_id = $1 AND product_type_id IN (SELECT value::smallint FROM json_array_elements_text($2))
@@ -770,15 +770,15 @@ begin
                                 SELECT product_id FROM product_provenance WHERE parent_product_id = id AND
                                        product_id IN (SELECT id FROM product WHERE site_id = $1 AND product_type_id = $3)
                         ) $sql$;
-                        -- SELECT id, processor_id, product_type_id, site_id, satellite_id, name, 
+                        -- SELECT id, processor_id, product_type_id, site_id, satellite_id, name,
                         --         full_path, created_timestamp, inserted_timestamp, job_id,
                         --         quicklook_image, footprint, orbit_id, tiles, downloader_history_id
                         --     FROM product P WHERE site_id = $1 AND product_type_id in (SELECT value::smallint FROM json_array_elements_text($2))
                         --     AND EXISTS (
-                        --         SELECT id FROM product_provenance PV JOIN product P ON P.id = PV.parent_product_id 
+                        --         SELECT id FROM product_provenance PV JOIN product P ON P.id = PV.parent_product_id
                         --         WHERE site_id = $1 AND PV.parent_product_id = id AND P.product_type_id = $3
                         --     )  $sql$;
-                    
+
                     IF $4 IS NOT NULL THEN
                         q := q || $sql$
                             AND P.created_timestamp >= $4$sql$;
@@ -791,7 +791,7 @@ begin
                         ORDER BY P.name;$SQL$;
 
                     -- raise notice '%', q;
-                    
+
                     RETURN QUERY
                         EXECUTE q
                         USING $1, $2, $3, $4, $5;
@@ -801,7 +801,7 @@ begin
             $str$;
             raise notice '%', _statement;
             execute _statement;
-            
+
             _statement := $str$
                 CREATE OR REPLACE FUNCTION sp_get_jobs_active(_processor_id smallint DEFAULT NULL, _site_id smallint DEFAULT NULL)
                   RETURNS TABLE(job_id integer, processor_id smallint, site_id smallint, status_id smallint) AS
@@ -809,22 +809,22 @@ begin
                     DECLARE q text;
                     BEGIN
                         q := $sql$
-                            SELECT J.id AS job_id, J.processor_id, J.site_id, J.status_id                                       
+                            SELECT J.id AS job_id, J.processor_id, J.site_id, J.status_id
                             FROM job J
                             WHERE J.status_id NOT IN (6,7,8) $sql$; -- Finished, Cancelled, Error
-                            
+
                             IF NULLIF($1, -1) IS NOT NULL THEN
                                 q := q || $sql$
                                         AND J.processor_id = $1$sql$;
-                            END IF;            
+                            END IF;
 
                             IF NULLIF($2, -1) IS NOT NULL THEN
                                 q := q || $sql$
                                         AND J.site_id = $2$sql$;
-                            END IF;  
+                            END IF;
 
                         -- raise notice '%', q;
-                        
+
                         RETURN QUERY
                             EXECUTE q
                             USING $1, $2;
@@ -839,7 +839,7 @@ begin
             raise notice '%', _statement;
             execute _statement;
 
-            
+
 
             -- FMask Upgrades
             _statement := $str$
@@ -851,7 +851,6 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud-shadow', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.snow', NULL, '0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.fmask-enabled', NULL, '0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.max-retries', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.num-workers', NULL, '20', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.output-path', NULL, '/mnt/archive/fmask_def/{site}/fmask/', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
@@ -860,23 +859,572 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold.l8', NULL, '17.5', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold.s2', NULL, '20', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.working-dir', NULL, '/mnt/archive/fmask_tmp/', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                
+
+                INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 2);
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.enabled', NULL, '0', '2021-02-10 15:58:31.878939+00');
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
             _statement := $str$
-                
+                drop function if exists sp_start_l1_tile_processing;
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
             _statement := $str$
-            
+                create or replace function sp_start_l1_tile_processing(
+                    _node_id text
+                )
+                returns table (
+                    site_id int,
+                    satellite_id smallint,
+                    orbit_id int,
+                    tile_id text,
+                    downloader_history_id int,
+                    path text,
+                    prev_l2a_path text
+                ) as
+                $$
+                declare _satellite_id smallint;
+                declare _orbit_id int;
+                declare _tile_id text;
+                declare _downloader_history_id int;
+                declare _path text;
+                declare _prev_l2a_path text;
+                declare _site_id int;
+                declare _product_date timestamp;
+                begin
+                    if (select current_setting('transaction_isolation') not ilike 'serializable') then
+                        raise exception 'Please set the transaction isolation level to serializable.' using errcode = 'UE001';
+                    end if;
+
+                    create temporary table if not exists site_config(
+                        key,
+                        site_id,
+                        value
+                    ) as
+                    select
+                        keys.key,
+                        site.id,
+                        config.value
+                    from site
+                    cross join (
+                        values
+                            ('processor.l2a.s2.implementation'),
+                            ('processor.l2a.optical.retry-interval'),
+                            ('processor.l2a.optical.max-retries'),
+                            ('processor.l2a.optical.num-workers'),
+                            ('s2.enabled'),
+                            ('l8.enabled')
+                    ) as keys(key)
+                    cross join lateral (
+                        select
+                            coalesce((
+                                select value
+                                from config
+                                where key = keys.key
+                                and config.site_id = site.id
+                            ), (
+                                select value
+                                from config
+                                where key = keys.key
+                                and config.site_id is null
+                            )) as value
+                    ) config;
+
+                    select l1_tile_history.satellite_id,
+                        l1_tile_history.orbit_id,
+                        l1_tile_history.tile_id,
+                        l1_tile_history.downloader_history_id
+                    into _satellite_id,
+                        _orbit_id,
+                        _tile_id,
+                        _downloader_history_id
+                    from l1_tile_history
+                    inner join downloader_history on downloader_history.id = l1_tile_history.downloader_history_id
+                    inner join site on site.id = downloader_history.site_id
+                    cross join lateral (
+                        select
+                            (
+                                select value :: int as max_retries
+                                from site_config
+                                where site_config.site_id = downloader_history.site_id
+                                and key = 'processor.l2a.optical.max-retries'
+                            ),
+                            (
+                                select value :: interval as retry_interval
+                                from site_config
+                                where site_config.site_id = downloader_history.site_id
+                                and key = 'processor.l2a.optical.retry-interval'
+                            ),
+                            (
+                                select value :: boolean as s2_enabled
+                                from site_config
+                                where site_config.site_id = downloader_history.site_id
+                                and key = 's2.enabled'
+                            ),
+                            (
+                                select value :: boolean as l8_enabled
+                                from site_config
+                                where site_config.site_id = downloader_history.site_id
+                                and key = 'l8.enabled'
+                            )
+                    ) config
+                    where l1_tile_history.status_id = 2 -- failed
+                    and l1_tile_history.retry_count < config.max_retries
+                    and l1_tile_history.status_timestamp < now() - config.retry_interval
+                    and case downloader_history.satellite_id
+                            when 1 then config.s2_enabled
+                            when 2 then config.l8_enabled
+                            else false
+                    end
+                    and (
+                        site.enabled
+                        or exists (
+                            select *
+                            from downloader_history
+                            where downloader_history.status_id = 2 -- downloaded
+                                and l1_tile_history.tile_id = any(downloader_history.tiles)
+                                and l1_tile_history.orbit_id = downloader_history.orbit_id
+                                and exists (
+                                    select *
+                                    from site
+                                    where site.id = downloader_history.site_id
+                                    and site.enabled
+                                )
+                        )
+                    )
+                    order by l1_tile_history.status_timestamp
+                    limit 1;
+
+                    if found then
+                        select downloader_history.product_date,
+                            downloader_history.full_path,
+                            downloader_history.site_id
+                        into _product_date,
+                            _path,
+                            _site_id
+                        from downloader_history
+                        where id = _downloader_history_id;
+
+                        update l1_tile_history
+                        set status_id = 1, -- processing
+                            status_timestamp = now()
+                        where (l1_tile_history.downloader_history_id, l1_tile_history.tile_id) = (_downloader_history_id, _tile_id);
+                    else
+                        select distinct
+                            downloader_history.satellite_id,
+                            downloader_history.orbit_id,
+                            tile_ids.tile_id,
+                            downloader_history.id,
+                            downloader_history.product_date,
+                            downloader_history.full_path,
+                            downloader_history.site_id
+                        into _satellite_id,
+                            _orbit_id,
+                            _tile_id,
+                            _downloader_history_id,
+                            _product_date,
+                            _path,
+                            _site_id
+                        from downloader_history
+                        inner join site on site.id = downloader_history.site_id
+                        cross join lateral (
+                                select unnest(tiles) as tile_id
+                            ) tile_ids
+                        cross join lateral (
+                            select
+                                (
+                                    select value as l2a_implementation
+                                    from site_config
+                                    where site_config.site_id = downloader_history.site_id
+                                    and key = 'processor.l2a.s2.implementation'
+                                ),
+                                (
+                                    select value :: int as max_retries
+                                    from site_config
+                                    where site_config.site_id = downloader_history.site_id
+                                    and key = 'processor.l2a.optical.max-retries'
+                                ),
+                                (
+                                    select value :: boolean as s2_enabled
+                                    from site_config
+                                    where site_config.site_id = downloader_history.site_id
+                                    and key = 's2.enabled'
+                                ),
+                                (
+                                    select value :: boolean as l8_enabled
+                                    from site_config
+                                    where site_config.site_id = downloader_history.site_id
+                                    and key = 'l8.enabled'
+                                )
+                        ) config
+                        where (
+                            config.l2a_implementation = 'sen2cor'
+                            and downloader_history.satellite_id = 1
+                            or not exists (
+                                select *
+                                from l1_tile_history
+                                where (l1_tile_history.satellite_id,
+                                    l1_tile_history.orbit_id,
+                                    l1_tile_history.tile_id) =
+                                    (downloader_history.satellite_id,
+                                    downloader_history.orbit_id,
+                                    tile_ids.tile_id)
+                                and (status_id = 1 or -- processing
+                                    retry_count < config.max_retries and status_id = 2 -- failed
+                                )
+                            )
+                        )
+                        and not exists (
+                            select *
+                            from l1_tile_history
+                            where (l1_tile_history.downloader_history_id, l1_tile_history.tile_id) = (downloader_history.id, tile_ids.tile_id)
+                        )
+                        and downloader_history.status_id in (2, 7) -- downloaded, processing
+                        and site.enabled
+                        and downloader_history.satellite_id in (1, 2) -- sentinel2, landsat8
+                        and case downloader_history.satellite_id
+                                when 1 then config.s2_enabled
+                                when 2 then config.l8_enabled
+                                else false
+                        end
+                        order by satellite_id,
+                                orbit_id,
+                                tile_id,
+                                product_date
+                        limit 1;
+
+                        if found then
+                            insert into l1_tile_history (
+                                satellite_id,
+                                orbit_id,
+                                tile_id,
+                                downloader_history_id,
+                                status_id,
+                                node_id
+                            ) values (
+                                _satellite_id,
+                                _orbit_id,
+                                _tile_id,
+                                _downloader_history_id,
+                                1, -- processing
+                                _node_id
+                            );
+
+                            update downloader_history
+                            set status_id = 7 -- processing
+                            where id = _downloader_history_id;
+                        end if;
+                    end if;
+
+                    if _downloader_history_id is not null then
+                        select product.full_path
+                        into _prev_l2a_path
+                        from product
+                        where product.site_id = _site_id
+                        and product.product_type_id = 1 -- l2a
+                        and product.satellite_id = _satellite_id
+                        and product.created_timestamp < _product_date
+                        and product.tiles :: text[] @> array[_tile_id]
+                        and (product.satellite_id <> 1 -- sentinel2
+                            or product.orbit_id = _orbit_id)
+                        order by created_timestamp desc
+                        limit 1;
+
+                        return query
+                            select _site_id,
+                                _satellite_id,
+                                _orbit_id,
+                                _tile_id,
+                                _downloader_history_id,
+                                _path,
+                                _prev_l2a_path;
+                    end if;
+                end;
+                $$ language plpgsql volatile;
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
+            _statement := $str$
+                drop function if exists sp_clear_pending_l1_tiles;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                create or replace function sp_clear_pending_l1_tiles(
+                    _node_id text
+                )
+                returns void
+                as
+                $$
+                begin
+                    if (select current_setting('transaction_isolation') not ilike 'serializable') then
+                        raise exception 'Please set the transaction isolation level to serializable.' using errcode = 'UE001';
+                    end if;
+
+                    delete
+                    from l1_tile_history
+                    using downloader_history
+                    where downloader_history.id = l1_tile_history.downloader_history_id
+                    and l1_tile_history.status_id = 1 -- processing
+                    and l1_tile_history.node_id = _node_id
+                    and downloader_history.satellite_id in (1, 2); -- sentinel2, landsat8
+
+                    update downloader_history
+                    set status_id = 2 -- downloaded
+                    where status_id = 7 -- processing
+                    and not exists (
+                        select *
+                        from l1_tile_history
+                        where status_id = 1 -- processing
+                    );
+                end;
+                $$ language plpgsql volatile;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                drop function if exists sp_start_fmask_l1_tile_processing;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                create or replace function sp_start_fmask_l1_tile_processing(
+                    _node_id text
+                )
+                returns table (
+                    site_id int,
+                    satellite_id smallint,
+                    downloader_history_id int,
+                    path text) as
+                $$
+                declare _satellite_id smallint;
+                declare _downloader_history_id int;
+                declare _path text;
+                declare _site_id int;
+                declare _product_date timestamp;
+                begin
+                    if (select current_setting('transaction_isolation') not ilike 'serializable') then
+                        raise exception 'Please set the transaction isolation level to serializable.' using errcode = 'UE001';
+                    end if;
+
+                    create temporary table if not exists site_config(
+                        key,
+                        site_id,
+                        value
+                    ) as
+                    select
+                        keys.key,
+                        site.id,
+                        config.value
+                    from site
+                    cross join (
+                        values
+                            ('processor.fmask.enabled'),
+                            ('s2.enabled'),
+                            ('l8.enabled')
+                    ) as keys(key)
+                    cross join lateral (
+                        select
+                            coalesce((
+                                select value
+                                from config
+                                where key = keys.key
+                                and config.site_id = site.id
+                            ), (
+                                select value
+                                from config
+                                where key = keys.key
+                                and config.site_id is null
+                            )) as value
+                    ) config;
+
+                    select fmask_history.satellite_id,
+                        fmask_history.downloader_history_id
+                    into _satellite_id,
+                        _downloader_history_id
+                    from fmask_history
+                    where status_id = 2 -- failed
+                    and retry_count < 3
+                    and status_timestamp < now() - interval '1 day'
+                    order by status_timestamp
+                    limit 1;
+
+                    if found then
+                        select downloader_history.product_date,
+                            downloader_history.full_path,
+                            downloader_history.site_id
+                        into _product_date,
+                            _path,
+                            _site_id
+                        from downloader_history
+                        where id = _downloader_history_id;
+
+                        update fmask_history
+                        set status_id = 1, -- processing
+                            status_timestamp = now()
+                        where (fmask_history.downloader_history_id) = (_downloader_history_id);
+                    else
+                        select distinct
+                            downloader_history.satellite_id,
+                            downloader_history.id,
+                            downloader_history.product_date,
+                            downloader_history.full_path,
+                            downloader_history.site_id
+                        into _satellite_id,
+                            _downloader_history_id,
+                            _product_date,
+                            _path,
+                            _site_id
+                        from downloader_history
+                        inner join site on site.id = downloader_history.site_id
+                        cross join lateral (
+                            select
+                                (
+                                    select value :: boolean as fmask_enabled
+                                    from site_config
+                                    where site_config.site_id = downloader_history.site_id
+                                    and key = 'processor.fmask.enabled'
+                                ),
+                                (
+                                    select value :: boolean as s2_enabled
+                                    from site_config
+                                    where site_config.site_id = downloader_history.site_id
+                                    and key = 's2.enabled'
+                                ),
+                                (
+                                    select value :: boolean as l8_enabled
+                                    from site_config
+                                    where site_config.site_id = downloader_history.site_id
+                                    and key = 'l8.enabled'
+                                )
+                        ) config
+                        where not exists (
+                            select *
+                            from fmask_history
+                            where fmask_history.downloader_history_id = downloader_history.id
+                        )
+                        and downloader_history.status_id in (2, 5, 7) -- downloaded, processing
+                        and site.enabled
+                        and fmask_enabled
+                        and case downloader_history.satellite_id
+                            when 1 then config.s2_enabled
+                            when 2 then config.l8_enabled
+                            else false
+                        end
+                        order by satellite_id, product_date
+                        limit 1;
+
+                        if found then
+                            insert into fmask_history (
+                                satellite_id,
+                                downloader_history_id,
+                                status_id,
+                                node_id
+                            ) values (
+                                _satellite_id,
+                                _downloader_history_id,
+                                1, -- processing
+                                _node_id
+                            );
+                        end if;
+                    end if;
+
+                    if _downloader_history_id is not null then
+                        return query
+                            select _site_id,
+                                _satellite_id,
+                                _downloader_history_id,
+                                _path;
+                    end if;
+                end;
+                $$ language plpgsql volatile;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                drop function if exists sp_clear_pending_fmask_tiles;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                create or replace function sp_clear_pending_fmask_tiles(
+                    _node_id text
+                )
+                returns void
+                as
+                $$
+                begin
+                    delete
+                    from fmask_history
+                    where status_id = 1 -- processing
+                    and node_id = _node_id;
+                end;
+                $$ language plpgsql volatile;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                alter table l1_tile_history add column node_id text;
+                update l1_tile_history set node_id = '';
+                alter table l1_tile_history alter column node_id set not null;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                alter table fmask_history add column node_id text;
+                update fmask_history set node_id = '';
+                alter table fmask_history alter column node_id set not null;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                drop function if exists sp_mark_fmask_l1_tile_failed;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                create or replace function sp_mark_fmask_l1_tile_failed(
+                    _downloader_history_id int,
+                    _reason text,
+                    _should_retry boolean
+                )
+                returns boolean
+                as
+                $$
+                begin
+                    if (select current_setting('transaction_isolation') not ilike 'serializable') then
+                        raise exception 'Please set the transaction isolation level to serializable.' using errcode = 'UE001';
+                    end if;
+
+                    update fmask_history
+                    set status_id = 2, -- failed
+                        status_timestamp = now(),
+                        retry_count = case _should_retry
+                            when true then retry_count + 1
+                            else 4
+                        end,
+                        failed_reason = _reason
+                    where (downloader_history_id) = (_downloader_history_id);
+
+                    return true;
+                end;
+                $$ language plpgsql volatile;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
 
            _statement := 'update meta set version = ''3.0'';';
             raise notice '%', _statement;
