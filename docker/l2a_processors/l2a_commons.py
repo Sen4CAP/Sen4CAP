@@ -1,1 +1,1 @@
-../../sen2agri-processors/DEM-WB/test/l2a_commons.py
+../../python-libs/l2a_commons.py
