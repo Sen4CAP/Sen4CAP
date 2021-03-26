@@ -16,7 +16,7 @@ begin
         status_timestamp = now(),
         retry_count = case _should_retry
             when true then retry_count + 1
-            else 3
+            else 4
         end,
         failed_reason = _reason
     where (downloader_history_id) = (_downloader_history_id);
