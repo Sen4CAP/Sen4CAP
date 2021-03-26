@@ -1220,10 +1220,11 @@ def process_radar(args, pool):
         for (vv, vh) in zip(pair.vv, pair.vh):
             products += [vv, vh]
 
-        composite = BackscatterMonthlyComposite(
-            tile_ref, output, output_extended, "ratio", products
-        )
-        backscatter_composites.append(composite)
+        if products:
+            composite = BackscatterMonthlyComposite(
+                tile_ref, output, output_extended, "ratio", products
+            )
+            backscatter_composites.append(composite)
 
     coherence_monthly_composites = []
     coherence_monthly_groups = sorted(list(coherence_monthly_groups.items()))
