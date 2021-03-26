@@ -1,5 +1,5 @@
 create or replace function sp_start_l1_tile_processing(
-    _node_id text,
+    _node_id text
 )
 returns table (
     site_id int,
