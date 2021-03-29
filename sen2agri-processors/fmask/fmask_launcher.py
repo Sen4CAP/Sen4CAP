@@ -31,7 +31,8 @@ import signal
 import traceback
 from psycopg2.sql import SQL
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, ArchiveHandler
+from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, read_1st
+from l2a_commons import ArchiveHandler, translate
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
@@ -57,6 +58,7 @@ DATABASE_FMASK_COG_TIFFS = 'processor.fmask.optical.cog-tiffs'
 DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
 DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
 DB_PROCESSOR_NAME = "fmask"
+S2_20M_RESOLUTION = "5490"
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -89,7 +91,7 @@ class FmaskProcessor(object):
         self.context = processor_context
         self.lin = L1CProduct(unprocessed_tile)
         self.fmask = FMaskProduct()
-        self.fmask_log_file = None
+        self.log_file_name = "fmask.log"
         self.name = "Fmask"
 
     def __del__(self):
@@ -98,7 +100,7 @@ class FmaskProcessor(object):
 
     def fmask_log(self, log_msg):
         log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
-        log(self.fmask.output_path, log_msg, self.fmask_log_file)
+        log(self.fmask.output_path, log_msg, self.log_file_name)
 
     def launcher_log(self, log_msg):
         log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
@@ -290,7 +292,6 @@ class FmaskProcessor(object):
         self.fmask.satellite_id = self.lin.satellite_id
         self.fmask.site_id = self.lin.site_id
         self.fmask.product_id = self.lin.product_id
-        self.fmask_log_file = "fmask.log"
         return True
 
     def update_rejection_reason(self, message):
@@ -370,7 +371,7 @@ class FmaskProcessor(object):
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
   
-        fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
+        fmask_log_path = os.path.join(self.fmask.output_path, self.log_file_name)
         fmask_log_file = open(fmask_log_path, "a")
         command_string =""
         for argument in script_command:
@@ -405,55 +406,63 @@ class FmaskProcessor(object):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
             self.lin.should_retry = False #TBD
 
-    def translate(self, fmask_file):
-        try:
-            cmd = []
-            #docker run
-            cmd.append("docker")
-            cmd.append("run")
-            cmd.append("--rm")
-            cmd.append("-u")
-            cmd.append("{}:{}".format(os.getuid(), os.getgid()))
-            cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(self.fmask.output_path), os.path.abspath(self.fmask.output_path)))
-            cmd.append("--name")
-            cmd.append("gdal_{}".format(self.fmask.product_id))
-            cmd.append(self.context.gdal_image)
+    # def translate(self, fmask_file, resize = False):
+    #     try:
+    #         cmd = []
+    #         #docker run
+    #         cmd.append("docker")
+    #         cmd.append("run")
+    #         cmd.append("--rm")
+    #         cmd.append("-u")
+    #         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+    #         cmd.append("-v")
+    #         cmd.append("{}:{}".format(os.path.abspath(self.fmask.output_path), os.path.abspath(self.fmask.output_path)))
+    #         cmd.append("--name")
+    #         cmd.append("gdal_{}".format(self.fmask.product_id))
+    #         cmd.append(self.context.gdal_image)
 
-            # gdal command
-            cmd.append("gdal_translate")
-            if self.context.cog_tiffs:
-                cmd.append("-f")
-                cmd.append("COG")
-                cmd.append("-co")
-                cmd.append("NUM_THREADS=ALL_CPUS")
-            if self.context.compress_tiffs:
-                cmd.append("-co")
-                cmd.append("COMPRESS=DEFLATE")
-            cmd.append("-co")
-            cmd.append("PREDICTOR=2")
-            cmd.append(fmask_file)
-            fmask_file_tmp = fmask_file[:-4] + "_tmp.tif"
-            cmd.append(fmask_file_tmp)
+    #         # gdal command
+    #         cmd.append("gdal_translate")
+    #         if self.context.cog_tiffs:
+    #             cmd.append("-f")
+    #             cmd.append("COG")
+    #             cmd.append("-co")
+    #             cmd.append("NUM_THREADS=ALL_CPUS")
+    #         if self.context.compress_tiffs:
+    #             cmd.append("-co")
+    #             cmd.append("COMPRESS=DEFLATE")
+    #         cmd.append("-co")
+    #         cmd.append("PREDICTOR=2")
+    #         if resize:
+    #             cmd.append("-tr")
+    #             cmd.append(S2_20M_RESOLUTION)
+    #             cmd.append(S2_20M_RESOLUTION)
+    #         cmd.append(fmask_file)
+    #         if resize:
+    #             fmask_file_tmp = fmask_file[:-4] + "_20m.tif"
+    #         else:
+    #             fmask_file_tmp = fmask_file[:-4] + "_10m.tif"
+    #         cmd.append(fmask_file_tmp)
 
-            fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
-            fmask_log_file = open(fmask_log_path, "a")
-            command_string =""
-            for argument in cmd:
-                command_string = command_string + " " + str(argument)
-            self.fmask_log("Running command: {}".format(command_string))
-            print("Running Fmask, console output can be found at {}".format(fmask_log_path))
-            command_return = subprocess.call(cmd, stdout = fmask_log_file, stderr = fmask_log_file)
+    #         fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
+    #         with open(fmask_log_path, "a") as fmask_log_file:
+    #             command_string =""
+    #             for argument in cmd:
+    #                 command_string = command_string + " " + str(argument)
+    #             self.fmask_log("Running command: {}".format(command_string))
+    #             print("Running Fmask, console output can be found at {}".format(fmask_log_path))
+    #             command_return = subprocess.call(cmd, stdout = fmask_log_file, stderr = fmask_log_file)
 
-            if (command_return == 0) and os.path.isfile(fmask_file_tmp):
-                os.remove(fmask_file)
-                os.rename(fmask_file_tmp, fmask_file)
-            else:
-                self.fmask_log(
-                    "Can NOT run translate Fmask , error code: {}.".format(command_return)
-                )
-        except Exception as e:
-            self.fmask_log("Exception ecounter upon translating fmask image: {}".format(e))
+    #         if (command_return == 0) and os.path.isfile(fmask_file_tmp):
+    #             if not resize:
+    #                 os.remove(fmask_file)
+    #                 os.rename(fmask_file_tmp, fmask_file)
+    #         else:
+    #             self.fmask_log(
+    #                 "Can NOT run translate Fmask , error code: {}.".format(command_return)
+    #             )
+    #     except Exception as e:
+    #         self.fmask_log("Exception ecounter upon translating fmask image: {}".format(e))
 
     def run(self):
         preprocess_successful = False
@@ -485,17 +494,49 @@ class FmaskProcessor(object):
         fmask_file_path = os.path.join(self.fmask.output_path, fmask_file_pattern)
         fmask_files = glob.glob(fmask_file_path)
         if len(fmask_files) == 1:
-            #postprocessing
-            self.get_fmask_footprint(fmask_files[0])
-            if self.context.cog_tiffs or self.context.compress_tiffs:
-                self.translate(fmask_files[0])
+            log_file = os.path.join(self.fmask.output_path, self.log_file_name)
+            if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
+                output_img_name = os.path.basename(fmask_files[0])[-4:] + "_10m.tif"
+            if self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
+                output_img_name = os.path.basename(fmask_files[0])[-4:] + "_30m.tif"
+            container_name = "gdal_" + str(self.lin.product_id)
+            translate(input_img = fmask_files[0],
+                      output_dir = self.fmask.output_path,
+                      output_img_name = output_img_name,
+                      log_file = log_file,
+                      gdal_image = self.context.gdal_image,
+                      name = container_name,
+                      cog = self.context.cog_tiffs,
+                      compress = self.context.compress_tiffs,
+            )
+            if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
+                output_img_name = os.path.basename(fmask_files[0])[-4:] + "_20m.tif"
+                translate(input_img = fmask_files[0],
+                      output_dir = self.fmask.output_path,
+                      output_img_name = output_img_name,
+                      log_file = log_file,
+                      gdal_image = self.context.gdal_image,
+                      name = container_name,
+                      resample_res = 20,
+                      cog = self.context.cog_tiffs,
+                      compress = self.context.compress_tiffs,
+                )
+            os.remove(fmask_files[0])
+            # #postprocessing
+            # self.get_fmask_footprint(fmask_files[0])
+            # #translate to cog and/or compress the output product
+            # if self.context.cog_tiffs or self.context.compress_tiffs:
+            #     self.translate(fmask_files[0])
+            # #translate to cog and/or compress the output product and resize it to 20m
+            # if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
+            #     self.translate(fmask_files[0], True)
             fmask_file_ok = True
         else:
             self.launcher_log(
-                "Exception when locating Fmask4.tif file in: {} ".format(self.fmask.output_path)
+                "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
             )
             self.update_rejection_reason(
-                "Exception when locating Fmask4.tif file in: {} ".format(self.fmask.output_path)
+                "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
             )
             fmask_file_ok = False
 
@@ -528,9 +569,10 @@ class FMaskContext(object):
         self.compress_tiffs = site_context.fmask_compress_tiffs
 
 class FMaskMaster(object):
-    def __init__(self, num_workers, db_config):
+    def __init__(self, num_workers, db_config, node_id):
         self.num_workers = num_workers
         self.db_config = db_config
+        self.node_id = node_id
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.in_processing = set()
@@ -585,7 +627,7 @@ class FMaskMaster(object):
                     self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    tile_info = db_get_unprocessed_tile(self.db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
@@ -1076,12 +1118,11 @@ class ProcessingContext(object):
                 else:
                     self.fmask_gdal_image["default"] = value
 
-def db_get_unprocessed_tile(db_config, log_dir, log_file):
+def db_get_unprocessed_tile(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_start_fmask_l1_tile_processing()")
-        cursor.execute(q2)
+        cursor.execute("""select * from sp_start_fmask_l1_tile_processing(%(node_id)s :: character varying);""",{"node_id" : node_id})
         tile_info = cursor.fetchone()
         return tile_info
 
@@ -1090,12 +1131,11 @@ def db_get_unprocessed_tile(db_config, log_dir, log_file):
         log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
         return tile_info
 
-def db_clear_pending_tiles(db_config, log_dir, log_file):
+def db_clear_pending_tiles(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
-        cursor.execute(q2)
+        cursor.execute("""select * from sp_clear_pending_fmask_tiles(%(node_id)s :: character varying);""",{"node_id" : node_id})
 
     with db_config.connect() as connection:
         handle_retries(connection, _run, log_dir, log_file)
@@ -1231,9 +1271,29 @@ if default_processing_context.num_workers < 1:
 # delete all the temporary content from working dir from a previous run
 remove_dir_content(default_processing_context.working_dir["default"])
 
+#get node id
+host = read_1st("/etc/hostname")
+machine_id = read_1st("/etc/machine-id")
+if (len(machine_id) < 1) or (len(host) < 1):
+    print(
+        "(launcher err) <master>: Invalid node_id: {}-{}".format(
+            host, machine_id
+        )
+    )
+    log(
+        LAUNCHER_LOG_DIR,
+        "(launcher err) <master>: Invalid pnode_id: {}-{}".format(
+                    host, machine_id
+        ),
+        LAUNCHER_LOG_FILE_NAME,
+    )
+    sys.exit(1)
+else:
+    node_id = host + "-" + machine_id
+
 # clear pending tiless
-db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-fmask_master = FMaskMaster(default_processing_context.num_workers, db_config)
+db_clear_pending_tiles(db_config, node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+fmask_master = FMaskMaster(default_processing_context.num_workers, db_config, node_id)
 fmask_master.run()
 
 if not DEBUG:

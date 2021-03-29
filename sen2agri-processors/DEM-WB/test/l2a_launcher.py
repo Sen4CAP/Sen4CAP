@@ -35,7 +35,8 @@ from lxml import etree
 from psycopg2.sql import SQL
 from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
-from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, ArchiveHandler 
+from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
+from l2a_commons import ArchiveHandler 
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -439,9 +440,10 @@ class Sen2CorContext(object):
 
 
 class L2aMaster(object):
-    def __init__(self, num_workers, db_config):
+    def __init__(self, num_workers, db_config, node_id):
         self.num_workers = num_workers
         self.db_config = db_config
+        self.node_id = node_id
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.in_processing = set()
@@ -496,7 +498,7 @@ class L2aMaster(object):
                     self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    tile_info = db_get_unprocessed_tile(self.db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
@@ -2136,22 +2138,20 @@ class Sen2Cor(L2aProcessor):
         )
         return self.lin, self.l2a
 
-def db_clear_pending_tiles(db_config, log_dir, log_file):
+def db_clear_pending_tiles(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_clear_pending_l1_tiles()")
-        cursor.execute(q2)
+        cursor.execute("""select * from sp_clear_pending_l1_tiles(%(node_id)s :: character varying);""",{"node_id" : node_id})
 
     with db_config.connect() as connection:
         handle_retries(connection, _run, log_dir, log_file)
 
-def db_get_unprocessed_tile(db_config, log_dir, log_file):
+def db_get_unprocessed_tile(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_start_l1_tile_processing()")
-        cursor.execute(q2)
+        cursor.execute("""select * from sp_start_l1_tile_processing(%(node_id)s :: character varying);""",{"node_id" : node_id})
         tile_info = cursor.fetchone()
         return tile_info
 
@@ -2178,6 +2178,11 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
         sat_id = l2a_prod.satellite_id
         acquisition_date = l2a_prod.acquisition_date
         orbit_id = l2a_prod.orbit_id
+        #tmp
+        machine_id = read_1st("/etc/machine-id")
+        host = read_1st("/etc/hostname")
+        node_id = host + "-" + machine_id
+        #tmp
 
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
@@ -2191,6 +2196,7 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
                                                                                          %(should_retry)s :: boolean,
                                                                                          %(cloud_coverage)s :: integer,
                                                                                          %(snow_coverage)s :: integer);""",
+                                                                                    #    %(host-id)s :: character varying,
                 {
                      "downloader_history_id": downloader_product_id,
                      "tile_id": tile_id,
@@ -2198,6 +2204,7 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
                      "should_retry": should_retry,
                      "cloud_coverage": cloud_coverage,
                      "snow_coverage": snow_coverage,
+                #    "host-id": node_id
                 },
             )
         else:
@@ -2347,9 +2354,29 @@ if not os.path.isdir(default_site_context.working_dir) and not create_recursive_
 # delete all the temporary content from a previous run
 remove_dir_content(default_site_context.working_dir)
 
+#get node id
+host = read_1st("/etc/hostname")
+machine_id = read_1st("/etc/machine-id")
+if (len(machine_id) < 1) or (len(host) < 1):
+    print(
+        "(launcher err) <master>: Invalid node_id: {}-{}".format(
+            host, machine_id
+        )
+    )
+    log(
+        LAUNCHER_LOG_DIR,
+        "(launcher err) <master>: Invalid pnode_id: {}-{}".format(
+                    host, machine_id
+        ),
+        LAUNCHER_LOG_FILE_NAME,
+    )
+    sys.exit(1)
+else:
+    node_id = host + "-" + machine_id
+
 # clear pending tiless
-db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-l2a_master = L2aMaster(default_site_context.num_workers, db_config)
+db_clear_pending_tiles(db_config, node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+l2a_master = L2aMaster(default_site_context.num_workers, db_config, node_id)
 l2a_master.run()
 
 if DEBUG == False:
