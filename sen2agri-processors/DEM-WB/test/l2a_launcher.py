@@ -44,13 +44,11 @@ from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_
 
 
 DEBUG = False
-MAJA_LOG_DIR = "/tmp/"
 MAJA_LOG_FILE_NAME = "maja.log"
-SEN2COR_LOG_DIR = "/tmp/"
 SEN2COR_LOG_FILE_NAME = "sen2cor.log"
 MIN_VALID_PIXELS_THRESHOLD = 10.0
 MAX_CLOUD_COVERAGE = 90.0
-LAUNCHER_LOG_DIR = "/tmp/"
+LAUNCHER_LOG_DIR = "/var/log/"
 LAUNCHER_LOG_FILE_NAME = "l2a_launcher.log"
 ARCHIVES_DIR_NAME = "archives"
 SQL_MAX_NB_RETRIES = 3
@@ -180,6 +178,7 @@ class ProcessingContext(object):
     def get_site_context(self, site_id):
         site_context = SiteContext()
         site_context.base_abs_path = self.base_abs_path
+        site_context.site_id = site_id
         if site_id in self.output_path:
             site_context.output_path = self.output_path[site_id]
             site_context.base_output_path = site_context.output_path.replace(
@@ -262,148 +261,147 @@ class SiteContext(object):
         self.maja_gipp = ""
         self.maja_conf = ""
 
+    def get_site_info(self, db_config):
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        self.site_output_path = self.base_output_path.replace("{site}", self.site_short_name)
+
     def is_valid(self):
         if len(self.output_path) == 0:
-            print(
-                "(launcher err) Invalid processing context output_path: {}.".format(
-                    self.output_path
-                )
+            rejection_reason = "(launcher err) Invalid processing context output_path: {}.".format(
+                self.output_path
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context output_path: {}.".format(
-                    self.output_path
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
         if self.num_workers < 1:
-            print(
-                "(launcher err) Invalid processing context num_workers: {}".format(
-                    self.num_workers
-                )
+            rejection_reason = "(launcher err) Invalid processing context num_workers: {}".format(
+                self.num_workers
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context num_workers: {}".format(
-                    self.num_workers
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if not os.path.isdir(self.swbd_path):
-            print(
-                "(launcher err) Invalid processing context swbd_path: {}".format(
-                    self.swbd_path
-                )
+            rejection_reason = "(launcher err) Invalid processing context swbd_path: {}".format(
+                self.swbd_path
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context swbd_path: {}".format(
-                    self.swbd_path
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if not os.path.isdir(self.dem_path):
-            print(
-                "(launcher err) Invalid processing context dem_path: {}".format(
-                    self.dem_path
-                )
+            rejection_reason = "(launcher err) Invalid processing context dem_path: {}".format(
+                self.dem_path
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context dem_path: {}".format(
-                    self.dem_path
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
-        if not os.path.isdir(self.working_dir) and not create_recursive_dirs(self.working_dir):
-            print(
-                "(launcher err) Invalid processing context working_dir: {}".format(
-                    self.working_dir
-                )
+        if not create_recursive_dirs(self.working_dir):
+            rejection_reason = "(launcher err) Invalid processing context working_dir: {}".format(
+                self.working_dir
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context working_dir: {}".format(
-                    self.working_dir
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if self.implementation not in ["sen2cor", "maja"]:
-            print(
-                "(launcher err) Invalid processing context implementation: {}".format(
+            rejection_reason = "(launcher err) Invalid processing context implementation: {}".format(
                     self.implementation
                 )
-            )
+            print(rejection_reason)
+
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context implementation: {}".format(
-                    self.implementation
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if self.implementation == "sen2cor" and not os.path.isdir(self.sen2cor_gipp):
-            print(
-                "(launcher err) Invalid processing context sen2cor_gipp: {}".format(
-                    self.sen2cor_gipp
-                )
+            rejection_reason = "(launcher err) Invalid processing context sen2cor_gipp: {}".format(
+                self.sen2cor_gipp
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context sen2cor_gipp: {}".format(
-                    self.sen2cor_gipp
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if self.implementation == "maja" and not os.path.isdir(self.maja_gipp):
-            print(
-                "(launcher err) Invalid processing context maja_gipp: {}".format(
+            rejection_reason = "(launcher err) Invalid processing context maja_gipp: {}".format(
                     self.maja_gipp
                 )
-            )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context maja_gipp: {}".format(
-                    self.maja_gipp
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if self.removeFreFiles and self.removeSreFiles:
-            print(
-                "(launcher err) Invalid processing context both removeFreFiles and removeSreFiles are True."
-            )
+            rejection_reason = "(launcher err) Invalid processing context both removeFreFiles and removeSreFiles are True."
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid processing context both removeFreFiles and removeSreFiles are True.",
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if self.implementation == "maja" and not os.path.isdir(self.maja_conf):
-            print(
-                "(launcher err) Invalid Maja configuration file {}.".format(self.maja_conf)
-            )
+            rejection_reason = "(launcher err) Invalid Maja configuration file {}.".format(self.maja_conf)
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid Maja configuration file.".format(self.maja_conf),
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
-        return True
+        if self.site_short_name is None:
+            rejection_reason = "(launcher err) Invalid site short name"
+            log(
+                LAUNCHER_LOG_DIR,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
+            )
+            return False, rejection_reason
+
+        if len(self.site_output_path) == 0:
+            rejection_reason = "(launcher err) Invalid site output path: {}".format(self.site_output_path)
+            log(
+                LAUNCHER_LOG_DIR,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
+            )
+            return False, rejection_reason
+
+        return True, None
 
 
 class MajaContext(object):
@@ -414,8 +412,6 @@ class MajaContext(object):
         self.swbd_path = site_context.swbd_path
         self.gips_path = site_context.maja_gipp
         self.worker_id = worker_id
-        self.processor_log_dir = MAJA_LOG_DIR
-        self.processor_log_file = MAJA_LOG_FILE_NAME
         self.removeFreFiles = site_context.removeFreFiles
         self.removeSreFiles = site_context.removeSreFiles
         self.compressTiffs = site_context.compressTiffs
@@ -423,20 +419,22 @@ class MajaContext(object):
         self.maja_launcher = site_context.maja_launcher
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.conf = site_context.maja_conf
+        self.site_output_path = site_context.site_output_path
+        self.site_short_name = site_context.site_short_name
 
 
 class Sen2CorContext(object):
-    def __init__(self, processing_context, worker_id):
-        self.dem_path = processing_context.dem_path
-        self.working_dir = processing_context.working_dir
-        self.processor_launch_path = processing_context.maja_launcher
-        self.gips_path = processing_context.sen2cor_gipp
+    def __init__(self, site_context, worker_id):
+        self.dem_path = site_context.dem_path
+        self.working_dir = site_context.working_dir
+        self.processor_launch_path = site_context.maja_launcher
+        self.gips_path = site_context.sen2cor_gipp
         self.worker_id = worker_id
-        self.processor_log_dir = SEN2COR_LOG_DIR
-        self.processor_log_file = SEN2COR_LOG_FILE_NAME
-        self.compressTiffs = processing_context.compressTiffs
-        self.cogTiffs = processing_context.cogTiffs
+        self.compressTiffs = site_context.compressTiffs
+        self.cogTiffs = site_context.cogTiffs
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
+        self.site_output_path = site_context.site_output_path
+        self.site_short_name = site_context.site_short_name
 
 
 class L2aMaster(object):
@@ -502,46 +500,27 @@ class L2aMaster(object):
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
-                        db_get_processing_context(self.db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                        db_get_processing_context(
+                            self.db_config,
+                            processing_context,
+                            DB_PROCESSOR_NAME,
+                            LAUNCHER_LOG_DIR,
+                            LAUNCHER_LOG_FILE_NAME)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
-                        valid_site_context = site_context.is_valid()
-                        unprocessed_tile.get_site_info(site_context.base_output_path, self.db_config)
-                        valid_tile = unprocessed_tile.is_valid()
+                        site_context.get_site_info(self.db_config)
+                        valid_site_context, site_context_rejection_resason = site_context.is_valid()
+                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid()
 
                         if not valid_tile:
-                            print(
-                                "\n(launcher err) <master>: Product {} has invalid tile info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                )
-                            )
-                            log(
-                                LAUNCHER_LOG_DIR,
-                                "(launcher err) <master>: Product {} has invalid tile info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                ),
-                                LAUNCHER_LOG_FILE_NAME
-                            )
                             db_prerun_update(
-                                self.db_config, unprocessed_tile, "Invalid tile information."
+                                self.db_config, unprocessed_tile, tile_rejection_reason
                             )
                             continue
 
                         if not valid_site_context:
-                            print(
-                                "\n(launcher err) <master>: Product {} has invalid site info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                )
-                            )
-                            log(
-                                LAUNCHER_LOG_DIR,
-                                "(launcher err) <master>: Product {} has invalid site info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                ),
-                                LAUNCHER_LOG_FILE_NAME
-                            )
-                            db_prerun_update(self.db_config, unprocessed_tile, "Invalid site context.")
+                            db_prerun_update(self.db_config, unprocessed_tile, site_context_rejection_resason)
                             continue
 
                         worker_id = sleeping_workers.pop()
@@ -661,12 +640,12 @@ class L2aWorker(threading.Thread):
         )
         print(
             "\n(launcher info) <worker {}>: site_short_name = {}".format(
-                self.worker_id, tile.site_short_name
+                self.worker_id, site_context.site_short_name
             )
         )
         print(
             "\n(launcher info) <worker {}>: site_output_path = {}".format(
-                self.worker_id, tile.site_output_path
+                self.worker_id, site_context.site_output_path
             )
         )
 
@@ -703,7 +682,7 @@ class L2aWorker(threading.Thread):
 
 
 class Tile(object):
-    def __init__(self, tile_info, base_output_path, db_config):
+    def __init__(self, tile_info):
         self.site_id = tile_info[0]
         self.satellite_id = tile_info[1]
         self.orbit_id = tile_info[2]
@@ -711,98 +690,89 @@ class Tile(object):
         self.downloader_history_id = tile_info[4]
         self.path = tile_info[5]
         self.previous_l2a_path = tile_info[6]
-        self.site_short_name = ""
-        self.site_output_path = ""
-        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-        self.site_output_path = base_output_path.replace("{site}", self.site_short_name)
-
 
     def is_valid(self):
         if self.downloader_history_id is None:
+            rejection_reason = "Aborting processing for tile {} because downloader history id is incorrect".format(
+                self.tile_id
+            ),
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for tile {} because downloader history id is incorrect".format(
-                    self.tile_id
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if self.site_id is None:
+            rejection_reason = "Aborting processing for product {} because site id is incorrect".format(
+                    self.downloader_history_id
+                )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product {} because site id is incorrect".format(
-                    self.downloader_history_id
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if self.satellite_id is None:
+            rejection_reason = "Aborting processing for product {} because site id is incorrect".format(
+                self.downloader_history_id
+            )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product {} because satellite id is incorrect".format(
-                    self.downloader_history_id, 
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
         if self.orbit_id is None:
+            rejection_reason = "Aborting processing for product {} because orbit id is incorrect".format(
+                self.downloader_history_id
+            ),
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product {} because orbit id is incorrect".format(
-                    self.downloader_history_id
-                ),
-                LAUNCHER_LOG_FILE_NAME,
+                rejection_reason,
+                LAUNCHER_LOG_FILE_NAME
             )
-            return False
+            return False, rejection_reason
 
         if (self.tile_id is None) or (len(self.tile_id) == 0):
+            rejection_reason = "Aborting processing for product {} because tile id is incorrect".format(
+                self.downloader_history_id
+            )
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product {} because tile id is incorrect".format(
-                    self.downloader_history_id
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
-
-        if self.site_short_name is None:
-            log(
-                LAUNCHER_LOG_DIR,
-                "Aborting processing for product {} because site short name is incorrect".format(
-                    self.downloader_history_id
-                ),
-                LAUNCHER_LOG_FILE_NAME,
-            )
-            return False
+            return False, rejection_reason
 
         if not os.path.exists(self.path):
+            rejection_reason = "Aborting processing for product {} because the input path does not exist".format(
+                self.downloader_history_id
+            ) 
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product {} because the path does not exist".format(
-                    self.downloader_history_id
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
         if (self.previous_l2a_path is not None) and not(os.path.exists(self.previous_l2a_path)):
+            rejection_reason = "Aborting processing for product {} because the previous l2a path does not exist".format(
+                self.downloader_history_id
+            )
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product {} because the previous l2a path does not exist".format(
-                    self.downloader_history_id
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
-        return True
+        return True, None
 
-    def get_site_info(self, base_output_path, db_config):
-        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-        self.site_output_path = base_output_path.replace("{site}", self.site_short_name)
 
 
 class L1CL8Product(object):
@@ -814,8 +784,6 @@ class L1CL8Product(object):
         self.product_id = tile.downloader_history_id
         self.db_path = tile.path
         self.previous_l2a_path = tile.previous_l2a_path
-        self.site_output_path = tile.site_output_path
-        self.site_short_name = tile.site_short_name
         self.was_archived = False
         self.path = None
         self.rejection_reason = None
@@ -1059,10 +1027,10 @@ class L2aProcessor(object):
 
         # determine the path of the l2a product
         l2a_output_path = os.path.join(
-            self.lin.site_output_path, "output", l2a_basename
+            self.context.site_output_path, "output", l2a_basename
         )
         l2a_destination_path = os.path.join(
-            self.lin.site_output_path, acq_year, acq_month, acq_day, l2a_basename
+            self.context.site_output_path, acq_year, acq_month, acq_day, l2a_basename
         )
         if not create_recursive_dirs(l2a_output_path):
             self.update_rejection_reason(
@@ -1079,7 +1047,7 @@ class L2aProcessor(object):
         self.l2a.site_id = self.lin.site_id
         self.l2a.product_id = self.lin.product_id
         self.l2a.orbit_id = self.lin.orbit_id
-        self.l2a_log_file = "l2a_{}.log".format(self.lin.tile_id)
+        self.l2a_log_file = "l2a_{}.log".format(self.lin.product_id)
         return True
 
     def update_rejection_reason(self, message):
@@ -1094,11 +1062,14 @@ class L2aProcessor(object):
     def move_to_destination(self):
         #Copies a valid product from the output path to the destination product path
         try:
-            dst = os.path.join(self.l2a.destination_path, os.pardir)
-            shutil.rmtree(self.l2a.destination_path, ignore_errors=True)
-            if not os.path.isdir(dst):
-                create_recursive_dirs(dst)
-            os.rename(self.l2a.output_path, self.l2a.destination_path)
+            if self.l2a.destination_path.endswith("/"):
+                dst = os.path.dirname(self.l2a.destination_path[:-1])
+            else:
+                dst = os.path.dirname(self.l2a.destination_path)
+            if create_recursive_dirs(dst):
+                os.rename(self.l2a.output_path, self.l2a.destination_path)
+            else:
+                self.update_rejection_reason("Can NOT copy from output path {} to destination product path {}".format(self.l2a.output_path, self.l2a.destination_path))
         except Exception as e:
             self.update_rejection_reason("Can NOT copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e))
 
@@ -1195,7 +1166,7 @@ class Maja(L2aProcessor):
                 )
         else:
             #starting with maja 4.2.1 the cloud coverage is read from maja.log, not from eef
-            maja_log_path = os.path.join(self.l2a.output_path,"maja.log")
+            maja_log_path = os.path.join(self.l2a.output_path, MAJA_LOG_FILE_NAME)
             if os.path.isfile(maja_log_path):
                 with open(maja_log_path) as log_file:
                     for line in log_file:
@@ -1273,8 +1244,7 @@ class Maja(L2aProcessor):
                 )
 
     def check_l2a_log(self):
-        tile_log_filename = "l2a_{}.log".format(self.lin.tile_id)
-        tile_log_filepath = os.path.join(self.l2a.output_path, tile_log_filename)
+        tile_log_filepath = os.path.join(self.l2a.output_path, MAJA_LOG_FILE_NAME)
         try:
             with open(tile_log_filepath) as in_file:
                 contents = in_file.readlines()
@@ -1537,9 +1507,6 @@ class Maja(L2aProcessor):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
-        maja_general_log_path = os.path.join(MAJA_LOG_DIR, MAJA_LOG_FILE_NAME)
-        script_command.append("-v")
-        script_command.append("{}:{}".format(maja_general_log_path, maja_general_log_path))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -1622,14 +1589,14 @@ class Maja(L2aProcessor):
         script_command.append("--docker-image-gdal")
         script_command.append(DEFAULT_GDAL_IMAGE_NAME)
 
-        majalog_path = os.path.join(self.l2a.output_path,"maja.log")
-        majalog_file = open(majalog_path, "w")
+        majalog_path = os.path.join(self.l2a.output_path, MAJA_LOG_FILE_NAME)
         command_string =""
         for argument in script_command:
             command_string = command_string + " " + str(argument)
         self.l2a_log("Running command: {}".format(command_string))
         print("Running Maja, console output can be found at {}".format(majalog_path))
-        command_return = subprocess.call(script_command, stdout = majalog_file, stderr = majalog_file)
+        with open(majalog_path, "w") as majalog_file:
+            command_return = subprocess.call(script_command, stdout = majalog_file, stderr = majalog_file)
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -1641,7 +1608,6 @@ class Maja(L2aProcessor):
                 "Can NOT run MAJA script, error code: {}.".format(command_return)
             )
             return False
-
 
     def manage_prods_status(
         self, preprocess_succesful, process_succesful, l2a_ok):
@@ -1807,7 +1773,7 @@ class Sen2Cor(L2aProcessor):
 
     def get_rejection_reason(self):
         log_path = os.path.join(
-            self.context.processor_log_dir, self.context.processor_log_file
+            self.l2a.output_path , SEN2COR_LOG_FILE_NAME
         )
         if os.path.isfile(log_path):
             try:
@@ -1935,9 +1901,6 @@ class Sen2Cor(L2aProcessor):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
-        sen2cor_general_log_path = os.path.join(SEN2COR_LOG_DIR, SEN2COR_LOG_FILE_NAME)
-        script_command.append("-v")
-        script_command.append("{}:{}".format(sen2cor_general_log_path, sen2cor_general_log_path))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -2023,18 +1986,18 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--docker-image-gdal")
         script_command.append(DEFAULT_GDAL_IMAGE_NAME)
         #tmp only for testing purposes
-        #script_command.append("--resolution")
-        #script_command.append(str(60))
+        script_command.append("--resolution")
+        script_command.append(str(60))
         #tmp
 
-        sen2corlog_path = os.path.join(self.l2a.output_path,"sen2cor.log")
-        sen2corlog_file = open(sen2corlog_path, "w")
+        sen2corlog_path = os.path.join(self.l2a.output_path, SEN2COR_LOG_FILE_NAME)
         cmd_str =""
         for elem in script_command:
             cmd_str = cmd_str + " " + elem
         self.l2a_log("Running command: {}".format(cmd_str))
         print("Running Sen2Cor, console output can be found at {}".format(sen2corlog_path))
-        command_return = subprocess.call(script_command, stdout = sen2corlog_file, stderr = sen2corlog_file)
+        with open(sen2corlog_path, "w") as sen2corlog_file:
+            command_return = subprocess.call(script_command, stdout = sen2corlog_file, stderr = sen2corlog_file)
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -2272,7 +2235,7 @@ def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_fi
         processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
         downloader_history_id = tile.downloader_history_id
         tile_id = tile.tile_id
-        should_retry = True
+        should_retry = False
         cloud_coverage = None
         snow_coverage = None
         q1 = SQL("set transaction isolation level serializable")
@@ -2310,17 +2273,6 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-#Create and manage log files
-sen2corlog_path = os.path.join(SEN2COR_LOG_DIR,SEN2COR_LOG_FILE_NAME)
-if os.path.isfile(sen2corlog_path) == False:
-    with open(sen2corlog_path, "w") as log_file:
-        log_file.write("#### Creation of sen2cor log file ####")
-
-majalog_path = os.path.join(MAJA_LOG_DIR,MAJA_LOG_FILE_NAME)
-if os.path.isfile(majalog_path) == False:
-    with open(majalog_path, "w") as log_file:
-        log_file.write("#### Creation of maja log file ####")
-
 # get the processing context
 db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 default_processing_context = ProcessingContext()
@@ -2333,26 +2285,42 @@ if default_processing_context is None:
     )
     sys.exit(1)
 
-default_site_context = default_processing_context.get_site_context("default")
-if default_site_context.is_valid() == False:
-    log(LAUNCHER_LOG_DIR, "Invalid processing context", LAUNCHER_LOG_FILE_NAME)
-    sys.exit(1)
-
-# woking dir operations
-# create working dir
-if not os.path.isdir(default_site_context.working_dir) and not create_recursive_dirs(
-    default_site_context.working_dir
-):
+if default_processing_context.num_workers["default"] < 1:
+    print(
+        "(launcher err) <master>: Invalid processing context num_workers: {}".format(
+            default_processing_context.num_workers["default"]
+        )
+    )
     log(
         LAUNCHER_LOG_DIR,
-        "Could not create the work base directory {}".format(
-            default_site_context.working_dir
+        "(launcher err) <master>: Invalid processing context num_workers: {}".format(
+                    default_processing_context.num_workers["default"]
         ),
         LAUNCHER_LOG_FILE_NAME,
     )
     sys.exit(1)
+
+# woking dir operations
+# create working dir
+if not create_recursive_dirs(
+    default_processing_context.working_dir["default"]
+):
+    print(
+        "Could not create the work base directory {}".format(
+            default_processing_context.working_dir["default"]
+        )
+    )
+    log(
+        LAUNCHER_LOG_DIR,
+        "Could not create the work base directory {}".format(
+            default_processing_context.working_dir["default"]
+        ),
+        LAUNCHER_LOG_FILE_NAME,
+    )
+    sys.exit(1)
+
 # delete all the temporary content from a previous run
-remove_dir_content(default_site_context.working_dir)
+remove_dir_content(default_processing_context.working_dir["default"])
 
 #get node id
 host = read_1st("/etc/hostname")
@@ -2376,8 +2344,8 @@ else:
 
 # clear pending tiless
 db_clear_pending_tiles(db_config, node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-l2a_master = L2aMaster(default_site_context.num_workers, db_config, node_id)
+l2a_master = L2aMaster(default_processing_context.num_workers["default"], db_config, node_id)
 l2a_master.run()
 
 if DEBUG == False:
-    remove_dir_content("{}/".format(default_site_context.working_dir))
+    remove_dir_content("{}/".format(default_processing_context.working_dir["default"]))

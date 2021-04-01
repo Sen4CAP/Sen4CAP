@@ -32,6 +32,7 @@ import ntpath
 import zipfile
 import tarfile
 import tempfile
+import errno
 
 DEBUG = False
 SENTINEL2_SATELLITE_ID = 1
@@ -74,33 +75,33 @@ def log(location, info, log_filename = ""):
         print("Could NOT write inside the log file {} due to: {}".format(log_filename, e))
 
 
-def run_command(cmd_array, log_path = "", log_filename = "", fake_command = False):
+def run_command(cmd_array, log_dir = "", log_file_name = "", fake_command = False):
     start = time.time()
     cmd_str = " ".join(map(pipes.quote, cmd_array))
     res = 0
     if not fake_command:
-        log(log_path, "Running command: {}".format(cmd_str), log_filename)
+        log(log_dir, "Running command: {}".format(cmd_str), log_file_name)
         try:
             res = subprocess.call(cmd_array, shell=False)
         except Exception as e:
-            log(log_path, "Exception encountered: {} when running command: {}".format(e, cmd_str), log_filename)
+            log(log_dir, "Exception encountered: {} when running command: {}".format(e, cmd_str), log_file_name)
             res = 1
     else:
-        log(log_path, "Fake command: {}".format(cmd_str), log_filename)
+        log(log_dir, "Fake command: {}".format(cmd_str), log_file_name)
     ok = "OK"
     nok = "NOK"
-    log(log_path, "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str), log_filename)
+    log(log_dir, "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str), log_file_name)
     return res
 
 
-def create_recursive_dirs(dir_name):
-    if not os.path.exists(dir_name):
-        try:
-            os.makedirs(dir_name)
-        except Exception as e:
-            print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
+def create_recursive_dirs(dir_path):
+    try:
+        os.makedirs(dir_path)
+    except Exception as e:
+        if e.errno != errno.EEXIST:
+            print(e)
             return False
-
+            
     return True
 
 
@@ -179,14 +180,15 @@ def get_footprint(image_filename):
 def translate(input_img,
               output_dir,
               output_img_name,
-              log_file,
+              output_img_format,
+              log_dir,
+              log_file_name,
               gdal_image = DEFAULT_GDAL_IMAGE,
               name = None,
               resample_res = 0,
-              cog = False,
               compress = False,
+              outsize = 0
         ):
-        try:
             cmd = []
             #docker run
             cmd.append("docker")
@@ -197,7 +199,8 @@ def translate(input_img,
             cmd.append("-v")
             cmd.append("{}:{}".format(os.path.abspath(input_img), os.path.abspath(input_img)))
             cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(input_img), os.path.abspath(input_img)))
+            cmd.append("{}:{}".format(os.path.abspath(output_dir), os.path.abspath(output_dir)))
+            log_file = os.path.join(log_dir, log_file_name)
             cmd.append("-v")
             cmd.append("{}:{}".format(os.path.abspath(log_file), os.path.abspath(log_file)))
             if name:
@@ -207,37 +210,38 @@ def translate(input_img,
 
             # gdal command
             cmd.append("gdal_translate")
-            if cog:
-                cmd.append("-f")
-                cmd.append("COG")
+            cmd.append("-of")
+            cmd.append(output_img_format)
+            if output_img_format == "COG":
                 cmd.append("-co")
                 cmd.append("NUM_THREADS=ALL_CPUS")
             if compress:
                 cmd.append("-co")
                 cmd.append("COMPRESS=DEFLATE")
-            cmd.append("-co")
-            cmd.append("PREDICTOR=2")
+            if output_img_format != "JPEG":
+                cmd.append("-co")
+                cmd.append("PREDICTOR=2")
             if resample_res > 0:
                 cmd.append("-tr")
-                cmd.append(resample_res)
-                cmd.append(resample_res)
+                cmd.append(str(resample_res))
+                cmd.append(str(resample_res))
+            if outsize > 0:
+                cmd.append("-outsize")
+                cmd.append(str(outsize))
+                cmd.append("0") #presevers the ratio of file
             cmd.append(input_img)
             output_img= os.path.join(output_dir, output_img_name)
             cmd.append(output_img)
 
-            with open(log_file, "a") as f:
-                cmd_ret = subprocess.call(cmd, stdout = f, stderr = f)
+            cmd_ret = run_command(cmd, log_dir, log_file_name)
 
             if (cmd_ret == 0) and os.path.isfile(output_img):
                 return True
             else:
-                with open(log_file, "a") as f:
-                    f.write("Exception ecounter upon translating fmask image: {}".format(input_img))
+                log(log_dir,"Translate cmd returned code : {}".format(cmd_ret), log_file_name)
                 return False
-        except Exception as e:
-            with open(log_file, "a") as f:
-                f.write("Exception ecountered {} upon translating fmask image: {}".format(e, input_img))
-            return False
+
+            return True
 
 ### Archiving operations
 
