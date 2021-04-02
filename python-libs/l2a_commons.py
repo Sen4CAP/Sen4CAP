@@ -212,13 +212,12 @@ def translate(input_img,
             cmd.append("gdal_translate")
             cmd.append("-of")
             cmd.append(output_img_format)
-            if output_img_format == "COG":
-                cmd.append("-co")
-                cmd.append("NUM_THREADS=ALL_CPUS")
             if compress:
                 cmd.append("-co")
                 cmd.append("COMPRESS=DEFLATE")
             if output_img_format != "JPEG":
+                cmd.append("-co")
+                cmd.append("NUM_THREADS=ALL_CPUS")
                 cmd.append("-co")
                 cmd.append("PREDICTOR=2")
             if resample_res > 0:
