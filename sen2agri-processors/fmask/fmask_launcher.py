@@ -31,15 +31,14 @@ import signal
 import traceback
 from psycopg2.sql import SQL
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, ArchiveHandler
+from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, read_1st
+from l2a_commons import ArchiveHandler, translate, get_node_id
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
 DEBUG = True
-FMASK_LOG_DIR = "/tmp/"
-FMASK_LOG_FILE_NAME = "fmask.log"
 ARCHIVES_DIR_NAME = "archives"
-LAUNCHER_LOG_DIR = "/tmp/"
+LAUNCHER_LOG_DIR = "/var/log/"
 LAUNCHER_LOG_FILE_NAME = "fmask_launcher.log"
 FMASK_EXTRACTOR = "fmask_extractor.py"
 DATABASE_FMASK_NUM_WORKERS = "processor.fmask.optical.num-workers"
@@ -57,6 +56,7 @@ DATABASE_FMASK_COG_TIFFS = 'processor.fmask.optical.cog-tiffs'
 DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
 DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
 DB_PROCESSOR_NAME = "fmask"
+S2_20M_RESOLUTION = "5490"
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -89,7 +89,7 @@ class FmaskProcessor(object):
         self.context = processor_context
         self.lin = L1CProduct(unprocessed_tile)
         self.fmask = FMaskProduct()
-        self.fmask_log_file = None
+        self.log_file_name = "fmask_{}.log".format(self.lin.product_id)
         self.name = "Fmask"
 
     def __del__(self):
@@ -98,7 +98,7 @@ class FmaskProcessor(object):
 
     def fmask_log(self, log_msg):
         log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
-        log(self.fmask.output_path, log_msg, self.fmask_log_file)
+        log(self.fmask.output_path, log_msg, self.log_file_name)
 
     def launcher_log(self, log_msg):
         log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
@@ -290,7 +290,6 @@ class FmaskProcessor(object):
         self.fmask.satellite_id = self.lin.satellite_id
         self.fmask.site_id = self.lin.site_id
         self.fmask.product_id = self.lin.product_id
-        self.fmask_log_file = "fmask.log"
         return True
 
     def update_rejection_reason(self, message):
@@ -309,9 +308,10 @@ class FmaskProcessor(object):
                 dst = os.path.dirname(self.fmask.destination_path[:-1])
             else:
                 dst = os.path.dirname(self.fmask.destination_path)
-            if not os.path.isdir(dst):
-                create_recursive_dirs(dst)
-            os.rename(self.fmask.output_path, self.fmask.destination_path)
+            if create_recursive_dirs(dst):
+                os.rename(self.fmask.output_path, self.fmask.destination_path)
+            else:
+                self.update_rejection_reason(" Can NOT copy from output path {} to destination product path {}".format(self.fmask.output_path, self.fmask.destination_path))
         except Exception as e:
             self.update_rejection_reason(" Can NOT copy from output path {} to destination product path {} due to: {}".format(self.fmask.output_path, self.fmask.destination_path, e))
 
@@ -370,14 +370,15 @@ class FmaskProcessor(object):
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
   
-        fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
-        fmask_log_file = open(fmask_log_path, "a")
+        fmask_log_path = os.path.join(self.fmask.output_path, self.log_file_name)
+
         command_string =""
         for argument in script_command:
             command_string = command_string + " " + str(argument)
         self.fmask_log("Running command: {}".format(command_string))
         print("Running Fmask, console output can be found at {}".format(fmask_log_path))
-        command_return = subprocess.call(script_command, stdout = fmask_log_file, stderr = fmask_log_file)
+        with open(fmask_log_path, "a") as fmask_log_file:
+            command_return = subprocess.call(script_command, stdout = fmask_log_file, stderr = fmask_log_file)
 
         if (command_return == 0) and os.path.isdir(self.fmask.output_path):
             return True
@@ -404,56 +405,6 @@ class FmaskProcessor(object):
         else:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
             self.lin.should_retry = False #TBD
-
-    def translate(self, fmask_file):
-        try:
-            cmd = []
-            #docker run
-            cmd.append("docker")
-            cmd.append("run")
-            cmd.append("--rm")
-            cmd.append("-u")
-            cmd.append("{}:{}".format(os.getuid(), os.getgid()))
-            cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(self.fmask.output_path), os.path.abspath(self.fmask.output_path)))
-            cmd.append("--name")
-            cmd.append("gdal_{}".format(self.fmask.product_id))
-            cmd.append(self.context.gdal_image)
-
-            # gdal command
-            cmd.append("gdal_translate")
-            if self.context.cog_tiffs:
-                cmd.append("-f")
-                cmd.append("COG")
-                cmd.append("-co")
-                cmd.append("NUM_THREADS=ALL_CPUS")
-            if self.context.compress_tiffs:
-                cmd.append("-co")
-                cmd.append("COMPRESS=DEFLATE")
-            cmd.append("-co")
-            cmd.append("PREDICTOR=2")
-            cmd.append(fmask_file)
-            fmask_file_tmp = fmask_file[:-4] + "_tmp.tif"
-            cmd.append(fmask_file_tmp)
-
-            fmask_log_path = os.path.join(self.fmask.output_path,"fmask.log")
-            fmask_log_file = open(fmask_log_path, "a")
-            command_string =""
-            for argument in cmd:
-                command_string = command_string + " " + str(argument)
-            self.fmask_log("Running command: {}".format(command_string))
-            print("Running Fmask, console output can be found at {}".format(fmask_log_path))
-            command_return = subprocess.call(cmd, stdout = fmask_log_file, stderr = fmask_log_file)
-
-            if (command_return == 0) and os.path.isfile(fmask_file_tmp):
-                os.remove(fmask_file)
-                os.rename(fmask_file_tmp, fmask_file)
-            else:
-                self.fmask_log(
-                    "Can NOT run translate Fmask , error code: {}.".format(command_return)
-                )
-        except Exception as e:
-            self.fmask_log("Exception ecounter upon translating fmask image: {}".format(e))
 
     def run(self):
         preprocess_successful = False
@@ -485,17 +436,55 @@ class FmaskProcessor(object):
         fmask_file_path = os.path.join(self.fmask.output_path, fmask_file_pattern)
         fmask_files = glob.glob(fmask_file_path)
         if len(fmask_files) == 1:
-            #postprocessing
-            self.get_fmask_footprint(fmask_files[0])
+            log_file = os.path.join(self.fmask.output_path, self.log_file_name)
+            if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
+                output_img_name = os.path.basename(fmask_files[0])[:-4] + "_20m.tif"
+            elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
+                output_img_name = os.path.basename(fmask_files[0])[:-4] + "_30m.tif"
+            container_name = "gdal_" + str(self.lin.product_id)
+                         
+            if self.context.cog_tiffs:
+                output_format = "COG"
+            else:
+                output_format = "GTiff"
+            #for S2 create a 10m resample copy 
+            if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
+                resampled_img_name = os.path.basename(fmask_files[0])[:-4] + "_10m.tif"
+                translate(input_img = fmask_files[0],
+                      output_dir = self.fmask.output_path,
+                      output_img_name = resampled_img_name,
+                      output_img_format = output_format,
+                      log_dir = self.fmask.output_path,
+                      log_file_name = self.log_file_name,
+                      gdal_image = self.context.gdal_image,
+                      name = container_name,
+                      resample_res = 10,
+                      compress = self.context.compress_tiffs,
+                )
+            
+            #translate to cog and/or compress
             if self.context.cog_tiffs or self.context.compress_tiffs:
-                self.translate(fmask_files[0])
+                translate(input_img = fmask_files[0],
+                        output_dir = self.fmask.output_path,
+                        output_img_name = output_img_name,
+                        output_img_format = output_format,
+                        log_dir = self.fmask.output_path,
+                        log_file_name = self.log_file_name,
+                        gdal_image = self.context.gdal_image,
+                        name = container_name,
+                        compress = self.context.compress_tiffs,
+                )
+                os.remove(fmask_files[0])
+            else:
+                os.rename(fmask_files[0], output_img_name)
+
             fmask_file_ok = True
         else:
             self.launcher_log(
-                "Exception when locating Fmask4.tif file in: {} ".format(self.fmask.output_path)
+                "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
             )
             self.update_rejection_reason(
-                "Exception when locating Fmask4.tif file in: {} ".format(self.fmask.output_path)
+                "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
             )
             fmask_file_ok = False
 
@@ -515,8 +504,6 @@ class FMaskContext(object):
         else:
             self.fmask_threshold = site_context.fmask_threshold
         self.worker_id = worker_id
-        self.processor_log_dir = FMASK_LOG_DIR
-        self.processor_log_file = FMASK_LOG_FILE_NAME
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.fmask_extractor_image = site_context.fmask_extractor_image
         self.fmask_image = site_context.fmask_image
@@ -528,9 +515,10 @@ class FMaskContext(object):
         self.compress_tiffs = site_context.fmask_compress_tiffs
 
 class FMaskMaster(object):
-    def __init__(self, num_workers, db_config):
+    def __init__(self, num_workers, db_config, node_id):
         self.num_workers = num_workers
         self.db_config = db_config
+        self.node_id = node_id
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.in_processing = set()
@@ -585,47 +573,32 @@ class FMaskMaster(object):
                     self.in_processing.remove(msg_to_master.lin.product_id)
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    tile_info = db_get_unprocessed_tile(self.db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
-                        db_get_processing_context(self.db_config, processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                        db_get_processing_context(
+                            self.db_config,
+                            processing_context,
+                            DB_PROCESSOR_NAME,
+                            LAUNCHER_LOG_DIR,
+                            LAUNCHER_LOG_FILE_NAME
+                        )
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
                         site_context.get_site_info(self.db_config)
-                        site_context_valid = site_context.is_valid()
-                        valid_tile = unprocessed_tile.is_valid()
-                        if valid_tile == False:
-                            print(
-                                "\n(launcher error) <master>: Product {} has invalid tile info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                )
-                            )
-                            log(
-                                LAUNCHER_LOG_DIR,
-                                "(launcher error) <master>: Product {} has invalid tile info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                ),
-                            )
+                        site_context_valid, site_context_rejection_reason = site_context.is_valid()
+                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid()
+                        if not valid_tile:
                             db_prerun_update(
-                                self.db_config, unprocessed_tile, "Invalid tile information."
+                                self.db_config, unprocessed_tile, tile_rejection_reason
                             )
                             continue
-
-                        if site_context_valid == False:
-                            print(
-                                "\n(launcher error) <master>: Product {} has invalid site info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                )
+                        if not site_context_valid:
+                            db_prerun_update(
+                                self.db_config, unprocessed_tile, site_context_rejection_reason
                             )
-                            log(
-                                LAUNCHER_LOG_DIR,
-                                "(launcher error) <master>: Product {} has invalid site info.".format(
-                                    unprocessed_tile.downloader_history_id
-                                ),
-                            )
-                            db_prerun_update(self.db_config, unprocessed_tile, "Invalid site context.")
                             continue
 
                         if valid_tile and site_context_valid:
@@ -751,44 +724,52 @@ class Tile(object):
  
     def is_valid(self):
         if self.downloader_history_id is None:
+            rejection_reason = "Aborting processing for product because the downloader_history_id is incorrect"
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product because the downloader_history_id is incorrect",
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
         
         if self.site_id is None:
+            rejection_reason = "Aborting processing for product with downloaded history id {} because the site_id is incorrect".format(
+                self.downloader_history_id
+            )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product with downloaded history id {} because the site_id is incorrect".format(
-                    self.downloader_history_id
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
         if self.satellite_id is None:
+            rejection_reason = "Aborting processing for product with downloaded history id {} because the satellite_id is incorrect".format(
+                self.downloader_history_id
+            )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product with downloaded history id {} because the satellite_id is incorrect".format(
-                    self.downloader_history_id
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
         if not os.path.exists(self.path):
+            rejection_reason = "Aborting processing for product with downloaded history id {} because the path is incorrect".format(
+                self.downloader_history_id
+            )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "Aborting processing for product with downloaded history id {} because the path is incorrect".format(
-                    self.downloader_history_id
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False ,rejection_reason
 
-        return True
+        return True, None
 
 class SiteContext(object):
     def __init__(self):
@@ -815,114 +796,96 @@ class SiteContext(object):
 
     def is_valid(self):
         if len(self.output_path) == 0:
-            print(
-                "(launcher error) <master>: Invalid processing context output_path: {}.".format(
-                    self.output_path
-                )
+            rejection_reason = "(launcher error) <master>: Invalid processing context output_path: {}.".format(
+                self.output_path
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context output_path: {}.".format(
-                    self.output_path
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
-        if not os.path.isdir(self.working_dir) and not create_recursive_dirs(self.working_dir):
-            print(
-                "(launcher error) <master>: Invalid processing context working_dir: {}".format(
-                    self.working_dir
-                )
+        if not create_recursive_dirs(self.working_dir):
+            rejection_reason = "(launcher error) <master>: Invalid processing context working_dir: {}".format(
+                self.working_dir
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context working_dir: {}".format(
-                    self.working_dir
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
         if len(self.fmask_image) == 0:
-            print(
-                "(launcher error) <master>: Invalid processing context fmask_image"
-            )
+            rejection_reason = "(launcher error) <master>: Invalid processing context fmask_image"
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context fmask_image",
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False    
+            return False, rejection_reason    
         
         if len(self.fmask_extractor_image) == 0:
-            print(
-                "(launcher error) <master>: Invalid processing context fmask_extractor_image"
-            )
+            rejection_reason = "(launcher error) <master>: Invalid processing context fmask_extractor_image"
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context fmask_extractor_image.",
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False   
+            return False, rejection_reason   
 
         if len(self.fmask_gdal_image) == 0:
-            print(
-                "(launcher error) <master>: Invalid processing context fmask_gdal_image"
-            )
+            rejection_reason = "(launcher error) <master>: Invalid processing context fmask_gdal_image"
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context fmask_gdal_image.",
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False
+            return False, rejection_reason
 
         if (float(self.fmask_threshold) > 100) or (float(self.fmask_threshold) > 100):
-            print(
-                "(launcher error) <master>: Invalid processing context fmask_threshold: {}".format(
-                    self.fmask_threshold
-                )
+            rejection_reason = "(launcher error) <master>: Invalid processing context fmask_threshold: {}".format(
+                self.fmask_threshold
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context fmask_threshold: {}.".format(
-                    self.fmask_threshold
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False  
+            return False, rejection_reason  
 
         if (float(self.fmask_threshold_s2) > 100) or (float(self.fmask_threshold_s2) > 100):
-            print(
-                "(launcher error) <master>: Invalid processing context fmask_threshold_s2: {}".format(
-                    self.fmask_threshold_s2
-                )
+            rejection_reason = "(launcher error) <master>: Invalid processing context fmask_threshold_s2: {}".format(
+                self.fmask_threshold_s2
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context fmask_threshold_s2: {}.".format(
-                    self.fmask_threshold_s2
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False    
+            return False, rejection_reason    
 
         if (float(self.fmask_threshold_l8) > 100) or (float(self.fmask_threshold_l8) > 100):
-            print(
-                "(launcher error) <master>: Invalid processing context fmask_threshold_l8: {}".format(
-                    self.fmask_threshold_l8
-                )
+            rejection_reason = "(launcher error) <master>: Invalid processing context fmask_threshold_l8: {}".format(
+                self.fmask_threshold_l8
             )
+            print(rejection_reason)
             log(
                 LAUNCHER_LOG_DIR,
-                "(launcher error) <master>: Invalid processing context fmask_threshold_l8: {}.".format(
-                    self.fmask_threshold_l8
-                ),
+                rejection_reason,
                 LAUNCHER_LOG_FILE_NAME,
             )
-            return False       
+            return False, rejection_reason       
 
-        return True
+        return True, None
 
 class ProcessingContext(object):
     def __init__(self):
@@ -1076,12 +1039,11 @@ class ProcessingContext(object):
                 else:
                     self.fmask_gdal_image["default"] = value
 
-def db_get_unprocessed_tile(db_config, log_dir, log_file):
+def db_get_unprocessed_tile(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_start_fmask_l1_tile_processing()")
-        cursor.execute(q2)
+        cursor.execute("""select * from sp_start_fmask_l1_tile_processing(%(node_id)s);""",{"node_id" : node_id})
         tile_info = cursor.fetchone()
         return tile_info
 
@@ -1090,12 +1052,11 @@ def db_get_unprocessed_tile(db_config, log_dir, log_file):
         log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
         return tile_info
 
-def db_clear_pending_tiles(db_config, log_dir, log_file):
+def db_clear_pending_tiles(db_config, x, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        q2 = SQL("select * from sp_clear_pending_fmask_tiles()")
-        cursor.execute(q2)
+        cursor.execute("""select * from sp_clear_pending_fmask_tiles(%(node_id)s);""",{"node_id" : node_id})
 
     with db_config.connect() as connection:
         handle_retries(connection, _run, log_dir, log_file)
@@ -1179,7 +1140,7 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log_dir = LAUNCHER_LOG_
 def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
     def _run(cursor):
         downloader_history_id = tile.downloader_history_id
-        should_retry = True
+        should_retry = False
 
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
@@ -1195,6 +1156,9 @@ def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_fi
                 "should_retry" : should_retry
             }
         )
+
+    with db_config.connect() as connection:
+        handle_retries(connection, _run, log_dir, log_file)
 
 
 parser = argparse.ArgumentParser(description="Launcher for FMASK script")
@@ -1213,7 +1177,7 @@ if default_processing_context is None:
     )
     sys.exit(1)
 
-if default_processing_context.num_workers < 1:
+if default_processing_context.num_workers< 1:
     print(
         "(launcher err) <master>: Invalid processing context num_workers: {}".format(
             default_processing_context.num_workers
@@ -1228,12 +1192,34 @@ if default_processing_context.num_workers < 1:
     )
     sys.exit(1)
 
+# woking dir operations
+# create working dir
+if not create_recursive_dirs(
+    default_processing_context.working_dir["default"]
+):
+    print(
+        "Could not create the work base directory {}".format(
+            default_processing_context.working_dir["default"]
+        )
+    )
+    log(
+        LAUNCHER_LOG_DIR,
+        "Could not create the work base directory {}".format(
+            default_processing_context.working_dir["default"]
+        ),
+        LAUNCHER_LOG_FILE_NAME,
+    )
+    sys.exit(1)
+
 # delete all the temporary content from working dir from a previous run
 remove_dir_content(default_processing_context.working_dir["default"])
 
+#get node id
+node_id = get_node_id()
+
 # clear pending tiless
-db_clear_pending_tiles(db_config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-fmask_master = FMaskMaster(default_processing_context.num_workers, db_config)
+db_clear_pending_tiles(db_config, node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+fmask_master = FMaskMaster(default_processing_context.num_workers, db_config, node_id)
 fmask_master.run()
 
 if not DEBUG:

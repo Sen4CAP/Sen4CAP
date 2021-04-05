@@ -32,6 +32,7 @@ import ntpath
 import zipfile
 import tarfile
 import tempfile
+import errno
 
 DEBUG = False
 SENTINEL2_SATELLITE_ID = 1
@@ -42,6 +43,7 @@ THEIA_MUSCATE_OUTPUT_FORMAT = 2
 SEN2COR_PROCESSOR_OUTPUT_FORMAT = 3
 FILES_IN_LANDSAT_L1_PRODUCT = 13
 UNKNOWN_SATELLITE_ID = -1
+DEFAULT_GDAL_IMAGE = "osgeo/gdal:ubuntu-full-3.2.0"
 
 ### OS related operations
 
@@ -73,33 +75,33 @@ def log(location, info, log_filename = ""):
         print("Could NOT write inside the log file {} due to: {}".format(log_filename, e))
 
 
-def run_command(cmd_array, log_path = "", log_filename = "", fake_command = False):
+def run_command(cmd_array, log_dir = "", log_file_name = "", fake_command = False):
     start = time.time()
     cmd_str = " ".join(map(pipes.quote, cmd_array))
     res = 0
     if not fake_command:
-        log(log_path, "Running command: {}".format(cmd_str), log_filename)
+        log(log_dir, "Running command: {}".format(cmd_str), log_file_name)
         try:
             res = subprocess.call(cmd_array, shell=False)
         except Exception as e:
-            log(log_path, "Exception encountered: {} when running command: {}".format(e, cmd_str), log_filename)
+            log(log_dir, "Exception encountered: {} when running command: {}".format(e, cmd_str), log_file_name)
             res = 1
     else:
-        log(log_path, "Fake command: {}".format(cmd_str), log_filename)
+        log(log_dir, "Fake command: {}".format(cmd_str), log_file_name)
     ok = "OK"
     nok = "NOK"
-    log(log_path, "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str), log_filename)
+    log(log_dir, "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str), log_file_name)
     return res
 
 
-def create_recursive_dirs(dir_name):
-    if not os.path.exists(dir_name):
-        try:
-            os.makedirs(dir_name)
-        except Exception as e:
-            print("The directory {} couldn't be created. Reason: {}".format(dir_name, e))
+def create_recursive_dirs(dir_path):
+    try:
+        os.makedirs(dir_path)
+    except Exception as e:
+        if e.errno != errno.EEXIST:
+            print(e)
             return False
-
+            
     return True
 
 
@@ -125,6 +127,15 @@ def copy_directory(src, dest):
         return False
     return True
 
+#reads the first line of a file
+def read_1st(file):
+    with open(file) as f:
+        return f.readline().strip("\n")
+
+def get_node_id(): 
+    host = read_1st("/etc/hostname")
+    machine_id = read_1st("/etc/machine-id")
+    return host + "-" + machine_id
 
 ### IMG related operations
 
@@ -170,6 +181,71 @@ def get_footprint(image_filename):
 
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
+
+def translate(input_img,
+              output_dir,
+              output_img_name,
+              output_img_format,
+              log_dir,
+              log_file_name,
+              gdal_image = DEFAULT_GDAL_IMAGE,
+              name = None,
+              resample_res = 0,
+              compress = False,
+              outsize = 0
+        ):
+            cmd = []
+            #docker run
+            cmd.append("docker")
+            cmd.append("run")
+            cmd.append("--rm")
+            cmd.append("-u")
+            cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+            cmd.append("-v")
+            cmd.append("{}:{}".format(os.path.abspath(input_img), os.path.abspath(input_img)))
+            cmd.append("-v")
+            cmd.append("{}:{}".format(os.path.abspath(output_dir), os.path.abspath(output_dir)))
+            log_file = os.path.join(log_dir, log_file_name)
+            cmd.append("-v")
+            cmd.append("{}:{}".format(os.path.abspath(log_file), os.path.abspath(log_file)))
+            if name:
+                cmd.append("--name")
+                cmd.append("gdal_{}".format(name))
+            cmd.append(gdal_image)
+
+            # gdal command
+            cmd.append("gdal_translate")
+            cmd.append("-of")
+            cmd.append(output_img_format)
+            if compress:
+                cmd.append("-co")
+                cmd.append("COMPRESS=DEFLATE")
+            if output_img_format != "JPEG":
+                cmd.append("-co")
+                cmd.append("NUM_THREADS=ALL_CPUS")
+                cmd.append("-co")
+                cmd.append("PREDICTOR=2")
+            if resample_res > 0:
+                cmd.append("-tr")
+                cmd.append(str(resample_res))
+                cmd.append(str(resample_res))
+            if outsize > 0:
+                cmd.append("-outsize")
+                cmd.append(str(outsize))
+                cmd.append("0") #presevers the ratio of file
+            cmd.append(input_img)
+            output_img= os.path.join(output_dir, output_img_name)
+            cmd.append(output_img)
+
+            cmd_ret = run_command(cmd, log_dir, log_file_name)
+
+            if (cmd_ret == 0) and os.path.isfile(output_img):
+                return True
+            else:
+                log(log_dir,"Translate cmd returned code : {}".format(cmd_ret), log_file_name)
+                return False
+
+            return True
 
 ### Archiving operations
 
