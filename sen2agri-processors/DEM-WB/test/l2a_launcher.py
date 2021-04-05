@@ -36,7 +36,7 @@ from psycopg2.sql import SQL
 from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
 from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
-from l2a_commons import ArchiveHandler 
+from l2a_commons import ArchiveHandler, get_node_id
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -2105,7 +2105,7 @@ def db_clear_pending_tiles(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        cursor.execute("""select * from sp_clear_pending_l1_tiles(%(node_id)s :: character varying);""",{"node_id" : node_id})
+        cursor.execute("""select * from sp_clear_pending_l1_tiles(%(node_id)s);""",{"node_id" : node_id})
 
     with db_config.connect() as connection:
         handle_retries(connection, _run, log_dir, log_file)
@@ -2114,7 +2114,7 @@ def db_get_unprocessed_tile(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        cursor.execute("""select * from sp_start_l1_tile_processing(%(node_id)s :: character varying);""",{"node_id" : node_id})
+        cursor.execute("""select * from sp_start_l1_tile_processing(%(node_id)s);""",{"node_id" : node_id})
         tile_info = cursor.fetchone()
         return tile_info
 
@@ -2159,7 +2159,6 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
                                                                                          %(should_retry)s :: boolean,
                                                                                          %(cloud_coverage)s :: integer,
                                                                                          %(snow_coverage)s :: integer);""",
-                                                                                    #    %(host-id)s :: character varying,
                 {
                      "downloader_history_id": downloader_product_id,
                      "tile_id": tile_id,
@@ -2323,24 +2322,7 @@ if not create_recursive_dirs(
 remove_dir_content(default_processing_context.working_dir["default"])
 
 #get node id
-host = read_1st("/etc/hostname")
-machine_id = read_1st("/etc/machine-id")
-if (len(machine_id) < 1) or (len(host) < 1):
-    print(
-        "(launcher err) <master>: Invalid node_id: {}-{}".format(
-            host, machine_id
-        )
-    )
-    log(
-        LAUNCHER_LOG_DIR,
-        "(launcher err) <master>: Invalid pnode_id: {}-{}".format(
-                    host, machine_id
-        ),
-        LAUNCHER_LOG_FILE_NAME,
-    )
-    sys.exit(1)
-else:
-    node_id = host + "-" + machine_id
+node_id = get_node_id()
 
 # clear pending tiless
 db_clear_pending_tiles(db_config, node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)

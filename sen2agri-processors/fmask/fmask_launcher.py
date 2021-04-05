@@ -32,7 +32,7 @@ import traceback
 from psycopg2.sql import SQL
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
 from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, read_1st
-from l2a_commons import ArchiveHandler, translate
+from l2a_commons import ArchiveHandler, translate, get_node_id
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
@@ -439,7 +439,7 @@ class FmaskProcessor(object):
             log_file = os.path.join(self.fmask.output_path, self.log_file_name)
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
                 output_img_name = os.path.basename(fmask_files[0])[:-4] + "_20m.tif"
-            if self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
+            elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
                 output_img_name = os.path.basename(fmask_files[0])[:-4] + "_30m.tif"
             container_name = "gdal_" + str(self.lin.product_id)
                          
@@ -1043,7 +1043,7 @@ def db_get_unprocessed_tile(db_config, node_id, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        cursor.execute("""select * from sp_start_fmask_l1_tile_processing(%(node_id)s :: character varying);""",{"node_id" : node_id})
+        cursor.execute("""select * from sp_start_fmask_l1_tile_processing(%(node_id)s);""",{"node_id" : node_id})
         tile_info = cursor.fetchone()
         return tile_info
 
@@ -1056,7 +1056,7 @@ def db_clear_pending_tiles(db_config, x, log_dir, log_file):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
-        cursor.execute("""select * from sp_clear_pending_fmask_tiles(%(node_id)s :: character varying);""",{"node_id" : node_id})
+        cursor.execute("""select * from sp_clear_pending_fmask_tiles(%(node_id)s);""",{"node_id" : node_id})
 
     with db_config.connect() as connection:
         handle_retries(connection, _run, log_dir, log_file)
@@ -1215,24 +1215,7 @@ if not create_recursive_dirs(
 remove_dir_content(default_processing_context.working_dir["default"])
 
 #get node id
-host = read_1st("/etc/hostname")
-machine_id = read_1st("/etc/machine-id")
-if (len(machine_id) < 1) or (len(host) < 1):
-    print(
-        "(launcher err) <master>: Invalid node_id: {}-{}".format(
-            host, machine_id
-        )
-    )
-    log(
-        LAUNCHER_LOG_DIR,
-        "(launcher err) <master>: Invalid pnode_id: {}-{}".format(
-                    host, machine_id
-        ),
-        LAUNCHER_LOG_FILE_NAME,
-    )
-    sys.exit(1)
-else:
-    node_id = host + "-" + machine_id
+node_id = get_node_id()
 
 # clear pending tiless
 db_clear_pending_tiles(db_config, node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)

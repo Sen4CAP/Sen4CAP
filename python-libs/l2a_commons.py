@@ -132,6 +132,11 @@ def read_1st(file):
     with open(file) as f:
         return f.readline().strip("\n")
 
+def get_node_id(): 
+    host = read_1st("/etc/hostname")
+    machine_id = read_1st("/etc/machine-id")
+    return host + "-" + machine_id
+
 ### IMG related operations
 
 def ReprojectCoords(coords, src_srs, tgt_srs):
