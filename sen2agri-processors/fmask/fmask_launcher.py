@@ -38,7 +38,7 @@ from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_
 
 DEBUG = True
 ARCHIVES_DIR_NAME = "archives"
-LAUNCHER_LOG_DIR = "/var/log/"
+LAUNCHER_LOG_DIR = "/var/log/sen2agri/"
 LAUNCHER_LOG_FILE_NAME = "fmask_launcher.log"
 FMASK_EXTRACTOR = "fmask_extractor.py"
 DATABASE_FMASK_NUM_WORKERS = "processor.fmask.optical.num-workers"
