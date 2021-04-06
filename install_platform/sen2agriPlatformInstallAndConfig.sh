@@ -476,6 +476,9 @@ function install_and_config_webserver()
 #-----------------------------------------------------------#
 function install_downloaders_demmacs()
 {
+   mkdir /var/log/sen2agri
+   chown sen2agri-service: /var/log/sen2agri
+
    ##install prerequisites for Downloaders
    yum -y install wget python-lxml bzip2 python-beautifulsoup4 python-dateutil java-1.8.0-openjdk
 

@@ -522,7 +522,7 @@ else
 #         echo "Environments:"
 #         sudo su -l sen2agri-service -c bash -c "conda info --envs"
 #     fi
-# 
+#
 #     rm "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh"
 #     rm "/mnt/archive/sen4cap_conda.yml"
 
@@ -535,6 +535,11 @@ else
     }
 EOF
 
+fi
+
+if [ ! -d /var/log/sen2agri ]; then
+    mkdir -p /var/log/sen2agri
+    chown sen2agri-service: /var/log/sen2agri
 fi
 
 systemctl start sen2agri-executor sen2agri-orchestrator sen2agri-http-listener sen2agri-demmaccs sen2agri-demmaccs.timer sen2agri-monitor-agent sen2agri-scheduler sen2agri-services

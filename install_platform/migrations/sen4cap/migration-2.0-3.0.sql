@@ -843,9 +843,9 @@ begin
 
             -- FMask Upgrades
             _statement := $str$
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'fmask_extractor', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'lnicola/fmask_extractor', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.image', NULL, 'fmask', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.image', NULL, 'lnicola/fmask:4.2', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.cog-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.compress-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
