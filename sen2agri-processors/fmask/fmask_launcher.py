@@ -343,7 +343,7 @@ class FmaskProcessor(object):
         script_command.append("{}:{}".format(self.fmask.output_path, self.fmask.output_path))
         script_command.append("--name")
         script_command.append("fmask_extractor_{}".format(self.lin.product_id))
-        script_command.append("fmask_extractor")
+        script_command.append(self.context.fmask_extractor_image)
 
         #actual fmask_extractor command
         script_path = "/usr/share/fmask/fmask_extractor.py"
