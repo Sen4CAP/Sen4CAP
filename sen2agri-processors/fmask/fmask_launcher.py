@@ -31,7 +31,7 @@ import signal
 import traceback
 from psycopg2.sql import SQL
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, run_command, read_1st
+from l2a_commons import log, create_recursive_dirs, remove_dir_content, remove_dir, get_footprint, get_guid, stop_containers
 from l2a_commons import ArchiveHandler, translate, get_node_id
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
@@ -57,6 +57,8 @@ DATABASE_FMASK_COMPRESS_TIFFS = 'processor.fmask.optical.compress-tiffs'
 DATABASE_FMASK_GDAL_IMAGE = 'processor.fmask.gdal_image'
 DB_PROCESSOR_NAME = "fmask"
 S2_20M_RESOLUTION = "5490"
+PRODUCT_STATUS_MSG_TYPE = 1
+CONTAINER_STATUS_MSG_TYPE = 2
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -85,12 +87,13 @@ class FMaskProduct(object):
         self.basename = None
 
 class FmaskProcessor(object):
-    def __init__(self, processor_context, unprocessed_tile):
+    def __init__(self, processor_context, unprocessed_tile, master_q):
         self.context = processor_context
         self.lin = L1CProduct(unprocessed_tile)
         self.fmask = FMaskProduct()
         self.log_file_name = "fmask_{}.log".format(self.lin.product_id)
         self.name = "Fmask"
+        self.master_q = master_q
 
     def __del__(self):
         if self.lin.was_archived and os.path.exists(self.lin.path):
@@ -324,6 +327,8 @@ class FmaskProcessor(object):
             self.fmask_log("Exception encouted upon extracting the footprint: {}".format(e))
 
     def run_script(self):
+        guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+        container_name = "fmask_extractor_{}_{}".format(self.lin.product_id, guid)
         script_command = []
         #docker run
         script_command.append("docker")
@@ -342,7 +347,7 @@ class FmaskProcessor(object):
         script_command.append("-v")
         script_command.append("{}:{}".format(self.fmask.output_path, self.fmask.output_path))
         script_command.append("--name")
-        script_command.append("fmask_extractor_{}".format(self.lin.product_id))
+        script_command.append(container_name)
         script_command.append(self.context.fmask_extractor_image)
 
         #actual fmask_extractor command
@@ -351,7 +356,6 @@ class FmaskProcessor(object):
         script_command.append("--working-dir")
         script_command.append(self.context.working_dir)
         script_command.append("--delete-temp")
-        script_command.append("False")
         script_command.append("--product-id")
         script_command.append(str(self.lin.product_id))
         script_command.append("--image-name")
@@ -377,9 +381,12 @@ class FmaskProcessor(object):
             command_string = command_string + " " + str(argument)
         self.fmask_log("Running command: {}".format(command_string))
         print("Running Fmask, console output can be found at {}".format(fmask_log_path))
+        notification = ContainerStatusMsg(container_name, True)
+        self.master_q.put(notification)
         with open(fmask_log_path, "a") as fmask_log_file:
             command_return = subprocess.call(script_command, stdout = fmask_log_file, stderr = fmask_log_file)
-
+        notification = ContainerStatusMsg(container_name, False)
+        self.master_q.put(notification)
         if (command_return == 0) and os.path.isdir(self.fmask.output_path):
             return True
         else:
@@ -450,6 +457,10 @@ class FmaskProcessor(object):
             #for S2 create a 10m resample copy 
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
                 resampled_img_name = os.path.basename(fmask_files[0])[:-4] + "_10m.tif"
+                guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+                container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
+                notification = ContainerStatusMsg(container_name, True)
+                self.master_q.put(notification)
                 translate(input_img = fmask_files[0],
                       output_dir = self.fmask.output_path,
                       output_img_name = resampled_img_name,
@@ -461,9 +472,14 @@ class FmaskProcessor(object):
                       resample_res = 10,
                       compress = self.context.compress_tiffs,
                 )
-            
+                notification = ContainerStatusMsg(container_name, False)
+                self.master_q.put(notification)
             #translate to cog and/or compress
             if self.context.cog_tiffs or self.context.compress_tiffs:
+                guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+                container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
+                notification = ContainerStatusMsg(container_name, True)
+                self.master_q.put(notification)
                 translate(input_img = fmask_files[0],
                         output_dir = self.fmask.output_path,
                         output_img_name = output_img_name,
@@ -474,6 +490,8 @@ class FmaskProcessor(object):
                         name = container_name,
                         compress = self.context.compress_tiffs,
                 )
+                notification = ContainerStatusMsg(container_name, False)
+                self.master_q.put(notification)
                 os.remove(fmask_files[0])
             else:
                 os.rename(fmask_files[0], output_img_name)
@@ -521,12 +539,12 @@ class FMaskMaster(object):
         self.node_id = node_id
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
-        self.in_processing = set()
+        self.running_containers = set()
         for worker_id in range(self.num_workers):
             self.workers.append(FmaskWorker(worker_id, self.master_q))
             self.workers[worker_id].daemon = True
             self.workers[worker_id].start()
-            msg_to_master = MsgToMaster(worker_id, None, None, False)
+            msg_to_master = ProductStatusMsg(worker_id, None, None, False)
             self.master_q.put(msg_to_master)
 
     def signal_handler(self, signum, frame):
@@ -540,22 +558,9 @@ class FMaskMaster(object):
         for worker in self.workers:
             worker.join(timeout=5)
 
-        cmd = []
-        containers = []
-        cmd.append("docker")
-        cmd.append("stop")
-        container_types = ["fmask", "fmask_extractor", "gdal"]
-        for product_id in self.in_processing:
-            for container_type in container_types:
-                containers.append("{}_{}".format(container_type, product_id))
+        stop_containers(self.running_containers, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 
-        if containers:
-            print("\n(launcher info) <master>: Stoping containers")
-            cmd.extend(containers)
-            run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-
-        print("\n(launcher info) <master>: is stopped")
-        os._exit(1)
+        os._exit(0)
 
     def run(self):
         sleeping_workers = []
@@ -568,9 +573,18 @@ class FMaskMaster(object):
                     msg_to_master = self.master_q.get(timeout=5)
                 except Queue.Empty:
                     continue
-                if msg_to_master.update_db:
-                    db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.fmask)
-                    self.in_processing.remove(msg_to_master.lin.product_id)
+                if msg_to_master.message_type == CONTAINER_STATUS_MSG_TYPE:
+                    if msg_to_master.is_running:
+                        self.running_containers.add(msg_to_master.container_name)
+                    else:
+                        self.running_containers.remove(msg_to_master.container_name)
+                    continue
+                elif msg_to_master.message_type == PRODUCT_STATUS_MSG_TYPE:
+                    if msg_to_master.update_db:
+                        db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.fmask)
+                else:
+                    #unrecognized type of message
+                    continue                    
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
@@ -605,7 +619,6 @@ class FMaskMaster(object):
                             worker_id = sleeping_workers.pop()
                             msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                             self.workers[worker_id].worker_q.put(msg_to_worker)
-                            self.in_processing.add(unprocessed_tile.downloader_history_id)
                             print(
                                 "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
                                     unprocessed_tile.downloader_history_id, worker_id
@@ -624,13 +637,19 @@ class FMaskMaster(object):
         finally:
             self.stop_workers()
 
-
-class MsgToMaster(object):
+class ProductStatusMsg(object):
     def __init__(self, worker_id, lin, fmask, update_db):
+        self.message_type = PRODUCT_STATUS_MSG_TYPE
         self.worker_id = worker_id
         self.lin = lin
         self.fmask = fmask
         self.update_db = update_db
+
+class ContainerStatusMsg(object):
+    def __init__(self, container_name, is_running):
+        self.message_type = CONTAINER_STATUS_MSG_TYPE
+        self.container_name = container_name
+        self.is_running = is_running
 
 class MsgToWorker(object):
     def __init__(self, unprocessed_tile, site_context):
@@ -645,7 +664,7 @@ class FmaskWorker(threading.Thread):
         self.worker_q = Queue.Queue(maxsize=1)
 
     def notify_end_of_tile_processing(self, lin, fmask):
-        notification = MsgToMaster(self.worker_id, lin, fmask, True)
+        notification = ProductStatusMsg(self.worker_id, lin, fmask, True)
         self.master_q.put(notification)
 
     def run(self):
@@ -710,7 +729,7 @@ class FmaskWorker(threading.Thread):
         )
 
         fmask_context = FMaskContext(site_context, self.worker_id, tile)
-        fmask_processor = FmaskProcessor(fmask_context, tile)
+        fmask_processor = FmaskProcessor(fmask_context, tile, self.master_q)
         lin, fmask = fmask_processor.run()
         del fmask_processor
         return lin, fmask

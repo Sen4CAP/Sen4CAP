@@ -19,14 +19,14 @@ _____________________________________________________________________________
 from __future__ import print_function
 from __future__ import absolute_import
 import os
-import sys
 import argparse
 import glob
 import re
 import time, datetime
 import shutil
+import signal
 from multiprocessing import Pool
-from l2a_commons import run_command, log, create_recursive_dirs, remove_dir, translate
+from l2a_commons import run_command, log, create_recursive_dirs, remove_dir, translate, get_guid, stop_containers
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT, UNKNOWN_PROCESSOR_OUTPUT_FORMAT
 import tempfile
@@ -252,6 +252,8 @@ class DEMMACCSContext(object):
         self.output = l2a_output
 
 def maccs_launcher(demmaccs_context, dem_output_dir):
+    global running_containers
+
     if not os.path.isfile(demmaccs_context.dem_hdr_file):
         log(demmaccs_context.output, "General failure: There is no such DEM file {}".format(demmaccs_context.dem_hdr_file), log_filename)
         return ""
@@ -389,6 +391,13 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     #MACCS bug. In case of setting the file status from VALD to NOTV, MACCS will try to create a directory LTC in the current running directory
     #which is / Of course, it will fail. That's why we have to move the current running directory to the MACCS temporary directory
     os.chdir(maccs_working_dir)
+
+    guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+    if args.product_id:
+        container_name = "maja_{}_{}".format(args.product_id, guid)
+    else:
+        container_name = "maja_{}".format(guid)
+
     cmd_array = []
     #docker run cmds
     cmd_array.append("docker")
@@ -419,9 +428,8 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     cmd_array.append("{}:{}".format(maccs_working_dir, maccs_working_dir))
     cmd_array.append("-v")
     cmd_array.append("{}:{}".format(args.conf, args.conf))
-    if args.product_id:
-        cmd_array.append("--name")
-        cmd_array.append("maja_{}".format(args.product_id))
+    cmd_array.append("--name")
+    cmd_array.append(container_name)
 
     eucmn00_file_path = os.path.join(demmaccs_context.gipp_base_dir, "LANDSAT8/*EUCMN00*")
     eucmn00_file = glob.glob(eucmn00_file_path)
@@ -443,7 +451,9 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         cmd_array += ["--conf", args.conf]
     log(demmaccs_context.output, "sat_id = {} | acq_date = {}".format(sat_id, acquistion_date), log_filename)
     log(demmaccs_context.output, "Starting MACCS/MAJA in {} for {} | TileID: {}".format(maccs_mode, demmaccs_context.input, tile_id), log_filename)
+    running_containers.add(container_name)
     maja_run_val = run_command(cmd_array, demmaccs_context.output, MAJA_LOG_FILE_NAME)
+    running_containers.remove(container_name)
     if maja_run_val:
         log(demmaccs_context.output, "MACCS/MAJA mode {} didn't work for {} | TileID: {}. Location {}".format(maccs_mode, demmaccs_context.input, tile_id, demmaccs_context.output), log_filename)
         return ""
@@ -572,7 +582,13 @@ def postprocess(working_dir):
                 img_format = "COG"
             else:
                 img_format = "GTiff"
-            if translate(
+            guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+            if args.product_id:
+                container_name = "gdal_{}_{}".format(args.product_id, guid)
+            else:
+                container_name = "gdal_{}".format(guid)
+            running_containers.add(container_name)
+            ret_translate = translate(
                 input_img = tif,
                 output_dir = tif_dir,
                 output_img_name = new_img_name,
@@ -582,7 +598,9 @@ def postprocess(working_dir):
                 gdal_image = args.docker_image_gdal,
                 name = args.product_id,
                 compress = args.compressTiffs,
-            ):
+            )
+            running_containers.remove(container_name)
+            if ret_translate:
                 try:
                     new_img_path = os.path.join(tif_dir, new_img_name)
                     os.remove(tif)
@@ -603,6 +621,23 @@ def postprocess(working_dir):
                 return False
 
     return True
+
+def signal_handler(signum, frame):
+    global maja_log_dir, log_filename
+
+    print("(Maja info) Signal caught: {}.".format(signum))
+    log(
+        maja_log_dir,
+        "(Maja info) Signal caught: {}.".format(signum),
+        log_filename,
+    )
+    stop()
+
+def stop():
+    global running_containers, maja_log_dir, log_filename
+
+    stop_containers(running_containers, maja_log_dir, log_filename)
+    os._exit(0)
 
 parser = argparse.ArgumentParser(
     description="Launches DEM and MACCS/MAJA for L2A product creation")
@@ -673,6 +708,8 @@ if args.product_id:
 else:
     log_filename = "l2a.log"
 
+running_containers = set()
+
 if not create_recursive_dirs(args.output):
     log(maja_log_dir, "Could not create the output directory", log_filename)
     os._exit(1)
@@ -721,6 +758,9 @@ base_abs_path = os.path.dirname(os.path.abspath(__file__)) + "/"
 product_name = os.path.basename(args.input[:len(args.input) - 1]) if args.input.endswith("/") else os.path.basename(args.input)
 sat_id, acquistion_date = get_product_info(product_name)
 
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
 # crop the LANDSAT products for the alignment
 if sat_id == LANDSAT8_SATELLITE_ID:
 
@@ -730,6 +770,12 @@ if sat_id == LANDSAT8_SATELLITE_ID:
         if not remove_dir(working_dir):
             log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
         os._exit(1)
+
+    guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+    if args.product_id:
+        container_name = "l8align_{}_{}".format(args.product_id, guid)
+    else:
+        container_name = "l8align_{}".format(guid)
 
     cmd_array = []
     #docker run 
@@ -744,9 +790,8 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     cmd_array.append("{}:{}".format(working_dir,working_dir))
     cmd_array.append("-v")
     cmd_array.append("{}:{}".format(l8_align_wrk_dir,l8_align_wrk_dir))
-    if args.product_id:
-        cmd_array.append("--name")
-        cmd_array.append("l8align_{}".format(args.product_id))
+    cmd_array.append("--name")
+    cmd_array.append(container_name)
     cmd_array.append(args.docker_image_l8align)
 
     #actual align command
@@ -764,7 +809,12 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     cmd_array.append(l8_align_wrk_dir)
     cmd_array.append("-t")
     cmd_array.append(product_name)
-    if run_command(cmd_array, maja_log_dir, log_filename) != 0:
+
+    running_containers.add(container_name)
+    cmd_ret = run_command(cmd_array, maja_log_dir, log_filename)
+    running_containers.remove(container_name)
+
+    if cmd_ret != 0:
         log(maja_log_dir, "The LANDSAT8 product could not be aligned {}".format(args.input), log_filename)
         if not remove_dir(working_dir):
             log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
@@ -780,6 +830,12 @@ if args.tiles_to_process is not None :
     args.processes_number_dem = str(len(tiles_to_process))
     args.processes_number_maccs = str(len(tiles_to_process))
 print("tiles_to_process = {}".format(tiles_to_process))
+
+guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+if args.product_id:
+    container_name = "dem_{}_{}".format(args.product_id, guid)
+else:
+    container_name = "dem_{}".format(guid)
 
 dem_command = []
 #docker run
@@ -798,9 +854,8 @@ dem_command.append("-v")
 dem_command.append("{}:{}".format(args.input, args.input))
 dem_command.append("-v")
 dem_command.append("{}:{}".format(dem_output_dir, dem_output_dir))
-if args.product_id:
-    dem_command.append("--name")
-    dem_command.append("dem_{}".format(args.product_id))
+dem_command.append("--name")
+dem_command.append(container_name)
 dem_command.append(args.docker_image_dem)
 #dem_command.append("/bin/bash")
 dem_command.append("/usr/bin/dem.py")
@@ -818,7 +873,10 @@ if len(tiles_to_process) > 0:
     dem_command.append("-l")
     dem_command += tiles_to_process
 
-if run_command(dem_command , maja_log_dir, log_filename) != 0:
+running_containers.add(container_name)
+cmd_ret = run_command(dem_command , maja_log_dir, log_filename)
+running_containers.remove(container_name)
+if cmd_ret != 0:
     log(maja_log_dir, "DEM failed", log_filename)
     if not remove_dir(working_dir):
         log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)

@@ -20,10 +20,12 @@ from __future__ import print_function
 import argparse
 import glob
 import os
-import time, datetime
+import time
+import datetime
 import shutil
 import tempfile
-from l2a_commons import log, run_command, create_recursive_dirs, remove_dir
+import signal
+from l2a_commons import log, run_command, create_recursive_dirs, remove_dir, get_guid, stop_containers
 
 DEFAULT_FMASK_IMAGE_NAME = "fmask"
 
@@ -57,11 +59,6 @@ def create_sym_links(filenames, target_directory, log_path, log_filename):
 
 def clone_product_dir(src_dir, target_directory, log_path, log_filename) :
     src_dir_name = get_dir_name_from_path(src_dir)
-    # target_path = os.path.join(target_directory, src_dir_name)
-    # if os.path.exists(target_path):
-    #     shutil.rmtree(target_path)    
-    # shutil.copytree(src_dir, target_path)
-    # return True
 
     for root, subdirs, files in os.walk(src_dir):
         src_rel_dir_path = os.path.relpath(root, src_dir)
@@ -124,6 +121,12 @@ def fmask_launcher(fmask_context):
         run_command(cmd_array1, fmask_context.output, log_filename)
         cmd_array += ["cp", "-f", "/mnt/archive/test/fmask/TestFile/L1C_T33UVQ_A019710_20190401T100512_Fmask4.tif", fmask_out_location]
     else :
+        guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+        if args.product_id:
+            container_name = "fmask_{}_{}".format(args.product_id, guid)
+        else:
+            container_name = "fmask_{}".format(guid)
+
         cmd_array.append("docker")
         cmd_array.append("run")
         cmd_array.append("--rm")
@@ -135,9 +138,8 @@ def fmask_launcher(fmask_context):
         cmd_array.append("{}:/work/{}".format(fmask_working_dir, prd_name))
         cmd_array.append("--workdir")
         cmd_array.append("/work/{}".format(docker_work_dir))
-        if args.product_id:
-            cmd_array.append("--name")
-            cmd_array.append("fmask_{}".format(args.product_id))
+        cmd_array.append("--name")
+        cmd_array.append(container_name)
         cmd_array.append(args.image_name)
         if args.cloud_dilation:
             cmd_array.append(args.cloud_dilation)
@@ -153,16 +155,15 @@ def fmask_launcher(fmask_context):
             cmd_array.append("0")
         if args.threshold: 
             cmd_array.append(args.threshold)
-
-
-            
+    
     log(fmask_context.output, "Starting FMask in {}".format(fmask_context.input), log_filename)
     log(fmask_context.output, "FMask: {}".format(cmd_array), log_filename)
+    running_containers.add(container_name)
     if run_command(cmd_array, fmask_context.output, log_filename) != 0:
         log(fmask_context.output, "FMask didn't work for {}. Location {}".format(fmask_context.input, fmask_context.output), log_filename)
     else:
         log(fmask_context.output, "FMask for {} finished in: {}. Location: {}".format(fmask_context.input, datetime.timedelta(seconds=(time.time() - start)), fmask_context.output), log_filename)
-     
+    running_containers.remove(container_name)
     # move the fmask output to the output directory.
     # only the valid files should be moved
     fmask_out_file = glob.glob("{}/*_Fmask4.tif".format(fmask_out_location))
@@ -196,6 +197,23 @@ def fmask_launcher(fmask_context):
  
     return new_fmask_out_file
 
+def signal_handler(signum, frame):
+    global fmask_context, log_filename
+
+    print("(FMask info) Signal caught: {}.".format(signum))
+    log(
+        fmask_context.output,
+        "(FMask info) Signal caught: {}.".format(signum),
+        log_filename,
+    )
+    stop()
+
+def stop():
+    global running_containers, fmask_context, log_filename
+
+    stop_containers(running_containers, fmask_context.output, log_filename)
+    os._exit(0)
+
 parser = argparse.ArgumentParser(
     description="Launches FMask for producing cloud/water/snow masks")
 parser.add_argument('input', help="input L1C directory")
@@ -204,8 +222,8 @@ parser.add_argument('-w', '--working-dir', required=True,
                     help="working directory")
 parser.add_argument('-t', '--threshold', required=False, default = "", 
                     help="FMask threshold")            
-parser.add_argument('--delete-temp', required=False,
-                        help="if set to True, it will delete all the temporary files and directories. Default: True", default="True")
+parser.add_argument('--delete-temp', required=False, action="store_true",
+                        help="if set to True, it will delete all the temporary files and directories.")
 parser.add_argument('--product-id', required=False,
                     help = "Downloader history id of the input product.")
 parser.add_argument('--image-name', required=False, default = DEFAULT_FMASK_IMAGE_NAME,
@@ -216,8 +234,11 @@ parser.add_argument('--cloud-shadow-dilation', required = False, default = 3,
                     help = "Number of dilated pixels for cloud shadow")
 parser.add_argument('--snow-dilation', required = False, default = 0,
                     help = "Number of dilated pixels for snow")
-
 args = parser.parse_args()
+
+running_containers = set()
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
 general_log_path = args.output
 if args.product_id:
@@ -234,7 +255,7 @@ working_dir = tempfile.mkdtemp(dir = args.working_dir)
 log(general_log_path,"working_dir = {}".format(working_dir), log_filename)
 general_start = time.time()
 
-if not create_recursive_dirs(working_dir):
+if not os.path.isdir(working_dir):
     log(general_log_path, "Could not create the temporary directory", log_filename)
     os._exit(1)
 
@@ -258,7 +279,7 @@ else:
     log(general_log_path, "FMask processed the following tiles for L1C product {} :".format(args.input), log_filename)
     log(general_log_path, "{}".format(processed_tiles), log_filename)
 
-if args.delete_temp == "True":
+if args.delete_temp:
     log(general_log_path, "Remove all the temporary files and directory", log_filename)
     if not remove_dir(working_dir):
         log(general_log_path, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
