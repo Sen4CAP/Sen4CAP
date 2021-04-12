@@ -1502,7 +1502,7 @@ class Maja(L2aProcessor):
             prev_l2a_tiles.append(self.lin.tile_id)
             prev_l2a_tiles_paths.append(self.lin.previous_l2a_path)
 
-        guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+        guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
 
         script_command = []
@@ -1535,7 +1535,7 @@ class Maja(L2aProcessor):
         script_command.append("{}:{}".format(self.lin.path, self.lin.path))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
-        guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+        guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
         script_command.append("--name")
         script_command.append(container_name)
         script_command.append(DEFAULT_L2APROCESSORS_IMAGE_NAME)
@@ -1904,7 +1904,7 @@ class Sen2Cor(L2aProcessor):
             self.l2a_log("Can NOT create wrk dir {}".format(wrk_dir))
             return False
 
-        guid = get_guid(8,"THEQUICKBROWNFOXJUMPESOVERTHELAZYDOG0123456789")
+        guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
 
         script_command = []
