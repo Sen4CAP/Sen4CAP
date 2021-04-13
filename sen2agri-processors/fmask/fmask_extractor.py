@@ -121,7 +121,7 @@ def fmask_launcher(fmask_context):
         run_command(cmd_array1, fmask_context.output, log_filename)
         cmd_array += ["cp", "-f", "/mnt/archive/test/fmask/TestFile/L1C_T33UVQ_A019710_20190401T100512_Fmask4.tif", fmask_out_location]
     else :
-        guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+        guid = get_guid(8)
         if args.product_id:
             container_name = "fmask_{}_{}".format(args.product_id, guid)
         else:

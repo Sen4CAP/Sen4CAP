@@ -327,7 +327,7 @@ class FmaskProcessor(object):
             self.fmask_log("Exception encouted upon extracting the footprint: {}".format(e))
 
     def run_script(self):
-        guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+        guid = get_guid(8)
         container_name = "fmask_extractor_{}_{}".format(self.lin.product_id, guid)
         script_command = []
         #docker run
@@ -457,7 +457,7 @@ class FmaskProcessor(object):
             #for S2 create a 10m resample copy 
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
                 resampled_img_name = os.path.basename(fmask_files[0])[:-4] + "_10m.tif"
-                guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+                guid = get_guid(8)
                 container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
                 notification = ContainerStatusMsg(container_name, True)
                 self.master_q.put(notification)
@@ -476,7 +476,7 @@ class FmaskProcessor(object):
                 self.master_q.put(notification)
             #translate to cog and/or compress
             if self.context.cog_tiffs or self.context.compress_tiffs:
-                guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+                guid = get_guid(8)
                 container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
                 notification = ContainerStatusMsg(container_name, True)
                 self.master_q.put(notification)
@@ -583,7 +583,11 @@ class FMaskMaster(object):
                     if msg_to_master.update_db:
                         db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.fmask)
                 else:
-                    #unrecognized type of message
+                    log(
+                        LAUNCHER_LOG_DIR,
+                        "(launcher error) master: Unrecognized type of message in the master queue with id: {}".format(msg_to_master.message_type),
+                        LAUNCHER_LOG_FILE_NAME,
+                    )
                     continue                    
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:

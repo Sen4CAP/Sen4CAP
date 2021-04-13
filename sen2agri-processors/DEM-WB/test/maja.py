@@ -392,7 +392,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     #which is / Of course, it will fail. That's why we have to move the current running directory to the MACCS temporary directory
     os.chdir(maccs_working_dir)
 
-    guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+    guid = get_guid(8)
     if args.product_id:
         container_name = "maja_{}_{}".format(args.product_id, guid)
     else:
@@ -582,7 +582,7 @@ def postprocess(working_dir):
                 img_format = "COG"
             else:
                 img_format = "GTiff"
-            guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+            guid = get_guid(8)
             if args.product_id:
                 container_name = "gdal_{}_{}".format(args.product_id, guid)
             else:
@@ -771,7 +771,7 @@ if sat_id == LANDSAT8_SATELLITE_ID:
             log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
         os._exit(1)
 
-    guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+    guid = get_guid(8)
     if args.product_id:
         container_name = "l8align_{}_{}".format(args.product_id, guid)
     else:
@@ -831,7 +831,7 @@ if args.tiles_to_process is not None :
     args.processes_number_maccs = str(len(tiles_to_process))
 print("tiles_to_process = {}".format(tiles_to_process))
 
-guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+guid = get_guid(8)
 if args.product_id:
     container_name = "dem_{}_{}".format(args.product_id, guid)
 else:

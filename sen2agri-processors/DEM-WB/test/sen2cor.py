@@ -460,7 +460,7 @@ def RunSen2Cor():
     else:
         wrk_dir = default_wrk_dir_path
 
-    guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+    guid = get_guid(8)
     if args.product_id:
         container_name = "sen2cor_{}_{}".format(args.product_id, guid)
     else:
@@ -719,7 +719,7 @@ def TranslateToTif(L2A_product_name):
                 output_format = "COG"
             else:
                 output_format = "GTiff"
-            guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+            guid = get_guid(8)
             if args.product_id:
                 container_name = "gdal_{}_{}".format(args.product_id, guid)
             else:
@@ -902,7 +902,7 @@ def ConvertPreviews(L2A_product_name):
             print("Translating {} to jpg".format(os.path.basename(jp2)))
             jp2_dir = os.path.dirname(jp2)
             jp2_name = os.path.basename(jp2)[:-3] + "jpg"
-            guid = get_guid(8,"ABCDEFGHIJKLMNOPRSTUWXYZ0123456789")
+            guid = get_guid(8)
             if args.product_id:
                 container_name = "gdal_{}_{}".format(args.product_id, guid)
             else:
