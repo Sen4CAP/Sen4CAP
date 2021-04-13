@@ -36,7 +36,7 @@ from psycopg2.sql import SQL
 from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
 from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
-from l2a_commons import ArchiveHandler, get_node_id
+from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -58,9 +58,11 @@ DEFAULT_DEM_IMAGE_NAME = "lnicola/sen2agri-dem"
 DEFAULT_MAJA3_IMAGE_NAME = "lnicola/maja:3.2.2-centos-7"
 DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
 DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
-DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.8.0-ubuntu-20.04"
+DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.9.0-ubuntu-20.04"
 DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/sen2agri-l2a-processors"
 DB_PROCESSOR_NAME = "l2a"
+PRODUCT_STATUS_MSG_TYPE = 1
+CONTAINER_STATUS_MSG_TYPE = 2
 
 class ProcessingContext(object):
     def __init__(self):
@@ -444,12 +446,12 @@ class L2aMaster(object):
         self.node_id = node_id
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
-        self.in_processing = set()
+        self.running_containers = set()
         for worker_id in range(self.num_workers):
             self.workers.append(L2aWorker(worker_id, self.master_q))
             self.workers[worker_id].daemon = True
             self.workers[worker_id].start()
-            msg_to_master = MsgToMaster(worker_id, None, None, False)
+            msg_to_master = ProductStatusMsg(worker_id, None, None, False)
             self.master_q.put(msg_to_master)
 
     def signal_handler(self, signum, frame):
@@ -463,20 +465,7 @@ class L2aMaster(object):
         for worker in self.workers:
             worker.join(timeout=5)
 
-        cmd = []
-        containers = []
-        cmd.append("docker")
-        cmd.append("stop")
-        for product_id in self.in_processing:
-            container_types = ["l2a_processors", "dem", "l8align", "maja", "sen2cor", "gdal"]
-            for product_id in self.in_processing:
-                for container_type in container_types:
-                    containers.append("{}_{}".format(container_type, product_id))
-
-        if containers:
-            print("\n(launcher info) <master>: Stoping containers")
-            cmd.extend(containers)
-            run_command(cmd, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        stop_containers(self.running_containers, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 
         os._exit(0)
 
@@ -491,9 +480,18 @@ class L2aMaster(object):
                     msg_to_master = self.master_q.get(timeout=5)
                 except Queue.Empty:
                     continue
-                if msg_to_master.update_db:
-                    db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a)
-                    self.in_processing.remove(msg_to_master.lin.product_id)
+                if msg_to_master.message_type == CONTAINER_STATUS_MSG_TYPE:
+                    if msg_to_master.is_running:
+                        self.running_containers.add(msg_to_master.container_name)
+                    else:
+                        self.running_containers.remove(msg_to_master.container_name)
+                    continue
+                elif msg_to_master.message_type == PRODUCT_STATUS_MSG_TYPE:
+                    if msg_to_master.update_db:
+                        db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a)
+                else:
+                    #unrecognized type of message
+                    continue
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
                     tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
@@ -526,7 +524,6 @@ class L2aMaster(object):
                         worker_id = sleeping_workers.pop()
                         msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                         self.workers[worker_id].worker_q.put(msg_to_worker)
-                        self.in_processing.add(unprocessed_tile.downloader_history_id)
                         print(
                             "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
                                 unprocessed_tile.downloader_history_id, worker_id
@@ -545,12 +542,20 @@ class L2aMaster(object):
             self.stop_workers()
 
 
-class MsgToMaster(object):
+class ProductStatusMsg(object):
     def __init__(self, worker_id, lin, l2a, update_db):
+        self.message_type = PRODUCT_STATUS_MSG_TYPE
         self.worker_id = worker_id
         self.lin = lin
         self.l2a = l2a
         self.update_db = update_db
+
+
+class ContainerStatusMsg(object):
+    def __init__(self, container_name, is_running):
+        self.message_type = CONTAINER_STATUS_MSG_TYPE
+        self.container_name = container_name
+        self.is_running = is_running
 
 
 class MsgToWorker(object):
@@ -567,7 +572,7 @@ class L2aWorker(threading.Thread):
         self.worker_q = Queue.Queue(maxsize=1)
 
     def notify_end_of_tile_processing(self, lin, l2a):
-        notification = MsgToMaster(self.worker_id, lin, l2a, True)
+        notification = ProductStatusMsg(self.worker_id, lin, l2a, True)
         self.master_q.put(notification)
 
     def run(self):
@@ -652,7 +657,7 @@ class L2aWorker(threading.Thread):
         if tile.satellite_id == LANDSAT8_SATELLITE_ID:
             # only MAJA can process L8 images
             maja_context = MajaContext(site_context, self.worker_id)
-            maja = Maja(maja_context, tile)
+            maja = Maja(maja_context, tile, self.master_q)
             lin, l2a = maja.run()
             del maja
             return lin, l2a
@@ -660,13 +665,13 @@ class L2aWorker(threading.Thread):
             # Sentinels can be processed either with Sen2cor or MAJA
             if site_context.implementation == "sen2cor":
                 sen2cor_context = Sen2CorContext(site_context, self.worker_id)
-                sen2cor = Sen2Cor(sen2cor_context, tile)
+                sen2cor = Sen2Cor(sen2cor_context, tile, self.master_q)
                 lin, l2a = sen2cor.run()
                 del sen2cor
                 return lin, l2a
             elif site_context.implementation == "maja":
                 maja_context = MajaContext(site_context, self.worker_id)
-                maja = Maja(maja_context, tile)
+                maja = Maja(maja_context, tile, self.master_q)
                 lin, l2a = maja.run()
                 del maja
                 return lin, l2a
@@ -812,11 +817,12 @@ class L2aProduct(object):
 
 
 class L2aProcessor(object):
-    def __init__(self, processor_context, unprocessed_tile):
+    def __init__(self, processor_context, unprocessed_tile, master_q):
         self.context = processor_context
         self.lin = L1CL8Product(unprocessed_tile)
         self.l2a = L2aProduct()
         self.l2a_log_file = None
+        self.master_q = master_q
 
     def __del__(self):
         if self.lin.was_archived and os.path.exists(self.lin.path):
@@ -1074,8 +1080,8 @@ class L2aProcessor(object):
             self.update_rejection_reason("Can NOT copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e))
 
 class Maja(L2aProcessor):
-    def __init__(self, processor_context, input_context):
-        super(Maja, self).__init__(processor_context, input_context)
+    def __init__(self, processor_context, input_context, master_q):
+        super(Maja, self).__init__(processor_context, input_context, master_q)
         self.name = "maja"
         self.eef_available = False
 
@@ -1496,6 +1502,9 @@ class Maja(L2aProcessor):
             prev_l2a_tiles.append(self.lin.tile_id)
             prev_l2a_tiles_paths.append(self.lin.previous_l2a_path)
 
+        guid = get_guid(8)
+        container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
+
         script_command = []
         #docker run
         script_command.append("docker")
@@ -1526,8 +1535,9 @@ class Maja(L2aProcessor):
         script_command.append("{}:{}".format(self.lin.path, self.lin.path))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
+        guid = get_guid(8)
         script_command.append("--name")
-        script_command.append("l2a_processors_{}".format(self.lin.product_id))
+        script_command.append(container_name)
         script_command.append(DEFAULT_L2APROCESSORS_IMAGE_NAME)
 
         script_name = "maja.py"
@@ -1595,8 +1605,12 @@ class Maja(L2aProcessor):
             command_string = command_string + " " + str(argument)
         self.l2a_log("Running command: {}".format(command_string))
         print("Running Maja, console output can be found at {}".format(majalog_path))
+        notification = ContainerStatusMsg(container_name, True)
+        self.master_q.put(notification)
         with open(majalog_path, "w") as majalog_file:
             command_return = subprocess.call(script_command, stdout = majalog_file, stderr = majalog_file)
+        notification = ContainerStatusMsg(container_name, False)
+        self.master_q.put(notification)
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -1685,8 +1699,8 @@ class Maja(L2aProcessor):
 
 
 class Sen2Cor(L2aProcessor):
-    def __init__(self, processor_context, input_context):
-        super(Sen2Cor, self).__init__(processor_context, input_context)
+    def __init__(self, processor_context, input_context, master_q):
+        super(Sen2Cor, self).__init__(processor_context, input_context, master_q)
         self.name = "sen2cor"
 
     def get_l2a_footprint(self):
@@ -1890,6 +1904,9 @@ class Sen2Cor(L2aProcessor):
             self.l2a_log("Can NOT create wrk dir {}".format(wrk_dir))
             return False
 
+        guid = get_guid(8)
+        container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
+
         script_command = []
         #docker run
         script_command.append("docker")
@@ -1912,13 +1929,13 @@ class Sen2Cor(L2aProcessor):
         script_command.append("-v")
         script_command.append("{}:{}".format(lc_wb_map_path, lc_wb_map_path))
         script_command.append("-v")
-        script_command.append("{}:{}".format(wrk_dir, wrk_dir))
+        script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.lin.path, self.lin.path))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
         script_command.append("--name")
-        script_command.append("l2a_processors_{}".format(self.lin.product_id))
+        script_command.append(container_name)
         script_command.append(DEFAULT_L2APROCESSORS_IMAGE_NAME)
         #actual script command
         script_name = "sen2cor.py"
@@ -1986,8 +2003,8 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--docker-image-gdal")
         script_command.append(DEFAULT_GDAL_IMAGE_NAME)
         #tmp only for testing purposes
-        script_command.append("--resolution")
-        script_command.append(str(60))
+        #script_command.append("--resolution")
+        #script_command.append(str(60))
         #tmp
 
         sen2corlog_path = os.path.join(self.l2a.output_path, SEN2COR_LOG_FILE_NAME)
@@ -1996,8 +2013,12 @@ class Sen2Cor(L2aProcessor):
             cmd_str = cmd_str + " " + elem
         self.l2a_log("Running command: {}".format(cmd_str))
         print("Running Sen2Cor, console output can be found at {}".format(sen2corlog_path))
+        notification = ContainerStatusMsg(container_name, True)
+        self.master_q.put(notification)
         with open(sen2corlog_path, "w") as sen2corlog_file:
             command_return = subprocess.call(script_command, stdout = sen2corlog_file, stderr = sen2corlog_file)
+        notification = ContainerStatusMsg(container_name, False)
+        self.master_q.put(notification)
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -2035,7 +2056,7 @@ class Sen2Cor(L2aProcessor):
                             self.l2a.valid_pixels_percentage, MIN_VALID_PIXELS_THRESHOLD
                         )
                     )
-                    if DEBUG == False:
+                    if not DEBUG:
                         remove_dir(self.l2a.product_path)
                 else:
                     self.move_to_destination()
@@ -2051,7 +2072,7 @@ class Sen2Cor(L2aProcessor):
         if self.check_lin() and self.l2a_setup():
             preprocess_succesful = True
         print(
-            "\n(launcher info) <worker {}>: Successful  pre-processing = {}".format(
+            "\n(launcher info) <worker {}>: Successful pre-processing = {}".format(
                 self.context.worker_id, preprocess_succesful
             )
         )

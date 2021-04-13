@@ -26,28 +26,29 @@ import datetime
 from lxml import etree
 import hashlib
 import subprocess
-from l2a_commons import log, create_recursive_dirs, copy_directory, run_command, remove_dir, translate
+import signal
+from l2a_commons import log, create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers
 
 # default values
 default_dem_path = "/mnt/archive/srtm"
-docker_dem_path = "/sen2cor/2.8/dem/srtm/"
+docker_dem_path = "/sen2cor/2.9/dem/srtm/"
 # default_lc_snow_cond_path = "/mnt/archive/reference_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
-docker_lc_snow_cond_path = "/opt/Sen2Cor-02.08.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
+docker_lc_snow_cond_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
 # default_lc_lccs_map_path = "/mnt/archive/reference_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
-docker_lc_lccs_map_path = "/opt/Sen2Cor-02.08.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
+docker_lc_lccs_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
 # default_lc_wb_map_path = "/mnt/archive/reference_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
-docker_lc_wb_map_path = "/opt/Sen2Cor-02.08.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
-docker_output_path = "/sen2cor/2.8/out"
-docker_wrk_path = "/sen2cor/2.8/wrk"
-docker_L2A_path = "/sen2cor/2.8/gipp/L2A_GIPP.xml"
-docker_L2A_SC_path = "/sen2cor/2.8/gipp/L2A_CAL_SC_GIPP.xml"
-docker_L2A_AC_path = "/sen2cor/2.8/gipp/L2A_CAL_AC_GIPP.xml"
-docker_L2A_PB_path = "/sen2cor/2.8/gipp/L2A_PB_GIPP.xml"
-docker_tile_path = "/sen2cor/2.8/tile"
-docker_datastrip_path = "/sen2cor/2.8/datastrip"
-docker_img_database_path = "/sen2cor/2.8/img_database"
-docker_res_database_path = "/sen2cor/2.8/res_database"
-docker_sen2cor_exec_path = "/opt/Sen2Cor-02.08.00-Linux64/bin/L2A_Process"
+docker_lc_wb_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
+docker_output_path = "/sen2cor/2.9/out"
+docker_wrk_path = "/sen2cor/2.9/wrk"
+docker_L2A_path = "/sen2cor/2.9/gipp/L2A_GIPP.xml"
+docker_L2A_SC_path = "/sen2cor/2.9/gipp/L2A_CAL_SC_GIPP.xml"
+docker_L2A_AC_path = "/sen2cor/2.9/gipp/L2A_CAL_AC_GIPP.xml"
+docker_L2A_PB_path = "/sen2cor/2.9/gipp/L2A_PB_GIPP.xml"
+docker_tile_path = "/sen2cor/2.9/tile"
+docker_datastrip_path = "/sen2cor/2.9/datastrip"
+docker_img_database_path = "/sen2cor/2.9/img_database"
+docker_res_database_path = "/sen2cor/2.9/res_database"
+docker_sen2cor_exec_path = "/opt/Sen2Cor-02.09.00-Linux64/bin/L2A_Process"
 docker_if_path = "/tmp/if/"  # input files path
 docker_of_path = "/tmp/of/"  # output files path
 SEN2COR_LOG_FILE_NAME = "sen2cor.log"
@@ -81,7 +82,7 @@ def CheckInput():
             l2a_log_file_name,
         )
         return False
-    docker_input_path = os.path.join("/sen2cor/2.8/input", L1C_file_name)
+    docker_input_path = os.path.join("/sen2cor/2.9/input", L1C_file_name)
 
     # --output_dir cheks
     if os.path.isdir(args.output_dir) is False:
@@ -449,11 +450,21 @@ def CopyOutput(L2A_product_name):
 def RunSen2Cor():
     global default_wrk_dir_path
     global docker_input_path
+    global running_containers
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
 
     if args.working_dir:
         wrk_dir = args.working_dir
     else:
         wrk_dir = default_wrk_dir_path
+
+    guid = get_guid(8)
+    if args.product_id:
+        container_name = "sen2cor_{}_{}".format(args.product_id, guid)
+    else:
+        container_name = "sen2cor_{}".format(guid)
 
     cmd = []
     if args.local_run == True:
@@ -587,9 +598,8 @@ def RunSen2Cor():
                     os.path.abspath(args.res_database_dir), docker_res_database_path
                 )
             )
-        if args.product_id:
-            cmd.append("--name")
-            cmd.append("sen2cor_{}".format(args.product_id))
+        cmd.append("--name")
+        cmd.append(container_name)
         cmd.append(args.docker_image_sen2cor)
 
         # actual sen2cor commands
@@ -657,9 +667,11 @@ def RunSen2Cor():
         with open(l2a_log_path, "a") as log_file:
                 log_file.write(cmd_str)
         sen2cor_log_path = os.path.join(log_dir, SEN2COR_LOG_FILE_NAME)
+        running_containers.add(container_name)
         with open(sen2cor_log_path, "a") as log_file:
             ret = subprocess.call(cmd, stdout = log_file, stderr = log_file)
             log_file.write("Cmd returned code: {}".format(ret))
+        running_containers.remove(container_name)
         with open(l2a_log_path, "a") as log_file:
             log_file.write("\nCmd returned code: {}".format(ret))
         if ret != 0:
@@ -674,6 +686,7 @@ def RunSen2Cor():
 
 def TranslateToTif(L2A_product_name):
     global default_wrk_dir_path
+    global running_containers
 
     if args.working_dir:
         wrk_dir = args.working_dir
@@ -706,8 +719,13 @@ def TranslateToTif(L2A_product_name):
                 output_format = "COG"
             else:
                 output_format = "GTiff"
-
-            if not translate(
+            guid = get_guid(8)
+            if args.product_id:
+                container_name = "gdal_{}_{}".format(args.product_id, guid)
+            else:
+                container_name = "gdal_{}".format(guid)
+            running_containers.add(container_name)
+            translate_ret = translate(
                 input_img = jp2,
                 output_dir = jp2_dir,
                 output_img_name = tif_name,
@@ -717,7 +735,9 @@ def TranslateToTif(L2A_product_name):
                 gdal_image = args.docker_image_gdal,
                 name = args.product_id,
                 compress = args.compressTiffs
-            ):
+            )
+            running_containers.remove(container_name)
+            if not translate_ret:
                 return False
             else:
                 try:
@@ -862,6 +882,8 @@ def TranslateToTif(L2A_product_name):
 # function used to convert PVI and TCI files from jp2 format to jpg format
 # also a rescalling of the converted file is made to allow a faster load
 def ConvertPreviews(L2A_product_name):
+    global running_containers
+
     if args.working_dir:
         wrk_dir = args.working_dir
     else:
@@ -880,7 +902,13 @@ def ConvertPreviews(L2A_product_name):
             print("Translating {} to jpg".format(os.path.basename(jp2)))
             jp2_dir = os.path.dirname(jp2)
             jp2_name = os.path.basename(jp2)[:-3] + "jpg"
-            if not translate(
+            guid = get_guid(8)
+            if args.product_id:
+                container_name = "gdal_{}_{}".format(args.product_id, guid)
+            else:
+                container_name = "gdal_{}".format(guid)
+            running_containers.add(container_name)
+            translate_ret = translate(
                 input_img = jp2,
                 output_dir = jp2_dir,
                 output_img_name = jp2_name,
@@ -888,9 +916,11 @@ def ConvertPreviews(L2A_product_name):
                 log_dir = log_dir,
                 log_file_name = l2a_log_file_name,
                 gdal_image = args.docker_image_gdal,
-                name = args.product_id,
+                name = container_name,
                 outsize = 1000
-            ):
+            )
+            running_containers.remove(container_name)
+            if not translate_ret:
                 log(
                     log_dir,
                     "(sen2cor err) Can NOT translate {} to .jpeg".format(jp2),
@@ -977,6 +1007,8 @@ def Cleanup():
 
 # execution of the script
 def RunScript():
+    global running_containers
+
     try:
         run_script_ok = True
 
@@ -1100,14 +1132,6 @@ def RunScript():
 
         return run_script_ok
 
-    except (KeyboardInterrupt, SystemExit):
-        print("(sen2cor err) Keyboard interrupted.")
-        log(
-            log_dir,
-            "(sen2cor err) Keyboard interrupted.",
-            l2a_log_file_name,
-        )
-        os._exit(1)
     except Exception as e:
         print("(sen2cor err): Exception {} encountered".format(e))
         log(
@@ -1115,8 +1139,24 @@ def RunScript():
             "(sen2cor err): Exception {} encountered".format(e),
             l2a_log_file_name,
         )
-        os._exit(1)
+        stop()
 
+def signal_handler(signum, frame):
+    global log_dir, l2a_log_file_name
+
+    print("(sen2cor info) Signal caught: {}.".format(signum))
+    log(
+        log_dir,
+        "(sen2cor info) Signal caught: {}.".format(signum),
+        l2a_log_file_name,
+    )
+    stop()
+
+def stop():
+    global running_containers,log_dir, l2a_log_file_name
+
+    stop_containers(running_containers, log_dir, l2a_log_file_name)
+    os._exit(0)
 
 # script argument operations
 parser = argparse.ArgumentParser(
@@ -1302,11 +1342,14 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+
 log_dir = args.output_dir
 if args.product_id:
     l2a_log_file_name = "l2a_{}.log".format(args.product_id)
 else:
     l2a_log_file_name = "l2a.log"
+
+running_containers = set()
 
 print("(sen2cor info) Start Sen2Cor script.")
 nominal_run = RunScript()

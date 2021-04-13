@@ -33,6 +33,8 @@ import zipfile
 import tarfile
 import tempfile
 import errno
+import random
+import string
 
 DEBUG = False
 SENTINEL2_SATELLITE_ID = 1
@@ -137,6 +139,19 @@ def get_node_id():
     machine_id = read_1st("/etc/machine-id")
     return host + "-" + machine_id
 
+def get_guid(size, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for x in range(size))
+
+def stop_containers(container_list, log_dir, log_file_name):
+    if container_list:
+        #stopping running containers
+        cmd = []
+        cmd.append("docker")
+        cmd.append("stop")
+        cmd.extend(container_list)
+        print("\nStoping running containers")
+        run_command(cmd, log_dir, log_file_name)
+
 ### IMG related operations
 
 def ReprojectCoords(coords, src_srs, tgt_srs):
@@ -210,7 +225,7 @@ def translate(input_img,
             cmd.append("{}:{}".format(os.path.abspath(log_file), os.path.abspath(log_file)))
             if name:
                 cmd.append("--name")
-                cmd.append("gdal_{}".format(name))
+                cmd.append(name)
             cmd.append(gdal_image)
 
             # gdal command
