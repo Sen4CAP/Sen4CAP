@@ -53,14 +53,6 @@ LAUNCHER_LOG_FILE_NAME = "l2a_launcher.log"
 ARCHIVES_DIR_NAME = "archives"
 SQL_MAX_NB_RETRIES = 3
 MAJA_CONFIGURATION_FILE_NAME = "UserConfiguration"
-DEFAULT_GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.2.0"
-DEFAULT_DEM_IMAGE_NAME = "lnicola/sen2agri-dem"
-DEFAULT_MAJA3_IMAGE_NAME = "lnicola/maja:3.2.2-centos-7"
-DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
-DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
-DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.9.0-ubuntu-20.04"
-DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/sen2agri-l2a-processors"
-
 DATABASE_L2A_PROCESSORS_IMAGE =  "processor.l2a.processors_image"
 DATABASE_SEN2COR_IMAGE = "processor.l2a.sen2cor_image"
 DATABASE_MAJA4_IMAGE = "processor.l2a.maja4_image"
@@ -68,7 +60,6 @@ DATABASE_MAJA3_IMAGE = "processor.l2a.maja3_image"
 DATABASE_GDAL_IMAGE = "processor.l2a.gdal_image"
 DATABASE_L8_ALIGN_IMAGE = "processor.l2a.l8_align_image"
 DATABASE_DEM_IMAGE = "processor.l2a.dem_image"
-
 DB_PROCESSOR_NAME = "l2a"
 PRODUCT_STATUS_MSG_TYPE = 1
 CONTAINER_STATUS_MSG_TYPE = 2
