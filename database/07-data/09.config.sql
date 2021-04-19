@@ -111,13 +111,13 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.sen
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.srtm-path', NULL, '/mnt/archive/srtm', '2016-02-25 11:11:36.372405+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.swbd-path', NULL, '/mnt/archive/swbd', '2016-02-25 11:12:04.008319+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.working-dir', NULL, '/mnt/archive/demmaccs_tmp/', '2016-02-25 17:31:06.01191+02');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.processors_image', NULL, 'lnicola/sen2agri-l2a-processors', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.sen2cor_image', NULL, 'lnicola/sen2cor:2.9.0-ubuntu-20.04', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja4_image', NULL, 'lnicola/maja:4.2.1-centos-7', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja3_image', NULL, 'lnicola/maja:3.2.2-centos-7', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.processors_image', NULL, 'sen4x/l2a-processors', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.sen2cor_image', NULL, 'sen4x/sen2cor:2.9.0-ubuntu-20.04', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja4_image', NULL, 'sen4x/maja:4.2.1-centos-7', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja3_image', NULL, 'sen4x/maja:3.2.2-centos-7', '2021-04-19 16:30:00.0');
 insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.l8_align_image', NULL, 'lnicola/sen2agri-l8-alignment', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem_image', NULL, 'lnicola/sen2agri-dem', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.l8_align_image', NULL, 'sen4x/l2a-l8-alignment', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem_image', NULL, 'sen4x/l2a-dem', '2021-04-19 16:30:00.0');
 
 -- -----------------------------------------------------------
 -- L2S1 processor Specific keys
