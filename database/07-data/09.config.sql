@@ -118,6 +118,7 @@ insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maj
 insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-04-19 16:30:00.0');
 insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.l8_align_image', NULL, 'lnicola/sen2agri-l8-alignment', '2021-04-19 16:30:00.0');
 insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem_image', NULL, 'lnicola/sen2agri-dem', '2021-04-19 16:30:00.0');
+
 -- -----------------------------------------------------------
 -- L2S1 processor Specific keys
 -- -----------------------------------------------------------
