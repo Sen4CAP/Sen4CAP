@@ -103,6 +103,13 @@ INSERT INTO config_metadata VALUES ('processor.l2a.sen2cor.gipp-path', 'Sen2Cor 
 INSERT INTO config_metadata VALUES ('processor.l2a.srtm-path', 'Path to the DEM dataset', 'directory', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'Path to the SWBD dataset', 'directory', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'Working directory', 'string', false, 2);
+insert into config_metadata values('processor.l2a.processors_image','L2a processors image name','string',false,2);
+insert into config_metadata values('processor.l2a.sen2cor_image','Sen2Cor image name','string',false,2);
+insert into config_metadata values('processor.l2a.maja4_image','MAJA 4 image name','string',false,2);
+insert into config_metadata values('processor.l2a.maja3_image','MAJA 3 image name','string',false,2);
+insert into config_metadata values('processor.l2a.gdal_image','GDAL image name','string',false,2);
+insert into config_metadata values('processor.l2a.l8_align_image','L8 align image name','string',false,2);
+insert into config_metadata values('processor.l2a.dem_image','DEM image name','string',false,2);
 
 -- -----------------------------------------------------------
 -- L2S1 processor Specific Keys
