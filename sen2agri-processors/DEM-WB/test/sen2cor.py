@@ -665,7 +665,7 @@ def RunSen2Cor():
         for x in cmd:
             cmd_str = cmd_str + " " + x
         with open(l2a_log_path, "a") as log_file:
-                log_file.write(cmd_str)
+            log_file.write(cmd_str)
         sen2cor_log_path = os.path.join(log_dir, SEN2COR_LOG_FILE_NAME)
         running_containers.add(container_name)
         with open(sen2cor_log_path, "a") as log_file:
@@ -952,45 +952,40 @@ def ConvertPreviews(L2A_product_name):
 
 def InitLog():
     log_file_path = os.path.join(log_dir, l2a_log_file_name)
-    if not create_recursive_dirs(log_dir):
-        # create the log file
-        try:
-            log_file = open(log_file_path, "a+")
-            log_file.write(
-                "{}:[{}]:{}\n".format(
-                    str(datetime.datetime.now()),
-                    os.getpid(),
-                    "### Log file created ###",
-                )
-            )
-            log_file.close()
+
+    if not os.path.isdir(log_dir):
+        if not create_recursive_dirs(log_dir):
             print(
-                "(sen2cor info) Created a log file {} in dir {}".format(
-                    l2a_log_file_name, log_dir
-                )
-            )
-        except Exception as e:
-            print(
-                "(sen2cor err) Can NOT create file {} in {} due to: {}.".format(
-                    l2a_log_file_name, log_dir, e
+                "(sen2cor err) Can NOT create output dir: {}.".format(
+                    log_dir
                 )
             )
             return False
+
+    try:
+        log_file = open(log_file_path, "a+")
+        log_file.write(
+            "{}:[{}]:{}\n".format(
+                str(datetime.datetime.now()),
+                os.getpid(),
+                "### Log file created ###",
+            )
+        )
+        log_file.close()
+    except Exception as e:
+        print(
+            "(sen2cor err) Can NOT create file {} in {} due to: {}.".format(
+                l2a_log_file_name, log_dir, e
+            )
+        )
+        return False
     else:
-        if os.path.isfile(log_file_path):
-            print(
-                "(sen2cor info) Using log file {} in dir {}".format(
-                    l2a_log_file_name, log_dir
-                )
+        print(
+            "(sen2cor info) Created a log file {} in dir {}".format(
+                l2a_log_file_name, log_dir
             )
-        else:
-            print(
-                "(sen2cor err) The name of the log file is used by another entity (not a file), aborting"
-            )
-            return False
-
-    return True
-
+        )
+        return True
 
 def Cleanup():
     if args.working_dir:

@@ -53,13 +53,13 @@ LAUNCHER_LOG_FILE_NAME = "l2a_launcher.log"
 ARCHIVES_DIR_NAME = "archives"
 SQL_MAX_NB_RETRIES = 3
 MAJA_CONFIGURATION_FILE_NAME = "UserConfiguration"
-DEFAULT_GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.2.0"
-DEFAULT_DEM_IMAGE_NAME = "lnicola/sen2agri-dem"
-DEFAULT_MAJA3_IMAGE_NAME = "lnicola/maja:3.2.2-centos-7"
-DEFAULT_MAJA4_IMAGE_NAME = "lnicola/maja:4.2.1-centos-7"
-DEFAULT_L8ALIGN_IMAGE_NAME = "lnicola/sen2agri-l8-alignment"
-DEFAULT_SEN2COR_IMAGE_NAME = "lnicola/sen2cor:2.9.0-ubuntu-20.04"
-DEFAULT_L2APROCESSORS_IMAGE_NAME = "lnicola/sen2agri-l2a-processors"
+DATABASE_L2A_PROCESSORS_IMAGE =  "processor.l2a.processors_image"
+DATABASE_SEN2COR_IMAGE = "processor.l2a.sen2cor_image"
+DATABASE_MAJA4_IMAGE = "processor.l2a.maja4_image"
+DATABASE_MAJA3_IMAGE = "processor.l2a.maja3_image"
+DATABASE_GDAL_IMAGE = "processor.l2a.gdal_image"
+DATABASE_L8_ALIGN_IMAGE = "processor.l2a.l8_align_image"
+DATABASE_DEM_IMAGE = "processor.l2a.dem_image"
 DB_PROCESSOR_NAME = "l2a"
 PRODUCT_STATUS_MSG_TYPE = 1
 CONTAINER_STATUS_MSG_TYPE = 2
@@ -81,6 +81,13 @@ class ProcessingContext(object):
         self.num_workers = {"default": 0}
         self.sen2cor_gipp = {"default": ""}
         self.maja_gipp = {"default": ""}
+        self.processors_image = {"default": ""}
+        self.sen2cor_image = {"default": ""}
+        self.maja3_image = {"default": ""}
+        self.maja4_image = {"default": ""}
+        self.gdal_image = {"default": ""}
+        self.l8_align_image = {"default": ""}
+        self.dem_image = {"default": ""}
 
     def add_parameter(self, row):
         if len(row) == 3 and row[0] is not None and row[2] is not None:
@@ -168,6 +175,41 @@ class ProcessingContext(object):
                     self.sen2cor_gipp[site] = value
                 else:
                     self.sen2cor_gipp["default"] = value
+            elif  parameter == DATABASE_L2A_PROCESSORS_IMAGE:
+                if site is not None:
+                    self.processors_image[site] = value
+                else:
+                    self.processors_image["default"] = value
+            elif  parameter == DATABASE_SEN2COR_IMAGE:
+                if site is not None:
+                    self.sen2cor_image[site] = value
+                else:
+                    self.sen2cor_image["default"] = value
+            elif  parameter == DATABASE_MAJA4_IMAGE:
+                if site is not None:
+                    self.maja4_image[site] = value
+                else:
+                    self.maja4_image["default"] = value
+            elif  parameter == DATABASE_MAJA3_IMAGE:
+                if site is not None:
+                    self.maja3_image[site] = value
+                else:
+                    self.maja3_image["default"] = value
+            elif  parameter == DATABASE_GDAL_IMAGE:
+                if site is not None:
+                    self.gdal_image[site] = value
+                else:
+                    self.gdal_image["default"] = value
+            elif  parameter == DATABASE_L8_ALIGN_IMAGE:
+                if site is not None:
+                    self.l8_align_image[site] = value
+                else:
+                    self.l8_align_image["default"] = value
+            elif  parameter == DATABASE_DEM_IMAGE:
+                if site is not None:
+                    self.dem_image[site] = value
+                else:
+                    self.dem_image["default"] = value
             else:
                 pass
         else:
@@ -239,6 +281,34 @@ class ProcessingContext(object):
             site_context.maja_gipp = self.maja_gipp[site_id]
         else:
             site_context.maja_gipp = self.maja_gipp["default"]
+        if site_id in self.processors_image:
+            site_context.processors_image = self.processors_image[site_id]
+        else:
+            site_context.processors_image = self.processors_image["default"]
+        if site_id in self.sen2cor_image:
+            site_context.sen2cor_image = self.sen2cor_image[site_id]
+        else:
+            site_context.sen2cor_image = self.sen2cor_image["default"]
+        if site_id in self.maja3_image:
+            site_context.maja3_image = self.maja3_image[site_id]
+        else:
+            site_context.maja3_image = self.maja3_image["default"]
+        if site_id in self.maja4_image:
+            site_context.maja4_image = self.maja4_image[site_id]
+        else:
+            site_context.maja4_image = self.maja4_image["default"]
+        if site_id in self.gdal_image:
+            site_context.gdal_image = self.gdal_image[site_id]
+        else:
+            site_context.gdal_image = self.gdal_image["default"]
+        if site_id in self.dem_image:
+            site_context.dem_image = self.dem_image[site_id]
+        else:
+            site_context.dem_image = self.dem_image["default"]
+        if site_id in self.l8_align_image:
+            site_context.l8_align_image = self.l8_align_image[site_id]
+        else:
+            site_context.l8_align_image = self.l8_align_image["default"]
         site_context.maja_conf = os.path.join(site_context.maja_gipp, MAJA_CONFIGURATION_FILE_NAME)
 
         return site_context
@@ -262,6 +332,13 @@ class SiteContext(object):
         self.sen2cor_gipp = ""
         self.maja_gipp = ""
         self.maja_conf = ""
+        self.processors_image = ""
+        self.sen2cor_image = ""
+        self.maja3_image = ""
+        self.maja4_image = ""
+        self.gdal_image = ""
+        self.dem_image = ""
+        self.l8_align_image = ""
 
     def get_site_info(self, db_config):
         self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
@@ -423,6 +500,12 @@ class MajaContext(object):
         self.conf = site_context.maja_conf
         self.site_output_path = site_context.site_output_path
         self.site_short_name = site_context.site_short_name
+        self.processors_image = site_context.processors_image
+        self.gdal_image = site_context.gdal_image
+        self.maja3_image = site_context.maja3_image
+        self.maja4_image = site_context.maja4_image
+        self.dem_image = site_context.dem_image
+        self.l8_align_image = site_context.l8_align_image
 
 
 class Sen2CorContext(object):
@@ -437,6 +520,9 @@ class Sen2CorContext(object):
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.site_output_path = site_context.site_output_path
         self.site_short_name = site_context.site_short_name
+        self.processors_image = site_context.processors_image
+        self.gdal_image = site_context.gdal_image
+        self.sen2cor_image = site_context.sen2cor_image
 
 
 class L2aMaster(object):
@@ -1538,7 +1624,7 @@ class Maja(L2aProcessor):
         guid = get_guid(8)
         script_command.append("--name")
         script_command.append(container_name)
-        script_command.append(DEFAULT_L2APROCESSORS_IMAGE_NAME)
+        script_command.append(self.context.processors_image)
 
         script_name = "maja.py"
         script_path = os.path.join("/usr/share/l2a_processors/", script_name)
@@ -1589,15 +1675,15 @@ class Maja(L2aProcessor):
             script_command.append("--cogTiffs")
 
         script_command.append("--docker-image-l8align")
-        script_command.append(DEFAULT_L8ALIGN_IMAGE_NAME)
+        script_command.append(self.context.l8_align_image)
         script_command.append("--docker-image-dem")
-        script_command.append(DEFAULT_DEM_IMAGE_NAME)
+        script_command.append(self.context.dem_image)
         script_command.append("--docker-image-maja3")
-        script_command.append(DEFAULT_MAJA3_IMAGE_NAME)
+        script_command.append(self.context.maja3_image)
         script_command.append("--docker-image-maja4")
-        script_command.append(DEFAULT_MAJA4_IMAGE_NAME)
+        script_command.append(self.context.maja4_image)
         script_command.append("--docker-image-gdal")
-        script_command.append(DEFAULT_GDAL_IMAGE_NAME)
+        script_command.append(self.context.gdal_image)
 
         majalog_path = os.path.join(self.l2a.output_path, MAJA_LOG_FILE_NAME)
         command_string =""
@@ -1936,7 +2022,7 @@ class Sen2Cor(L2aProcessor):
         script_command.append("{}:{}".format(self.l2a.output_path, self.l2a.output_path))
         script_command.append("--name")
         script_command.append(container_name)
-        script_command.append(DEFAULT_L2APROCESSORS_IMAGE_NAME)
+        script_command.append(self.context.processors_image)
         #actual script command
         script_name = "sen2cor.py"
         script_path = os.path.join("/usr/share/l2a_processors", script_name)
@@ -1999,9 +2085,9 @@ class Sen2Cor(L2aProcessor):
         if self.context.compressTiffs:
             script_command.append("--compressTiffs")
         script_command.append("--docker-image-sen2cor")
-        script_command.append(DEFAULT_SEN2COR_IMAGE_NAME)
+        script_command.append(self.context.sen2cor_image)
         script_command.append("--docker-image-gdal")
-        script_command.append(DEFAULT_GDAL_IMAGE_NAME)
+        script_command.append(self.context.gdal_image)
         #tmp only for testing purposes
         #script_command.append("--resolution")
         #script_command.append(str(60))
