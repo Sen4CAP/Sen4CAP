@@ -56,7 +56,7 @@ class DBConfig:
         )
 
     @staticmethod
-    def load(config_file, launcher_log):
+    def load(config_file, log):
         config = DBConfig()
         try:
             parser = ConfigParser()
@@ -69,8 +69,7 @@ class DBConfig:
             #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
             config.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
         except Exception as e:
-            log2(
-                launcher_log,
+            log.write(
                 EL,
                 "Can NOT read db configuration file due to: {}".format(e),
                 trace = True
@@ -78,7 +77,7 @@ class DBConfig:
         finally:
             return config
 
-def handle_retries(conn, f, launcher_log):
+def handle_retries(conn, f, log):
     nb_retries = 10
     max_sleep = 0.1
 
@@ -94,8 +93,7 @@ def handle_retries(conn, f, launcher_log):
                 e.pgcode in (SERIALIZATION_FAILURE, DEADLOCK_DETECTED)
                 and nb_retries > 0
             ):
-                log2(
-                    launcher_log,
+                log.write(
                     EL,
                     "Recoverable error {} on database query, retrying".format(e.pgcode),
                     print_msg = True
@@ -109,7 +107,7 @@ def handle_retries(conn, f, launcher_log):
             conn.rollback()
             raise
 
-def db_get_site_short_name(db_config, site_id, log_dir, log_file):
+def db_get_site_short_name(db_config, site_id, log):
     def _run(cursor):
         q = SQL("select short_name from site where id={}").format(Literal(site_id))
         cursor.execute(q)
@@ -121,10 +119,10 @@ def db_get_site_short_name(db_config, site_id, log_dir, log_file):
             return short_name
 
     with db_config.connect() as connection:
-        short_name = handle_retries(connection, _run, log_dir, log_file)
+        short_name = handle_retries(connection, _run, log)
         return short_name
 
-def db_get_processing_context(db_config, processing_context, processor_name, log_dir, log_file):
+def db_get_processing_context(db_config, processing_context, processor_name, log):
     def _run(cursor):
         filter = "processor.{}.".format(processor_name)
         q = SQL("select * from sp_get_parameters({})").format(Literal(filter))
@@ -132,6 +130,6 @@ def db_get_processing_context(db_config, processing_context, processor_name, log
         return cursor.fetchall()
 
     with db_config.connect() as connection:
-        params = handle_retries(connection, _run, log_dir, log_file)
+        params = handle_retries(connection, _run, log)
         for param in params:
             processing_context.add_parameter(param)

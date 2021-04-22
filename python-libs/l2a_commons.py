@@ -80,7 +80,19 @@ class Log():
         self.handler = logging.FileHandler(self.log_path, "a")        
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger(self.name)
-        self.logger.setLevel(self.level)
+        if self.level == DL:
+            log_level = logging.DEBUG
+        elif self.level == IL:
+            log_level = logging.INFO
+        elif self.level == WL:
+            log_level = logging.WARNING
+        elif self.level == EL:
+            log_level = logging.ERROR
+        elif self.level == CL:
+            log_level = logging.CRITICAL
+        else:
+            log_level = logging.DEBUG
+        self.logger.setLevel(self.log_level)
         self.logger.addHandler(self.handler)
 
     def write(self, level, msg, writer_id, print_msg = False, trace = False):
