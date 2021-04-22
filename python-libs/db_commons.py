@@ -29,7 +29,7 @@ from psycopg2.sql import Identifier, SQL, Literal
 from psycopg2 import Error, connect
 from time import sleep
 from random import uniform
-from l2a_commons import log
+from l2a_commons import log, log2, EL
 
 DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
 DATABASE_DOWNLOADER_STATUS_DOWNLOADED_VALUE = 2
@@ -56,7 +56,7 @@ class DBConfig:
         )
 
     @staticmethod
-    def load(config_file, log_dir, log_file_name):
+    def load(config_file, launcher_log):
         config = DBConfig()
         try:
             parser = ConfigParser()
@@ -69,15 +69,16 @@ class DBConfig:
             #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
             config.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
         except Exception as e:
-            log(
-                log_dir,
-                 "(launcher err) <master>: Can NOT read db configuration file due to: {}".format(e),
-                log_file_name
+            log2(
+                launcher_log,
+                EL,
+                "Can NOT read db configuration file due to: {}".format(e),
+                trace = True
             )
         finally:
             return config
 
-def handle_retries(conn, f, log_dir, log_file):
+def handle_retries(conn, f, launcher_log):
     nb_retries = 10
     max_sleep = 0.1
 
@@ -93,7 +94,12 @@ def handle_retries(conn, f, log_dir, log_file):
                 e.pgcode in (SERIALIZATION_FAILURE, DEADLOCK_DETECTED)
                 and nb_retries > 0
             ):
-                log(log_dir, "Recoverable error {} on database query, retrying".format(e.pgcode), log_file)
+                log2(
+                    launcher_log,
+                    EL,
+                    "Recoverable error {} on database query, retrying".format(e.pgcode),
+                    print_msg = True
+                )
                 sleep(uniform(0, max_sleep))
                 max_sleep *= 2
                 nb_retries -= 1
@@ -125,9 +131,7 @@ def db_get_processing_context(db_config, processing_context, processor_name, log
         cursor.execute(q)
         return cursor.fetchall()
 
-
     with db_config.connect() as connection:
         params = handle_retries(connection, _run, log_dir, log_file)
         for param in params:
             processing_context.add_parameter(param)
-        log(log_dir, "Processing context acquired.", log_file)
