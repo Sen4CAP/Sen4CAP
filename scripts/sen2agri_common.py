@@ -145,7 +145,7 @@ def get_reference_raster(product):
             directory = os.path.join(directory, "GRANULE")
             # Check for Sen2Cor reference raster
             for subdir in os.listdir(directory):
-                directory=os.path.join(directory, subdir)
+                directory = os.path.join(directory, subdir)
                 if os.path.isdir(directory):
                     directory = os.path.join(directory, "IMG_DATA")
                     directory = os.path.join(directory, "R10m")
@@ -160,7 +160,7 @@ def get_reference_raster(product):
                 else:
                     files = glob.glob(os.path.join(directory, "*"))
                     raise Exception("Unable to find a reference raster for MAJA or SPOT product", directory, files)
-    if extension == ".hdr":
+    elif extension == ".hdr":
         dir = os.path.join(directory, parts[0] + ".DBL.DIR")
         files = glob.glob(os.path.join(dir, "*_FRE_R1.DBL.TIF"))
         if files:
@@ -176,7 +176,6 @@ def get_reference_raster(product):
 
 
 class Mission(object):
-
     def __init__(self, value, name):
         self.value = value
         self.name = name
@@ -193,34 +192,40 @@ def get_tile_id(product):
     
     # Check first for S2 and L8 MAJA format 
     m = re.match(
-        "SENTINEL2[A-D]_.+_L2A_T([A-Z0-9]+)_.+_MTD_ALL\.xml", file, re.IGNORECASE)
+        r"S2[A-D]_MSIL2A_.+_T([A-Z0-9]+)_.+.SAFE", file, re.IGNORECASE)
     if m:
-        return (Mission.SENTINEL, m.group(1))
-    m = re.match("L8_.+_(\d{6})_\d{8}.HDR", file, re.IGNORECASE)
+        files = glob.glob(os.path.join(product, "SENTINEL2*/*_MTD_ALL.xml"))
+        if files:
+            return (Mission.SENTINEL, m.group(1), files[0])
+    m = re.match(
+        r"SENTINEL2[A-D]_.+_L2A_T([A-Z0-9]+)_.+_MTD_ALL\.xml", file, re.IGNORECASE)
     if m:
-        return (Mission.LANDSAT, m.group(1))
+        return (Mission.SENTINEL, m.group(1), product)
+    m = re.match(r"L8_.+_(\d{6})_\d{8}.HDR", file, re.IGNORECASE)
+    if m:
+        return (Mission.LANDSAT, m.group(1), product)
     
     # Check for Sen2Cor S2 format 
     if file.lower() == "MTD_MSIL2A.xml".lower():
         directory = os.path.dirname(product)
         dir_name = os.path.basename(directory)
-        m = re.match("S2[A-D]_.+_T([A-Z0-9]+)_.+", dir_name, re.IGNORECASE)
+        m = re.match(r"S2[A-D]_.+_T([A-Z0-9]+)_.+", dir_name, re.IGNORECASE)
         if m:
-            return (Mission.SENTINEL, m.group(1))
+            return (Mission.SENTINEL, m.group(1), product)
     
     # Check for MACCS format
     m = re.match(
-        "S2[a-z0-9]_[a-z0-9]+_[a-z0-9]+_[a-z0-9]+_([a-z0-9]+)_.+\\.HDR", file, re.IGNORECASE)
+        r"S2[a-z0-9]_[a-z0-9]+_[a-z0-9]+_[a-z0-9]+_([a-z0-9]+)_.+\.HDR", file, re.IGNORECASE)
     if m:
-        return (Mission.SENTINEL, m.group(1))
-    m = re.match(".+_L8_(\d{3})_(\d{3}).hdr", file, re.IGNORECASE)
+        return (Mission.SENTINEL, m.group(1), product)
+    m = re.match(r".+_L8_(\d{3})_(\d{3}).hdr", file, re.IGNORECASE)
     if m:
-        return (Mission.LANDSAT, m.group(1) + m.group(2))
+        return (Mission.LANDSAT, m.group(1) + m.group(2), product)
 
     # Check for SPOT format
-    m = re.match("SPOT.+_([a-z0-9]+)\\.xml", file, re.IGNORECASE)
+    m = re.match(r"SPOT.+_([a-z0-9]+)\.xml", file, re.IGNORECASE)
     if m:
-        return (Mission.SPOT, m.group(1))
+        return (Mission.SPOT, m.group(1), product)
 
     return None
 
@@ -743,11 +748,12 @@ class ProcessorBase(object):
         main_mission = None
         mission_products = defaultdict(lambda: defaultdict(list))
         for product in self.args.input:
-            (mission, tile_id) = get_tile_id(product)
-            if mission is None:
+            r = get_tile_id(product)
+            if r is None:
                 raise Exception("Unable to determine product type", product)
+            (mission, tile_id, adj_product) = r
 
-            mission_products[mission][tile_id].append(product)
+            mission_products[mission][tile_id].append(adj_product)
             if main_mission is None:
                 main_mission = mission
             elif main_mission.value > mission.value:
