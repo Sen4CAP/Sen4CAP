@@ -26,7 +26,7 @@ import shutil
 import tempfile
 import signal
 from l2a_commons import run_command, create_recursive_dirs, remove_dir, get_guid, stop_containers
-from l2a_commons import Log, DL, IL, WL, EL, CL
+from l2a_commons import LogHandler, NO_ID
 
 DEFAULT_FMASK_IMAGE_NAME = "fmask"
 
@@ -50,7 +50,7 @@ def create_sym_links(filenames, target_directory, log_path, log_filename):
         target = os.path.join(target_directory, basename)
         #does it already exist?
         if os.path.isfile(target) or os.path.isdir(target):
-            fmask_log.write(IL, "The path {} does exist already".format(target), print_msg = True)
+            fmask_log.info( "The path {} does exist already".format(target), print_msg = True)
             #skip it
             continue
         #create it
@@ -84,7 +84,7 @@ def fmask_launcher(fmask_context):
     product_name = os.path.basename(fmask_context.input[:len(fmask_context.input) - 1]) if fmask_context.input.endswith("/") else os.path.basename(fmask_context.input)
 
     if not clone_product_dir(fmask_context.input, working_dir, fmask_context.output, log_filename) : 
-        fmask_log.write(EL, "Product failure: Could not create sym links for {}".format(fmask_context.input), print_msg = True)
+        fmask_log.error("Product failure: Could not create sym links for {}".format(fmask_context.input), print_msg = True)
         return ""
 
     prd_name = get_dir_name_from_path(fmask_context.input)
@@ -157,13 +157,13 @@ def fmask_launcher(fmask_context):
         if args.threshold: 
             cmd_array.append(args.threshold)
     
-    fmask_log.write(IL, "Starting FMask in {}".format(fmask_context.input), print_msg = True)
-    fmask_log.write(IL, "FMask: {}".format(cmd_array), print_msg = True)
+    fmask_log.info("Starting FMask in {}".format(fmask_context.input), print_msg = True)
+    fmask_log.info("FMask: {}".format(cmd_array), print_msg = True)
     running_containers.add(container_name)
     if run_command(cmd_array, fmask_context.output, log_filename) != 0:
-        fmask_log.write(EL, "FMask didn't work for {}. Location {}".format(fmask_context.input, fmask_context.output), print_msg = True)
+        fmask_log.error("FMask didn't work for {}. Location {}".format(fmask_context.input, fmask_context.output), print_msg = True)
     else:
-        fmask_log.write(IL, "FMask for {} finished in: {}. Location: {}".format(fmask_context.input, datetime.timedelta(seconds=(time.time() - start)), fmask_context.output), print_msg = True)
+        fmask_log.info("FMask for {} finished in: {}. Location: {}".format(fmask_context.input, datetime.timedelta(seconds=(time.time() - start)), fmask_context.output), print_msg = True)
     running_containers.remove(container_name)
     # move the fmask output to the output directory.
     # only the valid files should be moved
@@ -171,30 +171,30 @@ def fmask_launcher(fmask_context):
     new_fmask_out_file = ""
     try:
         # move the FMask file
-        fmask_log.write(IL, "Searching for FMask file in: {}".format(fmask_out_location), print_msg = True)
+        fmask_log.info("Searching for FMask file in: {}".format(fmask_out_location), print_msg = True)
         if len(fmask_out_file) >= 1:
             if len(fmask_out_file) > 1:
-                fmask_log.write(WL, "More than one FMask files found in {}. Only the first one will be kept. FMask files list: {}.".format(fmask_working_dir, fmask_out_file), print_msg = True)
-            fmask_log.write(IL, "FMask file found in: {} : {}".format(fmask_working_dir, fmask_out_file[0]), print_msg = True)
+                fmask_log.warning("More than one FMask files found in {}. Only the first one will be kept. FMask files list: {}.".format(fmask_working_dir, fmask_out_file), print_msg = True)
+            fmask_log.info("FMask file found in: {} : {}".format(fmask_working_dir, fmask_out_file[0]), print_msg = True)
             basename = os.path.basename(fmask_out_file[0])
             new_fmask_out_file = "{}/{}".format(fmask_context.output[:len(fmask_context.output) - 1] if fmask_context.output.endswith("/") else fmask_context.output, basename)
             if os.path.isdir(new_fmask_out_file):
-                fmask_log.write(IL, "The directory {} already exists. Trying to delete it in order to move the new created directory by FMask".format(new_fmask_out_file), print_msg = True)
+                fmask_log.info("The directory {} already exists. Trying to delete it in order to move the new created directory by FMask".format(new_fmask_out_file), print_msg = True)
                 shutil.rmtree(new_fmask_out_file)
             elif os.path.isfile(new_fmask_out_file):
-                fmask_log.write(IL, "The file {} already exists. Trying to delete it in order to move the new created file by FMask".format(new_fmask_out_file), print_msg = True)
+                fmask_log.info("The file {} already exists. Trying to delete it in order to move the new created file by FMask".format(new_fmask_out_file), print_msg = True)
                 os.remove(new_fmask_out_file)
             else: #the destination does not exist, so move the files
                 pass
-            fmask_log.write(IL, "Moving {} to {}".format(fmask_out_file[0], new_fmask_out_file), print_msg = True)
+            fmask_log.info("Moving {} to {}".format(fmask_out_file[0], new_fmask_out_file), print_msg = True)
             shutil.move(fmask_out_file[0], new_fmask_out_file)
         else:
-            fmask_log.write(EL, "No FMask file found in: {}.".format(fmask_working_dir), print_msg = True)
-        fmask_log.write(IL, "Erasing the FMask working directory: rmtree: {}".format(fmask_working_dir), print_msg = True)
+            fmask_log.error("No FMask file found in: {}.".format(fmask_working_dir), print_msg = True)
+        fmask_log.info("Erasing the FMask working directory: rmtree: {}".format(fmask_working_dir), print_msg = True)
         shutil.rmtree(fmask_working_dir)
     except Exception as e:
         new_fmask_out_file = ""
-        fmask_log.write(EL, "FMask product failure: Exception caught when moving fmask files  to the output directory {}: {}".format(fmask_context.output, e), print_msg = True)
+        fmask_log.error("FMask product failure: Exception caught when moving fmask files  to the output directory {}: {}".format(fmask_context.output, e), print_msg = True)
  
     return new_fmask_out_file
 
@@ -202,8 +202,7 @@ def signal_handler(signum, frame):
     global fmask_context, log_filename
 
     print("(FMask info) Signal caught: {}.".format(signum))
-    fmask_log.write(
-        IL,
+    fmask_log.info(
         "(FMask info) Signal caught: {}.".format(signum),
         print_msg = True,
     )
@@ -235,8 +234,9 @@ parser.add_argument('--cloud-shadow-dilation', required = False, default = 3,
                     help = "Number of dilated pixels for cloud shadow")
 parser.add_argument('--snow-dilation', required = False, default = 0,
                     help = "Number of dilated pixels for snow")
-parser.add_argument('--log-level', required= False, default = IL,
-                    help = "Log level")
+parser.add_argument('-l', '--log-level', default = 'info',
+                    choices = ['debug' , 'info', 'warning' , 'error', 'critical'], 
+                    help = 'Minimum logging level')
 args = parser.parse_args()
 
 running_containers = set()
@@ -248,17 +248,17 @@ if args.product_id:
     log_filename = "fmask_{}.log".format(args.product_id)
 else:
     log_filename = "fmask.log"
-fmask_log = Log("fmask_log", general_log_path, args.log_level)
+fmask_log = LogHandler(general_log_path, "fmask_log", args.log_level, NO_ID)
 if not create_recursive_dirs(args.output):
-    fmask_log.write(CL, "Could not create the output directory", print_msg= True)
+    fmask_log.critical("Could not create the output directory", print_msg= True)
     os._exit(1)
 
 working_dir = tempfile.mkdtemp(dir = args.working_dir)
-fmask_log.write(IL, "working_dir = {}".format(working_dir), print_msg= True)
+fmask_log.info("working_dir = {}".format(working_dir), print_msg= True)
 general_start = time.time()
 
 if not os.path.isdir(working_dir):
-    fmask_log.write(CL, "Could not create the temporary directory", print_msg = True)
+    fmask_log.critical("Could not create the temporary directory", print_msg = True)
     os._exit(1)
 
 start = time.time()
@@ -275,17 +275,17 @@ if len(out) >=5:
 
 exit_code = 0
 if len(processed_tiles) == 0:
-    fmask_log.write(EL, "FMASK did NOT process the L1C product {}".format(args.input), print_msg = True)
+    fmask_log.error("FMASK did NOT process the L1C product {}".format(args.input), print_msg = True)
     exit_code = 1
 else:
-    fmask_log.write(IL, "FMask processed the following tiles for L1C product {} :".format(args.input), print_msg = True)
-    fmask_log.write(IL, "{}".format(processed_tiles), print_msg = True)
+    fmask_log.info("FMask processed the following tiles for L1C product {} :".format(args.input), print_msg = True)
+    fmask_log.info("{}".format(processed_tiles), print_msg = True)
 
 if args.delete_temp:
-    fmask_log.write(IL, "Remove all the temporary files and directory", print_msg = True)
+    fmask_log.info("Remove all the temporary files and directory", print_msg = True)
     if not remove_dir(working_dir):
-        fmask_log.write(WL, "Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
+        fmask_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
 
-fmask_log.write(IL, "Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), print_msg = True)
+fmask_log.info("Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), print_msg = True)
 
 os._exit(exit_code)
