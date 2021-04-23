@@ -29,7 +29,6 @@ from psycopg2.sql import Identifier, SQL, Literal
 from psycopg2 import Error, connect
 from time import sleep
 from random import uniform
-from l2a_commons import log, log2, EL
 
 DATABASE_DOWNLOADER_STATUS_DOWNLOADING_VALUE = 1
 DATABASE_DOWNLOADER_STATUS_DOWNLOADED_VALUE = 2
@@ -69,8 +68,7 @@ class DBConfig:
             #for py3: config.port = int(parser.get("Database", "Port", fallback="5432"))
             config.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
         except Exception as e:
-            log.write(
-                EL,
+            log.error(
                 "Can NOT read db configuration file due to: {}".format(e),
                 trace = True
             )
@@ -93,8 +91,7 @@ def handle_retries(conn, f, log):
                 e.pgcode in (SERIALIZATION_FAILURE, DEADLOCK_DETECTED)
                 and nb_retries > 0
             ):
-                log.write(
-                    EL,
+                log.error(
                     "Recoverable error {} on database query, retrying".format(e.pgcode),
                     print_msg = True
                 )

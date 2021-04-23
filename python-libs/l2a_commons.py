@@ -71,11 +71,12 @@ def remove_dir_content(directory):
     return True
 
     
-class Log():
-    def __init__(self, log_path, name, level):
+class LogHandler(object):
+    def __init__(self, log_path, name, level, emitter_id):
         self.log_path = log_path
         self.level = level
         self.name = name
+        self.emitter_id = emitter_id
         self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d.%H.%M.%S,§%z')
         self.handler = logging.FileHandler(self.log_path, "a")        
         self.handler.setFormatter(self.formatter)
@@ -95,31 +96,38 @@ class Log():
         self.logger.setLevel(self.log_level)
         self.logger.addHandler(self.handler)
 
-    def write(self, level, msg, writer_id, print_msg = False, trace = False):
-        
-        if writer_id == NO_ID:
-            pass
-        elif writer_id == MASTER_ID:
-            msg = "<master> " + msg
+    def format_msg(self, msg):
+        if self.emitter_id == NO_ID:
+            return msg
+        elif self.emitter_id == MASTER_ID:
+            return "<master> " + msg
         else:
-            msg = "<worker {}> ".format(self.writer_id) + msg
-        if level == DL:
-            self.logger.debug(msg)
-            if print_msg: print(msg)
-        elif level == IL:
-            self.logger.info(msg)
-            if print_msg: print(msg)
-        elif level == WL:
-            self.logger.warning(msg)
-            if print_msg: print(msg)
-        elif level == EL:
-            self.logger.error(msg, exc_info = trace)
-            if print_msg: print(msg)
-        elif level == CL:
-            self.logger.critical(msg, exc_info = trace)
-            if print_msg: print(msg)
-        else:
-            pass 
+            return "<worker {}> ".format(self.writer_id) + msg
+
+    def debug(self, msg, print_msg = False, trace = False):
+        log_msg = self.format_msg(msg)
+        if print_msg : print(log_msg)
+        self.logger.debug(log_msg, exc_info = trace)
+
+    def info(self, msg, print_msg = False, trace = False):
+        log_msg = self.format_msg(msg)
+        if print_msg : print(log_msg)
+        self.logger.info(log_msg, exc_info = trace)
+
+    def warning(self, msg, print_msg = False, trace = False):
+        log_msg = self.format_msg(msg)
+        if print_msg : print(log_msg)
+        self.logger.warning(log_msg, exc_info = trace)
+
+    def error(self, msg, print_msg = False, trace = False):
+        log_msg = self.format_msg(msg)
+        if print_msg : print(log_msg)
+        self.logger.error(log_msg, exc_info = trace)
+
+    def critical(self, msg, print_msg = False, trace = False):
+        log_msg = self.format_msg(msg)
+        if print_msg : print(log_msg)
+        self.logger.critical(log_msg, exc_info = trace)
 
 
 def run_command(cmd_array, log, fake_command = False):
@@ -127,24 +135,22 @@ def run_command(cmd_array, log, fake_command = False):
     cmd_str = " ".join(map(pipes.quote, cmd_array))
     res = 0
     if not fake_command:
-        log.write(IL, "Running command: {}".format(cmd_str), print_msg = True)
+        log.info("Running command: {}".format(cmd_str), print_msg = True)
         try:
             with open(log.log_path, "a") as log_file:
                 res = subprocess.call(cmd_array, stdout = log_file, stderr = log_file, shell=False)
         except Exception as e:
-            log.write(
-                EL,
+            log.error(
                 "Exception encountered: {} when running command: {}".format(e, cmd_str),
                 print_msg = True,
                 trace = True
             )
             res = 1
     else:
-        log.write(DL, "Fake command: {}".format(cmd_str), print_msg = True)
+        log.debug("Fake command: {}".format(cmd_str), print_msg = True)
     ok = "OK"
     nok = "NOK"
-    log.write(
-        IL,
+    log.info(
         "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str),
         print_msg = True
     )
@@ -352,7 +358,7 @@ class ArchiveHandler(object):
         return None
 
     def unzip(self, output_dir, input_file):
-        self.log.write(IL, "Unzip archive = {} to {}".format(input_file, output_dir))
+        self.log.info("Unzip archive = {} to {}".format(input_file, output_dir))
         try:
             with zipfile.ZipFile(input_file) as zip_archive:
                 zip_archive.extractall(output_dir)
@@ -360,8 +366,7 @@ class ArchiveHandler(object):
                     output_dir, self.path_filename(input_file)
                 )
         except Exception as e:
-            self.log.write(
-                EL,
+            self.log.error(
                 "Exception when trying to unzip file {}:  {} ".format(input_file, e),
                 trace = True
             )
@@ -369,7 +374,7 @@ class ArchiveHandler(object):
         return None
 
     def untar(self, output_dir, input_file):
-        self.log.write(IL, "Untar archive = {} to {}".format(input_file, output_dir))
+        self.log.info("Untar archive = {} to {}".format(input_file, output_dir))
         try:
             with tarfile.open(input_file) as tar_archive:
                 tar_archive.extractall(output_dir)
@@ -378,16 +383,16 @@ class ArchiveHandler(object):
                     output_dir, self.path_filename(input_file)
                 )
         except Exception as e:
-            self.launcher_log(
-                "Exception when trying to untar file {}:  {} ".format(input_file, e)
+            self.log.error(
+                "Exception when trying to untar file {}:  {} ".format(input_file, e),
+                trace = True
             )
 
         return None
 
     def extract_from_archive_if_needed(self, archive_file):
         if os.path.isdir(archive_file):
-            self.log.write(
-                IL,
+            self.log.info(
                 "This {} wasn't an archive, so continue as is.".format(archive_file)
             )
             return False, archive_file
@@ -397,51 +402,38 @@ class ArchiveHandler(object):
                     try:
                         extracted_archive_dir = tempfile.mkdtemp(dir=self.archives_dir)
                         extracted_file_path = self.unzip(extracted_archive_dir, archive_file)
-                        self.log.write(
-                            IL,
+                        self.log.info(
                             "Archive extracted to: {}".format(extracted_file_path)
                         )
                         return True, extracted_file_path
                     except Exception as e:
-                        self.log.write(
-                            EL,
+                        self.log.error(
                             "Can NOT extract zip archive {} due to: {}".format(archive_file, e),
                             trace = True
                         )
                         return False, None
                 else:
-                    self.log.write(
-                        EL,
-                        "Can NOT create arhive dir."
-                    )
+                    self.log.error("Can NOT create arhive dir.")
                     return False, None
             elif tarfile.is_tarfile(archive_file):
                 if create_recursive_dirs(self.archives_dir):
                     try:
                         extracted_archive_dir = tempfile.mkdtemp(dir=self.archives_dir)
                         extracted_file_path = self.untar(extracted_archive_dir, archive_file)
-                        self.log.write(
-                            IL,
+                        self.log.info(
                             "Archive extracted to: {}".format(extracted_file_path)
                         )
                         return True, extracted_file_path
                     except Exception as e:
-                        self.log.write(
-                            EL, 
+                        self.log.error(
                             "Can NOT extract tar archive {} due to: {}".format(archive_file, e),
                             trace = True
                         )
                         return False, None
                 else:
-                    self.log.write(
-                        EL, 
-                        "Can NOT create arhive dir."
-                    )
+                    self.log.error("Can NOT create arhive dir.")
                     return False, None
             else:
-                self.log.write(
-                    EL,
-                    "This wasn't an zip or tar archive, can NOT use input product."
-                )
+                self.log.error("This wasn't an zip or tar archive, can NOT use input product.")
                 return False, None
 
