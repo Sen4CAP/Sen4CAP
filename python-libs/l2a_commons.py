@@ -47,11 +47,6 @@ SEN2COR_PROCESSOR_OUTPUT_FORMAT = 3
 FILES_IN_LANDSAT_L1_PRODUCT = 13
 UNKNOWN_SATELLITE_ID = -1
 DEFAULT_GDAL_IMAGE = "osgeo/gdal:ubuntu-full-3.2.0"
-DL = "DEBUG_LOG_LEVEL"
-IL = "INFO_LOG_LEVEL"
-WL = "WARNING_LOG_LEVEL"
-EL = "ERROR_LOG_LEVEL"
-CL = "CRITICAL_LOG_LEVEL"
 MASTER_ID = -1
 NO_ID = -2
 
@@ -73,7 +68,7 @@ def remove_dir_content(directory):
     
 class LogHandler(object):
     def __init__(self, log_path, name, level, emitter_id):
-        self.log_path = log_path
+        self.path = log_path
         self.level = level
         self.name = name
         self.emitter_id = emitter_id
@@ -81,19 +76,19 @@ class LogHandler(object):
         self.handler = logging.FileHandler(self.log_path, "a")        
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger(self.name)
-        if self.level == DL:
+        if self.level == 'debug':
             log_level = logging.DEBUG
-        elif self.level == IL:
+        elif self.level == 'info':
             log_level = logging.INFO
-        elif self.level == WL:
+        elif self.level == 'warning':
             log_level = logging.WARNING
-        elif self.level == EL:
+        elif self.level == 'error':
             log_level = logging.ERROR
-        elif self.level == CL:
+        elif self.level == 'critical':
             log_level = logging.CRITICAL
         else:
             log_level = logging.DEBUG
-        self.logger.setLevel(self.log_level)
+        self.logger.setLevel(log_level)
         self.logger.addHandler(self.handler)
 
     def format_msg(self, msg):
@@ -280,9 +275,8 @@ def translate(input_img,
             cmd.append("{}:{}".format(os.path.abspath(input_img), os.path.abspath(input_img)))
             cmd.append("-v")
             cmd.append("{}:{}".format(os.path.abspath(output_dir), os.path.abspath(output_dir)))
-            log_file = os.path.join(log_dir, log_file_name)
             cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(log_file), os.path.abspath(log_file)))
+            cmd.append("{}:{}".format(os.path.abspath(log.path), os.path.abspath(log.path)))
             if name:
                 cmd.append("--name")
                 cmd.append(name)

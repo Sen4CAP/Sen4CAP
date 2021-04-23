@@ -28,7 +28,6 @@ import Queue
 import threading
 import grp
 import shutil
-import subprocess
 import signal
 import json
 from lxml import etree
@@ -44,7 +43,6 @@ from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWN
 from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
 
-DEBUG = False
 MAJA_LOG_FILE_NAME = "maja.log"
 SEN2COR_LOG_FILE_NAME = "sen2cor.log"
 MIN_VALID_PIXELS_THRESHOLD = 10.0
@@ -345,76 +343,76 @@ class SiteContext(object):
             rejection_reason = "Invalid processing context output_path: {}.".format(
                 self.output_path
             )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.num_workers < 1:
             rejection_reason = "Invalid processing context num_workers: {}".format(
                 self.num_workers
             )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if not os.path.isdir(self.swbd_path):
             rejection_reason = "Invalid processing context swbd_path: {}".format(
                 self.swbd_path
             )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if not os.path.isdir(self.dem_path):
             rejection_reason = "Invalid processing context dem_path: {}".format(
                 self.dem_path
             )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if not create_recursive_dirs(self.working_dir):
             rejection_reason = "Invalid processing context working_dir: {}".format(
                 self.working_dir
             )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation not in ["sen2cor", "maja"]:
             rejection_reason = "Invalid processing context implementation: {}".format(
                     self.implementation
                 )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation == "sen2cor" and not os.path.isdir(self.sen2cor_gipp):
             rejection_reason = "Invalid processing context sen2cor_gipp: {}".format(
                 self.sen2cor_gipp
             )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation == "maja" and not os.path.isdir(self.maja_gipp):
             rejection_reason = "Invalid processing context maja_gipp: {}".format(
                     self.maja_gipp
                 )
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.removeFreFiles and self.removeSreFiles:
             rejection_reason = "Invalid processing context both removeFreFiles and removeSreFiles are True."
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation == "maja" and not os.path.isdir(self.maja_conf):
             rejection_reason = "Invalid Maja configuration file {}.".format(self.maja_conf)
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.site_short_name is None:
             rejection_reason = "Invalid site short name"
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if len(self.site_output_path) == 0:
             rejection_reason = "Invalid site output path: {}".format(self.site_output_path)
-            log.write(EL, rejection_reason, print_msg = True)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         return True, None
@@ -1594,7 +1592,7 @@ class Maja(L2aProcessor):
         script_command.append("--docker-image-gdal")
         script_command.append(self.context.gdal_image)
 
-        print("Running Maja, console output can be found at {}".format(self.l2a_log.log_path))
+        print("Running Maja, console output can be found at {}".format(self.l2a_log.path))
         notification = ContainerStatusMsg(container_name, True)
         self.master_q.put(notification)
         command_return = run_command(script_command, self.l2a_log)
@@ -1950,8 +1948,7 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--lc_wb_map_path")
             script_command.append(lc_wb_map_path)
         else:
-            self.l2a_log.write(
-                EL,
+            self.l2a_log.error(
                 "Can NOT find ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif at {}, proceeding with default GIPP".format(
                     lc_wb_map_path
                 )
@@ -1980,7 +1977,7 @@ class Sen2Cor(L2aProcessor):
         #script_command.append(str(60))
         #tmp
 
-        print("Running Sen2Cor, console output can be found at {}".format(self.l2a_log.log_path))
+        print("Running Sen2Cor, console output can be found at {}".format(self.l2a_log.path))
         notification = ContainerStatusMsg(container_name, True)
         self.master_q.put(notification)
         command_return = run_command(script_command, self.l2a_log)
@@ -1992,8 +1989,7 @@ class Sen2Cor(L2aProcessor):
         else:
             reason = self.get_rejection_reason()
             self.update_rejection_reason(reason)
-            self.l2a_log.write(
-                EL,
+            self.l2a_log.error(
                 "Sen2Cor returned error code: {} due to : {}.".format(
                     command_return, reason
                 )
@@ -2018,11 +2014,8 @@ class Sen2Cor(L2aProcessor):
                         self.l2a.valid_pixels_percentage, MIN_VALID_PIXELS_THRESHOLD
                     )
                     self.update_rejection_reason(rejection_reason)
-                    self.l2a_log.write(
-                        EL,
-                        rejection_reason,
-                    )
-                    if not DEBUG:
+                    self.l2a_log.error(rejection_reason)
+                    if self.l2a_log.level == 'debug':
                         remove_dir(self.l2a.product_path)
                 else:
                     self.move_to_destination()
@@ -2040,28 +2033,28 @@ class Sen2Cor(L2aProcessor):
         msg = "Successful pre-processing = {}".format(
             preprocess_succesful
         )
-        self.l2a_log.write(IL, msg, print_msg = True)
+        self.l2a_log.info(msg, print_msg = True)
 
         if preprocess_succesful and self.run_script():
             process_succesful = True
         msg = "Successful Sen2Cor processing = {}".format(
             process_succesful
         )
-        self.l2a_log.write(IL, msg, print_msg = True)
+        self.l2a_log.info(msg, print_msg = True)
 
         if process_succesful and self.check_l2a():
             l2a_ok = True
         msg = "Valid L2a product = {}".format(
             l2a_ok
         )
-        self.l2a_log.write(IL, msg, print_msg = True)
+        self.l2a_log.info(msg, print_msg = True)
 
         if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
             postprocess_succesful = True
         msg = "Successful post-processing = {}".format(
             postprocess_succesful
         )
-        self.l2a_log.write(IL, msg, print_msg = True)
+        self.l2a_log.info(msg, print_msg = True)
         
         self.manage_prods_status(
             preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
@@ -2086,8 +2079,8 @@ def db_get_unprocessed_tile(db_config, node_id, log):
         return tile_info
 
     with db_config.connect() as connection:
-        tile_info = handle_retries(connection, _run, log_dir, log_file)
-        log.write(DL, "Unprocessed tile info: {}".format(tile_info))
+        tile_info = handle_retries(connection, _run, log)
+        log.debug("Unprocessed tile info: {}".format(tile_info))
         return tile_info
 
 def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
@@ -2231,8 +2224,7 @@ def db_prerun_update(db_config, tile, reason, log):
 
     with db_config.connect() as connection:
         handle_retries(connection, _run, log)
-        log.write(
-            EL,
+        log.error(
             "Product with downloader history id {} was rejected because: {}".format(tile.downloader_history_id, reason),
         )
 
@@ -2240,7 +2232,9 @@ parser = argparse.ArgumentParser(description="Launcher for MAJA/Sen2Cor script")
 parser.add_argument(
     "-c", "--config", default="/etc/sen2agri/sen2agri.conf", help="configuration file"
 )
-parser.add_argument('-l', '--log-level', default = IL, help = 'logging level')
+parser.add_argument('-l', '--log-level', default = 'info',
+                    choices = ['debug' , 'info', 'warning' , 'error', 'critical'], 
+                    help = 'Minimum logging level')
 args = parser.parse_args()
 launcher_log_path = os.path.join(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 launcher_log = LogHandler("launcher_log", launcher_log_path, args.log_level, MASTER_ID)
@@ -2250,14 +2244,14 @@ db_config = DBConfig.load(args.config, launcher_log)
 default_processing_context = ProcessingContext()
 db_get_processing_context(db_config, default_processing_context, DB_PROCESSOR_NAME, launcher_log)
 if default_processing_context is None:
-    launcher_log.write(CL, "Could not load the processing context from database", print_msg = True)
+    launcher_log.critical("Could not load the processing context from database", print_msg = True)
     sys.exit(1)
 
 if default_processing_context.num_workers["default"] < 1:
     msg = "(launcher err) <master>: Invalid processing context num_workers: {}".format(
             default_processing_context.num_workers["default"]
     )
-    launcher_log.write(CL, msg, print_msg = True)
+    launcher_log.critical(msg, print_msg = True)
     sys.exit(1)
 
 # woking dir operations
@@ -2268,7 +2262,7 @@ if not create_recursive_dirs(
     msg = "Could not create the work base directory {}".format(
             default_processing_context.working_dir["default"]
     )
-    launcher_log.write(CL, msg, print_msg = True)
+    launcher_log.critical(msg, print_msg = True)
     sys.exit(1)
 
 # delete all the temporary content from a previous run
@@ -2282,5 +2276,5 @@ db_clear_pending_tiles(db_config, node_id, launcher_log)
 l2a_master = L2aMaster(default_processing_context.num_workers["default"], db_config, node_id)
 l2a_master.run()
 
-if DEBUG == False:
+if launcher_log.level == 'debug':
     remove_dir_content("{}/".format(default_processing_context.working_dir["default"]))
