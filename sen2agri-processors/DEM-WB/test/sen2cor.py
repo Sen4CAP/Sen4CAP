@@ -22,12 +22,11 @@ import argparse
 import glob
 import re
 import os
-import datetime
 from lxml import etree
 import hashlib
-import subprocess
 import signal
-from l2a_commons import log, create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers
+from l2a_commons import create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers
+from l2a_commons import run_command, LogHandler, NO_ID
 
 # default values
 default_dem_path = "/mnt/archive/srtm"
@@ -58,6 +57,7 @@ def CheckInput():
     global default_wrk_dir_path
     global docker_input_path
     global default_dem_path
+    global l2a_log
 
     # input_dir checks
     # remove trailing / or \ from L1C_input_path
@@ -69,27 +69,21 @@ def CheckInput():
     L1C_file_name = os.path.basename(L1C_input_path)
     if re.match(r"S2[A|B|C|D]_\w*L1C\w*.SAFE", L1C_file_name) is not None:
         if os.path.isdir(L1C_input_path) is False:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid L1C_input_path {}.".format(L1C_input_path),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid L1C_input_path {}.".format(L1C_input_path)
             )
             return False
     else:
-        log(
-            log_dir,
-            "(sen2cor err) Invalid L1C input file name {}.".format(L1C_file_name),
-            l2a_log_file_name,
+        l2a_log.error(
+            "Invalid L1C input file name {}.".format(L1C_file_name),
         )
         return False
     docker_input_path = os.path.join("/sen2cor/2.9/input", L1C_file_name)
 
     # --output_dir cheks
     if os.path.isdir(args.output_dir) is False:
-        log(
-            log_dir,
-            "(sen2cor err) Invalid output directory {}.".format(args.output_dir),
-            l2a_log_file_name,
+        l2a_log.error(
+            "Invalid output directory {}.".format(args.output_dir)
         )
         return False
 
@@ -101,38 +95,30 @@ def CheckInput():
                 if ProcessorName[0] == "L2A_Process":
                     pass
                 else:
-                    log(
-                        log_dir,
-                        "(sen2cor err) Invalid Sen2Cor ProcessorName {}.".format(
+                    l2a_log.error(
+                        "Invalid Sen2Cor ProcessorName {}.".format(
                             ProcessorName[0]
-                        ),
-                        l2a_log_file_name,
+                        )
                     )
                     return False
             else:
-                log(
-                    log_dir,
-                    "(sen2cor err) Invalid Sen2Cor_exe_path {}.".format(
+                l2a_log.error(
+                    "Invalid Sen2Cor_exe_path {}.".format(
                         args.Sen2Cor_exe_path
-                    ),
-                    l2a_log_file_name,
+                    )
                 )
                 return False
         else:
-            log(
-                log_dir,
-                "(sen2cor err) In local_run mode a path to sen2cor_exec must be given.",
-                l2a_log_file_name,
+            l2a_log.error(
+                "In local_run mode a path to sen2cor_exec must be given."
             )
             return False
 
     # --working_dir cheks
     if args.working_dir:
         if os.path.isdir(args.working_dir) is False:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid working directory {}.".format(args.working_dir),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid working directory {}.".format(args.working_dir)
             )
             return False
     else:
@@ -142,10 +128,8 @@ def CheckInput():
             os.path.dirname(os.path.realpath(__file__)), default_wrk_dir_name
         )
         if not create_recursive_dirs(default_wrk_dir_path):
-            log(
-                log_dir,
-                "(sen2cor err) Can NOT create working directory {}.".format(default_wrk_dir_path),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Can NOT create working directory {}.".format(default_wrk_dir_path)
             )
             return False
 
@@ -154,46 +138,38 @@ def CheckInput():
         valid_resolution_values = ["10", "20", "60"]
         for resolution in args.resolution:
             if resolution not in valid_resolution_values:
-                log(
-                    log_dir,
-                    "(sen2cor err) Invalid resolution values {}.".format(resolution),
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "Invalid resolution values {}.".format(resolution)
                 )
                 return False
 
     # --processing_centre checks
     if args.processing_centre:
         if not re.match(r"^[a-zA-Z_]{4}$", args.processing_centre):
-            log(
-                log_dir,
-                "(sen2cor err) Invalid expression for processing_centre {}.".format(
+            l2a_log.error(
+                "Invalid expression for processing_centre {}.".format(
                     args.processing_centre
-                ),
-                l2a_log_file_name,
+                )
             )
             return False
 
     # --archiving_centre checks
     if args.archiving_centre:
         if not re.match(r"^[a-zA-Z_]{4}$", args.archiving_centre):
-            log(
-                log_dir,
-                "(sen2cor err) Invalid expression for processing_centre {}.".format(
+            l2a_log.error(
+                "Invalid expression for processing_centre {}.".format(
                     args.archiving_centre
-                ),
-                l2a_log_file_name,
+                )
             )
             return False
 
     # --processing_baseline checks
     if args.processing_baseline:
         if not re.match(r"^[0-9]{2}.[0-9]{2}$", args.processing_baseline):
-            log(
-                log_dir,
-                "(sen2cor err) Invalid expression for processing_baseline {}.".format(
+            l2a_log.error(
+                "Invalid expression for processing_baseline {}.".format(
                     args.processing_baseline
-                ),
-                l2a_log_file_name,
+                )
             )
             return False
 
@@ -203,10 +179,8 @@ def CheckInput():
             if os.path.isabs(args.GIP_L2A) == False:
                 args.GIP_L2A = os.path.abspath(args.GIP_L2A)
         else:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid GIP_L2A path {}.".format(args.GIP_L2A),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid GIP_L2A path {}.".format(args.GIP_L2A),
             )
             return False
 
@@ -215,10 +189,8 @@ def CheckInput():
         if os.path.isfile(args.GIP_L2A_SC) and os.path.isabs(args.GIP_L2A_SC):
             pass
         else:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid GIP_L2A_SC path {}.".format(args.GIP_L2A_SC),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid GIP_L2A_SC path {}.".format(args.GIP_L2A_SC)
             )
             return False
 
@@ -227,10 +199,8 @@ def CheckInput():
         if os.path.isfile(args.GIP_L2A_AC) and os.path.isabs(args.GIP_L2A_AC):
             pass
         else:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid GIP_L2A_AC path {}.".format(args.GIP_L2A_AC),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid GIP_L2A_AC path {}.".format(args.GIP_L2A_AC)
             )
             return False
 
@@ -239,10 +209,8 @@ def CheckInput():
         if os.path.isfile(args.GIP_L2A_PB) and os.path.isabs(args.GIP_L2A_PB):
             pass
         else:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid GIP_L2A_PB path {}.".format(args.GIP_L2A_PB),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid GIP_L2A_PB path {}.".format(args.GIP_L2A_PB)
             )
             return False
 
@@ -250,79 +218,63 @@ def CheckInput():
     if args.mode:
         valid_modes = ["generate_datastrip", "process_tile"]
         if args.mode[0] not in valid_modes:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid mode {}.".format(args.mode),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid mode {}.".format(args.mode)
             )
             return False
 
     # --datastrip checks
     if args.datastrip:
         if os.path.isdir(args.datastrip[0]) == False:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid datastrip path {}.".format(args.datastrip[0]),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid datastrip path {}.".format(args.datastrip[0])
             )
             return False
 
     # --tile checks
     if args.tile:
         if os.path.isdir(args.tile[0]) == False:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid tile path {}.".format(args.tile[0]),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Invalid tile path {}.".format(args.tile[0])
             )
             return False
 
     # --res_database_dir checks
     if args.res_database_dir:
         if os.path.isdir(args.res_database_dir[0]) == False:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid res_database_dir path {}.".format(
+            l2a_log.error(
+                "Invalid res_database_dir path {}.".format(
                     args.res_database_dir[0]
-                ),
-                l2a_log_file_name,
+                )
             )
             return False
 
     # --img_database_dir checks
     if args.img_database_dir:
         if os.path.isdir(args.img_database_dir[0]) == False:
-            log(
-                log_dir,
-                "(sen2cor err) Invalid img_database_dir path {}.".format(
+            l2a_log.error(
+                "Invalid img_database_dir path {}.".format(
                     args.img_database_dir[0]
-                ),
-                l2a_log_file_name,
+                )
             )
             return False
 
     if args.tif and args.cog:
-        log(
-            log_dir,
-            "(sen2cor err) Invalid output format, either cog or tif have to be chosen, not both of them.",
-            l2a_log_file_name,
+        l2a_log.error(
+            "Invalid output format, either cog or tif have to be chosen, not both of them."
         )
         return False
 
     if args.local_run is False:
         if args.docker_image_sen2cor is None:
-            log(
-                log_dir,
-                "(sen2cor err) Sen2cor docker image must be provided.",
-                l2a_log_file_name,
+            l2a_log.error(
+                "Sen2cor docker image must be provided."
             )
             return False
 
         if args.docker_image_gdal is None:
-            log(
-                log_dir,
-                "(sen2cor err) Gdal docker image must be provided.",
-                l2a_log_file_name,
+            l2a_log.error(
+                "Gdal docker image must be provided."
             )
             return False
 
@@ -331,10 +283,8 @@ def CheckInput():
             if os.path.isdir(args.dem_path):
                 default_dem_path = args.dem_path
             else:
-                log(
-                    log_dir,
-                    "(sen2cor err) Invalid dem_path {}.".format(args.dem_path),
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "Invalid dem_path {}.".format(args.dem_path)
                 )
                 return False
 
@@ -343,12 +293,10 @@ def CheckInput():
             if os.path.isfile(args.lc_wb_map_path):
                 pass
             else:
-                log(
-                    log_dir,
-                    "(sen2cor err) Invalid lc_wb_map_path path {}.".format(
+                l2a_log.error(
+                    "Invalid lc_wb_map_path path {}.".format(
                         args.lc_wb_map_path
-                    ),
-                    l2a_log_file_name,
+                    )
                 )
                 return False
 
@@ -357,12 +305,10 @@ def CheckInput():
             if os.path.isfile(args.lc_lccs_map_path):
                 pass
             else:
-                log(
-                    log_dir,
-                    "(sen2cor err) Invalid lc_lccs_map_path path {}.".format(
+                l2a_log.error(
+                    "Invalid lc_lccs_map_path path {}.".format(
                         args.lc_lccs_map_path
-                    ),
-                    l2a_log_file_name,
+                    )
                 )
                 return False
 
@@ -371,12 +317,10 @@ def CheckInput():
             if os.path.isdir(args.lc_snow_cond_path):
                 pass
             else:
-                log(
-                    log_dir,
-                    "(sen2cor err) Invalid lc_snow_cond_path path {}.".format(
+                l2a_log.error(
+                    "Invalid lc_snow_cond_path path {}.".format(
                         args.lc_snow_cond_path
-                    ),
-                    l2a_log_file_name,
+                    )
                 )
                 return False
 
@@ -385,6 +329,8 @@ def CheckInput():
 
 def CheckOutput():
     global default_wrk_dir_path
+    global l2a_log
+
     if args.working_dir:
         wrk_dir = args.working_dir
     else:
@@ -410,19 +356,15 @@ def CheckOutput():
     if len(L2a_products) == 1:
         L2A_name = os.path.basename(L2a_products[0])
     elif len(L2a_products) > 1:
-        log(
-            log_dir,
-            "(sen2cor err) Multiple L2A products found in the working directory {} for one input l1c product.".format(
+        l2a_log.error(
+            "Multiple L2A products found in the working directory {} for one input l1c product.".format(
                 L2a_products
-            ),
-            l2a_log_file_name,
+            )
         )
         return False, None
     else:
-        log(
-            log_dir,
-            "(sen2cor err) Can NOT find any L2A product in the working directory.",
-            l2a_log_file_name,
+        l2a_log.error(
+            "Can NOT find any L2A product in the working directory."
         )
         return False, None
 
@@ -436,6 +378,7 @@ def CheckOutput():
 
 def CopyOutput(L2A_product_name):
     global default_wrk_dir_path
+
     if args.working_dir:
         wrk_dir = args.working_dir
     else:
@@ -451,7 +394,8 @@ def RunSen2Cor():
     global default_wrk_dir_path
     global docker_input_path
     global running_containers
-
+    global l2a_log
+    
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -528,9 +472,8 @@ def RunSen2Cor():
         cmd.append("--rm")
         cmd.append("-u")
         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
-        sen2cor_log_path = os.path.join(log_dir, l2a_log_file_name)
         cmd.append("-v")
-        cmd.append("{}:{}".format(sen2cor_log_path, sen2cor_log_path))
+        cmd.append("{}:{}".format(args.output_dir, args.output_dir))
         cmd.append("-v")
         cmd.append("{}:{}".format(os.path.abspath(default_dem_path), docker_dem_path))
         if args.lc_snow_cond_path:
@@ -660,26 +603,17 @@ def RunSen2Cor():
             cmd.append(docker_res_database_path)
 
     try:
-        l2a_log_path = os.path.join(log_dir, l2a_log_file_name)
-        cmd_str = "\nRunning cmd: "
-        for x in cmd:
-            cmd_str = cmd_str + " " + x
-        with open(l2a_log_path, "a") as log_file:
-            log_file.write(cmd_str)
-        sen2cor_log_path = os.path.join(log_dir, SEN2COR_LOG_FILE_NAME)
+        sen2cor_log_path = os.path.join(args.output_dir, SEN2COR_LOG_FILE_NAME)
+        sen2cor_log = LogHandler(sen2cor_log_path, SEN2COR_LOG_FILE_NAME, l2a_log.level, NO_ID)
         running_containers.add(container_name)
-        with open(sen2cor_log_path, "a") as log_file:
-            ret = subprocess.call(cmd, stdout = log_file, stderr = log_file)
-            log_file.write("Cmd returned code: {}".format(ret))
+        ret = run_command(cmd, sen2cor_log)
         running_containers.remove(container_name)
-        with open(l2a_log_path, "a") as log_file:
-            log_file.write("\nCmd returned code: {}".format(ret))
         if ret != 0:
             return False
         else:
             return True
     except (KeyboardInterrupt, SystemExit):
-        print("(sen2cor err) Keyboard interrupted")
+        l2a_log.info("Keyboard interrupted", print_msg = True)
         os._exit(1)
     except:
         return False
@@ -687,6 +621,7 @@ def RunSen2Cor():
 def TranslateToTif(L2A_product_name):
     global default_wrk_dir_path
     global running_containers
+    global l2a_log
 
     if args.working_dir:
         wrk_dir = args.working_dir
@@ -730,8 +665,7 @@ def TranslateToTif(L2A_product_name):
                 output_dir = jp2_dir,
                 output_img_name = tif_name,
                 output_img_format = output_format,
-                log_dir = log_dir,
-                log_file_name = l2a_log_file_name,
+                log = l2a_log,
                 gdal_image = args.docker_image_gdal,
                 name = args.product_id,
                 compress = args.compressTiffs
@@ -743,18 +677,14 @@ def TranslateToTif(L2A_product_name):
                 try:
                     os.remove(jp2)
                 except Exception as e:
-                    log(
-                        log_dir,
-                        "(sen2cor err) Can NOT remove {} after JPEG translation due to: {}".format(
+                    l2a_log.error(
+                        "Can NOT remove {} after JPEG translation due to: {}".format(
                             jp2, e
-                        ),
-                        l2a_log_file_name,
+                        )
                     )
     else:
-        log(
-            log_dir,
-            "(sen2cor err) Can NOT find jp2 files in {}".format(wrk_dir),
-            l2a_log_file_name,
+        l2a_log.error(
+            "Can NOT find jp2 files in {}".format(wrk_dir)
         )
         return False
 
@@ -787,19 +717,15 @@ def TranslateToTif(L2A_product_name):
                             os.path.getsize(tif_location_path)
                         )
                     else:
-                        log(
-                            log_dir,
-                            "(sen2cor err) Can NOT find the translated tif file in the location specified by manifest.safe {}".format(
+                        l2a_log.error(
+                            "Can NOT find the translated tif file in the location specified by manifest.safe {}".format(
                                 tif_location_path
-                            ),
-                            l2a_log_file_name,
+                            )
                         )
                         return False
         except Exception as e:
-            log(
-                log_dir,
-                "(sen2cor err) Can NOT parse manifest.safe due to {}".format(e),
-                l2a_log_file_name,
+            l2a_log.error(
+                "Can NOT parse manifest.safe due to {}".format(e)
             )
             return False
 
@@ -809,17 +735,13 @@ def TranslateToTif(L2A_product_name):
             f.write(etree.tostring(tree))
             f.close()
         except:
-            log(
-                log_dir,
-                "(sen2cor err) Can NOT write the updates to manifest.safe",
-                l2a_log_file_name,
+            l2a_log.error(
+                "Can NOT write the updates to manifest.safe"
             )
             return False
     else:
-        log(
-            log_dir,
-            "(sen2cor err) Can NOT find the manifest.safe file",
-            l2a_log_file_name,
+        l2a_log.error(
+            "Can NOT find the manifest.safe file"
         )
         return False
 
@@ -830,10 +752,8 @@ def TranslateToTif(L2A_product_name):
     if len(mtd_tl_files) == 1:
         mtd_tl = mtd_tl_files[0]
     else:
-        log(
-            log_dir,
-            "(sen2cor err) Can NOT identify the correct MTD_TL.xml",
-            l2a_log_file_name,
+        l2a_log.error(
+            "Can NOT identify the correct MTD_TL.xml"
         )
         return False
     try:
@@ -846,16 +766,12 @@ def TranslateToTif(L2A_product_name):
                 aux = mask.text[:-3] + "tif"
                 mask.text = aux
         pvi_filename = quality_indicators_info.find("PVI_FILENAME")
-        log(
-            log_dir,
-            "(sen2cor info) Updated the MTD_TL.xml with tif extensions.",
-            l2a_log_file_name,
+        l2a_log.info(
+            "Updated the MTD_TL.xml with tif extensions."
         )
     except:
-        log(
-            log_dir,
-            "(sen2cor err) Can NOT parse MTD_TL.xml.",
-            l2a_log_file_name,
+        l2a_log.error(
+            "Can NOT parse MTD_TL.xml."
         )
         return False
 
@@ -865,17 +781,13 @@ def TranslateToTif(L2A_product_name):
         f.write(etree.tostring(tree))
         f.close()
     except:
-        log(
-            log_dir,
-            "(sen2cor err) Can NOT write the updates to MTD_TL.xml",
-            l2a_log_file_name,
+        l2a_log.error(
+            "Can NOT write the updates to MTD_TL.xml"
         )
         return False
 
-    log(
-        log_dir,
-        "(sen2cor info) Successful translation from jp2 to tif/cog format.",
-        l2a_log_file_name,
+    l2a_log.error(
+        "Successful translation from jp2 to tif/cog format."
     )
     return True
 
@@ -883,6 +795,7 @@ def TranslateToTif(L2A_product_name):
 # also a rescalling of the converted file is made to allow a faster load
 def ConvertPreviews(L2A_product_name):
     global running_containers
+    global l2a_log
 
     if args.working_dir:
         wrk_dir = args.working_dir
@@ -913,37 +826,30 @@ def ConvertPreviews(L2A_product_name):
                 output_dir = jp2_dir,
                 output_img_name = jp2_name,
                 output_img_format = "JPEG",
-                log_dir = log_dir,
-                log_file_name = l2a_log_file_name,
+                log = l2a_log,
                 gdal_image = args.docker_image_gdal,
                 name = container_name,
                 outsize = 1000
             )
             running_containers.remove(container_name)
             if not translate_ret:
-                log(
-                    log_dir,
-                    "(sen2cor err) Can NOT translate {} to .jpeg".format(jp2),
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "Can NOT translate {} to .jpeg".format(jp2)
                 )
                 return False
             else:
                 try:
                     os.remove(jp2)
                 except Exception as e:
-                    log(
-                        log_dir,
-                        "(sen2cor err) Can NOT remove {} after JPEG translation due to: {}".format(
+                    l2a_log.error(
+                        "Can NOT remove {} after JPEG translation due to: {}".format(
                             jp2, e
-                        ),
-                        l2a_log_file_name,
+                        )
                     )
                     return False
     else:
-        log(
-            log_dir,
-            "(sen2cor err) Can NOT find PVI and TCI files in {}".format(wrk_dir),
-            l2a_log_file_name,
+        l2a_log.error(
+            "Can NOT find PVI and TCI files in {}".format(wrk_dir)
         )
         return False
 
@@ -951,41 +857,25 @@ def ConvertPreviews(L2A_product_name):
 
 
 def InitLog():
-    log_file_path = os.path.join(log_dir, l2a_log_file_name)
+    global l2a_log
 
-    if not os.path.isdir(log_dir):
-        if not create_recursive_dirs(log_dir):
+    if args.product_id:
+        l2a_log_file_name = "l2a_{}.log".format(args.product_id)
+    else:
+        l2a_log_file_name = "l2a.log"
+
+    log_file_path = os.path.join(args.output_dir, l2a_log_file_name)
+    l2a_log = LogHandler(log_file_path, l2a_log_file_name, args.log_level, NO_ID)
+    if not os.path.isdir(args.output_dir):
+        if not create_recursive_dirs(args.output_dir):
             print(
                 "(sen2cor err) Can NOT create output dir: {}.".format(
-                    log_dir
+                    args.output_dir
                 )
             )
             return False
 
-    try:
-        log_file = open(log_file_path, "a+")
-        log_file.write(
-            "{}:[{}]:{}\n".format(
-                str(datetime.datetime.now()),
-                os.getpid(),
-                "### Log file created ###",
-            )
-        )
-        log_file.close()
-    except Exception as e:
-        print(
-            "(sen2cor err) Can NOT create file {} in {} due to: {}.".format(
-                l2a_log_file_name, log_dir, e
-            )
-        )
-        return False
-    else:
-        print(
-            "(sen2cor info) Created a log file {} in dir {}".format(
-                l2a_log_file_name, log_dir
-            )
-        )
-        return True
+    return True
 
 def Cleanup():
     if args.working_dir:
@@ -994,15 +884,15 @@ def Cleanup():
         wrk_dir = default_wrk_dir_path
 
     if remove_dir(wrk_dir) == False:
-        log(
-            log_dir,
-            "(sen2cor warning) Can NOT remove directory {}.".format(wrk_dir),
+        l2a_log.error(
+            "Can NOT remove directory {}.".format(wrk_dir)
         )
 
 
 # execution of the script
 def RunScript():
     global running_containers
+    global l2a_log
 
     try:
         run_script_ok = True
@@ -1011,11 +901,9 @@ def RunScript():
         if InitLog():
             print("(sen2cor info) Succesful initialisation of Sen2Cor script.")
         else:
-            print("(sen2cor err) Unsuccesful initialisation of Sen2Cor script.")
-            log(
-                log_dir,
-                "(sen2cor err) Unsuccesful initialisation of Sen2Cor script.",
-                l2a_log_file_name,
+            l2a_log.error(
+                "Unsuccesful initialisation of Sen2Cor script.",
+                print_msg = True
             )
             run_script_ok = False
 
@@ -1023,11 +911,9 @@ def RunScript():
             if CheckInput():
                 print("(sen2cor info) VALID input.")
             else:
-                print("(sen2cor err) INVALID input.")
-                log(
-                    log_dir,
-                    "(sen2cor err) INVALID input.",
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "INVALID input.",
+                    print_msg = True
                 )
                 run_script_ok = False
 
@@ -1036,11 +922,9 @@ def RunScript():
             if RunSen2Cor():
                 print("(sen2cor info) Succesful execution of Sen2Cor.")
             else:
-                print("(sen2cor err) Unsuccesful execution of Sen2Cor.")
-                log(
-                    log_dir,
-                    "(sen2cor err) Unsuccesful execution of Sen2Cor.",
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "Unsuccesful execution of Sen2Cor.",
+                    print_msg = True
                 )
                 run_script_ok = False
 
@@ -1050,11 +934,9 @@ def RunScript():
             if output_ok and L2A_product_name is not None:
                 print("(sen2cor info) VALID output of Sen2Cor processor.")
             else:
-                print("(sen2cor err) INVALID output of Sen2Cor processor.")
-                log(
-                    log_dir,
-                    "(sen2cor err) INVALID output of Sen2Cor processor.",
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "INVALID output of Sen2Cor processor.",
+                    print_msg = True
                 )
                 run_script_ok = False
 
@@ -1065,13 +947,9 @@ def RunScript():
                     "(sen2cor info) Succesful conversion of preview images (TCI, PVI) to JPEG format."
                 )
             else:
-                print(
-                    "(sen2cor err) Unsuccesful conversion of preview images (TCI, PVI) to jpeg format."
-                )
-                log(
-                    log_dir,
-                    "(sen2cor err) Unsuccesful conversion of preview images (TCI, PVI) to jpeg format.",
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "Unsuccesful conversion of preview images (TCI, PVI) to jpeg format.",
+                    print_msg = True
                 )
                 run_script_ok = False
 
@@ -1084,23 +962,17 @@ def RunScript():
 
             if translate_ok:
                 if args.tif:
-                    log(
-                        log_dir,
-                        "(sen2cor info) Succesful TIFF translation.",
-                        l2a_log_file_name,
+                    l2a_log.info(
+                        "Succesful TIFF translation."
                     )
                 if args.cog:
-                    log(
-                        log_dir,
-                        "(sen2cor info) Succesful COG translation.",
-                        l2a_log_file_name,
+                    l2a_log.info(
+                        "Succesful COG translation."
                     )
             else:
-                print("(sen2cor err) Unsuccesful Tiff/COG translation.")
-                log(
-                    log_dir,
-                    "(sen2cor err) Unsuccesful Tiff/COG translation.",
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "Unsuccesful Tiff/COG translation.",
+                    print_msg = True
                 )
                 run_script_ok = False
 
@@ -1110,13 +982,9 @@ def RunScript():
                     "(sen2cor info) NOMIMAL copying of the product from working directory to output directory."
                 )
             else:
-                print(
-                    "(sen2cor err) NON-NOMIMAL copying of the product from working directory to output directory."
-                )
-                log(
-                    log_dir,
-                    "(sen2cor err) NON-NOMIMAL copying of the product from working directory to output directory.",
-                    l2a_log_file_name,
+                l2a_log.error(
+                    "NON-NOMIMAL copying of the product from working directory to output directory.",
+                    print_msg = True
                 )
                 run_script_ok = False
 
@@ -1128,29 +996,26 @@ def RunScript():
         return run_script_ok
 
     except Exception as e:
-        print("(sen2cor err): Exception {} encountered".format(e))
-        log(
-            log_dir,
-            "(sen2cor err): Exception {} encountered".format(e),
-            l2a_log_file_name,
+        l2a_log.error(
+            "Exception {} encountered".format(e),
+            print_msg = True
         )
         stop()
 
 def signal_handler(signum, frame):
-    global log_dir, l2a_log_file_name
+    global l2a_log
 
-    print("(sen2cor info) Signal caught: {}.".format(signum))
-    log(
-        log_dir,
-        "(sen2cor info) Signal caught: {}.".format(signum),
-        l2a_log_file_name,
+    l2a_log.info(
+        "Signal caught: {}.".format(signum),
+        print_msg = True
     )
     stop()
 
 def stop():
-    global running_containers,log_dir, l2a_log_file_name
+    global running_containers
+    global l2a_log
 
-    stop_containers(running_containers, log_dir, l2a_log_file_name)
+    stop_containers(running_containers, l2a_log)
     os._exit(0)
 
 # script argument operations
@@ -1335,14 +1200,13 @@ parser.add_argument(
 parser.add_argument(
     "--res_database_dir", required=False, nargs=1, help="Tile folder, process_tile."
 )
+parser.add_argument('-l', '--log-level', default = 'info',
+                    choices = ['debug' , 'info', 'warning' , 'error', 'critical'], 
+                    help = 'Minimum logging level')
+
 args = parser.parse_args()
 
 
-log_dir = args.output_dir
-if args.product_id:
-    l2a_log_file_name = "l2a_{}.log".format(args.product_id)
-else:
-    l2a_log_file_name = "l2a.log"
 
 running_containers = set()
 

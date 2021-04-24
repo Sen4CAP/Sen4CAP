@@ -1591,6 +1591,8 @@ class Maja(L2aProcessor):
         script_command.append(self.context.maja4_image)
         script_command.append("--docker-image-gdal")
         script_command.append(self.context.gdal_image)
+        script_command.append("--log-level")
+        script_command.append(self.l2a_log.level)
 
         print("Running Maja, console output can be found at {}".format(self.l2a_log.path))
         notification = ContainerStatusMsg(container_name, True)
@@ -1972,6 +1974,8 @@ class Sen2Cor(L2aProcessor):
         script_command.append(self.context.sen2cor_image)
         script_command.append("--docker-image-gdal")
         script_command.append(self.context.gdal_image)
+        script_command.append("--log-level")
+        script_command.append(self.l2a_log.level)
         #tmp only for testing purposes
         #script_command.append("--resolution")
         #script_command.append(str(60))

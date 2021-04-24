@@ -646,7 +646,8 @@ class FmaskWorker(threading.Thread):
         self.launcher_log = LogHandler(
             launcher_log.path,
             launcher_log.name,
-            launcher_log.level
+            launcher_log.level,
+            self.context.worker_id
         )
 
     def notify_end_of_tile_processing(self, lin, fmask):
