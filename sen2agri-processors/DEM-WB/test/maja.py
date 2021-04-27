@@ -454,7 +454,13 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     l2a_log.info("sat_id = {} | acq_date = {}".format(sat_id, acquistion_date))
     l2a_log.info("Starting MACCS/MAJA in {} for {} | TileID: {}".format(maccs_mode, demmaccs_context.input, tile_id))
     maja_log_path = os.path.join(demmaccs_context.output, MAJA_LOG_FILE_NAME)
-    maja_log = LogHandler(maja_log_path, "maja.log", l2a_log.level, NO_ID)
+    maja_log = LogHandler(maja_log_path, MAJA_LOG_FILE_NAME, l2a_log.level, NO_ID)
+    cmd_str = " ".join(map(pipes.quote, cmd_array))
+    l2a_log.info("Running command: " + cmd_str, print_msg = True)
+    l2a_log.info(
+        "Running Maja, console output can be found at {}".format(maja_log.path),
+        print_msg = True
+    )
     running_containers.add(container_name)
     maja_run_val = run_command(cmd_array, maja_log)
     running_containers.remove(container_name)

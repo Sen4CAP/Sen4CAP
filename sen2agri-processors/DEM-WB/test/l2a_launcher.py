@@ -1587,7 +1587,10 @@ class Maja(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
 
-        print("<worker {}> Running Maja, console output can be found at {}".format(self.context.worker_id, self.l2a_log.path))
+        self.launcher_log.info(
+            "Running Maja, console output can be found at {}".format(self.l2a_log.path),
+            print_msg = True
+        )
         cmd_str = " ".join(map(pipes.quote, script_command))
         self.l2a_log.info("Running command: " + cmd_str)
         start_time = time.time()
@@ -1983,7 +1986,10 @@ class Sen2Cor(L2aProcessor):
         script_command.append(str(60))
         #tmp
 
-        print("<worker {}> Running Sen2Cor, console output can be found at {}".format(self.context.worker_id, self.l2a_log.path))
+        self.launcher_log.info(
+            "Running Sen2Cor, console output can be found at {}".format(self.l2a_log.path),
+            print_msg = True
+        )
         cmd_str = " ".join(map(pipes.quote, script_command))
         self.l2a_log.info("Running command: " + cmd_str)
         start_time = time.time()

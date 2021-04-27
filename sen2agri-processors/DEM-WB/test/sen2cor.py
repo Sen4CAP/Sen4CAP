@@ -610,6 +610,10 @@ def RunSen2Cor():
         sen2cor_log = LogHandler(sen2cor_log_path, SEN2COR_LOG_FILE_NAME, l2a_log.level, NO_ID)
         cmd_str = " ".join(map(pipes.quote, cmd))
         l2a_log.info("Running command: " + cmd_str, print_msg = True)
+        l2a_log.info(
+            "Running Sen2cor, console output can be found at {}".format(sen2cor_log.path),
+            print_msg = True
+        )
         start_time = time.time()
         running_containers.add(container_name)
         ret = run_command(cmd, sen2cor_log)
