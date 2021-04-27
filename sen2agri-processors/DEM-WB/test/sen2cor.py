@@ -25,6 +25,9 @@ import os
 from lxml import etree
 import hashlib
 import signal
+import pipes
+import datetime
+import time
 from l2a_commons import create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers
 from l2a_commons import run_command, LogHandler, NO_ID
 
@@ -605,9 +608,17 @@ def RunSen2Cor():
     try:
         sen2cor_log_path = os.path.join(args.output_dir, SEN2COR_LOG_FILE_NAME)
         sen2cor_log = LogHandler(sen2cor_log_path, SEN2COR_LOG_FILE_NAME, l2a_log.level, NO_ID)
+        cmd_str = " ".join(map(pipes.quote, cmd))
+        l2a_log.info("Running command: " + cmd_str, print_msg = True)
+        start_time = time.time()
         running_containers.add(container_name)
         ret = run_command(cmd, sen2cor_log)
         running_containers.remove(container_name)
+        end_time = time.time()
+        l2a_log.info(
+            "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+            print_msg = True
+        )
         if ret != 0:
             return False
         else:
@@ -641,12 +652,11 @@ def TranslateToTif(L2A_product_name):
         for jp2 in jp2_files:
             if ("_PVI" in os.path.basename(jp2)) or ("_TCI_" in os.path.basename(jp2)):
                 # jump to the next jp2 file
-                print("Ignoring {}".format(os.path.basename(jp2)))
                 continue
             if args.tif:
-                print("Translating {} to GTiff".format(os.path.basename(jp2)))
+                l2a_log.info("Translating {} to GTiff".format(os.path.basename(jp2)), print_msg = True)
             else:
-                print("Translating {} to COG".format(os.path.basename(jp2)))
+                l2a_log.info("Translating {} to COG".format(os.path.basename(jp2)), print_msg = True)
 
             jp2_dir = os.path.dirname(jp2)
             tif_name = os.path.basename(jp2)[:-3] + "tif"
@@ -786,7 +796,7 @@ def TranslateToTif(L2A_product_name):
         )
         return False
 
-    l2a_log.error(
+    l2a_log.info(
         "Successful translation from jp2 to tif/cog format."
     )
     return True
@@ -812,7 +822,7 @@ def ConvertPreviews(L2A_product_name):
 
     if len(jp2_files) != 0:
         for jp2 in jp2_files:
-            print("Translating {} to jpg".format(os.path.basename(jp2)))
+            l2a_log.info("Translating {} to jpg".format(os.path.basename(jp2)))
             jp2_dir = os.path.dirname(jp2)
             jp2_name = os.path.basename(jp2)[:-3] + "jpg"
             guid = get_guid(8)
@@ -868,8 +878,8 @@ def InitLog():
     l2a_log = LogHandler(log_file_path, l2a_log_file_name, args.log_level, NO_ID)
     if not os.path.isdir(args.output_dir):
         if not create_recursive_dirs(args.output_dir):
-            print(
-                "(sen2cor err) Can NOT create output dir: {}.".format(
+            l2a_log.error(
+                "Can NOT create output dir: {}.".format(
                     args.output_dir
                 )
             )
@@ -899,7 +909,7 @@ def RunScript():
 
         # initialisation operations
         if InitLog():
-            print("(sen2cor info) Succesful initialisation of Sen2Cor script.")
+            l2a_log.info("Succesful initialisation of Sen2Cor script.", print_msg = True)
         else:
             l2a_log.error(
                 "Unsuccesful initialisation of Sen2Cor script.",
@@ -909,7 +919,7 @@ def RunScript():
 
         if run_script_ok:
             if CheckInput():
-                print("(sen2cor info) VALID input.")
+                l2a_log.info("VALID input.", print_msg = True)
             else:
                 l2a_log.error(
                     "INVALID input.",
@@ -920,7 +930,7 @@ def RunScript():
         # run Sen2Cor processor
         if run_script_ok:
             if RunSen2Cor():
-                print("(sen2cor info) Succesful execution of Sen2Cor.")
+                l2a_log.info("Succesful execution of Sen2Cor.", print_msg = True)
             else:
                 l2a_log.error(
                     "Unsuccesful execution of Sen2Cor.",
@@ -932,7 +942,7 @@ def RunScript():
         if run_script_ok:
             output_ok, L2A_product_name = CheckOutput()
             if output_ok and L2A_product_name is not None:
-                print("(sen2cor info) VALID output of Sen2Cor processor.")
+                l2a_log.info("VALID output of Sen2Cor processor.", print_msg = True)
             else:
                 l2a_log.error(
                     "INVALID output of Sen2Cor processor.",
@@ -943,8 +953,9 @@ def RunScript():
         # convert TCI and PVI files to jpeg format
         if run_script_ok:
             if ConvertPreviews(L2A_product_name):
-                print(
-                    "(sen2cor info) Succesful conversion of preview images (TCI, PVI) to JPEG format."
+                l2a_log.info(
+                    "Succesful conversion of preview images (TCI, PVI) to JPEG format.",
+                    print_msg = True
                 )
             else:
                 l2a_log.error(
@@ -978,8 +989,9 @@ def RunScript():
 
         if run_script_ok:
             if CopyOutput(L2A_product_name):
-                print(
-                    "(sen2cor info) NOMIMAL copying of the product from working directory to output directory."
+                l2a_log.info(
+                    "NOMIMAL copying of the product from working directory to output directory.",
+                    print_msg = True
                 )
             else:
                 l2a_log.error(
@@ -1210,11 +1222,10 @@ args = parser.parse_args()
 
 running_containers = set()
 
-print("(sen2cor info) Start Sen2Cor script.")
 nominal_run = RunScript()
 if nominal_run == True:
-    print("(sen2cor info) End Sen2Cor script with success.")
+    l2a_log.info("End Sen2Cor script with success.", print_msg = True)
     os._exit(0)
 else:
-    print("(sen2cor info) End Sen2Cor script with errors.")
+    l2a_log.error("End Sen2Cor script with errors.", print_msg = True)
     os._exit(1)

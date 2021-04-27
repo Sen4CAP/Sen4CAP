@@ -22,11 +22,13 @@ import os
 import argparse
 import glob
 import re
-import time, datetime
+import time
+import datetime
+import pipes
 import shutil
 import signal
 from multiprocessing import Pool
-from l2a_commons import run_command, log, create_recursive_dirs, remove_dir, translate, get_guid, stop_containers
+from l2a_commons import run_command, create_recursive_dirs, remove_dir, translate, get_guid, stop_containers
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT, UNKNOWN_PROCESSOR_OUTPUT_FORMAT
 from l2a_commons import LogHandler, NO_ID
@@ -116,7 +118,7 @@ def get_l1c_processor_output_format(working_directory, tile_id):
 		
     return UNKNOWN_PROCESSOR_OUTPUT_FORMAT, None
 
-def create_sym_links(filenames, target_directory, log_path, log_filename):
+def create_sym_links(filenames, target_directory, log):
 
     for file_to_sym_link in filenames:
         #target name
@@ -127,11 +129,10 @@ def create_sym_links(filenames, target_directory, log_path, log_filename):
         target = os.path.join(target_directory, basename)
         #does it already exist?
         if os.path.isfile(target) or os.path.isdir(target):
-            l2a_log.info("The path {} does exist already".format(target))
             #skip it
             continue
         #create it
-        if run_command(["ln", "-s", file_to_sym_link, target_directory]) != 0:
+        if run_command(["ln", "-s", file_to_sym_link, target_directory], log) != 0:
             return False
     return True
 
@@ -142,7 +143,7 @@ def remove_sym_links(filenames, target_directory):
             basename = os.path.basename(sym_link[:len(sym_link) - 1])
         else:
             basename = os.path.basename(sym_link)
-        if run_command(["rm", os.path.join(target_directory, basename)]) != 0:
+        if run_command(["rm", os.path.join(target_directory, basename)], l2a_log) != 0:
             continue
     return True
 
@@ -322,7 +323,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         l2a_log.error("Tile failure: Could not create the MACCS/MAJA working directory {}".format(maccs_working_dir), print_msg = True)
         return ""
 
-    if not create_sym_links([demmaccs_context.input], working_dir, demmaccs_context.output, log_filename):
+    if not create_sym_links([demmaccs_context.input], working_dir, l2a_log):
         l2a_log.error("Tile failure: Could not create sym links for {}".format(demmaccs_context.input), print_msg = True)
         return ""
     common_gipps = glob.glob("{}/{}/{}*_L_*.*".format(demmaccs_context.gipp_base_dir, gipp_sat_dir, full_gipp_sat_prefix))
@@ -330,7 +331,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         common_gipps = glob.glob("{}/{}/{}*_L_*.*".format(demmaccs_context.gipp_base_dir, gipp_sat_dir, gipp_sat_prefix))
     
     print ("common_gipps is {}".format(common_gipps))
-    if not create_sym_links(common_gipps, working_dir, demmaccs_context.output, log_filename):
+    if not create_sym_links(common_gipps, working_dir, l2a_log):
         l2a_log.error("Tile failure: Symbolic links for GIPP files could not be created in the output directory", print_msg = True)
         return ""
     gipp_tile_types = ["L2SITE", "CKEXTL", "CKQLTL"]
@@ -344,7 +345,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         
         print ("tmp_tile_gipp is {}".format(tmp_tile_gipp))
         if len(tmp_tile_gipp) > 0:
-            if not create_sym_links(tmp_tile_gipp, working_dir, demmaccs_context.output, log_filename):
+            if not create_sym_links(tmp_tile_gipp, working_dir, l2a_log):
                 l2a_log.error("Tile failure: Symbolic links for tile id {} GIPP files could not be created in the output directory".format(tile_id), print_msg = True)
                 return ""
         else:
@@ -357,7 +358,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
                 l2a_log.error("Tile failure: {}".format(log_gipp), print_msg = True)
                 return ""
 
-    if not create_sym_links([demmaccs_context.dem_hdr_file, dem_dir], working_dir, demmaccs_context.output, log_filename):
+    if not create_sym_links([demmaccs_context.dem_hdr_file, dem_dir], working_dir, l2a_log):
         l2a_log.error("Tile failure: Could not create symbolic links for {0} and {1}".format(demmaccs_context.dem_hdr_file, dem_dir), print_msg = True)
         return ""
 
@@ -374,7 +375,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         prev_l2a_tile_path = get_prev_l2a_tile_path(tile_id, product_path)
 
         l2a_log.error("Creating sym links for NOMINAL MACCS/MAJA mode: l2a prev tiles {}".format(prev_l2a_tile_path))
-        if len(prev_l2a_tile_path) > 0 and create_sym_links(prev_l2a_tile_path, working_dir, demmaccs_context.output, log_filename):
+        if len(prev_l2a_tile_path) > 0 and create_sym_links(prev_l2a_tile_path, working_dir, l2a_log):
             #set MACCS mode to NOMINAL
             l2a_log.error("Created sym links for NOMINAL MACCS/MAJA mode for {}".format(prev_l2a_tile_path))
             maccs_mode = "L2NOMINAL"
@@ -808,12 +809,20 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     cmd_array.append(l8_align_wrk_dir)
     cmd_array.append("-t")
     cmd_array.append(product_name)
-
+    
+    cmd_str = " ".join(map(pipes.quote, cmd_array))
+    l2a_log.info("Running command: " + cmd_str, print_msg = True)
+    start_time = time.time()
     running_containers.add(container_name)
-    cmd_ret = run_command(cmd_array, l2a_log)
+    ret = run_command(cmd_array, l2a_log)
     running_containers.remove(container_name)
+    end_time = time.time()
+    l2a_log.info(
+        "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+        print_msg = True
+    )
 
-    if cmd_ret != 0:
+    if ret != 0:
         l2a_log.critical("The LANDSAT8 product could not be aligned {}".format(args.input), print_msg = True)
         if not remove_dir(working_dir):
             l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
@@ -872,10 +881,19 @@ if len(tiles_to_process) > 0:
     dem_command.append("-l")
     dem_command += tiles_to_process
 
+cmd_str = " ".join(map(pipes.quote, dem_command))
+l2a_log.info("Running cmd: " + cmd_str)
+start_time = time.time()
 running_containers.add(container_name)
-cmd_ret = run_command(dem_command, l2a_log)
+ret = run_command(dem_command, l2a_log)
 running_containers.remove(container_name)
-if cmd_ret != 0:
+end_time = time.time()
+l2a_log.info(
+    "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+    print_msg = True
+)
+
+if ret != 0:
     l2a_log.critical("DEM failed", print_msg = True)
     if not remove_dir(working_dir):
         l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)

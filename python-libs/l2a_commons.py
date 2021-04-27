@@ -22,9 +22,6 @@ from __future__ import with_statement
 from __future__ import absolute_import
 import subprocess
 import os
-import sys
-import time, datetime
-import pipes
 import shutil
 import osr
 import gdal
@@ -36,6 +33,9 @@ import errno
 import random
 import string
 import logging
+import time
+import datetime
+import pipes
 
 DEBUG = False
 SENTINEL2_SATELLITE_ID = 1
@@ -72,8 +72,8 @@ class LogHandler(object):
         self.level = level
         self.name = name
         self.emitter_id = emitter_id
-        self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d.%H.%M.%S,§%z')
-        self.handler = logging.FileHandler(self.log_path, "a")        
+        self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d.%H.%M.%S%z')
+        self.handler = logging.FileHandler(self.path, "a")        
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger(self.name)
         if self.level == 'debug':
@@ -97,7 +97,7 @@ class LogHandler(object):
         elif self.emitter_id == MASTER_ID:
             return "<master> " + msg
         else:
-            return "<worker {}> ".format(self.writer_id) + msg
+            return "<worker {}> ".format(self.emitter_id) + msg
 
     def debug(self, msg, print_msg = False, trace = False):
         log_msg = self.format_msg(msg)
@@ -125,30 +125,18 @@ class LogHandler(object):
         self.logger.critical(log_msg, exc_info = trace)
 
 
-def run_command(cmd_array, log, fake_command = False):
-    start = time.time()
-    cmd_str = " ".join(map(pipes.quote, cmd_array))
-    res = 0
-    if not fake_command:
-        log.info("Running command: {}".format(cmd_str), print_msg = True)
-        try:
-            with open(log.log_path, "a") as log_file:
-                res = subprocess.call(cmd_array, stdout = log_file, stderr = log_file, shell=False)
-        except Exception as e:
-            log.error(
-                "Exception encountered: {} when running command: {}".format(e, cmd_str),
-                print_msg = True,
-                trace = True
-            )
-            res = 1
-    else:
-        log.debug("Fake command: {}".format(cmd_str), print_msg = True)
-    ok = "OK"
-    nok = "NOK"
-    log.info(
-        "Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str),
-        print_msg = True
-    )
+def run_command(cmd_array, log):
+    try:
+        with open(log.path, "a") as log_file:
+            res = subprocess.call(cmd_array, stdout = log_file, stderr = log_file, shell=False)
+    except Exception as e:
+        log.error(
+            "Exception encountered: {}".format(e),
+            print_msg = True,
+            trace = True
+        )
+        res = 1
+
     return res
 
 
@@ -205,8 +193,15 @@ def stop_containers(container_list, log):
         cmd.append("docker")
         cmd.append("stop")
         cmd.extend(container_list)
-        print("\nStoping running containers")
-        run_command(cmd, log)
+        cmd_str = " ".join(map(pipes.quote, cmd))
+        log.info("Runnning command: " + cmd_str)
+        start_time = time.time()
+        ret = run_command(cmd, log)
+        end_time = time.time()
+        log.info(
+            "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+            print_msg = True
+        )
 
 ### IMG related operations
 
@@ -305,9 +300,16 @@ def translate(input_img,
             cmd.append(input_img)
             output_img= os.path.join(output_dir, output_img_name)
             cmd.append(output_img)
-
+            
+            cmd_str = " ".join(map(pipes.quote, cmd))
+            log.info("Running command: " + cmd_str, print_msg = True)
+            start_time = time.time()
             cmd_ret = run_command(cmd, log)
-
+            end_time = time.time()
+            log.info(
+                "Command finished with return code {} in {}".format(cmd_ret, datetime.timedelta(seconds=(end_time - start_time))),
+                print_msg = True
+            )
             if (cmd_ret == 0) and os.path.isfile(output_img):
                 return True
             else:

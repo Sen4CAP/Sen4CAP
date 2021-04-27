@@ -23,6 +23,8 @@ import re
 import os
 import glob
 import sys
+import time
+import pipes
 import datetime
 import Queue
 import threading
@@ -34,7 +36,7 @@ from lxml import etree
 from psycopg2.sql import SQL
 from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
-from l2a_commons import LogHandler, DL, IL, WL, EL, CL, MASTER_ID 
+from l2a_commons import LogHandler, MASTER_ID 
 from l2a_commons import remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
 from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
@@ -334,8 +336,8 @@ class SiteContext(object):
         self.dem_image = ""
         self.l8_align_image = ""
 
-    def get_site_info(self, db_config):
-        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+    def get_site_info(self, db_config, log):
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, log)
         self.site_output_path = self.base_output_path.replace("{site}", self.site_short_name)
 
     def is_valid(self, log):
@@ -477,17 +479,17 @@ class L2aMaster(object):
             self.master_q.put(msg_to_master)
 
     def signal_handler(self, signum, frame):
-        print("(launcher info) Signal caught: {}.".format(signum))
+        self.launcher_log.info("Signal caught: {}.".format(signum), print_msg = True)
         self.stop_workers()
 
     def stop_workers(self):
-        print("\n(launcher info) <master>: Stoping workers")
+        self.launcher_log.info("Stoping workers", print_msg = True)
         for worker in self.workers:
             worker.worker_q.put(None)
         for worker in self.workers:
             worker.join(timeout=5)
 
-        stop_containers(self.running_containers, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        stop_containers(self.running_containers, self.launcher_log)
 
         os._exit(0)
 
@@ -510,13 +512,13 @@ class L2aMaster(object):
                     continue
                 elif msg_to_master.message_type == PRODUCT_STATUS_MSG_TYPE:
                     if msg_to_master.update_db:
-                        db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a)
+                        db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a, self.launcher_log)
                 else:
                     #unrecognized type of message
                     continue
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, self.launcher_log)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
@@ -524,42 +526,42 @@ class L2aMaster(object):
                             self.db_config,
                             processing_context,
                             DB_PROCESSOR_NAME,
-                            LAUNCHER_LOG_DIR,
-                            LAUNCHER_LOG_FILE_NAME)
+                            self.launcher_log)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
-                        site_context.get_site_info(self.db_config)
+                        site_context.get_site_info(self.db_config, self.launcher_log)
                         valid_site_context, site_context_rejection_resason = site_context.is_valid(self.launcher_log)
                         valid_tile, tile_rejection_reason = unprocessed_tile.is_valid(self.launcher_log)
 
                         if not valid_tile:
                             db_prerun_update(
-                                self.db_config, unprocessed_tile, tile_rejection_reason
+                                self.db_config, unprocessed_tile, tile_rejection_reason, self.launcher_log
                             )
                             continue
 
                         if not valid_site_context:
-                            db_prerun_update(self.db_config, unprocessed_tile, site_context_rejection_resason)
+                            db_prerun_update(self.db_config, unprocessed_tile, site_context_rejection_resason, self.launcher_log)
                             continue
 
                         worker_id = sleeping_workers.pop()
                         msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                         self.workers[worker_id].worker_q.put(msg_to_worker)
-                        print(
-                            "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
+                        self.launcher_log.info(
+                            "Product {} assigned to <worker {}>".format(
                                 unprocessed_tile.downloader_history_id, worker_id
-                            )
+                            ),
+                            print_msg = True
                         )
                     else:
                         break
 
                 if len(sleeping_workers) == self.num_workers:
-                    print("\n(launcher info) <master>: No more tiles to process")
+                    self.launcher_log.info("No more tiles to process", print_msg = True)
                     break
 
         except Exception as e:
-            print("\n(launcher err) <master>: Exception encountered: {}.".format(e))
+            self.launcher_log.info("Exception encountered: {}.".format(e), trace = True)
         finally:
             self.stop_workers()
 
@@ -614,10 +616,11 @@ class L2aWorker(threading.Thread):
                     msg_to_worker.unprocessed_tile is None
                     or msg_to_worker.site_context is None
                 ):
-                    print(
-                        "\n(launcher err) <worker {}>: Either the tile or site context is None".format(
+                    self.launcher_log.error(
+                        "Either the tile or site context is None".format(
                             self.worker_id
-                        )
+                        ),
+                        print_msg = True
                     )
                     os._exit(1)
                 else:
@@ -627,57 +630,59 @@ class L2aWorker(threading.Thread):
                     self.notify_end_of_tile_processing(lin, l2a)
                     self.worker_q.task_done()
         except Exception as e:
-            print(
-                "\n(launcher err) <worker {}>: Exception {} encountered".format(
+            self.launcher_log.error(
+                "Exception {} encountered".format(
                     self.worker_id, e
-                )
+                ),
+                print_msg = True,
+                trace = True
             )
             os._exit(1)
         finally:
-            print("\n(launcher info) <worker {}>: is stopped".format(self.worker_id))
+            self.launcher_log.info("Current worker stopped".format(self.worker_id))
 
     def process_tile(self, tile, site_context):
-        print("\n#################### Tile & Site Info ####################\n")
+        print("<worker {}> Tile & Site Info:".format(self.worker_id))
         print(
-            "\n(launcher info) <worker {}>: site_id = {}".format(
+            "<worker {}> site_id = {}".format(
                 self.worker_id, tile.site_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: satellite_id = {}".format(
+            "<worker {}> satellite_id = {}".format(
                 self.worker_id, tile.satellite_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: orbit_id = {}".format(
+            "<worker {}> orbit_id = {}".format(
                 self.worker_id, tile.orbit_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: tile_id = {}".format(
+            "<worker {}> tile_id = {}".format(
                 self.worker_id, tile.tile_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: downloader_history_id = {}".format(
+            "<worker {}> downloader_history_id = {}".format(
                 self.worker_id, tile.downloader_history_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: path = {}".format(self.worker_id, tile.path)
+            "<worker {}> path = {}".format(self.worker_id, tile.path)
         )
         print(
-            "\n(launcher info) <worker {}>: previous_l2a_path = {}".format(
+            "<worker {}> previous_l2a_path = {}".format(
                 self.worker_id, tile.previous_l2a_path
             )
         )
         print(
-            "\n(launcher info) <worker {}>: site_short_name = {}".format(
+            "<worker {}> site_short_name = {}".format(
                 self.worker_id, site_context.site_short_name
             )
         )
         print(
-            "\n(launcher info) <worker {}>: site_output_path = {}".format(
+            "<worker {}> site_output_path = {}".format(
                 self.worker_id, site_context.site_output_path
             )
         )
@@ -685,7 +690,7 @@ class L2aWorker(threading.Thread):
         if tile.satellite_id == LANDSAT8_SATELLITE_ID:
             # only MAJA can process L8 images
             maja_context = MajaContext(site_context, self.worker_id)
-            maja = Maja(maja_context, tile, self.master_q)
+            maja = Maja(maja_context, tile, self.master_q, self.launcher_log)
             lin, l2a = maja.run()
             del maja
             return lin, l2a
@@ -693,13 +698,13 @@ class L2aWorker(threading.Thread):
             # Sentinels can be processed either with Sen2cor or MAJA
             if site_context.implementation == "sen2cor":
                 sen2cor_context = Sen2CorContext(site_context, self.worker_id)
-                sen2cor = Sen2Cor(sen2cor_context, tile, self.master_q)
+                sen2cor = Sen2Cor(sen2cor_context, tile, self.master_q, self.launcher_log)
                 lin, l2a = sen2cor.run()
                 del sen2cor
                 return lin, l2a
             elif site_context.implementation == "maja":
                 maja_context = MajaContext(site_context, self.worker_id)
-                maja = Maja(maja_context, tile, self.master_q)
+                maja = Maja(maja_context, tile, self.master_q, self.launcher_log)
                 lin, l2a = maja.run()
                 del maja
                 return lin, l2a
@@ -877,22 +882,10 @@ class L2aProcessor(object):
 
     def check_lin(self):
 
-        self.launcher_log.info(
-            "Starting extract_from_archive_if_needed for tile {}".format(
-                self.lin.tile_id
-            ),
-            print_msg = True
-        )
         archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-        archive_handler = ArchiveHandler(archives_dir, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        archive_handler = ArchiveHandler(archives_dir, self.launcher_log)
         self.lin.was_archived, self.lin.path = archive_handler.extract_from_archive_if_needed(
             self.lin.db_path
-        )
-        self.launcher_log.info(
-            "Ended extract_from_archive_if_needed for product {}".format(
-                self.lin.product_id
-            ),
-            print_msg = True
         )
         if self.lin.path is not None:
             return self.validate_input_product_dir()
@@ -1032,7 +1025,7 @@ class L2aProcessor(object):
             l2a_log_path,
             "l2a_log",
             self.launcher_log.level,
-            self.worker_id
+            self.context.worker_id
         )
         return True
 
@@ -1594,12 +1587,21 @@ class Maja(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
 
-        print("Running Maja, console output can be found at {}".format(self.l2a_log.path))
+        print("<worker {}> Running Maja, console output can be found at {}".format(self.context.worker_id, self.l2a_log.path))
+        cmd_str = " ".join(map(pipes.quote, script_command))
+        self.l2a_log.info("Running command: " + cmd_str)
+        start_time = time.time()
         notification = ContainerStatusMsg(container_name, True)
         self.master_q.put(notification)
         command_return = run_command(script_command, self.l2a_log)
         notification = ContainerStatusMsg(container_name, False)
         self.master_q.put(notification)
+        end_time = time.time()
+        self.l2a_log.info(
+            "Command finished with return code {} in {}".format(command_return, datetime.timedelta(seconds=(end_time - start_time))),
+            print_msg = True
+        )
+
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -1680,8 +1682,8 @@ class Maja(L2aProcessor):
 
 
 class Sen2Cor(L2aProcessor):
-    def __init__(self, processor_context, input_context, master_q):
-        super(Sen2Cor, self).__init__(processor_context, input_context, master_q)
+    def __init__(self, processor_context, input_context, master_q, launcher_log):
+        super(Sen2Cor, self).__init__(processor_context, input_context, master_q, launcher_log)
         self.name = "sen2cor"
 
     def get_l2a_footprint(self):
@@ -1977,16 +1979,25 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
         #tmp only for testing purposes
-        #script_command.append("--resolution")
-        #script_command.append(str(60))
+        script_command.append("--resolution")
+        script_command.append(str(60))
         #tmp
 
-        print("Running Sen2Cor, console output can be found at {}".format(self.l2a_log.path))
+        print("<worker {}> Running Sen2Cor, console output can be found at {}".format(self.context.worker_id, self.l2a_log.path))
+        cmd_str = " ".join(map(pipes.quote, script_command))
+        self.l2a_log.info("Running command: " + cmd_str)
+        start_time = time.time()
         notification = ContainerStatusMsg(container_name, True)
         self.master_q.put(notification)
         command_return = run_command(script_command, self.l2a_log)
         notification = ContainerStatusMsg(container_name, False)
         self.master_q.put(notification)
+        end_time = time.time()
+        self.l2a_log.info(
+            "Command finished with return code {} in {}".format(command_return, datetime.timedelta(seconds=(end_time - start_time))),
+            print_msg = True
+        )
+
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
@@ -2087,7 +2098,7 @@ def db_get_unprocessed_tile(db_config, node_id, log):
         log.debug("Unprocessed tile info: {}".format(tile_info))
         return tile_info
 
-def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
+def db_postrun_update(db_config, input_prod, l2a_prod, log):
     def _run(cursor):
         processing_status = input_prod.processing_status
         downloader_product_id = input_prod.product_id
@@ -2191,7 +2202,7 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
             )
 
     with db_config.connect() as connection:
-        handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log)
 
 def db_prerun_update(db_config, tile, reason, log):
     def _run(cursor):
@@ -2241,7 +2252,7 @@ parser.add_argument('-l', '--log-level', default = 'info',
                     help = 'Minimum logging level')
 args = parser.parse_args()
 launcher_log_path = os.path.join(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-launcher_log = LogHandler("launcher_log", launcher_log_path, args.log_level, MASTER_ID)
+launcher_log = LogHandler(launcher_log_path, "launcher_log", args.log_level, MASTER_ID)
 
 # get the processing context
 db_config = DBConfig.load(args.config, launcher_log)
@@ -2252,7 +2263,7 @@ if default_processing_context is None:
     sys.exit(1)
 
 if default_processing_context.num_workers["default"] < 1:
-    msg = "(launcher err) <master>: Invalid processing context num_workers: {}".format(
+    msg = "Invalid processing context num_workers: {}".format(
             default_processing_context.num_workers["default"]
     )
     launcher_log.critical(msg, print_msg = True)
@@ -2277,7 +2288,7 @@ node_id = get_node_id()
 
 # clear pending tiless
 db_clear_pending_tiles(db_config, node_id, launcher_log)
-l2a_master = L2aMaster(default_processing_context.num_workers["default"], db_config, node_id)
+l2a_master = L2aMaster(default_processing_context.num_workers["default"], db_config, node_id, launcher_log)
 l2a_master.run()
 
 if launcher_log.level == 'debug':
