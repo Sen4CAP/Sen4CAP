@@ -205,7 +205,7 @@ def stop_containers(container_list, log):
         ret = run_command(cmd, log)
         end_time = time.time()
         log.info(
-            "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+            "Command {} finished with return code {} in {}".format(cmd_str, ret, datetime.timedelta(seconds=(end_time - start_time))),
             print_msg = True
         )
 
@@ -313,7 +313,7 @@ def translate(input_img,
             cmd_ret = run_command(cmd, log)
             end_time = time.time()
             log.info(
-                "Command finished with return code {} in {}".format(cmd_ret, datetime.timedelta(seconds=(end_time - start_time))),
+                "Command {} finished with return code {} in {}".format(cmd_str, cmd_ret, datetime.timedelta(seconds=(end_time - start_time))),
                 print_msg = True
             )
             if (cmd_ret == 0) and os.path.isfile(output_img):

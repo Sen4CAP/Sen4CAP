@@ -642,7 +642,7 @@ class L2aWorker(threading.Thread):
             self.launcher_log.info("Current worker stopped".format(self.worker_id))
 
     def process_tile(self, tile, site_context):
-        print("<worker {}> Tile & Site Info:".format(self.worker_id))
+        print("\n<worker {}> Tile & Site Info:".format(self.worker_id))
         print(
             "<worker {}> site_id = {}".format(
                 self.worker_id, tile.site_id
@@ -1598,7 +1598,7 @@ class Maja(L2aProcessor):
         self.master_q.put(notification)
         end_time = time.time()
         self.l2a_log.info(
-            "Command finished with return code {} in {}".format(command_return, datetime.timedelta(seconds=(end_time - start_time))),
+            "Command {} finished with return code {} in {}".format(cmd_str, command_return, datetime.timedelta(seconds=(end_time - start_time))),
             print_msg = True
         )
 
@@ -1994,7 +1994,7 @@ class Sen2Cor(L2aProcessor):
         self.master_q.put(notification)
         end_time = time.time()
         self.l2a_log.info(
-            "Command finished with return code {} in {}".format(command_return, datetime.timedelta(seconds=(end_time - start_time))),
+            "Command {} finished with return code {} in {}".format(cmd_str, command_return, datetime.timedelta(seconds=(end_time - start_time))),
             print_msg = True
         )
 
