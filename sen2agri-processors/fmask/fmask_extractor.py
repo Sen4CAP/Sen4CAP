@@ -25,6 +25,7 @@ import datetime
 import shutil
 import tempfile
 import signal
+import pipes
 from l2a_commons import run_command, create_recursive_dirs, remove_dir, get_guid, stop_containers
 from l2a_commons import LogHandler, NO_ID
 
@@ -54,7 +55,7 @@ def create_sym_links(filenames, target_directory, log_path, log_filename):
             #skip it
             continue
         #create it
-        if run_command(["ln", "-s", file_to_sym_link, target_directory], log_path, log_filename) != 0:
+        if run_command(["ln", "-s", file_to_sym_link, target_directory], fmask_log) != 0:
             return False
     return True
 
@@ -119,7 +120,7 @@ def fmask_launcher(fmask_context):
     if debug == True:
         cmd_array1 = []
         cmd_array1 += ["mkdir", "-p", fmask_out_location]
-        run_command(cmd_array1, fmask_context.output, log_filename)
+        run_command(cmd_array1, fmask_log)
         cmd_array += ["cp", "-f", "/mnt/archive/test/fmask/TestFile/L1C_T33UVQ_A019710_20190401T100512_Fmask4.tif", fmask_out_location]
     else :
         guid = get_guid(8)
@@ -158,13 +159,21 @@ def fmask_launcher(fmask_context):
             cmd_array.append(args.threshold)
     
     fmask_log.info("Starting FMask in {}".format(fmask_context.input), print_msg = True)
-    fmask_log.info("FMask: {}".format(cmd_array), print_msg = True)
+    cmd_str = " ".join(map(pipes.quote, cmd_array))
+    fmask_log.info("Running command: " + cmd_str)
+    start_time = time.time()
     running_containers.add(container_name)
-    if run_command(cmd_array, fmask_context.output, log_filename) != 0:
+    ret = run_command(cmd_array, fmask_log)    
+    running_containers.remove(container_name)
+    end_time = time.time()
+    fmask_log.info(
+        "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+        print_msg = True
+    )
+    if ret != 0:
         fmask_log.error("FMask didn't work for {}. Location {}".format(fmask_context.input, fmask_context.output), print_msg = True)
     else:
         fmask_log.info("FMask for {} finished in: {}. Location: {}".format(fmask_context.input, datetime.timedelta(seconds=(time.time() - start)), fmask_context.output), print_msg = True)
-    running_containers.remove(container_name)
     # move the fmask output to the output directory.
     # only the valid files should be moved
     fmask_out_file = glob.glob("{}/*_Fmask4.tif".format(fmask_out_location))
@@ -243,11 +252,11 @@ running_containers = set()
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
-general_log_path = args.output
 if args.product_id:
     log_filename = "fmask_{}.log".format(args.product_id)
 else:
     log_filename = "fmask.log"
+general_log_path = os.path.join(args.output, log_filename)
 fmask_log = LogHandler(general_log_path, "fmask_log", args.log_level, NO_ID)
 if not create_recursive_dirs(args.output):
     fmask_log.critical("Could not create the output directory", print_msg= True)

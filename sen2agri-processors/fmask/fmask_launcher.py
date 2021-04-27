@@ -28,6 +28,9 @@ import re
 import grp
 import glob
 import signal
+import time
+import datetime
+import pipes
 from psycopg2.sql import SQL
 from l2a_commons import LogHandler, MASTER_ID
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
@@ -94,14 +97,8 @@ class FmaskProcessor(object):
         self.log_file_name = "fmask_{}.log".format(self.lin.product_id)
         self.name = "Fmask"
         self.master_q = master_q
-        fmask_log_path = os.path.join(self.fmask.output_path, "fmask.log")
         self.launcher_log = launcher_log
-        self.fmask_log = LogHandler(
-            fmask_log_path,
-            "fmask_log",
-            self.launcher_log.level,
-            self.context.worker_id
-        )
+        self.fmask_log = None # initialised in fmask_setup
 
     def __del__(self):
         if self.lin.was_archived and os.path.exists(self.lin.path):
@@ -276,6 +273,14 @@ class FmaskProcessor(object):
         self.fmask.satellite_id = self.lin.satellite_id
         self.fmask.site_id = self.lin.site_id
         self.fmask.product_id = self.lin.product_id
+        fmask_log_path = os.path.join(self.fmask.output_path, "fmask_{}.log".format(self.lin.product_id))
+        self.fmask_log = LogHandler(
+            fmask_log_path,
+            "fmask_log",
+            self.launcher_log.level,
+            self.context.worker_id
+        )
+
         return True
 
     def update_rejection_reason(self, message):
@@ -360,16 +365,24 @@ class FmaskProcessor(object):
         script_command.append("-t")
         script_command.append(self.context.fmask_threshold)  
         script_command.append("--log-level")
-        script_command.applend(self.fmask_log.level)
+        script_command.append(self.fmask_log.level)
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
-  
+        
         print("Running Fmask, console output can be found at {}".format(self.fmask_log.path))
+        cmd_str = " ".join(map(pipes.quote, script_command))
+        self.launcher_log.info("Running command: " + cmd_str)
+        start_time = time.time()
         notification = ContainerStatusMsg(container_name, True)
         self.master_q.put(notification)
         command_return = run_command(script_command, self.fmask_log)
         notification = ContainerStatusMsg(container_name, False)
         self.master_q.put(notification)
+        end_time = time.time()
+        self.launcher_log.info(
+            "Command finished with return code {} in {}".format(command_return, datetime.timedelta(seconds=(end_time - start_time))),
+            print_msg = True
+        )
         if (command_return == 0) and os.path.isdir(self.fmask.output_path):
             return True
         else:
@@ -401,10 +414,11 @@ class FmaskProcessor(object):
         # pre-processing
         if self.check_lin() and self.fmask_setup():
             preprocess_successful = True
-        print(
-            "\n(launcher info) <worker {}>: Successful pre-processing = {}".format(
+        self.launcher_log.info(
+            "Successful pre-processing = {}".format(
                 self.context.worker_id, preprocess_successful
-            )
+            ),
+            print_msg = True
         )
         self.fmask_log.info(
             "Successful pre-processing = {}".format(preprocess_successful),
@@ -414,10 +428,11 @@ class FmaskProcessor(object):
         # processing
         if preprocess_successful:
             process_successful = self.run_script()
-        print(
-            "\n(launcher info) <worker {}>: Successful processing = {}".format(
+        self.launcher_log.info(
+            "Successful processing = {}".format(
                 self.context.worker_id, process_successful
-            )
+            ),
+            print_msg = True
         )
         self.fmask_log.info("Successful processing = {}".format(process_successful), print_msg = True)
 
@@ -448,8 +463,7 @@ class FmaskProcessor(object):
                       output_dir = self.fmask.output_path,
                       output_img_name = resampled_img_name,
                       output_img_format = output_format,
-                      log_dir = self.fmask.output_path,
-                      log_file_name = self.log_file_name,
+                      log = self.fmask_log,
                       gdal_image = self.context.gdal_image,
                       name = container_name,
                       resample_res = 10,
@@ -467,8 +481,7 @@ class FmaskProcessor(object):
                         output_dir = self.fmask.output_path,
                         output_img_name = output_img_name,
                         output_img_format = output_format,
-                        log_dir = self.fmask.output_path,
-                        log_file_name = self.log_file_name,
+                        log = self.fmask_log,
                         gdal_image = self.context.gdal_image,
                         name = container_name,
                         compress = self.context.compress_tiffs,
@@ -529,11 +542,11 @@ class FmaskMaster(object):
             self.master_q.put(msg_to_master)
 
     def signal_handler(self, signum, frame):
-        print("(launcher info) Signal caught: {}.".format(signum))
+        self.launcher_log.info("Signal caught: {}.".format(signum), print_msg = True)
         self.stop_workers()
 
     def stop_workers(self):
-        print("\n(launcher info) <master>: Stoping workers")
+        self.launcher_log.info("Stoping workers", print_msg = True)
         for worker in self.workers:
             worker.worker_q.put(None)
         for worker in self.workers:
@@ -565,7 +578,7 @@ class FmaskMaster(object):
                         db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.fmask, self.launcher_log)
                 else:
                     msg = "Unrecognized type of message in the master queue with id: {}".format(msg_to_master.message_type),
-                    self.launcher_log.error(msg)
+                    self.launcher_log.error(msg, print_msg = True)
                     continue                    
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
@@ -583,8 +596,8 @@ class FmaskMaster(object):
                             unprocessed_tile.site_id
                         )
                         site_context.get_site_info(self.db_config, self.launcher_log)
-                        site_context_valid, site_context_rejection_reason = site_context.is_valid(self.context.worker_id, self.launcher_log)
-                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid(self.context.worker_id, self.launcher_log)
+                        site_context_valid, site_context_rejection_reason = site_context.is_valid(MASTER_ID, self.launcher_log)
+                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid(MASTER_ID, self.launcher_log)
                         if not valid_tile:
                             db_prerun_update(
                                 self.db_config, unprocessed_tile, tile_rejection_reason, self.launcher_log
@@ -600,20 +613,21 @@ class FmaskMaster(object):
                             worker_id = sleeping_workers.pop()
                             msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                             self.workers[worker_id].worker_q.put(msg_to_worker)
-                            print(
-                                "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
+                            self.launcher_log.info(
+                                "Product {} assigned to <worker {}>".format(
                                     unprocessed_tile.downloader_history_id, worker_id
-                                )
+                                ),
+                                print_msg = True
                             )
                     else:
                         break
 
                 if len(sleeping_workers) == self.num_workers:
-                    print("\n(launcher info) <master>: No more tiles to process")
+                    self.launcher_log.info("No more tiles to process", print_msg = True)
                     break
 
         except Exception as e:
-            msg = "\n(launcher error) <master>: Exception {} encountered".format(e)
+            msg = "Exception {} encountered".format(e) 
             self.launcher_log.critical(msg, print_msg = True, trace = True)
         finally:
             self.stop_workers()
@@ -647,7 +661,7 @@ class FmaskWorker(threading.Thread):
             launcher_log.path,
             launcher_log.name,
             launcher_log.level,
-            self.context.worker_id
+            self.worker_id
         )
 
     def notify_end_of_tile_processing(self, lin, fmask):
@@ -666,7 +680,7 @@ class FmaskWorker(threading.Thread):
                     or msg_to_worker.site_context is None
                 ):
                     msg = "Either the tile or site context is None"
-                    launcher_log.critical(msg, print_msg = True)
+                    self.launcher_log.critical(msg, print_msg = True)
                     os._exit(1)
                 else:
                     lin, fmask = self.process_tile(
@@ -676,34 +690,34 @@ class FmaskWorker(threading.Thread):
                     self.worker_q.task_done()
         except Exception as e:
             msg = "Exception encoutered: {}".format(e) 
-            launcher_log.critical(msg, print_msg = True, trace = True)
+            self.launcher_log.critical(msg, print_msg = True, trace = True)
             os._exit(1)
         finally:
-            print("\n(launcher info) <worker {}>: is stopped".format(self.worker_id))
+            self.launcher_log.info("Current worker is stopped".format(self.worker_id), print_msg = True)
 
     def process_tile(self, tile, site_context):
-        print("\n#################### Tile & Site Info ####################\n")
+        print("<worker {}> Tile & Site Info:".format(self.worker_id))
         print(
-            "\n(launcher info) <worker {}>: site_id = {}".format(
+            "<worker {}> site_id = {}".format(
                 self.worker_id, tile.site_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: satellite_id = {}".format(
+            "<worker {}> satellite_id = {}".format(
                 self.worker_id, tile.satellite_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: downloader_history_id = {}".format(
+            "<worker {}> downloader_history_id = {}".format(
                 self.worker_id, tile.downloader_history_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: path = {}".format(self.worker_id, tile.path)
+            "<worker {}> path = {}".format(self.worker_id, tile.path)
         )
 
         print(
-            "\n(launcher info) <worker {}>: site_id = {}".format(
+            "<worker {}> site_id = {}".format(
                 self.worker_id, tile.site_id
             )
         )
@@ -768,8 +782,8 @@ class SiteContext(object):
         self.fmask_compress_tiffs = ''
         self.fmask_cog_tiffs = ''
         
-    def get_site_info(self, db_config, launcher_log):
-        self.site_short_name = db_get_site_short_name(db_config, self.site_id, launcher_log)
+    def get_site_info(self, db_config, log):
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, log)
         if "{site}" in self.output_path:
             self.output_path = self.output_path.replace("{site}", self.site_short_name)
 
@@ -987,11 +1001,11 @@ def db_get_unprocessed_tile(db_config, node_id, log):
         return tile_info
 
     with db_config.connect() as connection:
-        tile_info = handle_retries(connection, _run, launcher_log)
+        tile_info = handle_retries(connection, _run, log)
         log.debug("Unprocessed tile info: {}".format(tile_info))
         return tile_info
 
-def db_clear_pending_tiles(db_config, log):
+def db_clear_pending_tiles(db_config, node_id, log):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
@@ -1000,7 +1014,7 @@ def db_clear_pending_tiles(db_config, log):
     with db_config.connect() as connection:
         handle_retries(connection, _run, log)
 
-def db_postrun_update(db_config, input_prod, fmask_prod, launcher_log):
+def db_postrun_update(db_config, input_prod, fmask_prod, log):
     def _run(cursor):   
         processing_status = input_prod.processing_status
         downloader_product_id = input_prod.product_id
@@ -1074,7 +1088,7 @@ def db_postrun_update(db_config, input_prod, fmask_prod, launcher_log):
             )
     
     with db_config.connect() as connection:
-        handle_retries(connection, _run, launcher_log)
+        handle_retries(connection, _run, log)
 
 def db_prerun_update(db_config, tile, reason, log):
     def _run(cursor):
@@ -1098,7 +1112,6 @@ def db_prerun_update(db_config, tile, reason, log):
 
     with db_config.connect() as connection:
         handle_retries(connection, _run, log)
-
 
         
 parser = argparse.ArgumentParser(description="Launcher for FMASK script")
