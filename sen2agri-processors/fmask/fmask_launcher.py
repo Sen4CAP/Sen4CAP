@@ -596,8 +596,8 @@ class FmaskMaster(object):
                             unprocessed_tile.site_id
                         )
                         site_context.get_site_info(self.db_config, self.launcher_log)
-                        site_context_valid, site_context_rejection_reason = site_context.is_valid(MASTER_ID, self.launcher_log)
-                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid(MASTER_ID, self.launcher_log)
+                        site_context_valid, site_context_rejection_reason = site_context.is_valid(self.launcher_log)
+                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid(self.launcher_log)
                         if not valid_tile:
                             db_prerun_update(
                                 self.db_config, unprocessed_tile, tile_rejection_reason, self.launcher_log
@@ -735,7 +735,7 @@ class Tile(object):
         self.downloader_history_id = tile_info[2]
         self.path = tile_info[3]
  
-    def is_valid(self, worker_id, log):
+    def is_valid(self, log):
         if self.downloader_history_id is None:
             rejection_reason = "Aborting processing for product because the downloader_history_id is incorrect"
             log.error(rejection_reason, print_msg = True)
@@ -787,7 +787,7 @@ class SiteContext(object):
         if "{site}" in self.output_path:
             self.output_path = self.output_path.replace("{site}", self.site_short_name)
 
-    def is_valid(self, worker_id, log):
+    def is_valid(self, log):
         if len(self.output_path) == 0:
             rejection_reason = "Invalid processing context output_path: {}.".format(
                 self.output_path
