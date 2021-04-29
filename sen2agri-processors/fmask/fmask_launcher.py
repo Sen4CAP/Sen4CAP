@@ -306,7 +306,7 @@ class FmaskProcessor(object):
         except Exception as e:
             rejection_reason = ("Can NOT copy from output path {} to destination product path {} due to: {}".format(self.fmask.output_path, self.fmask.destination_path, e))
             self.update_rejection_reason(rejection_reason)
-            self.launcher_log.error(msg, print_msg = True, trace = True)
+            self.launcher_log.error(rejection_reason, print_msg = True, trace = True)
 
     def get_fmask_footprint(self, footprint_file) :
         try:
