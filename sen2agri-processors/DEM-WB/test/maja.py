@@ -22,13 +22,16 @@ import os
 import argparse
 import glob
 import re
-import time, datetime
+import time
+import datetime
+import pipes
 import shutil
 import signal
 from multiprocessing import Pool
-from l2a_commons import run_command, log, create_recursive_dirs, remove_dir, translate, get_guid, stop_containers
+from l2a_commons import run_command, create_recursive_dirs, remove_dir, translate, get_guid, stop_containers
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT, UNKNOWN_PROCESSOR_OUTPUT_FORMAT
+from l2a_commons import LogHandler, NO_ID
 import tempfile
 from bs4 import BeautifulSoup as Soup
 
@@ -115,7 +118,7 @@ def get_l1c_processor_output_format(working_directory, tile_id):
 		
     return UNKNOWN_PROCESSOR_OUTPUT_FORMAT, None
 
-def create_sym_links(filenames, target_directory, log_path, log_filename):
+def create_sym_links(filenames, target_directory, log):
 
     for file_to_sym_link in filenames:
         #target name
@@ -126,11 +129,10 @@ def create_sym_links(filenames, target_directory, log_path, log_filename):
         target = os.path.join(target_directory, basename)
         #does it already exist?
         if os.path.isfile(target) or os.path.isdir(target):
-            log(log_path, "The path {} does exist already".format(target), log_filename)
             #skip it
             continue
         #create it
-        if run_command(["ln", "-s", file_to_sym_link, target_directory]) != 0:
+        if run_command(["ln", "-s", file_to_sym_link, target_directory], log) != 0:
             return False
     return True
 
@@ -141,7 +143,7 @@ def remove_sym_links(filenames, target_directory):
             basename = os.path.basename(sym_link[:len(sym_link) - 1])
         else:
             basename = os.path.basename(sym_link)
-        if run_command(["rm", os.path.join(target_directory, basename)]) != 0:
+        if run_command(["rm", os.path.join(target_directory, basename)], l2a_log) != 0:
             continue
     return True
 
@@ -163,7 +165,7 @@ def get_prev_l2a_tile_path(tile_id, prev_l2a_product_path):
     return tile_files
 
 def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context, log_filename):
-    log(demmaccs_context.output, "Checking for MAJA JPI file in directory {} ...".format(maja_working_dir), log_filename)
+    l2a_log.info("Checking for MAJA JPI file in directory {} ...".format(maja_working_dir))
     
     files = []
     # r=root, d=directories, f = files
@@ -173,13 +175,13 @@ def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context, log_filename):
                 files.append(os.path.join(r, file))
     if (len(files) == 0) :
         # No JPI file found ... return true from here
-        log(demmaccs_context.output, "No _JPI_ALL.xml found in the maja working dir {}. Not considering an error ...".format(maja_working_dir), log_filename)
+        l2a_log.info("No _JPI_ALL.xml found in the maja working dir {}. Not considering an error ...".format(maja_working_dir))
         return True
     
     # normally we should have only one file like this
     maja_jpi_file = files[0]
     
-    log(demmaccs_context.output, "Checking MAJA JPI file {} ...".format(maja_jpi_file), log_filename)
+    l2a_log.info("Checking MAJA JPI file {} ...".format(maja_jpi_file))
 
     try:
         xml_handler = open(maja_jpi_file).read()
@@ -189,14 +191,14 @@ def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context, log_filename):
             if key == 'Validity_Flag' :
                 value = message.find('value').get_text()
                 if value == 'L2NOTV' :
-                    log(demmaccs_context.output, "L2NOTV found in the Validity_Flag Processing_Flags_And_Modes element from MAJA JPI file {}. The product will be invalidated ... ".format(maja_jpi_file), log_filename)
+                    l2a_log.error("L2NOTV found in the Validity_Flag Processing_Flags_And_Modes element from MAJA JPI file {}. The product will be invalidated ... ".format(maja_jpi_file), print_msg = True)
                     # copy the file also in the MAJA root directory (near EEF)
                     new_file = os.path.join(demmaccs_context.output, os.path.basename(maja_jpi_file))
                     shutil.copy(maja_jpi_file, new_file)
                     return False
     except Exception as e:
         print("Exception received when trying to read the MAJA JPI from file {}: {}".format(maja_jpi_file, e))
-        log(demmaccs_context.output, "Exception received when trying to read the MAJA JPI from file {}: {}".format(maja_jpi_file, e), log_filename)
+        l2a_log.error("Exception received when trying to read the MAJA JPI from file {}: {}".format(maja_jpi_file, e), print_msg = True, trace = True)
         pass
     return True
 
@@ -255,7 +257,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     global running_containers
 
     if not os.path.isfile(demmaccs_context.dem_hdr_file):
-        log(demmaccs_context.output, "General failure: There is no such DEM file {}".format(demmaccs_context.dem_hdr_file), log_filename)
+        l2a_log.error("General failure: There is no such DEM file {}".format(demmaccs_context.dem_hdr_file), print_msg = True)
         return ""
     product_name = os.path.basename(demmaccs_context.input[:len(demmaccs_context.input) - 1]) if demmaccs_context.input.endswith("/") else os.path.basename(demmaccs_context.input)
     sat_id, acquistion_date = get_product_info(product_name)
@@ -264,7 +266,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     dem_dir_list = glob.glob("{0}/{1}.DBL.DIR".format(dem_output_dir, basename[0:len(basename) - 4]))
 
     if len(dem_dir_list) != 1 or not os.path.isdir(dem_dir_list[0]):
-        log(demmaccs_context.output, "General failure: No {}.DBL.DIR found for DEM ".format(demmaccs_context.dem_hdr_file[0:len(demmaccs_context.dem_hdr_file) - 4]), log_filename)
+        l2a_log.error("General failure: No {}.DBL.DIR found for DEM ".format(demmaccs_context.dem_hdr_file[0:len(demmaccs_context.dem_hdr_file) - 4]), print_msg = True)
         return ""
     dem_dir = dem_dir_list[0]
     tile_id = ""
@@ -304,33 +306,33 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         if tile is not None:
             tile_id = tile.group(1)
     else:
-        log(demmaccs_context.output, "General failure: Unknown satellite id {} found for {}".format(sat_id, demmaccs_context.input), log_filename)
+        l2a_log.error("General failure: Unknown satellite id {} found for {}".format(sat_id, demmaccs_context.input), print_msg = True)
         return ""
 
     if len(tile_id) == 0:
-        log(demmaccs_context.output, "General failure: Could not get the tile id from DEM file {}".format(demmaccs_context.dem_hdr_file), log_filename)
+        l2a_log.error("General failure: Could not get the tile id from DEM file {}".format(demmaccs_context.dem_hdr_file), print_msg = True)
         return ""
 
     working_dir = os.path.join(demmaccs_context.base_working_dir, tile_id)
     maccs_working_dir = "{}/maccs_{}".format(demmaccs_context.base_working_dir[:len(demmaccs_context.base_working_dir) - 1] if demmaccs_context.base_working_dir.endswith("/") else demmaccs_context.base_working_dir, tile_id)
     if not create_recursive_dirs(working_dir):
-        log(demmaccs_context.output, "Tile failure: Could not create the working directory {}".format(working_dir), log_filename)
+        l2a_log.error("Tile failure: Could not create the working directory {}".format(working_dir), print_msg = True)
         return ""
 
     if not create_recursive_dirs(maccs_working_dir):
-        log(demmaccs_context.output, "Tile failure: Could not create the MACCS/MAJA working directory {}".format(maccs_working_dir), log_filename)
+        l2a_log.error("Tile failure: Could not create the MACCS/MAJA working directory {}".format(maccs_working_dir), print_msg = True)
         return ""
 
-    if not create_sym_links([demmaccs_context.input], working_dir, demmaccs_context.output, log_filename):
-        log(demmaccs_context.output, "Tile failure: Could not create sym links for {}".format(demmaccs_context.input), log_filename)
+    if not create_sym_links([demmaccs_context.input], working_dir, l2a_log):
+        l2a_log.error("Tile failure: Could not create sym links for {}".format(demmaccs_context.input), print_msg = True)
         return ""
     common_gipps = glob.glob("{}/{}/{}*_L_*.*".format(demmaccs_context.gipp_base_dir, gipp_sat_dir, full_gipp_sat_prefix))
     if len(common_gipps) == 0:
         common_gipps = glob.glob("{}/{}/{}*_L_*.*".format(demmaccs_context.gipp_base_dir, gipp_sat_dir, gipp_sat_prefix))
     
     print ("common_gipps is {}".format(common_gipps))
-    if not create_sym_links(common_gipps, working_dir, demmaccs_context.output, log_filename):
-        log(demmaccs_context.output, "Tile failure: Symbolic links for GIPP files could not be created in the output directory", log_filename)
+    if not create_sym_links(common_gipps, working_dir, l2a_log):
+        l2a_log.error("Tile failure: Symbolic links for GIPP files could not be created in the output directory", print_msg = True)
         return ""
     gipp_tile_types = ["L2SITE", "CKEXTL", "CKQLTL"]
 
@@ -343,21 +345,21 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         
         print ("tmp_tile_gipp is {}".format(tmp_tile_gipp))
         if len(tmp_tile_gipp) > 0:
-            if not create_sym_links(tmp_tile_gipp, working_dir, demmaccs_context.output, log_filename):
-                log(demmaccs_context.output, "Tile failure: Symbolic links for tile id {} GIPP files could not be created in the output directory".format(tile_id), log_filename)
+            if not create_sym_links(tmp_tile_gipp, working_dir, l2a_log):
+                l2a_log.error("Tile failure: Symbolic links for tile id {} GIPP files could not be created in the output directory".format(tile_id), print_msg = True)
                 return ""
         else:
             #search for the gipp common tile file
-            log(demmaccs_context.output, "Symbolic link {} for tile id {} GIPP file could not be found. Searching for the common one ".format(gipp_tile_type, tile_id), log_filename)
+            l2a_log.error("Symbolic link {} for tile id {} GIPP file could not be found. Searching for the common one ".format(gipp_tile_type, tile_id), print_msg = True)
             ret, log_gipp = copy_common_gipp_file(working_dir, demmaccs_context.gipp_base_dir, gipp_sat_dir, gipp_sat_prefix, full_gipp_sat_prefix, gipp_tile_type, gipp_tile_prefix, tile_id, common_tile_id)
             if len(log_gipp) > 0:
-                log(demmaccs_context.output, log_gipp, log_filename)
+                l2a_log.info(log_gipp, print_msg = True)
             if not ret:
-                log(demmaccs_context.output, "Tile failure: {}".format(log_gipp), log_filename)
+                l2a_log.error("Tile failure: {}".format(log_gipp), print_msg = True)
                 return ""
 
-    if not create_sym_links([demmaccs_context.dem_hdr_file, dem_dir], working_dir, demmaccs_context.output, log_filename):
-        log(demmaccs_context.output, "Tile failure: Could not create symbolic links for {0} and {1}".format(demmaccs_context.dem_hdr_file, dem_dir), log_filename)
+    if not create_sym_links([demmaccs_context.dem_hdr_file, dem_dir], working_dir, l2a_log):
+        l2a_log.error("Tile failure: Could not create symbolic links for {0} and {1}".format(demmaccs_context.dem_hdr_file, dem_dir), print_msg = True)
         return ""
 
     start = time.time()
@@ -372,21 +374,21 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
 
         prev_l2a_tile_path = get_prev_l2a_tile_path(tile_id, product_path)
 
-        log(demmaccs_context.output, "Creating sym links for NOMINAL MACCS/MAJA mode: l2a prev tiles {}".format(prev_l2a_tile_path), log_filename)
-        if len(prev_l2a_tile_path) > 0 and create_sym_links(prev_l2a_tile_path, working_dir, demmaccs_context.output, log_filename):
+        l2a_log.error("Creating sym links for NOMINAL MACCS/MAJA mode: l2a prev tiles {}".format(prev_l2a_tile_path))
+        if len(prev_l2a_tile_path) > 0 and create_sym_links(prev_l2a_tile_path, working_dir, l2a_log):
             #set MACCS mode to NOMINAL
-            log(demmaccs_context.output, "Created sym links for NOMINAL MACCS/MAJA mode for {}".format(prev_l2a_tile_path), log_filename)
+            l2a_log.error("Created sym links for NOMINAL MACCS/MAJA mode for {}".format(prev_l2a_tile_path))
             maccs_mode = "L2NOMINAL"
         else:
             # something went wrong. shall this be an exit point?
             # shall the mode remain to L2INIT? This behavior may as well hide a bug in a previous demmaccs run (it's possible)...
-            log(demmaccs_context.output, "Tile failure: Could not create sym links for NOMINAL MACCS/MAJA mode for {}. Exit".format(prev_l2a_tile_path), log_filename)
+            l2a_log.error("Tile failure: Could not create sym links for NOMINAL MACCS/MAJA mode for {}. Exit".format(prev_l2a_tile_path), print_msg = True)
             return ""
     except SystemExit:
-        log(demmaccs_context.output, "Tile failure: SystemExit caught when trying to create sym links for NOMINAL MACCS/MAJA mode, product {}. Exit!".format(demmaccs_context.input), log_filename)
+        l2a_log.error("Tile failure: SystemExit caught when trying to create sym links for NOMINAL MACCS/MAJA mode, product {}. Exit!".format(demmaccs_context.input), print_msg = True)
         return ""
     except:
-        log(demmaccs_context.output, "No previous processed l2a tile found for {} in product {}. Running MACCS/MAJA in L2INIT mode".format(tile_id, product_name), log_filename)
+        l2a_log.info("No previous processed l2a tile found for {} in product {}. Running MACCS/MAJA in L2INIT mode".format(tile_id, product_name), print_msg = True)
         pass
     #MACCS bug. In case of setting the file status from VALD to NOTV, MACCS will try to create a directory LTC in the current running directory
     #which is / Of course, it will fail. That's why we have to move the current running directory to the MACCS temporary directory
@@ -449,23 +451,31 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
                     "--mode", maccs_mode]
     if args.conf != "":
         cmd_array += ["--conf", args.conf]
-    log(demmaccs_context.output, "sat_id = {} | acq_date = {}".format(sat_id, acquistion_date), log_filename)
-    log(demmaccs_context.output, "Starting MACCS/MAJA in {} for {} | TileID: {}".format(maccs_mode, demmaccs_context.input, tile_id), log_filename)
+    l2a_log.info("sat_id = {} | acq_date = {}".format(sat_id, acquistion_date))
+    l2a_log.info("Starting MACCS/MAJA in {} for {} | TileID: {}".format(maccs_mode, demmaccs_context.input, tile_id))
+    maja_log_path = os.path.join(demmaccs_context.output, MAJA_LOG_FILE_NAME)
+    maja_log = LogHandler(maja_log_path, MAJA_LOG_FILE_NAME, l2a_log.level, NO_ID)
+    cmd_str = " ".join(map(pipes.quote, cmd_array))
+    l2a_log.info("Running command: " + cmd_str, print_msg = True)
+    l2a_log.info(
+        "Running Maja, console output can be found at {}".format(maja_log.path),
+        print_msg = True
+    )
     running_containers.add(container_name)
-    maja_run_val = run_command(cmd_array, demmaccs_context.output, MAJA_LOG_FILE_NAME)
+    maja_run_val = run_command(cmd_array, maja_log)
     running_containers.remove(container_name)
     if maja_run_val:
-        log(demmaccs_context.output, "MACCS/MAJA mode {} didn't work for {} | TileID: {}. Location {}".format(maccs_mode, demmaccs_context.input, tile_id, demmaccs_context.output), log_filename)
+        l2a_log.error("MACCS/MAJA mode {} didn't work for {} | TileID: {}. Location {}".format(maccs_mode, demmaccs_context.input, tile_id, demmaccs_context.output), print_msg = True)
         return ""
     else:
-        log(demmaccs_context.output, "MACCS/MAJA mode {} for {} tile {} finished in: {}. Location: {}".format(maccs_mode, demmaccs_context.input, tile_id, datetime.timedelta(seconds=(time.time() - start)), demmaccs_context.output), log_filename)
+        l2a_log.info("MACCS/MAJA mode {} for {} tile {} finished in: {}. Location: {}".format(maccs_mode, demmaccs_context.input, tile_id, datetime.timedelta(seconds=(time.time() - start)), demmaccs_context.output), print_msg = True)
     
     
     #postprocess tif/cog translation and/or sre/fre removable
     if postprocess(maccs_working_dir):
-        log(demmaccs_context.output, "Maja postprocessing succesfull for: {} ".format(demmaccs_context.input), log_filename)
+        l2a_log.info("Maja postprocessing succesfull for: {} ".format(demmaccs_context.input))
     else:
-        log(demmaccs_context.output, "Maja postprocessing did NOT work for: {} ".format(demmaccs_context.input), log_filename)
+        l2a_log.error("Maja postprocessing did NOT work for: {} ".format(demmaccs_context.input), print_msg = True)
         return ""
     
     # move the maccs output to the output directory.
@@ -479,70 +489,70 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         # Sometimes (usually when it crashes or for different reasons stops at the beginning), this renaming does not take place,
         # so the report file will remain PMC_LxREPT.EEF
         # This report file (doesn't matter the name) will be kept and save to the working_dir with the name MACCS_L2REPT_{tile_id}.EEF
-        log(demmaccs_context.output, "Searching for report maccs file (REPT) in: {}".format(maccs_working_dir), log_filename)
+        l2a_log.info("Searching for report maccs file (REPT) in: {}".format(maccs_working_dir))
         if len(maccs_report_file) >= 1:
             if len(maccs_report_file) > 1:
-                log(demmaccs_context.output, "WARNING: More than one report maccs file (REPT) found in {}. Only the first one will be kept. Report files list: {}.".format(maccs_working_dir, maccs_report_file), log_filename)
-            log(demmaccs_context.output, "Report maccs file (REPT) found in: {} : {}".format(maccs_working_dir, maccs_report_file[0]), log_filename)
+                l2a_log.warning("More than one report maccs file (REPT) found in {}. Only the first one will be kept. Report files list: {}.".format(maccs_working_dir, maccs_report_file), print_msg = True)
+            l2a_log.error("Report maccs file (REPT) found in: {} : {}".format(maccs_working_dir, maccs_report_file[0]), print_msg = True)
             new_maccs_report_file = "{}/MACCS_L2REPT_{}.EEF".format(demmaccs_context.output[:len(demmaccs_context.output) - 1] if demmaccs_context.output.endswith("/") else demmaccs_context.output, tile_id)
             if os.path.isdir(new_maccs_report_file):
-                log(demmaccs_context.output, "The directory {} already exists. Trying to delete it in order to move the new created directory by MACCS/MAJA".format(new_maccs_report_file), log_filename)
+                l2a_log.warning("The directory {} already exists. Trying to delete it in order to move the new created directory by MACCS/MAJA".format(new_maccs_report_file), print_msg = True)
                 shutil.rmtree(new_maccs_report_file)
             elif os.path.isfile(new_maccs_report_file):
-                log(demmaccs_context.output, "The file {} already exists. Trying to delete it in order to move the new created file by MACCS/MAJA".format(new_maccs_report_file), log_filename)
+                l2a_log.warning("The file {} already exists. Trying to delete it in order to move the new created file by MACCS/MAJA".format(new_maccs_report_file), print_msg = True)
                 os.remove(new_maccs_report_file)
             else: #the destination does not exist, so move the files
                 pass
-            log(demmaccs_context.output, "Moving {} to {}".format(maccs_report_file[0], new_maccs_report_file), log_filename)
+            l2a_log.info("Moving {} to {}".format(maccs_report_file[0], new_maccs_report_file))
             shutil.move(maccs_report_file[0], new_maccs_report_file)
         working_dir_content = glob.glob("{}/*".format(maccs_working_dir))
-        log(demmaccs_context.output, "Searching for valid products in working dir: {}. Following is the content of this dir: {}".format(maccs_working_dir, working_dir_content), log_filename)
+        l2a_log.info("Searching for valid products in working dir: {}. Following is the content of this dir: {}".format(maccs_working_dir, working_dir_content))
         #check for MACCS format
         output_format, maja_dir = get_l1c_processor_output_format(maccs_working_dir, tile_id)
         print("output_format = {}, maja_dir = {}".format(output_format, maja_dir))
         if output_format == MACCS_PROCESSOR_OUTPUT_FORMAT:
-            log(demmaccs_context.output, "MACCS output format found. Searching output for valid results", log_filename)
+            l2a_log.info("MACCS output format found. Searching output for valid results")
             return_tile_id = "{}".format(tile_id)
-            log(demmaccs_context.output, "Found valid tile id {} in {}. Moving all the files to destination".format(tile_id, maccs_working_dir), log_filename)
+            l2a_log.info("Found valid tile id {} in {}. Moving all the files to destination".format(tile_id, maccs_working_dir))
             for maccs_out in working_dir_content:
                 new_file = os.path.join(demmaccs_context.output, os.path.basename(maccs_out))
                 if os.path.isdir(new_file):
-                    log(demmaccs_context.output, "The directory {} already exists. Trying to delete it in order to move the new created directory by MACCS".format(new_file), log_filename)
+                    l2a_log.warning("The directory {} already exists. Trying to delete it in order to move the new created directory by MACCS".format(new_file), print_msg = True)
                     shutil.rmtree(new_file)
                 elif os.path.isfile(new_file):
-                    log(demmaccs_context.output, "The file {} already exists. Trying to delete it in order to move the new created file by MACCS".format(new_file), log_filename)
+                    l2a_log.warning("The file {} already exists. Trying to delete it in order to move the new created file by MACCS".format(new_file), print_msg = True)
                     os.remove(new_file)
                 else: #the dest does not exist, so it will be moved without problems
                     pass
-                log(demmaccs_context.output, "Moving {} to {}".format(maccs_out, new_file), log_filename)
+                l2a_log.info("Moving {} to {}".format(maccs_out, new_file))
                 shutil.move(maccs_out, new_file)
         elif output_format == THEIA_MUSCATE_OUTPUT_FORMAT and maja_dir is not None:
             #check for THEIA/MUSCATE format
-            log(demmaccs_context.output, "THEIA/MUSCATE ouput format found. Searching output for valid results", log_filename)            
+            l2a_log.info( "Demmaccs_context.output,THEIA/MUSCATE ouput format found. Searching output for valid results")            
             new_file = os.path.join(demmaccs_context.output, os.path.basename(maja_dir))
             if os.path.isdir(new_file):
-                log(demmaccs_context.output, "The directory {} already exists. Trying to delete it in order to move the new created directory by MAJA".format(new_file), log_filename)
+                l2a_log.warning("The directory {} already exists. Trying to delete it in order to move the new created directory by MAJA".format(new_file), print_msg = True)
                 shutil.rmtree(new_file)
             elif os.path.isfile(new_file):
-                log(demmaccs_context.output, "The file {} already exists. Trying to delete it in order to move the new created file by MAJA".format(new_file), log_filename)
+                l2a_log.warning("The file {} already exists. Trying to delete it in order to move the new created file by MAJA".format(new_file), print_msg = True)
                 os.remove(new_file)
             else: #the dest does not exist, so it will be moved without problems
                 pass
             
             is_valid_maja_jpi = get_maja_jpi_log_extract(maccs_working_dir, demmaccs_context, log_filename)
             if is_valid_maja_jpi == True :
-                log(demmaccs_context.output, "Moving {} to {}".format(maja_dir, new_file), log_filename)
+                l2a_log.info("Moving {} to {}".format(maja_dir, new_file))
                 shutil.move(maja_dir, new_file)
                 return_tile_id = "{}".format(tile_id)
             else :
-                log(demmaccs_context.output, "No valid products (JPI L2NOTV status) found in: {}.".format(maccs_working_dir), log_filename)
+                l2a_log.error("No valid products (JPI L2NOTV status) found in: {}.".format(maccs_working_dir), print_msg = True)
         else:
-            log(demmaccs_context.output, "No valid products (MACCS VALD status or THEIA/MUSCATE formats) found in: {}.".format(maccs_working_dir), log_filename)
-        log(demmaccs_context.output, "Erasing the MACCS/MAJA working directory: rmtree: {}".format(maccs_working_dir), log_filename)
+            l2a_log.error("No valid products (MACCS VALD status or THEIA/MUSCATE formats) found in: {}.".format(maccs_working_dir), print_msg = True)
+        l2a_log.info("Erasing the MACCS/MAJA working directory: rmtree: {}".format(maccs_working_dir))
         shutil.rmtree(maccs_working_dir)
     except Exception as e:
         return_tile_id = ""
-        log(demmaccs_context.output, "Tile failure: Exception caught when moving maccs files for tile {} to the output directory {}: {}".format(tile_id, demmaccs_context.output, e), log_filename)
+        l2a_log.error("Tile failure: Exception caught when moving maccs files for tile {} to the output directory {}: {}".format(tile_id, demmaccs_context.output, e), print_msg = True, trace = True)
  
     return return_tile_id
 
@@ -593,8 +603,7 @@ def postprocess(working_dir):
                 output_dir = tif_dir,
                 output_img_name = new_img_name,
                 output_img_format = img_format,
-                log_dir = maja_log_dir,
-                log_file_name = log_filename,
+                log = l2a_log,
                 gdal_image = args.docker_image_gdal,
                 name = args.product_id,
                 compress = args.compressTiffs,
@@ -606,37 +615,33 @@ def postprocess(working_dir):
                     os.remove(tif)
                     os.rename(new_img_path, tif)
                 except Exception as e:
-                    log(
-                        maja_log_dir,
-                        "(Maja err) Can NOT rename the translated TIFF/COG translation for {} command due to: {}.".format(tif,e),
-                        log_filename,
+                    l2a_log.error(
+                        "Can NOT rename the translated TIFF/COG translation for {} command due to: {}.".format(tif,e),
+                        print_msg = True
                     )
                     return False
             else:
-                log(
-                    maja_log_dir,
-                    "(Maja err) Gdal can NOT convert {}.".format(tif),
-                    log_filename,
+                l2a_log.error(
+                    "Gdal can NOT convert {}.".format(tif),
+                    print_msg = True
                 )
                 return False
 
     return True
 
 def signal_handler(signum, frame):
-    global maja_log_dir, log_filename
 
     print("(Maja info) Signal caught: {}.".format(signum))
-    log(
-        maja_log_dir,
-        "(Maja info) Signal caught: {}.".format(signum),
-        log_filename,
+    l2a_log.error(
+        "Signal caught: {}.".format(signum),
+        print_msg = True
     )
     stop()
 
 def stop():
-    global running_containers, maja_log_dir, log_filename
+    global running_containers, l2a_log 
 
-    stop_containers(running_containers, maja_log_dir, log_filename)
+    stop_containers(running_containers, l2a_log)
     os._exit(0)
 
 parser = argparse.ArgumentParser(
@@ -700,34 +705,35 @@ parser.add_argument(
     required=True,
     help="Name of the gdal docker image.",
 )
+parser.add_argument('-l', '--log-level', default = 'info',
+                    choices = ['debug' , 'info', 'warning' , 'error', 'critical'], 
+                    help = 'Minimum logging level')
 
 args = parser.parse_args()
-maja_log_dir = args.output
 if args.product_id:
-    log_filename = "l2a_{}.log".format(args.product_id)
+    l2a_log_filename = "l2a_{}.log".format(args.product_id)
 else:
-    log_filename = "l2a.log"
-
+    l2a_log_filename = "l2a.log"
+l2a_log_path = os.path.join(args.output, l2a_log_filename)    
+l2a_log = LogHandler(l2a_log_path, "l2a_log", args.log_level, NO_ID)
 running_containers = set()
 
 if not create_recursive_dirs(args.output):
-    log(maja_log_dir, "Could not create the output directory", log_filename)
+    l2a_log.critical("Could not create the output directory", print_msg = True)
     os._exit(1)
 
 if len(args.prev_l2a_tiles) != len(args.prev_l2a_products_paths):
-    log(maja_log_dir, "The number of previous l2a tiles is not the same as for paths for these tiles. Check args: --prev-l2-tiles and --prev-l2a-products-paths, the length should be equal", log_filename)
+    l2a_log.critical("The number of previous l2a tiles is not the same as for paths for these tiles. Check args: --prev-l2-tiles and --prev-l2a-products-paths, the length should be equal", print_msg = True)
     os._exit(1)
-
-maja_log_dir = args.output
 
 if args.product_id:
     working_dir_name =  "tmp_" + args.product_id
     working_dir = os.path.join(args.working_dir, working_dir_name)
     if not create_recursive_dirs(working_dir):
-        log(maja_log_dir, "Could not create the temporary directory", log_filename)
+        l2a_log.critical("Could not create the temporary directory", print_msg = True)
         os._exit(1)
     else:
-        log(maja_log_dir, "Created the working dir", log_filename)
+        l2a_log.info("Created the working dir", print_msg = True)
 else:
     working_dir = tempfile.mkdtemp(dir = args.working_dir)
 if working_dir.endswith("/"):
@@ -736,20 +742,20 @@ dem_working_dir = "{}_DEM_TMP".format(working_dir)
 dem_output_dir = "{}_DEM_OUT".format(working_dir)
 
 if not create_recursive_dirs(dem_output_dir):
-    log(maja_log_dir, "Could NOT create the output directory for DEM", log_filename)
+    l2a_log.critical("Could NOT create the output directory for DEM", print_msg = True)
     if not remove_dir(working_dir):
-        log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
     os._exit(1)
 
 if not create_recursive_dirs(dem_working_dir):
-    log(maja_log_dir, "Could not create the working directory for DEM", log_filename)
+    l2a_log.critical("Could not create the working directory for DEM", print_msg = True)
     if not remove_dir(working_dir):
-        log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
     os._exit(1)
 
-log(maja_log_dir,"working_dir = {}".format(working_dir), log_filename)
-log(maja_log_dir,"dem_working_dir = {}".format(dem_working_dir), log_filename)
-log(maja_log_dir,"dem_output_dir = {}".format(dem_output_dir), log_filename)
+l2a_log.info("working_dir = {}".format(working_dir), print_msg = True)
+l2a_log.info("dem_working_dir = {}".format(dem_working_dir), print_msg = True)
+l2a_log.info("dem_output_dir = {}".format(dem_output_dir), print_msg = True)
 
 
 general_start = time.time()
@@ -766,9 +772,9 @@ if sat_id == LANDSAT8_SATELLITE_ID:
 
     l8_align_wrk_dir = os.path.join(working_dir, "l8_align_tmp")
     if not create_recursive_dirs(l8_align_wrk_dir):
-        log(maja_log_dir, "Could not create the l8 align working directory.", log_filename)
+        l2a_log.error("Could not create the l8 align working directory.", print_msg = True)
         if not remove_dir(working_dir):
-            log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+            l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
         os._exit(1)
 
     guid = get_guid(8)
@@ -809,19 +815,27 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     cmd_array.append(l8_align_wrk_dir)
     cmd_array.append("-t")
     cmd_array.append(product_name)
-
+    
+    cmd_str = " ".join(map(pipes.quote, cmd_array))
+    l2a_log.info("Running command: " + cmd_str, print_msg = True)
+    start_time = time.time()
     running_containers.add(container_name)
-    cmd_ret = run_command(cmd_array, maja_log_dir, log_filename)
+    ret = run_command(cmd_array, l2a_log)
     running_containers.remove(container_name)
+    end_time = time.time()
+    l2a_log.info(
+        "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+        print_msg = True
+    )
 
-    if cmd_ret != 0:
-        log(maja_log_dir, "The LANDSAT8 product could not be aligned {}".format(args.input), log_filename)
+    if ret != 0:
+        l2a_log.critical("The LANDSAT8 product could not be aligned {}".format(args.input), print_msg = True)
         if not remove_dir(working_dir):
-            log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+            l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
         os._exit(1)
     #the l8.align.py outputs in the working_dir directory where creates a directory which has the product name
     args.input = working_dir + "/" + product_name
-    log(maja_log_dir, "The LANDSAT8 product was aligned here: {}".format(args.input), log_filename)
+    l2a_log.info("The LANDSAT8 product was aligned here: {}".format(args.input), print_msg = True)
 
 tiles_to_process = []
 print("Creating DEMs for {}".format(args.input))
@@ -873,33 +887,42 @@ if len(tiles_to_process) > 0:
     dem_command.append("-l")
     dem_command += tiles_to_process
 
+cmd_str = " ".join(map(pipes.quote, dem_command))
+l2a_log.info("Running cmd: " + cmd_str)
+start_time = time.time()
 running_containers.add(container_name)
-cmd_ret = run_command(dem_command , maja_log_dir, log_filename)
+ret = run_command(dem_command, l2a_log)
 running_containers.remove(container_name)
-if cmd_ret != 0:
-    log(maja_log_dir, "DEM failed", log_filename)
+end_time = time.time()
+l2a_log.info(
+    "Command finished with return code {} in {}".format(ret, datetime.timedelta(seconds=(end_time - start_time))),
+    print_msg = True
+)
+
+if ret != 0:
+    l2a_log.critical("DEM failed", print_msg = True)
     if not remove_dir(working_dir):
-        log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
     os._exit(1)
 
-log(maja_log_dir, "DEM finished in: {}".format(datetime.timedelta(seconds=(time.time() - start))), log_filename)
+l2a_log.info("DEM finished in: {}".format(datetime.timedelta(seconds=(time.time() - start))), print_msg = True)
 
 dem_hdr_path = os.path.join(dem_output_dir, "*.HDR")
 dem_hdrs = glob.glob(dem_hdr_path)
-log(maja_log_dir, "DEM output directory {} has DEM hdrs = {}".format(dem_output_dir, dem_hdrs), log_filename)
+l2a_log.info("DEM output directory {} has DEM hdrs = {}".format(dem_output_dir, dem_hdrs), print_msg = True)
 if len(dem_hdrs) == 0:
-    log(maja_log_dir, "There are no hdr DEM files in {}".format(dem_output_dir), log_filename)
+    l2a_log.critical("There are no hdr DEM files in {}".format(dem_output_dir), print_msg = True)
     if args.delete_temp:
         if not remove_dir(dem_working_dir):
-            log(maja_log_dir, "Couldn't remove the temp dir {}".format(dem_working_dir), log_filename)
+            l2a_log.warning("Couldn't remove the dem working dir {}".format(dem_working_dir), print_msg = True)
         if not remove_dir(dem_output_dir):
-            log(maja_log_dir, "Couldn't remove the temp dir {}".format(dem_output_dir), log_filename)
+            l2a_log.warning("Couldn't remove the dem output dir {}".format(dem_output_dir), print_msg = True)
         if not remove_dir(working_dir):
-            log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+            l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
     os._exit(1)
 
 if len(tiles_to_process) > 0 and len(tiles_to_process) != len(dem_hdrs):
-    log(maja_log_dir, "The number of hdr DEM files in {} is not equal with the number of the received tiles to process !!".format(dem_output_dir), log_filename)
+    l2a_log.error("The number of hdr DEM files in {} is not equal with the number of the received tiles to process !!".format(dem_output_dir), print_msg = True)
 demmaccs_contexts = []
 print("Creating demmaccs contexts with: input: {} | output {}".format(args.input, args.output))
 for dem_hdr in dem_hdrs:
@@ -930,22 +953,22 @@ else:
 
 ret = 0
 if len(processed_tiles) == 0:
-    log(maja_log_dir, "MACCS/MAJA did not process any tiles for L1C product {}".format(args.input), log_filename)
+    l2a_log.error("MACCS/MAJA did not process any tiles for L1C product {}".format(args.input), print_msg = True)
     ret = 1
 else:
-    log(maja_log_dir, "MACCS/MAJA processed the following tiles for L1C product {} :".format(args.input), log_filename)
-    log(maja_log_dir, "{}".format(processed_tiles), log_filename)
+    l2a_log.info("MACCS/MAJA processed the following tiles for L1C product {} :".format(args.input), print_msg = True)
+    l2a_log.info("{}".format(processed_tiles), print_msg = True)
 
 if args.delete_temp:
-    log(maja_log_dir, "Remove all the temporary files and directory", log_filename)
+    l2a_log.info("Remove all the temporary files and directory", print_msg = True)
     if not remove_dir(dem_working_dir):
-        log(maja_log_dir, "Couldn't remove the temp dir {}".format(dem_working_dir), log_filename)
+        l2a_log.warning("Couldn't remove the dem working dir {}".format(dem_working_dir), print_msg = True)
     if not remove_dir(dem_output_dir):
-        log(maja_log_dir, "Couldn't remove the temp dir {}".format(dem_output_dir), log_filename)
+        l2a_log.warning("Couldn't remove the dem output dir {}".format(dem_output_dir), print_msg = True)
     if not remove_dir(working_dir):
-        log(maja_log_dir, "Couldn't remove the temp dir {}".format(working_dir), log_filename)
+        l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
 
-log(maja_log_dir, "Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), log_filename)
+l2a_log.info("Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), print_msg = True)
 
 os._exit(ret)
 

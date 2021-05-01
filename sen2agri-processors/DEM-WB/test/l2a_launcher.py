@@ -23,19 +23,21 @@ import re
 import os
 import glob
 import sys
+import time
+import pipes
 import datetime
 import Queue
 import threading
 import grp
 import shutil
-import subprocess
 import signal
 import json
 from lxml import etree
 from psycopg2.sql import SQL
 from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
-from l2a_commons import log, remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
+from l2a_commons import LogHandler, MASTER_ID 
+from l2a_commons import remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
 from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
@@ -43,7 +45,6 @@ from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWN
 from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
 
 
-DEBUG = False
 MAJA_LOG_FILE_NAME = "maja.log"
 SEN2COR_LOG_FILE_NAME = "sen2cor.log"
 MIN_VALID_PIXELS_THRESHOLD = 10.0
@@ -212,12 +213,7 @@ class ProcessingContext(object):
                     self.dem_image["default"] = value
             else:
                 pass
-        else:
-            log(
-                LAUNCHER_LOG_DIR,
-                "(launcher err) Invalid database row: {}".format(row),
-                LAUNCHER_LOG_FILE_NAME,
-            )
+        
 
     def get_site_context(self, site_id):
         site_context = SiteContext()
@@ -340,144 +336,85 @@ class SiteContext(object):
         self.dem_image = ""
         self.l8_align_image = ""
 
-    def get_site_info(self, db_config):
-        self.site_short_name = db_get_site_short_name(db_config, self.site_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+    def get_site_info(self, db_config, log):
+        self.site_short_name = db_get_site_short_name(db_config, self.site_id, log)
         self.site_output_path = self.base_output_path.replace("{site}", self.site_short_name)
 
-    def is_valid(self):
+    def is_valid(self, log):
         if len(self.output_path) == 0:
-            rejection_reason = "(launcher err) Invalid processing context output_path: {}.".format(
+            rejection_reason = "Invalid processing context output_path: {}.".format(
                 self.output_path
             )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME,
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.num_workers < 1:
-            rejection_reason = "(launcher err) Invalid processing context num_workers: {}".format(
+            rejection_reason = "Invalid processing context num_workers: {}".format(
                 self.num_workers
             )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if not os.path.isdir(self.swbd_path):
-            rejection_reason = "(launcher err) Invalid processing context swbd_path: {}".format(
+            rejection_reason = "Invalid processing context swbd_path: {}".format(
                 self.swbd_path
             )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if not os.path.isdir(self.dem_path):
-            rejection_reason = "(launcher err) Invalid processing context dem_path: {}".format(
+            rejection_reason = "Invalid processing context dem_path: {}".format(
                 self.dem_path
             )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if not create_recursive_dirs(self.working_dir):
-            rejection_reason = "(launcher err) Invalid processing context working_dir: {}".format(
+            rejection_reason = "Invalid processing context working_dir: {}".format(
                 self.working_dir
             )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation not in ["sen2cor", "maja"]:
-            rejection_reason = "(launcher err) Invalid processing context implementation: {}".format(
+            rejection_reason = "Invalid processing context implementation: {}".format(
                     self.implementation
                 )
-            print(rejection_reason)
-
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation == "sen2cor" and not os.path.isdir(self.sen2cor_gipp):
-            rejection_reason = "(launcher err) Invalid processing context sen2cor_gipp: {}".format(
+            rejection_reason = "Invalid processing context sen2cor_gipp: {}".format(
                 self.sen2cor_gipp
             )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation == "maja" and not os.path.isdir(self.maja_gipp):
-            rejection_reason = "(launcher err) Invalid processing context maja_gipp: {}".format(
+            rejection_reason = "Invalid processing context maja_gipp: {}".format(
                     self.maja_gipp
                 )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.removeFreFiles and self.removeSreFiles:
-            rejection_reason = "(launcher err) Invalid processing context both removeFreFiles and removeSreFiles are True."
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            rejection_reason = "Invalid processing context both removeFreFiles and removeSreFiles are True."
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.implementation == "maja" and not os.path.isdir(self.maja_conf):
-            rejection_reason = "(launcher err) Invalid Maja configuration file {}.".format(self.maja_conf)
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            rejection_reason = "Invalid Maja configuration file {}.".format(self.maja_conf)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.site_short_name is None:
-            rejection_reason = "(launcher err) Invalid site short name"
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            rejection_reason = "Invalid site short name"
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if len(self.site_output_path) == 0:
-            rejection_reason = "(launcher err) Invalid site output path: {}".format(self.site_output_path)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            rejection_reason = "Invalid site output path: {}".format(self.site_output_path)
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         return True, None
@@ -526,32 +463,33 @@ class Sen2CorContext(object):
 
 
 class L2aMaster(object):
-    def __init__(self, num_workers, db_config, node_id):
+    def __init__(self, num_workers, db_config, node_id, launcher_log):
         self.num_workers = num_workers
         self.db_config = db_config
         self.node_id = node_id
         self.master_q = Queue.Queue(maxsize=self.num_workers)
         self.workers = []
+        self.launcher_log = launcher_log
         self.running_containers = set()
         for worker_id in range(self.num_workers):
-            self.workers.append(L2aWorker(worker_id, self.master_q))
+            self.workers.append(L2aWorker(worker_id, self.master_q, self.launcher_log))
             self.workers[worker_id].daemon = True
             self.workers[worker_id].start()
             msg_to_master = ProductStatusMsg(worker_id, None, None, False)
             self.master_q.put(msg_to_master)
 
     def signal_handler(self, signum, frame):
-        print("(launcher info) Signal caught: {}.".format(signum))
+        self.launcher_log.info("Signal caught: {}.".format(signum), print_msg = True)
         self.stop_workers()
 
     def stop_workers(self):
-        print("\n(launcher info) <master>: Stoping workers")
+        self.launcher_log.info("Stoping workers", print_msg = True)
         for worker in self.workers:
             worker.worker_q.put(None)
         for worker in self.workers:
             worker.join(timeout=5)
 
-        stop_containers(self.running_containers, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        stop_containers(self.running_containers, self.launcher_log)
 
         os._exit(0)
 
@@ -574,13 +512,13 @@ class L2aMaster(object):
                     continue
                 elif msg_to_master.message_type == PRODUCT_STATUS_MSG_TYPE:
                     if msg_to_master.update_db:
-                        db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a)
+                        db_postrun_update(self.db_config, msg_to_master.lin, msg_to_master.l2a, self.launcher_log)
                 else:
                     #unrecognized type of message
                     continue
                 sleeping_workers.append(msg_to_master.worker_id)
                 while len(sleeping_workers) > 0:
-                    tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+                    tile_info = db_get_unprocessed_tile(self.db_config, self.node_id, self.launcher_log)
                     if tile_info is not None:
                         unprocessed_tile = Tile(tile_info)
                         processing_context = ProcessingContext()
@@ -588,42 +526,42 @@ class L2aMaster(object):
                             self.db_config,
                             processing_context,
                             DB_PROCESSOR_NAME,
-                            LAUNCHER_LOG_DIR,
-                            LAUNCHER_LOG_FILE_NAME)
+                            self.launcher_log)
                         site_context = processing_context.get_site_context(
                             unprocessed_tile.site_id
                         )
-                        site_context.get_site_info(self.db_config)
-                        valid_site_context, site_context_rejection_resason = site_context.is_valid()
-                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid()
+                        site_context.get_site_info(self.db_config, self.launcher_log)
+                        valid_site_context, site_context_rejection_resason = site_context.is_valid(self.launcher_log)
+                        valid_tile, tile_rejection_reason = unprocessed_tile.is_valid(self.launcher_log)
 
                         if not valid_tile:
                             db_prerun_update(
-                                self.db_config, unprocessed_tile, tile_rejection_reason
+                                self.db_config, unprocessed_tile, tile_rejection_reason, self.launcher_log
                             )
                             continue
 
                         if not valid_site_context:
-                            db_prerun_update(self.db_config, unprocessed_tile, site_context_rejection_resason)
+                            db_prerun_update(self.db_config, unprocessed_tile, site_context_rejection_resason, self.launcher_log)
                             continue
 
                         worker_id = sleeping_workers.pop()
                         msg_to_worker = MsgToWorker(unprocessed_tile, site_context)
                         self.workers[worker_id].worker_q.put(msg_to_worker)
-                        print(
-                            "\n(launcher info) <master>: product {} assigned to <worker {}>".format(
+                        self.launcher_log.info(
+                            "Product {} assigned to <worker {}>".format(
                                 unprocessed_tile.downloader_history_id, worker_id
-                            )
+                            ),
+                            print_msg = True
                         )
                     else:
                         break
 
                 if len(sleeping_workers) == self.num_workers:
-                    print("\n(launcher info) <master>: No more tiles to process")
+                    self.launcher_log.info("No more tiles to process", print_msg = True)
                     break
 
         except Exception as e:
-            print("\n(launcher err) <master>: Exception encountered: {}.".format(e))
+            self.launcher_log.info("Exception encountered: {}.".format(e), trace = True)
         finally:
             self.stop_workers()
 
@@ -651,11 +589,17 @@ class MsgToWorker(object):
 
 
 class L2aWorker(threading.Thread):
-    def __init__(self, worker_id, master_q):
+    def __init__(self, worker_id, master_q, launcher_log):
         super(L2aWorker, self).__init__()
         self.worker_id = worker_id
         self.master_q = master_q
         self.worker_q = Queue.Queue(maxsize=1)
+        self.launcher_log = LogHandler(
+            launcher_log.path,
+            launcher_log.name,
+            launcher_log.level,
+            self.worker_id
+        )
 
     def notify_end_of_tile_processing(self, lin, l2a):
         notification = ProductStatusMsg(self.worker_id, lin, l2a, True)
@@ -672,10 +616,11 @@ class L2aWorker(threading.Thread):
                     msg_to_worker.unprocessed_tile is None
                     or msg_to_worker.site_context is None
                 ):
-                    print(
-                        "\n(launcher err) <worker {}>: Either the tile or site context is None".format(
+                    self.launcher_log.error(
+                        "Either the tile or site context is None".format(
                             self.worker_id
-                        )
+                        ),
+                        print_msg = True
                     )
                     os._exit(1)
                 else:
@@ -685,57 +630,59 @@ class L2aWorker(threading.Thread):
                     self.notify_end_of_tile_processing(lin, l2a)
                     self.worker_q.task_done()
         except Exception as e:
-            print(
-                "\n(launcher err) <worker {}>: Exception {} encountered".format(
+            self.launcher_log.error(
+                "Exception {} encountered".format(
                     self.worker_id, e
-                )
+                ),
+                print_msg = True,
+                trace = True
             )
             os._exit(1)
         finally:
-            print("\n(launcher info) <worker {}>: is stopped".format(self.worker_id))
+            self.launcher_log.info("Current worker stopped".format(self.worker_id))
 
     def process_tile(self, tile, site_context):
-        print("\n#################### Tile & Site Info ####################\n")
+        print("\n<worker {}> Tile & Site Info:".format(self.worker_id))
         print(
-            "\n(launcher info) <worker {}>: site_id = {}".format(
+            "<worker {}> site_id = {}".format(
                 self.worker_id, tile.site_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: satellite_id = {}".format(
+            "<worker {}> satellite_id = {}".format(
                 self.worker_id, tile.satellite_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: orbit_id = {}".format(
+            "<worker {}> orbit_id = {}".format(
                 self.worker_id, tile.orbit_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: tile_id = {}".format(
+            "<worker {}> tile_id = {}".format(
                 self.worker_id, tile.tile_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: downloader_history_id = {}".format(
+            "<worker {}> downloader_history_id = {}".format(
                 self.worker_id, tile.downloader_history_id
             )
         )
         print(
-            "\n(launcher info) <worker {}>: path = {}".format(self.worker_id, tile.path)
+            "<worker {}> path = {}".format(self.worker_id, tile.path)
         )
         print(
-            "\n(launcher info) <worker {}>: previous_l2a_path = {}".format(
+            "<worker {}> previous_l2a_path = {}".format(
                 self.worker_id, tile.previous_l2a_path
             )
         )
         print(
-            "\n(launcher info) <worker {}>: site_short_name = {}".format(
+            "<worker {}> site_short_name = {}".format(
                 self.worker_id, site_context.site_short_name
             )
         )
         print(
-            "\n(launcher info) <worker {}>: site_output_path = {}".format(
+            "<worker {}> site_output_path = {}".format(
                 self.worker_id, site_context.site_output_path
             )
         )
@@ -743,7 +690,7 @@ class L2aWorker(threading.Thread):
         if tile.satellite_id == LANDSAT8_SATELLITE_ID:
             # only MAJA can process L8 images
             maja_context = MajaContext(site_context, self.worker_id)
-            maja = Maja(maja_context, tile, self.master_q)
+            maja = Maja(maja_context, tile, self.master_q, self.launcher_log)
             lin, l2a = maja.run()
             del maja
             return lin, l2a
@@ -751,24 +698,21 @@ class L2aWorker(threading.Thread):
             # Sentinels can be processed either with Sen2cor or MAJA
             if site_context.implementation == "sen2cor":
                 sen2cor_context = Sen2CorContext(site_context, self.worker_id)
-                sen2cor = Sen2Cor(sen2cor_context, tile, self.master_q)
+                sen2cor = Sen2Cor(sen2cor_context, tile, self.master_q, self.launcher_log)
                 lin, l2a = sen2cor.run()
                 del sen2cor
                 return lin, l2a
             elif site_context.implementation == "maja":
                 maja_context = MajaContext(site_context, self.worker_id)
-                maja = Maja(maja_context, tile, self.master_q)
+                maja = Maja(maja_context, tile, self.master_q, self.launcher_log)
                 lin, l2a = maja.run()
                 del maja
                 return lin, l2a
             else:
-                log(
-                    LAUNCHER_LOG_DIR,
-                    "{}: Aborting processing for site {} because the processor name {} is not recognized".format(
+                msg = "{}: Aborting processing for site {} because the processor name {} is not recognized".format(
                         self.worker_id, site_context.site_id, site_context.implementation
-                    ),
-                    LAUNCHER_LOG_FILE_NAME,
                 )
+                self.launcher_log.error(msg, print_msg = True)
                 return None, None
 
 
@@ -782,84 +726,54 @@ class Tile(object):
         self.path = tile_info[5]
         self.previous_l2a_path = tile_info[6]
 
-    def is_valid(self):
+    def is_valid(self, log):
         if self.downloader_history_id is None:
             rejection_reason = "Aborting processing for tile {} because downloader history id is incorrect".format(
                 self.tile_id
             ),
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.site_id is None:
             rejection_reason = "Aborting processing for product {} because site id is incorrect".format(
                     self.downloader_history_id
                 )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True) 
             return False, rejection_reason
 
         if self.satellite_id is None:
             rejection_reason = "Aborting processing for product {} because site id is incorrect".format(
                 self.downloader_history_id
             )
-            print(rejection_reason)
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME,
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if self.orbit_id is None:
             rejection_reason = "Aborting processing for product {} because orbit id is incorrect".format(
                 self.downloader_history_id
             ),
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if (self.tile_id is None) or (len(self.tile_id) == 0):
             rejection_reason = "Aborting processing for product {} because tile id is incorrect".format(
                 self.downloader_history_id
             )
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME,
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if not os.path.exists(self.path):
             rejection_reason = "Aborting processing for product {} because the input path does not exist".format(
                 self.downloader_history_id
             ) 
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME,
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         if (self.previous_l2a_path is not None) and not(os.path.exists(self.previous_l2a_path)):
             rejection_reason = "Aborting processing for product {} because the previous l2a path does not exist".format(
                 self.downloader_history_id
             )
-            log(
-                LAUNCHER_LOG_DIR,
-                rejection_reason,
-                LAUNCHER_LOG_FILE_NAME,
-            )
+            log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         return True, None
@@ -903,24 +817,17 @@ class L2aProduct(object):
 
 
 class L2aProcessor(object):
-    def __init__(self, processor_context, unprocessed_tile, master_q):
+    def __init__(self, processor_context, unprocessed_tile, master_q, launcher_log):
         self.context = processor_context
         self.lin = L1CL8Product(unprocessed_tile)
         self.l2a = L2aProduct()
-        self.l2a_log_file = None
         self.master_q = master_q
+        self.launcher_log = launcher_log
+        self.l2a_log = None # created in setup_l2a
 
     def __del__(self):
         if self.lin.was_archived and os.path.exists(self.lin.path):
             remove_dir(self.lin.path)
-
-    def l2a_log(self, log_msg):
-        log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
-        log(self.l2a.output_path, log_msg, self.l2a_log_file)
-
-    def launcher_log(self, log_msg):
-        log_msg = "<worker {}>: ".format(self.context.worker_id) + log_msg
-        log(LAUNCHER_LOG_DIR, log_msg, LAUNCHER_LOG_FILE_NAME)
 
     def get_envelope(self, footprints):
         geomCol = ogr.Geometry(ogr.wkbGeometryCollection)
@@ -975,21 +882,11 @@ class L2aProcessor(object):
 
     def check_lin(self):
 
-        self.launcher_log(
-            "{}: Starting extract_from_archive_if_needed for tile {}".format(
-                self.context.worker_id, self.lin.tile_id
-            )
-        )
         archives_dir = os.path.join(self.context.working_dir, ARCHIVES_DIR_NAME)
-        archive_handler = ArchiveHandler(archives_dir, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+        archive_handler = ArchiveHandler(archives_dir, self.launcher_log)
         self.lin.was_archived, self.lin.path = archive_handler.extract_from_archive_if_needed(
             self.lin.db_path
         )
-        self.launcher_log(
-                "{}: Ended extract_from_archive_if_needed for product {}".format(
-                    self.context.worker_id, self.lin.product_id
-                )
-            )
         if self.lin.path is not None:
             return self.validate_input_product_dir()
         else:
@@ -1044,24 +941,19 @@ class L2aProcessor(object):
             elif lin_basename.find("_L1GT_") > 0:
                 l2a_basename = lin_basename.replace("_L1GT_", "_L2A_")
             else:
-                self.update_rejection_reason(
-                    "The input product name is wrong - L2A cannot be filled: {}".format(
+                rejection_reason = "The input product name is wrong - L2A cannot be filled: {}".format(
                         lin_basename
-                    )
-                )
-                self.launcher_log(
-                    "The input product name is wrong - L2A cannot be filled: {}".format(
-                        lin_basename
-                    )
+                ),
+                self.update_rejection_reason(rejection_reason)
+                self.launcher_log.error(
+                    rejection_reason,
+                    print_msg = True
                 )
                 return False
         else:
-            self.update_rejection_reason(
-                "The input product name is wrong: {}".format(lin_basename)
-            )
-            self.launcher_log(
-                "The input product name is wrong: {}".format(lin_basename)
-            )
+            rejection_reason = "The input product name is wrong: {}".format(lin_basename)
+            self.update_rejection_reason(rejection_reason)
+            self.launcher_log.error(rejection_reason)
             return False
         self.l2a.basename = l2a_basename
 
@@ -1074,16 +966,11 @@ class L2aProcessor(object):
                 acq_month = acq_date[4:6]
                 acq_day = acq_date[6:]
             else:
-                self.update_rejection_reason(
-                    "Can NOT obtain the aquisition date on input product: {}".format(
+                rejection_reason = "Can NOT obtain the aquisition date on input product: {}".format(
                         lin_basename
-                    )
                 )
-                self.launcher_log(
-                    "Can NOT obtain the aquisition date on input product: {}".format(
-                        lin_basename
-                    )
-                )
+                self.update_rejection_reason(rejection_reason)
+                self.launcher_log.error(rejection_reason)
                 return False
         elif lin_basename.startswith("LC"):
             result = re.findall(r"_\d{8}_", lin_basename)
@@ -1093,28 +980,22 @@ class L2aProcessor(object):
                 acq_month = acq_date[4:6]
                 acq_day = acq_date[6:]
             else:
-                self.update_rejection_reason(
+                rejection_reason = (
                     "Can NOT obtain the aquisition date on input product: {}".format(
                         lin_basename
                     )
                 )
-                self.launcher_log(
-                    "Can NOT obtain the aquisition date on input product: {}".format(
-                        lin_basename
-                    )
-                )
+                self.update_rejection_reason(rejection_reason)
+                self.launcher_log.error(rejection_reason)
                 return False
         else:
-            self.update_rejection_reason(
+            rejection_reason = (
                 "Can NOT obtain the aquisition date on input product: {}".format(
                     lin_basename
                 )
             )
-            self.launcher_log(
-                "Can NOT obtain the aquisition date on input product: {}".format(
-                    lin_basename
-                )
-            )
+            self.update_rejection_reason(rejection_reason)
+            self.launcher_log.error(rejection_reason)
             return False
 
         # determine the path of the l2a product
@@ -1125,12 +1006,11 @@ class L2aProcessor(object):
             self.context.site_output_path, acq_year, acq_month, acq_day, l2a_basename
         )
         if not create_recursive_dirs(l2a_output_path):
-            self.update_rejection_reason(
+            rejection_reason = (
                 "Can NOT create the output directory: {}".format(l2a_output_path)
             )
-            self.launcher_log(
-                "Can NOT create the output directory: {}".format(l2a_output_path)
-            )
+            self.update_rejection_reason(rejection_reason)
+            self.launcher_log.error(rejection_reason)
             return False
 
         self.l2a.output_path = l2a_output_path
@@ -1139,7 +1019,14 @@ class L2aProcessor(object):
         self.l2a.site_id = self.lin.site_id
         self.l2a.product_id = self.lin.product_id
         self.l2a.orbit_id = self.lin.orbit_id
-        self.l2a_log_file = "l2a_{}.log".format(self.lin.product_id)
+        log_file_name = "l2a_{}.log".format(self.lin.product_id)
+        l2a_log_path = os.path.join(self.l2a.output_path, log_file_name)
+        self.l2a_log = LogHandler(
+            l2a_log_path,
+            "l2a_log",
+            self.launcher_log.level,
+            self.context.worker_id
+        )
         return True
 
     def update_rejection_reason(self, message):
@@ -1166,8 +1053,8 @@ class L2aProcessor(object):
             self.update_rejection_reason("Can NOT copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e))
 
 class Maja(L2aProcessor):
-    def __init__(self, processor_context, input_context, master_q):
-        super(Maja, self).__init__(processor_context, input_context, master_q)
+    def __init__(self, processor_context, input_context, master_q, launcher_log):
+        super(Maja, self).__init__(processor_context, input_context, master_q, launcher_log)
         self.name = "maja"
         self.eef_available = False
 
@@ -1181,18 +1068,16 @@ class Maja(L2aProcessor):
             elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
                 footprint_tif_pattern = "**/*.DBL.TIF"
             else:
-                self.update_rejection_reason(
-                    "Can NOT create the footprint, invalid satelite id."
-                )
-                self.l2a_log("Can NOT create the footprint, invalid satelite id.")
+                rejection_reason = "Can NOT create the footprint, invalid satelite id."
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(rejection_reason)
                 return False
         elif self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
             footprint_tif_pattern = "**/*_B2.tif"
         else:
-            self.update_rejection_reason(
-                    "Can NOT create the footprint, invalid output format."
-                )
-            self.l2a_log("Can NOT create the footprint, invalid output format.")
+            rejection_reason = "Can NOT create the footprint, invalid output format."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
 
         footprint_tif_path = os.path.join(self.l2a.output_path, footprint_tif_pattern)
@@ -1200,14 +1085,15 @@ class Maja(L2aProcessor):
 
         if len(tile_img) > 0:
             wgs84_extent_list.append(get_footprint(tile_img[0])[0])
-            self.l2a_log("MAJA common footprint tif file: {}".format(tile_img))
+            self.l2a_log.info(
+                "MAJA common footprint tif file: {}".format(tile_img),
+            )
             self.l2a.footprint = self.get_envelope(wgs84_extent_list)
             return True
 
-        self.update_rejection_reason(
-            "Can NOT create the footprint, no FRE tif file exists."
-        )
-        self.l2a_log("Can NOT create the footprint, no FRE tif file exists.")
+        rejection_reason = "Can NOT create the footprint, no FRE tif file exists."
+        self.update_rejection_reason(rejection_reason)
+        self.l2a_log.error(rejection_reason)
         return False
 
     def get_quality_indicators(self):
@@ -1239,22 +1125,23 @@ class Maja(L2aProcessor):
                             self.l2a.snow_ice_percentage = numbers[0]
                             snow_coverage_acq = True
             except Exception as e:
-                self.l2a_log(
+                self.l2a_log.error(
                     "Exception received when trying to read  file {} due to: {}".format(
                         maja_report_file_path, e
-                    )
+                    ),
+                    trace = True
                 )
 
             if not cloud_coverage_acq:
-                self.l2a_log(
-                    "Can NOT extract cloud coverage from {}".format(maja_report_file_path)
+                self.l2a_log.warning(
+                    "Can NOT extract cloud coverage from {}".format(maja_report_file_path),
                 )
 
             if not snow_coverage_acq:
-                self.l2a_log(
+                self.l2a_log.warning(
                     "Can NOT extract snow ice coverage from {}".format(
                         maja_report_file_path
-                    )
+                    ),
                 )
         else:
             #starting with maja 4.2.1 the cloud coverage is read from maja.log, not from eef
@@ -1286,15 +1173,15 @@ class Maja(L2aProcessor):
                     ):
                         pass
             except Exception as e:
-                self.update_rejection_reason(
+                rejection_reason = (
                     "Exception received when trying to read file {}: {}".format(
                         maja_report_file_path, e
                     )
                 )
-                self.l2a_log(
-                    "Exception received when trying to read file {}: {}".format(
-                        maja_report_file_path, e
-                    )
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(
+                    rejection_reason,
+                    trace = True
                 )
 
     def check_jpi_file(self):
@@ -1312,27 +1199,20 @@ class Maja(L2aProcessor):
                     if key == "Validity_Flag":
                         value = message.find("value").get_text()
                         if value == "L2NOTV":
-                            self.l2a_log(
-                                "L2NOTV found in the MAJA JPI file {}. The product will not be retried ... ".format(
+                            rejection_reason = "L2NOTV found in the MAJA JPI file {}. The product will not be retried!".format(
                                     jpi_file
-                                )
                             )
+                            self.update_rejection_reason(rejection_reason)
+                            self.l2a_log.error(rejection_reason)
                             self.lin.should_retry = False
-                            self.update_rejection_reason(
-                                "L2NOTV found in the MAJA JPI file {}. The product will not be retried!".format(
-                                    jpi_file
-                                )
-                            )
             except Exception as e:
-                self.update_rejection_reason(
-                    "Exception received when trying to read the MAJA JPI from file {}: {}".format(
+                rejection_reason = "Exception received when trying to read the MAJA JPI from file {}: {}".format(
                         jpi_file, e
-                    )
                 )
-                self.l2a_log(
-                    "Exception received when trying to read the MAJA JPI from file {}: {}".format(
-                        jpi_file, e
-                    )
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(
+                    rejection_reason,
+                    trace = True
                 )
 
     def check_l2a_log(self):
@@ -1357,8 +1237,12 @@ class Maja(L2aProcessor):
         elif self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
             qkl_pattern = "*QKL*.jpg"
         else:
-            self.update_rejection_reason("Can NOT find QKL file, invalid output format.")
-            self.l2a_log("Can NOT find QKL file, invalid output format.")
+            rejection_reason = "Can NOT find QKL file, invalid output format."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(
+               rejection_reason,
+               trace = True
+            )
             return False
         qkl_search_path = os.path.join(self.l2a.product_path, qkl_pattern)
         qkl_files = glob.glob(qkl_search_path)
@@ -1369,14 +1253,17 @@ class Maja(L2aProcessor):
                 shutil.copy(qkl, mosaic)
                 return True
             except:
-                self.update_rejection_reason(
-                    "Can NOT copy QKL {} to {}".format(qkl, mosaic)
+                rejection_reason = "Can NOT copy QKL {} to {}".format(qkl, mosaic)
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(
+                   rejection_reason,
+                   trace = True
                 )
-                self.l2a_log("Can NOT copy QKL {} to {}".format(qkl, mosaic))
                 return False
         else:
-            self.update_rejection_reason("Can NOT find QKL file.")
-            self.l2a_log("Can NOT find QKL file.")
+            rejection_reason = "Can NOT find QKL file."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
 
     def check_theia_muscate_format(self):
@@ -1449,32 +1336,39 @@ class Maja(L2aProcessor):
                 masks_dir = True
 
         if atb_files_count == 0:
-            self.update_rejection_reason("Can NOT find ATB files.")
-            self.l2a_log("Can NOT find ATB files.")
+            rejection_reason = "Can NOT find ATB files."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
         if (fre_files_count == 0) and (self.context.removeFreFiles == False):
-            self.update_rejection_reason("Can NOT find FRE files.")
-            self.l2a_log("Can NOT find FRE files.")
+            rejection_reason = "Can NOT find FRE files."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
         if (sre_files_count == 0) and (self.context.removeSreFiles == False):
-            self.update_rejection_reason("Can NOT find SRE files.")
-            self.l2a_log("Can NOT find SRE files.")
+            rejection_reason = "Can NOT find SRE files."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
         if qkl_file == False:
-            self.update_rejection_reason("Can NOT find QKL files.")
-            self.l2a_log("Can NOT find QKL files.")
+            rejection_reason = "Can NOT find QKL files."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
         if mtd_file == False:
-            self.update_rejection_reason("Can NOT find MTD files.")
-            self.l2a_log("Can NOT find MTD files.")
+            rejection_reason = "Can rejection_reason NOT find MTD files."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
         if data_dir == False:
-            self.update_rejection_reason("Can NOT find DATA dir.")
-            self.l2a_log("Can NOT find DATA dir.")
+            rejection_reason = "Can NOT find DATA dir."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
         if masks_dir == False:
-            self.update_rejection_reason("Can NOT find MASKS dir.")
-            self.l2a_log("Can NOT find MASKS dir.")
+            rejection_reason = "Can NOT find MASKS dir."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
 
         return True
@@ -1516,14 +1410,16 @@ class Maja(L2aProcessor):
         l2a_product_name = os.path.basename(tmp_path)
         satellite_id, acquisition_date = self.get_l2a_info(l2a_product_name)
         if acquisition_date is None:
-            self.update_rejection_reason("Acquisition date could not be retrieved.")
-            self.l2a_log("Acquisition date could not be retrieved.")
+            rejection_reason = "Acquisition date could not be retrieved."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
         else:
             self.l2a.acquisition_date = acquisition_date
         if satellite_id == UNKNOWN_SATELLITE_ID:
-            self.update_rejection_reason("UNKNOWN SATELLITE ID: {}.".format(satellite_id))
-            self.l2a_log("UNKNOWN SATELLITE ID: {}.".format(satellite_id))
+            rejection_reason = "UNKNOWN SATELLITE ID: {}.".format(satellite_id)
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
 
         #determine the l2a product format
@@ -1546,16 +1442,18 @@ class Maja(L2aProcessor):
                 self.l2a.name = os.path.basename(self.l2a.output_path)
                 l2a_found = True
             else:
-                self.update_rejection_reason("None or multiple tiles were processed.")
-                self.l2a_log("None or multiple tiles were processed.")
+                rejection_reason = "None or multiple tiles were processed."
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(rejection_reason)
         elif self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
             if satellite_id == LANDSAT8_SATELLITE_ID:
                 name_pattern = "*_[CHD]_V*"
             elif satellite_id == SENTINEL2_SATELLITE_ID:
                 name_pattern = "*_T{}_[CHD]_V*".format(self.lin.tile_id)
             else:
-                self.update_rejection_reason("Invalid satelite id.")
-                self.l2a_log("Invalid satelite id.")
+                rejection_reason = "Invalid satelite id."
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(rejection_reason)
                 return False
             search_path = os.path.join(self.l2a.output_path, name_pattern)
             l2a_products = glob.glob(search_path)
@@ -1566,11 +1464,13 @@ class Maja(L2aProcessor):
                     self.l2a.processed_tiles.append(self.lin.tile_id)
                     l2a_found = True
             else:
-                self.update_rejection_reason("None or multiple tiles were processed.")
-                self.l2a_log("None or multiple tiles were processed.")
+                rejection_reason = "None or multiple tiles were processed."
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(rejection_reason)
         else:
-            self.update_rejection_reason("Invalid output format.")
-            self.l2a_log("Invalid output format.")
+            rejection_reason = "Invalid output format."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
 
         #get the cloud and/or snow coverage
         self.get_quality_indicators()
@@ -1684,29 +1584,36 @@ class Maja(L2aProcessor):
         script_command.append(self.context.maja4_image)
         script_command.append("--docker-image-gdal")
         script_command.append(self.context.gdal_image)
+        script_command.append("--log-level")
+        script_command.append(self.l2a_log.level)
 
-        majalog_path = os.path.join(self.l2a.output_path, MAJA_LOG_FILE_NAME)
-        command_string =""
-        for argument in script_command:
-            command_string = command_string + " " + str(argument)
-        self.l2a_log("Running command: {}".format(command_string))
-        print("Running Maja, console output can be found at {}".format(majalog_path))
+        self.launcher_log.info(
+            "Running Maja, console output can be found at {}".format(self.l2a_log.path),
+            print_msg = True
+        )
+        cmd_str = " ".join(map(pipes.quote, script_command))
+        self.l2a_log.info("Running command: " + cmd_str)
+        start_time = time.time()
         notification = ContainerStatusMsg(container_name, True)
         self.master_q.put(notification)
-        with open(majalog_path, "w") as majalog_file:
-            command_return = subprocess.call(script_command, stdout = majalog_file, stderr = majalog_file)
+        command_return = run_command(script_command, self.l2a_log)
         notification = ContainerStatusMsg(container_name, False)
         self.master_q.put(notification)
+        end_time = time.time()
+        self.l2a_log.info(
+            "Command {} finished with return code {} in {}".format(cmd_str, command_return, datetime.timedelta(seconds=(end_time - start_time))),
+            print_msg = True
+        )
+
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
         else:
-            self.update_rejection_reason(
+            rejection_reason = ( 
                 "Can NOT run MAJA script, error code: {}.".format(command_return)
             )
-            self.l2a_log(
-                "Can NOT run MAJA script, error code: {}.".format(command_return)
-            )
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
 
     def manage_prods_status(
@@ -1746,47 +1653,40 @@ class Maja(L2aProcessor):
         # pre-processing
         if self.check_lin() and self.l2a_setup():
             preprocess_succesful = True
-        print(
-            "\n(launcher info) <worker {}>: Successful pre-processing = {}".format(
-                self.context.worker_id, preprocess_succesful
-            )
+        msg = "Successful pre-processing = {}".format(
+            preprocess_succesful
         )
-        self.l2a_log("Successful pre-processing = {}".format(preprocess_succesful))
+        self.l2a_log.info(msg, print_msg = True)
 
         # processing
         if preprocess_succesful:
             process_succesful = self.run_script()
-        print(
-            "\n(launcher info) <worker {}>: Successful processing = {}".format(
-                self.context.worker_id, process_succesful
-            )
+        msg = "Successful processing = {}".format(
+            process_succesful
         )
-        self.l2a_log("Successful processing = {}".format(process_succesful))
+        self.l2a_log.info(msg, print_msg = True)
 
         # processing checks
         l2a_ok = self.check_l2a(process_succesful)
-        print(
-            "\n(launcher info) <worker {}>: Valid L2a product = {}".format(
-                self.context.worker_id, l2a_ok
-            )
+        msg = "Valid L2a product = {}".format(
+            l2a_ok
         )
-        self.l2a_log("Valid L2a product = {}".format(l2a_ok))
+        self.l2a_log.info(msg, print_msg = True)
 
         #post-processing
         if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
-            print(
-                "\n(launcher info) <worker {}>: Footprint computed: {}".format(
-                    self.context.worker_id, self.l2a.footprint)
-                )
-            self.l2a_log("Footprint computed: {}".format(self.l2a.footprint))
+            msg = "Footprint computed: {}".format(
+                self.l2a.footprint
+            )
+            self.l2a_log.info(msg, print_msg = True)
 
         self.manage_prods_status(preprocess_succesful, process_succesful, l2a_ok)
         return self.lin, self.l2a
 
 
 class Sen2Cor(L2aProcessor):
-    def __init__(self, processor_context, input_context, master_q):
-        super(Sen2Cor, self).__init__(processor_context, input_context, master_q)
+    def __init__(self, processor_context, input_context, master_q, launcher_log):
+        super(Sen2Cor, self).__init__(processor_context, input_context, master_q, launcher_log)
         self.name = "sen2cor"
 
     def get_l2a_footprint(self):
@@ -1805,16 +1705,19 @@ class Sen2Cor(L2aProcessor):
 
         if len(footprint_files) > 0:
             footprint_file = os.path.abspath(footprint_files[0])
-            self.l2a_log("Sen2Cor common footprint file: {}".format(footprint_file))
+            self.l2a_log.info(
+                "Sen2Cor common footprint file: {}".format(footprint_file),
+                print_msg = True
+            )
             wgs84_extent_list.append(get_footprint(footprint_file)[0])
             self.l2a.footprint = self.get_envelope(wgs84_extent_list)
             return True
         else:
-            self.update_rejection_reason(
-                "Can NOT create the footprint, no B02_10m/20m/60m.tif file exists."
-            )
-            self.l2a_log(
-                "Can NOT create the footprint, no B02_10m/20m/60m.tif file exists."
+            rejection_reason = "Can NOT create the footprint, no B02_10m/20m/60m.tif file exists."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(
+                rejection_reason,
+                print_msg = True
             )
             return False
 
@@ -1861,14 +1764,15 @@ class Sen2Cor(L2aProcessor):
                     )
                 )
             except:
-                self.l2a_log(
+                self.l2a_log.error(
                     "Can NOT parse {} for quality indicators extraction.".format(
                         mtd_path
-                    )
+                    ),
+                    trace = True
                 )
         else:
-            self.l2a_log(
-                "Can NOT find MTD_MSIL2A.xml file in location.".format(mtd_path)
+            self.l2a_log.error(
+                "Can NOT find MTD_MSIL2A.xml file in location.".format(mtd_path),
             )
 
     def get_rejection_reason(self):
@@ -1886,22 +1790,17 @@ class Sen2Cor(L2aProcessor):
                 rejection_reason = "Can NOT read from sen2cor log file {} to get the rejection reason".format(
                     log_path
                 )
-                self.l2a_log(
-                    "Can NOT read from sen2cor log file {} to get the rejection reason".format(
-                        log_path
-                    )
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(
+                    rejection_reason,
+                    trace = True
                 )
         else:
-            rejection_reason = (
-                "Can NOT find sen2cor log file {} to get the rejection reason".format(
+            rejection_reason = "Can NOT find sen2cor log file {} to get the rejection reason".format(
                     log_path
-                )
             )
-            self.l2a_log(
-                "Can NOT find sen2cor log file {} to get the rejection reason".format(
-                    log_path
-                )
-            )
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
 
         return rejection_reason
 
@@ -1918,16 +1817,17 @@ class Sen2Cor(L2aProcessor):
                 shutil.copy(pvi_files[0], mosaic)
                 return True
             except:
-                self.update_rejection_reason(
-                    "Can NOT copy PVI {} to {}".format(pvi_files[0], mosaic)
+                rejection_reason = "Can NOT copy PVI {} to {}".format(pvi_files[0], mosaic)
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(
+                    rejection_reason,
+                    trace = True
                 )
-                self.l2a_log("Can NOT copy PVI {} to {}".format(pvi_files[0], mosaic))
                 return False
         else:
-            self.update_rejection_reason(
-                "Can NOT indentify a PVI image to create mosaic.jpg ."
-            )
-            self.l2a_log("Can NOT indentify a PVI image to create mosaic.jpg .")
+            rejection_reason = "Can NOT indentify a PVI image to create mosaic.jpg ."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
 
     def check_l2a(self):
@@ -1944,26 +1844,18 @@ class Sen2Cor(L2aProcessor):
 
             satellite_id, acquisition_date = self.get_l2a_info(l2a_product_name)
             if self.lin.satellite_id != satellite_id:
-                self.update_rejection_reason(
-                    "L2A and input product have different satellite ids: {} vs {} .".format(
+                rejection_reason ="L2A and input product have different satellite ids: {} vs {} .".format(
                         satellite_id, self.lin.satellite_id
-                    )
                 )
-                self.l2a_log(
-                    "L2A and input product have different satellite ids: {} vs {} .".format(
-                        satellite_id, self.lin.satellite_id
-                    )
-                )
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(rejection_reason)
                 return False
         else:
-            self.update_rejection_reason(
-                "No product or multiple L2A products are present in the output directory."
-            )
-            self.l2a_log(
-                "No product or multiple L2A products are present in the output directory."
-            )
+            rejection_reason = "No product or multiple L2A products are present in the output directory."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
-
+            
         self.l2a.name = l2a_product_name
         self.l2a.product_path = os.path.join(self.l2a.output_path, self.l2a.name)
         self.l2a.acquisition_date = acquisition_date
@@ -1984,10 +1876,9 @@ class Sen2Cor(L2aProcessor):
         )
         wrk_dir = os.path.join(self.context.working_dir, self.l2a.basename)
         if not create_recursive_dirs(wrk_dir):
-            self.update_rejection_reason(
-                "Can NOT create wrk dir {}".format(wrk_dir)
-            )
-            self.l2a_log("Can NOT create wrk dir {}".format(wrk_dir))
+            rejection_reason = "Can NOT create wrk dir {}".format(wrk_dir)
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason)
             return False
 
         guid = get_guid(8)
@@ -2034,8 +1925,8 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--GIP_L2A")
             script_command.append(gipp_l2a_path)
         else:
-            self.l2a_log(
-                "(launcher warning) Can NOT find L2A_GIPP.xml at {}, proceeding with default GIPP".format(
+            self.l2a_log.warning(
+                "Can NOT find L2A_GIPP.xml at {}, proceeding with default GIPP".format(
                     gipp_l2a_path
                 )
             )
@@ -2044,8 +1935,8 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--lc_snow_cond_path")
             script_command.append(lc_snow_cond_path)
         else:
-            self.l2a_log(
-                "(launcher warning) Can NOT find ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0 at {}, proceeding with default GIPP".format(
+            self.l2a_log.error(
+                "Can NOT find ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0 at {}, proceeding with default GIPP".format(
                     lc_snow_cond_path
                 )
             )
@@ -2054,8 +1945,8 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--lc_lccs_map_path")
             script_command.append(lc_lccs_map_path)
         else:
-            self.l2a_log(
-                "(launcher warning) Can NOT find ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif at {}, proceeding with default GIPP".format(
+            self.l2a_log.error(
+                "Can NOT find ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif at {}, proceeding with default GIPP".format(
                     lc_lccs_map_path
                 )
             )
@@ -2064,8 +1955,8 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--lc_wb_map_path")
             script_command.append(lc_wb_map_path)
         else:
-            self.l2a_log(
-                "(launcher warning) Can NOT find ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif at {}, proceeding with default GIPP".format(
+            self.l2a_log.error(
+                "Can NOT find ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif at {}, proceeding with default GIPP".format(
                     lc_wb_map_path
                 )
             )
@@ -2088,30 +1979,38 @@ class Sen2Cor(L2aProcessor):
         script_command.append(self.context.sen2cor_image)
         script_command.append("--docker-image-gdal")
         script_command.append(self.context.gdal_image)
+        script_command.append("--log-level")
+        script_command.append(self.l2a_log.level)
         #tmp only for testing purposes
         #script_command.append("--resolution")
         #script_command.append(str(60))
         #tmp
 
-        sen2corlog_path = os.path.join(self.l2a.output_path, SEN2COR_LOG_FILE_NAME)
-        cmd_str =""
-        for elem in script_command:
-            cmd_str = cmd_str + " " + elem
-        self.l2a_log("Running command: {}".format(cmd_str))
-        print("Running Sen2Cor, console output can be found at {}".format(sen2corlog_path))
+        self.launcher_log.info(
+            "Running Sen2Cor, console output can be found at {}".format(self.l2a_log.path),
+            print_msg = True
+        )
+        cmd_str = " ".join(map(pipes.quote, script_command))
+        self.l2a_log.info("Running command: " + cmd_str)
+        start_time = time.time()
         notification = ContainerStatusMsg(container_name, True)
         self.master_q.put(notification)
-        with open(sen2corlog_path, "w") as sen2corlog_file:
-            command_return = subprocess.call(script_command, stdout = sen2corlog_file, stderr = sen2corlog_file)
+        command_return = run_command(script_command, self.l2a_log)
         notification = ContainerStatusMsg(container_name, False)
         self.master_q.put(notification)
+        end_time = time.time()
+        self.l2a_log.info(
+            "Command {} finished with return code {} in {}".format(cmd_str, command_return, datetime.timedelta(seconds=(end_time - start_time))),
+            print_msg = True
+        )
+
 
         if (command_return == 0) and os.path.isdir(self.l2a.output_path):
             return True
         else:
             reason = self.get_rejection_reason()
             self.update_rejection_reason(reason)
-            self.l2a_log(
+            self.l2a_log.error(
                 "Sen2Cor returned error code: {} due to : {}.".format(
                     command_return, reason
                 )
@@ -2132,17 +2031,12 @@ class Sen2Cor(L2aProcessor):
             if self.l2a.valid_pixels_percentage is not None:
                 if self.l2a.valid_pixels_percentage < MIN_VALID_PIXELS_THRESHOLD:
                     self.lin.should_retry = False
-                    self.update_rejection_reason(
-                        "The valid pixels percentage is {} which is less that the threshold of {}%".format(
-                            self.l2a.valid_pixels_percentage, MIN_VALID_PIXELS_THRESHOLD
-                        )
+                    rejection_reason = "The valid pixels percentage is {} which is less that the threshold of {}%".format(
+                        self.l2a.valid_pixels_percentage, MIN_VALID_PIXELS_THRESHOLD
                     )
-                    self.l2a_log(
-                        "The valid pixels percentage is {} which is less that the threshold of {}%".format(
-                            self.l2a.valid_pixels_percentage, MIN_VALID_PIXELS_THRESHOLD
-                        )
-                    )
-                    if not DEBUG:
+                    self.update_rejection_reason(rejection_reason)
+                    self.l2a_log.error(rejection_reason)
+                    if self.l2a_log.level == 'debug':
                         remove_dir(self.l2a.product_path)
                 else:
                     self.move_to_destination()
@@ -2157,67 +2051,47 @@ class Sen2Cor(L2aProcessor):
 
         if self.check_lin() and self.l2a_setup():
             preprocess_succesful = True
-        print(
-            "\n(launcher info) <worker {}>: Successful pre-processing = {}".format(
-                self.context.worker_id, preprocess_succesful
-            )
+        msg = "Successful pre-processing = {}".format(
+            preprocess_succesful
         )
-        self.l2a_log(
-            "Successful  pre-processing = {}".format(
-                self.context.worker_id, preprocess_succesful
-            )
-        )
+        self.l2a_log.info(msg, print_msg = True)
 
         if preprocess_succesful and self.run_script():
             process_succesful = True
-        print(
-            "\n(launcher info) <worker {}>: Successful Sen2Cor processing = {}".format(
-                self.context.worker_id, process_succesful
-            )
+        msg = "Successful Sen2Cor processing = {}".format(
+            process_succesful
         )
-        self.l2a_log(
-            "Successful Sen2Cor processing = {}".format(
-                self.context.worker_id, process_succesful
-            )
-        )
+        self.l2a_log.info(msg, print_msg = True)
 
         if process_succesful and self.check_l2a():
             l2a_ok = True
-        print(
-            "\n(launcher info) <worker {}>: Valid L2a product = {}".format(
-                self.context.worker_id, l2a_ok
-            )
+        msg = "Valid L2a product = {}".format(
+            l2a_ok
         )
-        self.l2a_log("Valid L2a product = {}".format(self.context.worker_id, l2a_ok))
+        self.l2a_log.info(msg, print_msg = True)
 
         if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
             postprocess_succesful = True
-        print(
-            "\n(launcher info) <worker {}>: Successful post-processing = {}".format(
-                self.context.worker_id, postprocess_succesful
-            )
+        msg = "Successful post-processing = {}".format(
+            postprocess_succesful
         )
-        self.l2a_log(
-            "Successful post-processing = {}".format(
-                self.context.worker_id, postprocess_succesful
-            )
-        )
-
+        self.l2a_log.info(msg, print_msg = True)
+        
         self.manage_prods_status(
             preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
         )
         return self.lin, self.l2a
 
-def db_clear_pending_tiles(db_config, node_id, log_dir, log_file):
+def db_clear_pending_tiles(db_config, node_id, log):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
         cursor.execute("""select * from sp_clear_pending_l1_tiles(%(node_id)s);""",{"node_id" : node_id})
 
     with db_config.connect() as connection:
-        handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log)
 
-def db_get_unprocessed_tile(db_config, node_id, log_dir, log_file):
+def db_get_unprocessed_tile(db_config, node_id, log):
     def _run(cursor):
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
@@ -2226,11 +2100,11 @@ def db_get_unprocessed_tile(db_config, node_id, log_dir, log_file):
         return tile_info
 
     with db_config.connect() as connection:
-        tile_info = handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "Unprocessed tile info: {}".format(tile_info), log_file)
+        tile_info = handle_retries(connection, _run, log)
+        log.debug("Unprocessed tile info: {}".format(tile_info))
         return tile_info
 
-def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
+def db_postrun_update(db_config, input_prod, l2a_prod, log):
     def _run(cursor):
         processing_status = input_prod.processing_status
         downloader_product_id = input_prod.product_id
@@ -2334,9 +2208,9 @@ def db_postrun_update(db_config, input_prod, l2a_prod, log_dir = LAUNCHER_LOG_DI
             )
 
     with db_config.connect() as connection:
-        handle_retries(connection, _run, log_dir, log_file)
+        handle_retries(connection, _run, log)
 
-def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_file = LAUNCHER_LOG_FILE_NAME):
+def db_prerun_update(db_config, tile, reason, log):
     def _run(cursor):
         processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
         downloader_history_id = tile.downloader_history_id
@@ -2370,40 +2244,35 @@ def db_prerun_update(db_config, tile, reason, log_dir = LAUNCHER_LOG_DIR, log_fi
         )
 
     with db_config.connect() as connection:
-        handle_retries(connection, _run, log_dir, log_file)
-        log(log_dir, "Product with downloader history id {} was rejected because: {}".format(tile.downloader_history_id, reason), log_file)
+        handle_retries(connection, _run, log)
+        log.error(
+            "Product with downloader history id {} was rejected because: {}".format(tile.downloader_history_id, reason),
+        )
 
 parser = argparse.ArgumentParser(description="Launcher for MAJA/Sen2Cor script")
 parser.add_argument(
     "-c", "--config", default="/etc/sen2agri/sen2agri.conf", help="configuration file"
 )
+parser.add_argument('-l', '--log-level', default = 'info',
+                    choices = ['debug' , 'info', 'warning' , 'error', 'critical'], 
+                    help = 'Minimum logging level')
 args = parser.parse_args()
+launcher_log_path = os.path.join(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+launcher_log = LogHandler(launcher_log_path, "launcher_log", args.log_level, MASTER_ID)
 
 # get the processing context
-db_config = DBConfig.load(args.config, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+db_config = DBConfig.load(args.config, launcher_log)
 default_processing_context = ProcessingContext()
-db_get_processing_context(db_config, default_processing_context, DB_PROCESSOR_NAME, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
+db_get_processing_context(db_config, default_processing_context, DB_PROCESSOR_NAME, launcher_log)
 if default_processing_context is None:
-    log(
-        LAUNCHER_LOG_DIR,
-        "Could not load the processing context from database",
-        LAUNCHER_LOG_FILE_NAME,
-    )
+    launcher_log.critical("Could not load the processing context from database", print_msg = True)
     sys.exit(1)
 
 if default_processing_context.num_workers["default"] < 1:
-    print(
-        "(launcher err) <master>: Invalid processing context num_workers: {}".format(
+    msg = "Invalid processing context num_workers: {}".format(
             default_processing_context.num_workers["default"]
-        )
     )
-    log(
-        LAUNCHER_LOG_DIR,
-        "(launcher err) <master>: Invalid processing context num_workers: {}".format(
-                    default_processing_context.num_workers["default"]
-        ),
-        LAUNCHER_LOG_FILE_NAME,
-    )
+    launcher_log.critical(msg, print_msg = True)
     sys.exit(1)
 
 # woking dir operations
@@ -2411,18 +2280,10 @@ if default_processing_context.num_workers["default"] < 1:
 if not create_recursive_dirs(
     default_processing_context.working_dir["default"]
 ):
-    print(
-        "Could not create the work base directory {}".format(
+    msg = "Could not create the work base directory {}".format(
             default_processing_context.working_dir["default"]
-        )
     )
-    log(
-        LAUNCHER_LOG_DIR,
-        "Could not create the work base directory {}".format(
-            default_processing_context.working_dir["default"]
-        ),
-        LAUNCHER_LOG_FILE_NAME,
-    )
+    launcher_log.critical(msg, print_msg = True)
     sys.exit(1)
 
 # delete all the temporary content from a previous run
@@ -2432,9 +2293,9 @@ remove_dir_content(default_processing_context.working_dir["default"])
 node_id = get_node_id()
 
 # clear pending tiless
-db_clear_pending_tiles(db_config, node_id, LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
-l2a_master = L2aMaster(default_processing_context.num_workers["default"], db_config, node_id)
+db_clear_pending_tiles(db_config, node_id, launcher_log)
+l2a_master = L2aMaster(default_processing_context.num_workers["default"], db_config, node_id, launcher_log)
 l2a_master.run()
 
-if DEBUG == False:
+if launcher_log.level == 'debug':
     remove_dir_content("{}/".format(default_processing_context.working_dir["default"]))
