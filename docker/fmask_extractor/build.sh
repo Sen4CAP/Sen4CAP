@@ -1,2 +1,2 @@
 #!/bin/bash
-tar -czh . | docker build -t lnicola/fmask_extractor -
+tar -czh . | docker build -t sen4x/fmask_extractor:0.1 -

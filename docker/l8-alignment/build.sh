@@ -1,2 +1,2 @@
 #!/bin/bash
-tar -czh . | docker build -t lnicola/sen2agri-l8-alignment -
+tar -czh . | docker build -t sen4x/l2a-l8-alignment:0.1 -

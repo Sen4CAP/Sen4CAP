@@ -1,2 +1,2 @@
 #!/bin/bash
-tar -czh . | docker build -t lnicola/sen2agri-dem -
+tar -czh . | docker build -t sen4x/l2a-dem:0.1 -
