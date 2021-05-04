@@ -164,7 +164,7 @@ def get_prev_l2a_tile_path(tile_id, prev_l2a_product_path):
     print("STOP get_prev_l2a_tile_path")
     return tile_files
 
-def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context, log_filename):
+def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context):
     l2a_log.info("Checking for MAJA JPI file in directory {} ...".format(maja_working_dir))
     
     files = []
@@ -539,7 +539,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
             else: #the dest does not exist, so it will be moved without problems
                 pass
             
-            is_valid_maja_jpi = get_maja_jpi_log_extract(maccs_working_dir, demmaccs_context, log_filename)
+            is_valid_maja_jpi = get_maja_jpi_log_extract(maccs_working_dir, demmaccs_context)
             if is_valid_maja_jpi == True :
                 l2a_log.info("Moving {} to {}".format(maja_dir, new_file))
                 shutil.move(maja_dir, new_file)
