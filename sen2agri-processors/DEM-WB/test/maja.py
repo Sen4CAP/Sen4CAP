@@ -732,7 +732,7 @@ if not create_recursive_dirs(dem_working_dir):
     if not remove_dir(working_dir):
         l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
     os._exit(1)
-remove_dir_content(dem_output_dir)
+remove_dir_content(dem_working_dir)
 
 l2a_log.info("working_dir = {}".format(working_dir), print_msg = True)
 l2a_log.info("dem_working_dir = {}".format(dem_working_dir), print_msg = True)

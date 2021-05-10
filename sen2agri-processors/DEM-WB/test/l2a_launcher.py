@@ -857,7 +857,7 @@ class L2aProcessor(object):
                     self.lin.path, e.errno
             )
             self.update_rejection_reason(rejection_reason)
-	    self.launcher_log.error(rejection_reason, print_msg = True)
+            self.launcher_log.error(rejection_reason, print_msg = True)
             return False
 
         for root, subdirs, files in os.walk(self.lin.path):
@@ -870,7 +870,7 @@ class L2aProcessor(object):
                             subdir_path, e.errno
                     )
                     self.update_rejection_reason(rejection_reason)
-		    self.launcher_log.error(rejection_reason, print_msg = True, trace = True)
+                    self.launcher_log.error(rejection_reason, print_msg = True, trace = True)
                     return False
 
             for filename in files:
@@ -882,7 +882,7 @@ class L2aProcessor(object):
                             file_path, e.errno
                     )
                     self.update_rejection_reason(rejection_reason)
-		    self.launcher_log.error(rejection_reason, print_msg = True, trace = True)
+                    self.launcher_log.error(rejection_reason, print_msg = True, trace = True)
                     return False
 
         return True
@@ -1227,7 +1227,7 @@ class Maja(L2aProcessor):
                 self.update_rejection_reason(rejection_reason)
                 self.l2a_log.error(
                     rejection_reason,
-		    print_msg = True,
+                    print_msg = True,
                     trace = True
                 )
 
@@ -1810,7 +1810,7 @@ class Sen2Cor(L2aProcessor):
                 self.update_rejection_reason(rejection_reason)
                 self.l2a_log.error(
                     rejection_reason,
-		    print_msg = True,
+                    print_msg = True,
                     trace = True
                 )
         else:
