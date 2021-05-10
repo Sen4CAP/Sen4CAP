@@ -28,7 +28,7 @@ import pipes
 import shutil
 import signal
 from multiprocessing import Pool
-from l2a_commons import run_command, create_recursive_dirs, remove_dir, translate, get_guid, stop_containers
+from l2a_commons import run_command, create_recursive_dirs, remove_dir, translate, get_guid, stop_containers, remove_dir_content
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT, UNKNOWN_PROCESSOR_OUTPUT_FORMAT
 from l2a_commons import LogHandler, NO_ID
@@ -236,7 +236,7 @@ def copy_common_gipp_file(working_dir, gipp_base_dir, gipp_sat_dir, gipp_sat_pre
 
 
 class DEMMACCSContext(object):
-    def __init__(self, base_working_dir, dem_hdr_file, gipp_base_dir, prev_l2a_tiles, prev_l2a_products_paths, maccs_address, maccs_launcher, l1c_input, l2a_output):
+    def __init__(self, base_working_dir, dem_hdr_file, gipp_base_dir, prev_l2a_tiles, prev_l2a_products_paths, maccs_address, l1c_input, l2a_output):
         self.base_working_dir = base_working_dir
         self.dem_hdr_file = dem_hdr_file
         self.dem_output_dir = dem_output_dir
@@ -244,12 +244,6 @@ class DEMMACCSContext(object):
         self.prev_l2a_tiles = prev_l2a_tiles
         self.prev_l2a_products_paths = prev_l2a_products_paths
         self.maccs_address = maccs_address
-        self.maccs_launcher = maccs_launcher
-        self.l1c_processor = UNKNOWN_PROCESSOR_OUTPUT_FORMAT 
-        if re.search(r"maccs", maccs_launcher, re.IGNORECASE):
-            self.l1c_processor = MACCS_PROCESSOR_OUTPUT_FORMAT
-        elif re.search(r"maja", maccs_launcher, re.IGNORECASE):
-            self.l1c_processor = THEIA_MUSCATE_OUTPUT_FORMAT
         self.input = l1c_input
         self.output = l2a_output
 
@@ -418,12 +412,10 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         cmd_array.append("{}:{}".format(tmp, tmp))  
     cmd_array.append("-v")
     cmd_array.append("{}:{}".format(dem_dir, dem_dir))
-    for gip in common_gipps:
-        cmd_array.append("-v")
-        cmd_array.append("{}:{}".format(gip, gip))
+    cmd_array.append("-v")
+    cmd_array.append("{}:{}".format(args.gipp_dir, args.gipp_dir))
     cmd_array.append("-v")
     cmd_array.append("{}:{}".format(demmaccs_context.input, demmaccs_context.input))
-
     cmd_array.append("-v")
     cmd_array.append("{}:{}".format(working_dir, working_dir))
     cmd_array.append("-v")
@@ -432,20 +424,12 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     cmd_array.append("{}:{}".format(args.conf, args.conf))
     cmd_array.append("--name")
     cmd_array.append(container_name)
-
-    eucmn00_file_path = os.path.join(demmaccs_context.gipp_base_dir, "LANDSAT8/*EUCMN00*")
-    eucmn00_file = glob.glob(eucmn00_file_path)
-    if len(eucmn00_file) > 0:
-        cmd_array.append(args.docker_image_maja3)
-    else:
-        cmd_array.append(args.docker_image_maja4)
-
+    cmd_array.append(args.docker_image_maja)
     #actual maja command
     if demmaccs_context.maccs_address is not None:
         cmd_array.append("ssh")
         cmd_array.append(demmaccs_context.maccs_address)
-    cmd_array += [demmaccs_context.maccs_launcher,
-                    "--input", working_dir,
+    cmd_array += ["--input", working_dir,
                     "--TileId", tile_id,
                     "--output", maccs_working_dir,
                     "--mode", maccs_mode]
@@ -493,7 +477,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         if len(maccs_report_file) >= 1:
             if len(maccs_report_file) > 1:
                 l2a_log.warning("More than one report maccs file (REPT) found in {}. Only the first one will be kept. Report files list: {}.".format(maccs_working_dir, maccs_report_file), print_msg = True)
-            l2a_log.error("Report maccs file (REPT) found in: {} : {}".format(maccs_working_dir, maccs_report_file[0]), print_msg = True)
+            l2a_log.info("Report maccs file (REPT) found in: {} : {}".format(maccs_working_dir, maccs_report_file[0]), print_msg = True)
             new_maccs_report_file = "{}/MACCS_L2REPT_{}.EEF".format(demmaccs_context.output[:len(demmaccs_context.output) - 1] if demmaccs_context.output.endswith("/") else demmaccs_context.output, tile_id)
             if os.path.isdir(new_maccs_report_file):
                 l2a_log.warning("The directory {} already exists. Trying to delete it in order to move the new created directory by MACCS/MAJA".format(new_maccs_report_file), print_msg = True)
@@ -653,7 +637,6 @@ parser.add_argument('-w', '--working-dir', required=True,
 parser.add_argument('--dem', required=True, help="DEM dataset path")
 parser.add_argument('--swbd', required=True, help="SWBD dataset path")
 parser.add_argument('--gipp-dir', required=True, help="directory where gip are to be found")
-parser.add_argument('--maccs-launcher', required=True, help="MACCS or MAJA binary path in localhost (or remote host if maccs-address is set)")
 parser.add_argument('--processes-number-dem', required=False,
                         help="number of processes to run DEM in parallel", default="3")
 parser.add_argument('--processes-number-maccs', required=False,
@@ -691,14 +674,9 @@ parser.add_argument(
     help="Name of the dem docker image.",
 )
 parser.add_argument(
-    "--docker-image-maja3",
+    "--docker-image-maja",
     required=True,
-    help="Name of the maja docker image 3.",
-)
-parser.add_argument(
-    "--docker-image-maja4",
-    required=True,
-    help="Name of the maja docker image 4.",
+    help="Name of the maja docker image.",
 )
 parser.add_argument(
     "--docker-image-gdal",
@@ -738,20 +716,23 @@ else:
     working_dir = tempfile.mkdtemp(dir = args.working_dir)
 if working_dir.endswith("/"):
     working_dir = working_dir[:-1]
+remove_dir_content(working_dir)
+
 dem_working_dir = "{}_DEM_TMP".format(working_dir)
 dem_output_dir = "{}_DEM_OUT".format(working_dir)
-
 if not create_recursive_dirs(dem_output_dir):
     l2a_log.critical("Could NOT create the output directory for DEM", print_msg = True)
     if not remove_dir(working_dir):
         l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
     os._exit(1)
+remove_dir_content(dem_output_dir)
 
 if not create_recursive_dirs(dem_working_dir):
     l2a_log.critical("Could not create the working directory for DEM", print_msg = True)
     if not remove_dir(working_dir):
         l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
     os._exit(1)
+remove_dir_content(dem_output_dir)
 
 l2a_log.info("working_dir = {}".format(working_dir), print_msg = True)
 l2a_log.info("dem_working_dir = {}".format(dem_working_dir), print_msg = True)
@@ -927,7 +908,7 @@ demmaccs_contexts = []
 print("Creating demmaccs contexts with: input: {} | output {}".format(args.input, args.output))
 for dem_hdr in dem_hdrs:
     print("DEM_HDR: {}".format(dem_hdr))
-    demmaccs_contexts.append(DEMMACCSContext(working_dir, dem_hdr, args.gipp_dir, args.prev_l2a_tiles, args.prev_l2a_products_paths, args.maccs_address, args.maccs_launcher, args.input, args.output))
+    demmaccs_contexts.append(DEMMACCSContext(working_dir, dem_hdr, args.gipp_dir, args.prev_l2a_tiles, args.prev_l2a_products_paths, args.maccs_address, args.input, args.output))
 
 processed_tiles = []
 if len(demmaccs_contexts) == 1:
