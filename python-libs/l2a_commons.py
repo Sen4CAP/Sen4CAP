@@ -159,8 +159,10 @@ def create_recursive_dirs(dir_path):
 
 def remove_dir(directory):
     try:
-        shutil.rmtree(directory)
+        shutil.rmtree(directory):
     except Exception as e:
+        if e.errno == errno.ENOENT:
+            return True
         print("Can not remove directory {} due to: {}.".format(directory, e))
         return False
     return True
