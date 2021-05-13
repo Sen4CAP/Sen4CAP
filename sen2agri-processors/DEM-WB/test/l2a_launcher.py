@@ -1050,6 +1050,8 @@ class L2aProcessor(object):
     def move_to_destination(self):
         #Copies a valid product from the output path to the destination product path
         try:
+            if os.path.exists(self.l2a.destination_path):
+                remove_dir(self.l2a.destination_path)
             if self.l2a.destination_path.endswith("/"):
                 dst = os.path.dirname(self.l2a.destination_path[:-1])
             else:
@@ -2275,13 +2277,23 @@ args = parser.parse_args()
 launcher_log_path = os.path.join(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 launcher_log = LogHandler(launcher_log_path, "launcher_log", args.log_level, MASTER_ID)
 
-# get the processing context
+# get the processing context from db
 db_config = DBConfig.load(args.config, launcher_log)
 default_processing_context = ProcessingContext()
 db_get_processing_context(db_config, default_processing_context, DB_PROCESSOR_NAME, launcher_log)
 if default_processing_context is None:
     launcher_log.critical("Could not load the processing context from database", print_msg = True)
     sys.exit(1)
+
+# get the processing context from environment varialbles
+try: 
+    if "L2A_NUM_WORKERS" in os.environ:
+        env_num_workers = int(os.environ("L2A_NUM_WORKERS"))
+        if env_num_workers:
+            default_processing_context.num_workers["default"] = env_num_workers
+except Exception as e:
+    launcher_log.error("Can NOT read env var L2A_NUM_WORKERS due to: {}".format(e), print_msg = True)
+
 
 if default_processing_context.num_workers["default"] < 1:
     msg = "Invalid processing context num_workers: {}".format(
