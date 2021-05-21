@@ -18,6 +18,7 @@ _____________________________________________________________________________
 """
 from __future__ import print_function
 from logging import error
+import shutil
 import sys
 import argparse
 import threading
@@ -25,7 +26,6 @@ import ogr
 import os
 import Queue
 import re
-import grp
 import glob
 import signal
 import time
@@ -295,12 +295,13 @@ class FmaskProcessor(object):
     def move_to_destination(self):
         #Copies a valid product from the output path to the destination product path
         try:
+            remove_dir(self.fmask.destination_path)
             if self.fmask.destination_path.endswith("/"):
                 dst = os.path.dirname(self.fmask.destination_path[:-1])
             else:
                 dst = os.path.dirname(self.fmask.destination_path)
             if create_recursive_dirs(dst):
-                os.rename(self.fmask.output_path, self.fmask.destination_path)
+                shutil.move(self.fmask.output_path, self.fmask.destination_path)
             else:
                 self.update_rejection_reason(" Can NOT copy from output path {} to destination product path {}".format(self.fmask.output_path, self.fmask.destination_path))
         except Exception as e:
@@ -322,6 +323,14 @@ class FmaskProcessor(object):
     def run_script(self):
         guid = get_guid(8)
         container_name = "fmask_extractor_{}_{}".format(self.lin.product_id, guid)
+        docker_status = os.stat("/var/run/docker.sock")
+        if docker_status:
+            docker_group_id = docker_status.st_gid
+        else:
+            msg = "Can NOT determine docker group id"
+            self.launcher_log.error(msg, print_msg = True)
+            self.update_rejection_reason(msg)
+            return False
         script_command = []
         #docker run
         script_command.append("docker")
@@ -332,7 +341,7 @@ class FmaskProcessor(object):
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
-        script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
+        script_command.append("{}".format(docker_group_id))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
         script_command.append("-v")
@@ -401,6 +410,7 @@ class FmaskProcessor(object):
             and (fmask_file_ok == True)
         ):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
+            self.fmask_log.close()
             self.move_to_destination()
         else:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -490,7 +500,7 @@ class FmaskProcessor(object):
                 self.master_q.put(notification)
                 os.remove(fmask_files[0])
             else:
-                os.rename(fmask_files[0], output_img_name)
+                shutil.move(fmask_files[0], output_img_name)
 
             fmask_file_ok = True
         else:
@@ -927,6 +937,9 @@ class ProcessingContext(object):
             if parameter == DATABASE_FMASK_NUM_WORKERS:
                 self.num_workers = int(value)
             elif parameter == DATABASE_FMASK_WORKING_DIR:
+                env_wrk_dir = os.environ.get("FMASK_WRK_DIR")
+                if env_wrk_dir:
+                    value = env_wrk_dir
                 if site is not None:
                     self.working_dir[site] = value
                 else:
@@ -1132,6 +1145,15 @@ if default_processing_context is None:
     launcher_log.critical(msg, print_msg = True)
     sys.exit(1)
 
+# get the num workers from environment varialbles
+env_num_workers = os.environ.get("FMASK_NUM_WORKERS")
+if env_num_workers:
+    if env_num_workers.isdigit():
+        default_processing_context.num_workers["default"] = int(env_num_workers)
+    else:
+        launcher_log.critical("Invalid FMASK_NUM_WORKERS env var: {}".format(env_num_workers))
+        sys.exit(1)
+
 if default_processing_context.num_workers< 1:
     msg = "Invalid processing context num_workers: {}".format(
                     default_processing_context.num_workers
@@ -1141,6 +1163,10 @@ if default_processing_context.num_workers< 1:
 
 # woking dir operations
 # create working dir
+env_wrk_dir = os.environ.get("FMASK_WRK_DIR")
+if env_wrk_dir:
+    default_processing_context.working_dir["default"] = env_wrk_dir
+
 if not create_recursive_dirs(
     default_processing_context.working_dir["default"]
 ):
@@ -1163,3 +1189,4 @@ fmask_master.run()
 
 if launcher_log.level != 'debug':
     remove_dir_content("{}/".format(default_processing_context.working_dir["default"]))
+launcher_log.close()

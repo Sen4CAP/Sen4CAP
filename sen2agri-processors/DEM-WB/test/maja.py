@@ -950,6 +950,6 @@ if args.delete_temp:
         l2a_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
 
 l2a_log.info("Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), print_msg = True)
-
+l2a_log.close()
 os._exit(ret)
 

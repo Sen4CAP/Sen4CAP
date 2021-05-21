@@ -94,7 +94,8 @@ class LogHandler(object):
         self.logger.addHandler(self.handler)
         self.logger.propagate = False
     
-    def __del__(self):
+    def close(self):
+        self.handler.close()
         self.logger.removeHandler(self.handler)
 
     def format_msg(self, msg):
