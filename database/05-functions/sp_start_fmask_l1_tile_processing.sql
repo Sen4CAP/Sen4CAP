@@ -71,7 +71,8 @@ begin
 
         update fmask_history
         set status_id = 1, -- processing
-            status_timestamp = now()
+            status_timestamp = now(),
+            node_id = _node_id
         where (fmask_history.downloader_history_id) = (_downloader_history_id);
     else
         select distinct

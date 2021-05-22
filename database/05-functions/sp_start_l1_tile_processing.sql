@@ -135,7 +135,8 @@ begin
 
         update l1_tile_history
         set status_id = 1, -- processing
-            status_timestamp = now()
+            status_timestamp = now(),
+            node_id = _node_id
         where (l1_tile_history.downloader_history_id, l1_tile_history.tile_id) = (_downloader_history_id, _tile_id);
     else
         select distinct
