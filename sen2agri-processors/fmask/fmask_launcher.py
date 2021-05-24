@@ -273,7 +273,7 @@ class FmaskProcessor(object):
         self.fmask.satellite_id = self.lin.satellite_id
         self.fmask.site_id = self.lin.site_id
         self.fmask.product_id = self.lin.product_id
-        fmask_log_path = os.path.join(self.fmask.output_path, "fmask_{}.log".format(self.lin.product_id))
+        fmask_log_path = os.path.join(LAUNCHER_LOG_DIR, "fmask_{}.log".format(self.lin.product_id))
         self.fmask_log = LogHandler(
             fmask_log_path,
             "fmask_log",
@@ -377,8 +377,11 @@ class FmaskProcessor(object):
         script_command.append(self.fmask_log.level)
         script_command.append(self.lin.path)
         script_command.append(self.fmask.output_path)
-        
-        print("Running Fmask, console output can be found at {}".format(self.fmask_log.path))
+
+
+        fmask_extractor_log_name = "fmask_{}".format(self.fmask_product_id)
+        fmask_extractor_log_path = os.path.join(self.fmask.output_path, fmask_extractor_log_name)
+        print("Running FMask extractor, console output can be found at {}".format(fmask_extractor_log_path))
         cmd_str = " ".join(map(pipes.quote, script_command))
         self.launcher_log.info("Running command: " + cmd_str)
         start_time = time.time()
@@ -404,13 +407,14 @@ class FmaskProcessor(object):
     def manage_prods_status(
         self, preprocess_successful, process_successful, fmask_file_ok
     ):
+        self.fmask_log.close()
+        del self.fmask_log
         if (
             (preprocess_successful == True)
             and (process_successful == True)
             and (fmask_file_ok == True)
         ):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-            self.fmask_log.close()
             self.move_to_destination()
         else:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE

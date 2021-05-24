@@ -832,7 +832,7 @@ class L2aProcessor(object):
         self.l2a = L2aProduct()
         self.master_q = master_q
         self.launcher_log = launcher_log
-        self.l2a_log = None # created in setup_l2a
+        self.l2a_log = None # created in l2a_setup
 
     def __del__(self):
         if self.lin.was_archived and os.path.exists(self.lin.path):
@@ -1030,8 +1030,8 @@ class L2aProcessor(object):
         self.l2a.site_id = self.lin.site_id
         self.l2a.product_id = self.lin.product_id
         self.l2a.orbit_id = self.lin.orbit_id
-        log_file_name = "l2a_launcher_{}.log".format(self.lin.product_id)
-        l2a_log_path = os.path.join(self.l2a.output_path, log_file_name)
+        log_file_name = "l2a_{}.log".format(self.lin.product_id)
+        l2a_log_path = os.path.join(LAUNCHER_LOG_DIR, log_file_name)
         self.l2a_log = LogHandler(
             l2a_log_path,
             "l2a_log",
@@ -1614,8 +1614,10 @@ class Maja(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
 
+        l2a_processors_log_name = "l2a_{}".format(self.l2a.product_id)
+        l2a_processors_log_path = os.path.join(self.l2a.output_path, l2a_processors_log_name)
         self.launcher_log.info(
-            "Running Maja, console output can be found at {}".format(self.l2a_log.path),
+            "Running L2a Processors, console output can be found at {}".format(l2a_processors_log_path),
             print_msg = True
         )
         cmd_str = " ".join(map(pipes.quote, script_command))
@@ -1654,13 +1656,14 @@ class Maja(L2aProcessor):
             "PersistentStreamingConditionalStatisticsImageFilter::Synthetize.No pixel is valid. Return null statistics",
         ]
 
+        self.l2a_log.close()
+        del self.l2a_log
         if (
             (preprocess_succesful == True)
             and (process_succesful == True)
             and (l2a_ok == True)
         ):
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-            self.l2a_log.close()
             self.move_to_destination()
         else:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -2029,8 +2032,10 @@ class Sen2Cor(L2aProcessor):
         script_command.append(str(60))
         #tmp
 
+        l2a_processors_log_name = "l2a_{}".format(self.l2a.product_id)
+        l2a_processors_log_path = os.path.join(self.l2a.output_path, l2a_processors_log_name)
         self.launcher_log.info(
-            "Running Sen2Cor, console output can be found at {}".format(self.l2a_log.path),
+            "Running L2a Processors, console output can be found at {}".format(l2a_processors_log_path),
             print_msg = True
         )
         cmd_str = " ".join(map(pipes.quote, script_command))
@@ -2064,6 +2069,9 @@ class Sen2Cor(L2aProcessor):
     def manage_prods_status(
         self, preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
     ):
+
+        self.l2a_log.close()
+        del self.l2a_log
         if (
             (preprocess_succesful == True)
             and (process_succesful == True)
@@ -2083,7 +2091,6 @@ class Sen2Cor(L2aProcessor):
                     if self.l2a_log.level == 'debug':
                         remove_dir(self.l2a.product_path)
                 else:
-                    self.l2a_log.close()
                     self.move_to_destination()
         else:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE

@@ -73,7 +73,7 @@ class LogHandler(object):
         self.name = name
         self.emitter_id = emitter_id
         self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d-%H:%M:%S%z')
-        self.handler = logging.FileHandler(self.path, "a")        
+        self.handler = logging.FileHandler(self.path, "a+")        
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger(self.name)
         if self.level == 'debug':
@@ -93,6 +93,9 @@ class LogHandler(object):
             self.logger.handlers.pop()
         self.logger.addHandler(self.handler)
         self.logger.propagate = False
+
+    def __del__(self):
+        self.close()
     
     def close(self):
         self.handler.close()
