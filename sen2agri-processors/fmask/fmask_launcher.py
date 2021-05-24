@@ -379,7 +379,7 @@ class FmaskProcessor(object):
         script_command.append(self.fmask.output_path)
 
 
-        fmask_extractor_log_name = "fmask_{}.log".format(self.fmask_product_id)
+        fmask_extractor_log_name = "fmask_{}.log".format(self.fmask.product_id)
         fmask_extractor_log_path = os.path.join(self.fmask.output_path, fmask_extractor_log_name)
         print("Running FMask extractor, console output can be found at {}".format(fmask_extractor_log_path))
         cmd_str = " ".join(map(pipes.quote, script_command))
@@ -859,7 +859,7 @@ class ProcessingContext(object):
         self.base_abs_path = os.path.dirname(os.path.abspath(__file__))
         self.output_path = {"default": ""}
         self.working_dir = {"default": ""}
-        self.num_workers = 2
+        self.num_workers = {"default": ""}
         self.fmask_threshold = {"default": ''}
         self.fmask_threshold_s2 = {"default": ''}
         self.fmask_threshold_l8 = {"default": ''}
@@ -939,7 +939,7 @@ class ProcessingContext(object):
             site = row[1]
             value = row[2]
             if parameter == DATABASE_FMASK_NUM_WORKERS:
-                self.num_workers = int(value)
+                self.num_workers["default"] = int(value)
             elif parameter == DATABASE_FMASK_WORKING_DIR:
                 env_wrk_dir = os.environ.get("FMASK_WRK_DIR")
                 if env_wrk_dir:
@@ -1158,9 +1158,9 @@ if env_num_workers:
         launcher_log.critical("Invalid FMASK_NUM_WORKERS env var: {}".format(env_num_workers))
         sys.exit(1)
 
-if default_processing_context.num_workers< 1:
+if default_processing_context.num_workers["default"]< 1:
     msg = "Invalid processing context num_workers: {}".format(
-                    default_processing_context.num_workers
+                    default_processing_context.num_workers["default"]
     )
     launcher_log.critical(msg, print_msg = True)
     sys.exit(1)
@@ -1188,7 +1188,7 @@ node_id = get_node_id()
 
 # clear pending tiles
 db_clear_pending_tiles(db_config, node_id, launcher_log)
-fmask_master = FmaskMaster(default_processing_context.num_workers, db_config, node_id, launcher_log)
+fmask_master = FmaskMaster(default_processing_context.num_workers["default"], db_config, node_id, launcher_log)
 fmask_master.run()
 
 if launcher_log.level != 'debug':
