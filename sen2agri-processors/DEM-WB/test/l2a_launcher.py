@@ -1614,7 +1614,7 @@ class Maja(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
 
-        l2a_processors_log_name = "l2a_{}".format(self.l2a.product_id)
+        l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)
         l2a_processors_log_path = os.path.join(self.l2a.output_path, l2a_processors_log_name)
         self.launcher_log.info(
             "Running L2a Processors, console output can be found at {}".format(l2a_processors_log_path),
@@ -2032,7 +2032,7 @@ class Sen2Cor(L2aProcessor):
         script_command.append(str(60))
         #tmp
 
-        l2a_processors_log_name = "l2a_{}".format(self.l2a.product_id)
+        l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)
         l2a_processors_log_path = os.path.join(self.l2a.output_path, l2a_processors_log_name)
         self.launcher_log.info(
             "Running L2a Processors, console output can be found at {}".format(l2a_processors_log_path),

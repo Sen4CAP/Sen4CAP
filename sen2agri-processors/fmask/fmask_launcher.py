@@ -379,7 +379,7 @@ class FmaskProcessor(object):
         script_command.append(self.fmask.output_path)
 
 
-        fmask_extractor_log_name = "fmask_{}".format(self.fmask_product_id)
+        fmask_extractor_log_name = "fmask_{}.log".format(self.fmask_product_id)
         fmask_extractor_log_path = os.path.join(self.fmask.output_path, fmask_extractor_log_name)
         print("Running FMask extractor, console output can be found at {}".format(fmask_extractor_log_path))
         cmd_str = " ".join(map(pipes.quote, script_command))
