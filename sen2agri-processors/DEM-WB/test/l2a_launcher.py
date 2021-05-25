@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
 from l2a_commons import LogHandler, MASTER_ID 
 from l2a_commons import remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
-from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers
+from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers, get_docker_gid
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -1513,10 +1513,8 @@ class Maja(L2aProcessor):
 
         guid = get_guid(8)
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
-        docker_status = os.stat("/var/run/docker.sock")
-        if docker_status:
-            docker_group_id = docker_status.st_gid
-        else:
+        docker_gid = get_docker_gid()
+        if not docker_gid:
             msg = "Can NOT determine docker group id"
             self.launcher_log.error(msg, print_msg = True)
             self.update_rejection_reason(msg)
@@ -1532,7 +1530,7 @@ class Maja(L2aProcessor):
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
-        script_command.append("{}".format(docker_group_id))
+        script_command.append("{}".format(docker_gid))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -1921,10 +1919,8 @@ class Sen2Cor(L2aProcessor):
 
         guid = get_guid(8)
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
-        docker_status = os.stat("/var/run/docker.sock")
-        if docker_status:
-            docker_group_id = docker_status.st_gid
-        else:
+        docker_gid = get_docker_gid()
+        if not docker_gid:
             msg = "Can NOT determine docker group id"
             self.launcher_log.error(msg, print_msg = True)
             self.update_rejection_reason(msg)
@@ -1940,7 +1936,7 @@ class Sen2Cor(L2aProcessor):
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
-        script_command.append("{}".format(docker_group_id))
+        script_command.append("{}".format(docker_gid))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -2028,8 +2024,8 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
         #tmp only for testing purposes
-        script_command.append("--resolution")
-        script_command.append(str(60))
+        #script_command.append("--resolution")
+        #script_command.append(str(60))
         #tmp
 
         l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)

@@ -34,7 +34,7 @@ import pipes
 from psycopg2.sql import SQL
 from l2a_commons import LogHandler, MASTER_ID
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
-from l2a_commons import ArchiveHandler, translate, get_node_id, run_command, stop_containers
+from l2a_commons import ArchiveHandler, translate, get_node_id, run_command, stop_containers, get_docker_gid
 from l2a_commons import create_recursive_dirs, remove_dir, get_guid, get_footprint, remove_dir_content 
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
 from db_commons import DBConfig, handle_retries, db_get_site_short_name, db_get_processing_context
@@ -323,10 +323,8 @@ class FmaskProcessor(object):
     def run_script(self):
         guid = get_guid(8)
         container_name = "fmask_extractor_{}_{}".format(self.lin.product_id, guid)
-        docker_status = os.stat("/var/run/docker.sock")
-        if docker_status:
-            docker_group_id = docker_status.st_gid
-        else:
+        docker_gid = get_docker_gid()
+        if not docker_gid:
             msg = "Can NOT determine docker group id"
             self.launcher_log.error(msg, print_msg = True)
             self.update_rejection_reason(msg)
@@ -341,7 +339,7 @@ class FmaskProcessor(object):
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
-        script_command.append("{}".format(docker_group_id))
+        script_command.append("{}".format(docker_gid))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
         script_command.append("-v")

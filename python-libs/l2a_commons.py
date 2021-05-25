@@ -73,7 +73,7 @@ class LogHandler(object):
         self.name = name
         self.emitter_id = emitter_id
         self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d-%H:%M:%S%z')
-        self.handler = logging.FileHandler(self.path, "a+")        
+        self.handler = logging.FileHandler(self.path, "a")        
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger(self.name)
         if self.level == 'debug':
@@ -190,6 +190,8 @@ def read_1st(file):
     with open(file) as f:
         return f.readline().strip("\n")
 
+### Docker related operations
+
 def get_node_id(): 
     host = read_1st("/etc/hostname")
     machine_id = read_1st("/etc/machine-id")
@@ -214,6 +216,15 @@ def stop_containers(container_list, log):
             "Command {} finished with return code {} in {}".format(cmd_str, ret, datetime.timedelta(seconds=(end_time - start_time))),
             print_msg = True
         )
+
+def get_docker_gid():
+    docker_status = os.stat("/var/run/docker.sock")
+    if docker_status:
+        docker_gid = docker_status.st_gid
+        return docker_gid
+    else:
+        return None
+
 
 ### IMG related operations
 
