@@ -76,10 +76,10 @@ def clone_product_dir(src_dir, target_directory, log_path, log_filename) :
     return True
 
 class FMaskContext(object):
-    def __init__(self, base_working_dir, l1c_input, l2a_output):
+    def __init__(self, base_working_dir, l1c_input, fmask_output):
         self.base_working_dir = base_working_dir
         self.input = l1c_input
-        self.output = l2a_output
+        self.output = fmask_output
 
 def fmask_launcher(fmask_context):
     product_name = os.path.basename(fmask_context.input[:len(fmask_context.input) - 1]) if fmask_context.input.endswith("/") else os.path.basename(fmask_context.input)
@@ -296,5 +296,5 @@ if args.delete_temp:
         fmask_log.warning("Couldn't remove the temp dir {}".format(working_dir), print_msg = True)
 
 fmask_log.info("Total execution {}:".format(datetime.timedelta(seconds=(time.time() - general_start))), print_msg = True)
-
+fmask_log.close()
 os._exit(exit_code)

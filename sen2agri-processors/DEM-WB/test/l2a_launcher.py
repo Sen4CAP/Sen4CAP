@@ -28,7 +28,6 @@ import pipes
 import datetime
 import Queue
 import threading
-import grp
 import shutil
 import signal
 import json
@@ -38,7 +37,7 @@ from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
 from l2a_commons import LogHandler, MASTER_ID 
 from l2a_commons import remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
-from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers
+from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers, get_docker_gid
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -108,6 +107,9 @@ class ProcessingContext(object):
                 else:
                     self.swbd_path["default"] = value
             elif parameter == "processor.l2a.working-dir":
+                env_wrk_dir = os.environ.get("L2A_WRK_DIR")
+                if env_wrk_dir:
+                    value = env_wrk_dir
                 if site is not None:
                     self.working_dir[site] = value
                 else:
@@ -830,7 +832,7 @@ class L2aProcessor(object):
         self.l2a = L2aProduct()
         self.master_q = master_q
         self.launcher_log = launcher_log
-        self.l2a_log = None # created in setup_l2a
+        self.l2a_log = None # created in l2a_setup
 
     def __del__(self):
         if self.lin.was_archived and os.path.exists(self.lin.path):
@@ -1029,7 +1031,7 @@ class L2aProcessor(object):
         self.l2a.product_id = self.lin.product_id
         self.l2a.orbit_id = self.lin.orbit_id
         log_file_name = "l2a_{}.log".format(self.lin.product_id)
-        l2a_log_path = os.path.join(self.l2a.output_path, log_file_name)
+        l2a_log_path = os.path.join(LAUNCHER_LOG_DIR, log_file_name)
         self.l2a_log = LogHandler(
             l2a_log_path,
             "l2a_log",
@@ -1056,7 +1058,7 @@ class L2aProcessor(object):
             else:
                 dst = os.path.dirname(self.l2a.destination_path)
             if create_recursive_dirs(dst):
-                os.rename(self.l2a.output_path, self.l2a.destination_path)
+                shutil.move(self.l2a.output_path, self.l2a.destination_path)
                 self.launcher_log.info("L2A product moved from output path {} to destination product path {}.".format(self.l2a.output_path, self.l2a.destination_path))
             else:
                 rejection_reason = "Can NOT create destination path {}".format(self.l2a.destination_path)
@@ -1511,6 +1513,12 @@ class Maja(L2aProcessor):
 
         guid = get_guid(8)
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
+        docker_gid = get_docker_gid()
+        if not docker_gid:
+            msg = "Can NOT determine docker group id"
+            self.launcher_log.error(msg, print_msg = True)
+            self.update_rejection_reason(msg)
+            return False
 
         script_command = []
         #docker run
@@ -1522,7 +1530,7 @@ class Maja(L2aProcessor):
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
-        script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
+        script_command.append("{}".format(docker_gid))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -1604,8 +1612,10 @@ class Maja(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
 
+        l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)
+        l2a_processors_log_path = os.path.join(self.l2a.output_path, l2a_processors_log_name)
         self.launcher_log.info(
-            "Running Maja, console output can be found at {}".format(self.l2a_log.path),
+            "Running L2a Processors, console output can be found at {}".format(l2a_processors_log_path),
             print_msg = True
         )
         cmd_str = " ".join(map(pipes.quote, script_command))
@@ -1644,6 +1654,8 @@ class Maja(L2aProcessor):
             "PersistentStreamingConditionalStatisticsImageFilter::Synthetize.No pixel is valid. Return null statistics",
         ]
 
+        self.l2a_log.close()
+        del self.l2a_log
         if (
             (preprocess_succesful == True)
             and (process_succesful == True)
@@ -1659,6 +1671,10 @@ class Maja(L2aProcessor):
                     break
 
             if self.l2a.cloud_coverage_assessment > MAX_CLOUD_COVERAGE:
+                self.update_rejection_reason("Cloud coverage {} is above the maximum value".format(
+                    self.l2a.cloud_coverage_assessment,
+                    MAX_CLOUD_COVERAGE)
+                )
                 self.lin.should_retry = False
 
 
@@ -1903,6 +1919,12 @@ class Sen2Cor(L2aProcessor):
 
         guid = get_guid(8)
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
+        docker_gid = get_docker_gid()
+        if not docker_gid:
+            msg = "Can NOT determine docker group id"
+            self.launcher_log.error(msg, print_msg = True)
+            self.update_rejection_reason(msg)
+            return False
 
         script_command = []
         #docker run
@@ -1914,7 +1936,7 @@ class Sen2Cor(L2aProcessor):
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
-        script_command.append("{}".format(grp.getgrnam("dockerroot").gr_gid))
+        script_command.append("{}".format(docker_gid))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -2006,8 +2028,10 @@ class Sen2Cor(L2aProcessor):
         #script_command.append(str(60))
         #tmp
 
+        l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)
+        l2a_processors_log_path = os.path.join(self.l2a.output_path, l2a_processors_log_name)
         self.launcher_log.info(
-            "Running Sen2Cor, console output can be found at {}".format(self.l2a_log.path),
+            "Running L2a Processors, console output can be found at {}".format(l2a_processors_log_path),
             print_msg = True
         )
         cmd_str = " ".join(map(pipes.quote, script_command))
@@ -2041,6 +2065,9 @@ class Sen2Cor(L2aProcessor):
     def manage_prods_status(
         self, preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
     ):
+
+        self.l2a_log.close()
+        del self.l2a_log
         if (
             (preprocess_succesful == True)
             and (process_succesful == True)
@@ -2284,15 +2311,14 @@ if default_processing_context is None:
     launcher_log.critical("Could not load the processing context from database", print_msg = True)
     sys.exit(1)
 
-# get the processing context from environment varialbles
+# get the num workers from environment varialbles
 env_num_workers = os.environ.get("L2A_NUM_WORKERS")
 if env_num_workers:
-    if env_num_workers.is_digit():
+    if env_num_workers.isdigit():
         default_processing_context.num_workers["default"] = int(env_num_workers)
     else:
         launcher_log.critical("Invalid L2A_NUM_WORKERS env var: {}".format(env_num_workers))
         sys.exit(1)
-
 
 if default_processing_context.num_workers["default"] < 1:
     msg = "Invalid processing context num_workers: {}".format(
@@ -2303,6 +2329,10 @@ if default_processing_context.num_workers["default"] < 1:
 
 # woking dir operations
 # create working dir
+env_wrk_dir = os.environ.get("L2A_WRK_DIR")
+if env_wrk_dir:
+    default_processing_context.working_dir["default"] = env_wrk_dir
+
 if not create_recursive_dirs(
     default_processing_context.working_dir["default"]
 ):
@@ -2325,3 +2355,4 @@ l2a_master.run()
 
 if launcher_log.level == 'debug':
     remove_dir_content("{}/".format(default_processing_context.working_dir["default"]))
+launcher_log.close()

@@ -1233,3 +1233,4 @@ if nominal_run == True:
 else:
     l2a_log.error("End Sen2Cor script with errors.", print_msg = True)
     os._exit(1)
+l2a_log.close()
