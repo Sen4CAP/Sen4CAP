@@ -87,7 +87,6 @@ class FmaskProduct(object):
         self.site_id = None
         self.product_id = None
         self.footprint = None
-        self.basename = None
 
 class FmaskProcessor(object):
     def __init__(self, processor_context, unprocessed_tile, master_q, launcher_log):
@@ -209,7 +208,7 @@ class FmaskProcessor(object):
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason)
             return False
-        self.fmask.basename = fmask_basename
+        self.fmask.name = fmask_basename
 
         # determine the acq date
         if lin_basename.startswith("S2"):
@@ -746,6 +745,8 @@ class Tile(object):
         self.satellite_id = tile_info[1]
         self.downloader_history_id = tile_info[2]
         self.path = tile_info[3]
+        self.orbit_id = tile_info[4]
+        self.tile_id = tile_info[5]
  
     def is_valid(self, log):
         if self.downloader_history_id is None:

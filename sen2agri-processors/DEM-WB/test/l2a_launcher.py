@@ -821,7 +821,6 @@ class L2aProduct(object):
         self.snow_ice_percentage = None
         self.valid_pixels_percentage = None
         self.footprint = None
-        self.basename = None
         self.output_format = None
 
 
@@ -966,7 +965,7 @@ class L2aProcessor(object):
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason, print_msg = True)
             return False
-        self.l2a.basename = l2a_basename
+        self.l2a.name = l2a_basename
 
         # determine the acq date
         if lin_basename.startswith("S2"):
@@ -1892,7 +1891,6 @@ class Sen2Cor(L2aProcessor):
             self.l2a_log.error(rejection_reason, print_msg = True)
             return False
             
-        self.l2a.name = l2a_product_name
         self.l2a.product_path = os.path.join(self.l2a.output_path, self.l2a.name)
         self.l2a.acquisition_date = acquisition_date
         self.l2a.output_format = SEN2COR_PROCESSOR_OUTPUT_FORMAT
@@ -1910,7 +1908,7 @@ class Sen2Cor(L2aProcessor):
         lc_wb_map_path = os.path.join(
             self.context.gips_path, "ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
         )
-        wrk_dir = os.path.join(self.context.working_dir, self.l2a.basename)
+        wrk_dir = os.path.join(self.context.working_dir, self.l2a.name)
         if not create_recursive_dirs(wrk_dir):
             rejection_reason = "Can NOT create wrk dir {}".format(wrk_dir)
             self.update_rejection_reason(rejection_reason)
