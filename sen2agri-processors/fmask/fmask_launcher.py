@@ -31,6 +31,7 @@ import signal
 import time
 import datetime
 import pipes
+import json
 from psycopg2.sql import SQL
 from l2a_commons import LogHandler, MASTER_ID
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
@@ -61,7 +62,7 @@ DB_PROCESSOR_NAME = "fmask"
 S2_20M_RESOLUTION = "5490"
 PRODUCT_STATUS_MSG_TYPE = 1
 CONTAINER_STATUS_MSG_TYPE = 2
-
+DEFAULT_QUICKLOOK_IMAGE_NAME ="qkl.jpeg"
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -74,6 +75,8 @@ class L1CProduct(object):
         self.rejection_reason = None
         self.should_retry = True
         self.processing_status = None
+        self.orbit_id = tile.orbit_id
+        self.tile_id = tile.tile_id
 
 class FmaskProduct(object):
     def __init__(self):
@@ -87,6 +90,7 @@ class FmaskProduct(object):
         self.site_id = None
         self.product_id = None
         self.footprint = None
+        self.qkl = None
 
 class FmaskProcessor(object):
     def __init__(self, processor_context, unprocessed_tile, master_q, launcher_log):
@@ -452,7 +456,33 @@ class FmaskProcessor(object):
         fmask_file_path = os.path.join(self.fmask.output_path, fmask_file_pattern)
         fmask_files = glob.glob(fmask_file_path)
         if len(fmask_files) == 1:
-            log_file = os.path.join(self.fmask.output_path, self.log_file_name)
+            
+            #compute footprint
+            self.get_fmask_footprint(fmask_files[0])
+
+            #compute quicklook image
+            guid = get_guid(8)
+            output_format = "JPEG"
+            container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
+            notification = ContainerStatusMsg(container_name, True)
+            self.master_q.put(notification)
+            translate_ok = translate(input_img = fmask_files[0],
+                    output_dir = self.fmask.output_path,
+                    output_img_name = DEFAULT_QUICKLOOK_IMAGE_NAME,
+                    output_img_format = output_format,
+                    log = self.fmask_log,
+                    gdal_image = self.context.gdal_image,
+                    name = container_name,
+                    outsize = 1000
+            )
+            if not translate_ok:
+                self.fmask_log.error("Can NOT create quicklook image", print_msg = True)
+            else:
+                self.fmask.qkl = DEFAULT_QUICKLOOK_IMAGE_NAME
+            notification = ContainerStatusMsg(container_name, False)
+            self.master_q.put(notification)
+
+            #fmask image translations
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
                 output_img_name = os.path.basename(fmask_files[0])[:-4] + "_20m.tif"
             elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
@@ -502,7 +532,6 @@ class FmaskProcessor(object):
                 os.remove(fmask_files[0])
             else:
                 shutil.move(fmask_files[0], output_img_name)
-
             fmask_file_ok = True
         else:
             rejection_reason = "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
@@ -1039,9 +1068,12 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log):
         site_id = input_prod.site_id
         full_path = fmask_prod.destination_path
         product_name = fmask_prod.name
-        footprint = fmask_prod.footprint
         sat_id = fmask_prod.satellite_id
         acquisition_date = fmask_prod.acquisition_date
+        orbit_id = input_prod.orbit_id
+        processed_tiles = [input_prod.tile_id]
+        qkl = fmask_prod.qkl
+        footprint = fmask_prod.footprint
 
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
@@ -1094,10 +1126,10 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log):
                                         "full_path" : full_path,
                                         "created_timestamp" : acquisition_date,
                                         "name" : product_name,
-                                        "quicklook_image" : None,
+                                        "quicklook_image" : qkl,
                                         "footprint" : footprint,
-                                        "orbit_id" : None,
-                                        "tiles" : None,
+                                        "orbit_id" : orbit_id,
+                                        "tiles" : json.dumps(processed_tiles),
                                         "orbit_type_id" : None,
                                         "downloader_history_id" : downloader_product_id
                                     }
