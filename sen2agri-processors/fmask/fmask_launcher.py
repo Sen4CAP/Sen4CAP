@@ -158,6 +158,7 @@ class FmaskProcessor(object):
 
         return True
 
+
     def check_lin(self):
 
         self.launcher_log.info(
@@ -180,13 +181,37 @@ class FmaskProcessor(object):
         else:
             return False
 
+    def get_lin_info(self, product_name):
+        acquisition_date = None
+        if product_name.startswith("S2"):
+            m = re.match(r"\w+_V(\d{8}T\d{6})_\w+.SAFE", product_name)
+            # check if the new convention naming aplies
+            if m is None:
+                m = re.match(r"\w+_(\d{8}T\d{6})_\w+.SAFE", product_name)
+            if m is not None:
+                acquisition_date = m.group(1)
+        elif product_name.startswith("LC8"):
+            m = re.match(r"LC8\d{6}(\d{7})[A-Z]{3}\d{2}", product_name)
+            if m is not None:
+                acquisition_date = datetime.datetime.strptime(
+                    "{} {}".format(m.group(1)[0:4], m.group(1)[4:]), "%Y %j"
+                ).strftime("%Y%m%dT%H%M%S")
+        elif product_name.startswith("LC08"):
+            m = re.match(
+                r"LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name
+            )
+            if m is not None:
+                acquisition_date = "{}T000000".format(m.group(1))
+
+        return acquisition_date
+
+
     def fmask_setup(self):
         # determine the name of the fmask output dir
-        name_determined = True
         if self.lin.path.endswith("/"):
             lin_basename = os.path.basename(self.lin.path[:-1])
-            
-        lin_basename = os.path.basename(self.lin.path)
+        else:    
+            lin_basename = os.path.basename(self.lin.path)
         if lin_basename.startswith("S2"):
             fmask_basename = lin_basename.replace("L1C", "FMASK")
         elif lin_basename.startswith("LC8"):
@@ -215,39 +240,8 @@ class FmaskProcessor(object):
         self.fmask.name = fmask_basename
 
         # determine the acq date
-        if lin_basename.startswith("S2"):
-            result = re.findall(r"_\d{8}T\d{6}_", lin_basename)
-            if result:
-                acq_date = result[0].strip("_").split("T")[0]
-                acq_year = acq_date[:4]
-                acq_month = acq_date[4:6]
-                acq_day = acq_date[6:]
-            else:
-                rejection_reason = (
-                    "Can NOT obtain the aquisition date on input product: {}".format(
-                        lin_basename
-                    )
-                )
-                self.update_rejection_reason(rejection_reason)
-                self.launcher_log.error(rejection_reason)
-                return False
-        elif lin_basename.startswith("LC"):
-            result = re.findall(r"_\d{8}_", lin_basename)
-            if result:
-                acq_date = result[0].strip("_")
-                acq_year = acq_date[:4]
-                acq_month = acq_date[4:6]
-                acq_day = acq_date[6:]
-            else:
-                rejection_reason = (
-                    "Can NOT obtain the aquisition date on input product: {}".format(
-                        lin_basename
-                    )
-                )
-                self.update_rejection_reason(rejection_reason)
-                self.launcher_log.error(rejection_reason)
-                return False
-        else:
+        lin_acq_date = self.get_lin_info(lin_basename)
+        if lin_acq_date is None:
             rejection_reason = (
                 "Can NOT obtain the aquisition date on input product: {}".format(
                     lin_basename
@@ -256,6 +250,11 @@ class FmaskProcessor(object):
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason)
             return False
+        else:
+            self.fmask.acquisition_date = lin_acq_date
+            acq_year = lin_acq_date[0:4]
+            acq_month = lin_acq_date[4:6]
+            acq_day = lin_acq_date[6:8] 
 
         # determine the path of the fmask product
         fmask_output_path = os.path.join(
