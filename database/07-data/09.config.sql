@@ -97,7 +97,6 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('downloader.use.es
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l2a.name', NULL, 'L2A', '2015-06-03 17:02:50.028002+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l2a.path', NULL, '/bin/false', '2015-07-20 16:31:23.208369+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.gipp-path', NULL, '/mnt/archive/gipp/maja', '2016-02-24 18:12:16.464479+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.launcher', NULL, '/opt/maja/3.2.2/bin/maja', '2016-02-25 16:29:07.763339+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.remove-fre', NULL, '0', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.remove-sre', NULL, '1', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.optical.cog-tiffs', NULL, '0', '2017-10-24 14:56:57.501918+02');
@@ -111,13 +110,12 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.sen
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.srtm-path', NULL, '/mnt/archive/srtm', '2016-02-25 11:11:36.372405+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.swbd-path', NULL, '/mnt/archive/swbd', '2016-02-25 11:12:04.008319+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.working-dir', NULL, '/mnt/archive/demmaccs_tmp/', '2016-02-25 17:31:06.01191+02');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.processors_image', NULL, 'sen4x/l2a-processors', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.processors_image', NULL, 'sen4x/l2a-processors:0.1', '2021-04-19 16:30:00.0');
 insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.sen2cor_image', NULL, 'sen4x/sen2cor:2.9.0-ubuntu-20.04', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja4_image', NULL, 'sen4x/maja:4.2.1-centos-7', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja3_image', NULL, 'sen4x/maja:3.2.2-centos-7', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja_image', NULL, 'sen4x/maja:3.2.2-centos-7', '2021-04-19 16:30:00.0');
 insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.l8_align_image', NULL, 'sen4x/l2a-l8-alignment', '2021-04-19 16:30:00.0');
-insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem_image', NULL, 'sen4x/l2a-dem', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.l8_align_image', NULL, 'sen4x/l2a-l8-alignment:0.1', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem_image', NULL, 'sen4x/l2a-dem:0.1', '2021-04-19 16:30:00.0');
 
 -- -----------------------------------------------------------
 -- L2S1 processor Specific keys

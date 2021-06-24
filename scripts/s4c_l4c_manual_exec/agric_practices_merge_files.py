@@ -246,10 +246,7 @@ def main():
                 listFilePaths.append(fullFilePath)
     
     command = []
-    command += ["otbcli", "AgricPractMergeDataExtractionFiles", "./sen2agri-processors-build/"]
-    command += ["-csvcompact", args.csvcompact]
-    command += ["-outformat", args.out_file_type]
-    command += ["-sort", args.sort]
+    command += ["otbcli", "Markers1CsvMerge", "./sen2agri-processors-build/"]
     command += ["-out", args.output_file]
     command += ["-il"] + listFilePaths
     

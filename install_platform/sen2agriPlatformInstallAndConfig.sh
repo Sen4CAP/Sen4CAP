@@ -359,10 +359,17 @@ function config_docker()
         sleep 1
     done
 
+    docker pull osgeo/gdal:ubuntu-full-3.2.0
+    docker pull sen4x/fmask_extractor:0.1
+    docker pull sen4x/fmask:4.2
+
     docker pull sen4cap/processors:2.0.0
     docker pull sen4cap/grassland_mowing:2.0.0
-    docker pull lnicola/sen2agri-l2a-processors
-    docker pull lnicola/sen2agri-dem
+    docker pull sen4x/l2a-processors:0.1
+    docker pull sen4x/sen2cor:2.9.0-ubuntu-20.04
+    docker pull sen4x/maja:3.2.2-centos-7
+    docker pull sen4x/l2a-l8-alignment:0.1
+    docker pull sen4x/l2a-dem:0.1
 
     cd ..
 }
@@ -547,6 +554,12 @@ function install_additional_packages()
 {
     if ! [[ "${SEN2AGRI_DATABASE_NAME}" == "sen2agri" ]] ; then
         # Install and config SNAP
+        wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
+        mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
+        chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
+        docker build -t sen4cap/snap -f ./docker/snap8/Dockerfile ./docker/snap8/
+
+        # TODO: This should be removed
         wget http://step.esa.int/downloads/7.0/installers/esa-snap_sentinel_unix_7_0.sh && \
         cp -f esa-snap_sentinel_unix_7_0.sh /tmp/ && \
         chmod +x /tmp/esa-snap_sentinel_unix_7_0.sh && \

@@ -44,7 +44,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestra
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.mdb-csv-to-ipc-export.use_docker', NULL, '0', '2021-01-19 09:06:29.116319+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-extract-products.use_docker', NULL, '0', '2021-01-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-gen-input-shp.use_docker', NULL, '0', '2021-01-18 14:41:25.651377+00');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.docker_image', NULL, 'sen4cap/grassland_mowing', '2021-02-19 14:43:00.720811+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.docker_image', NULL, 'sen4cap/grassland_mowing:2.0.0', '2021-02-19 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.use_docker', NULL, '1', '2021-01-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-l4a-extract-parcels.use_docker', NULL, '0', '2021-01-20 18:50:52.244303+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.use_docker', NULL, '1', '2021-01-14 12:11:21.800537+00');
@@ -113,7 +113,6 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('downloader.use.es
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l2a.name', NULL, 'L2A', '2015-06-03 17:02:50.028002+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l2a.path', NULL, '/bin/false', '2015-07-20 16:31:23.208369+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.gipp-path', NULL, '/mnt/archive/gipp/maja', '2016-02-24 18:12:16.464479+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.launcher', NULL, '/opt/maja/3.2.2/bin/maja', '2016-02-25 16:29:07.763339+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.remove-fre', NULL, '0', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja.remove-sre', NULL, '1', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.optical.cog-tiffs', NULL, '0', '2017-10-24 14:56:57.501918+02');
@@ -127,6 +126,12 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.sen
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.srtm-path', NULL, '/mnt/archive/srtm', '2016-02-25 11:11:36.372405+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.swbd-path', NULL, '/mnt/archive/swbd', '2016-02-25 11:12:04.008319+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.working-dir', NULL, '/mnt/archive/demmaccs_tmp/', '2016-02-25 17:31:06.01191+02');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.processors_image', NULL, 'sen4x/l2a-processors:0.1', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.sen2cor_image', NULL, 'sen4x/sen2cor:2.9.0-ubuntu-20.04', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.maja_image', NULL, 'sen4x/maja:3.2.2-centos-7', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.l8_align_image', NULL, 'sen4x/l2a-l8-alignment:0.1', '2021-04-19 16:30:00.0');
+insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem_image', NULL, 'sen4x/l2a-dem:0.1', '2021-04-19 16:30:00.0');
 
 -- -----------------------------------------------------------
 -- L2S1 processor Specific keys
@@ -174,6 +179,11 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.lai
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.production_interval', NULL, '10', '2016-02-29 12:03:31.197823+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.reproc_production_interval', NULL, '30', '2016-02-29 12:03:31.197823+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.sched_wait_proc_inputs', NULL, '0', '2015-07-10 17:54:17.288095+03');
+
+-- -----------------------------------------------------------
+-- L2A Masked Specific Keys
+-- -----------------------------------------------------------
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l2a_msk', NULL, '/mnt/archive/orchestrator_temp/l2a_msk/{job_id}/{task_id}-{module}', '2021-05-18 17:54:17.288095+03');
 
 -- -----------------------------------------------------------
 -- S2A_L3C Specific Keys
@@ -228,10 +238,9 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.cfg_upload_dir',  NULL, '/mnt/archive/upload/grassland_mowing_cfg/{site}', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.default_config_path', NULL, '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/src_ini/S4C_L4B_Default_Config.cfg', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.end_date',  NULL, '', '2019-10-18 15:27:41.861613+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.gen_input_shp_path', NULL, '/mnt/archive/grassland_mowing_files/{site}/{year}/InputShp/SEN4CAP_L4B_GeneratedInputShp.shp', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.input_amp', NULL, 'N/A', '2019-02-19 11:09:58.820032+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.input_cohe', NULL, 'N/A', '2019-02-19 11:10:25.068169+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.input_ndvi', NULL, 'N/A', '2019-02-19 11:09:43.978921+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.input_l3b', NULL, 'N/A', '2019-02-19 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.input_product_types',  NULL, 'S1_S2', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.s1_py_script',  NULL, '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/src_s1/S1_main.py', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.s1_s2_startdate_diff',  NULL, '0', '2020-10-02 15:27:41.861613+02');
@@ -247,10 +256,8 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('archiver.max_age.
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_l4c.keep_job_folders', NULL, '0', '2016-10-18 16:41:20.194169+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.s4c_l4c.slurm_qos', NULL, 'qoss4cl4c', '2015-08-24 17:44:38.29255+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.s4c_l4c', NULL, '/mnt/archive/orchestrator_temp/s4c_l4c/{job_id}/{task_id}-{module}', '2015-07-10 17:54:17.288095+03');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.amp_data_extr_dir', NULL, '/mnt/archive/agric_practices_files/{site}/data_extraction/amp', '2019-04-12 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.cfg_dir', NULL, '/mnt/archive/agric_practices_files/{site}/{year}/config/', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.cfg_upload_dir',  NULL, '/mnt/archive/upload/agric_practices_files/{site}/config', '2019-10-18 15:27:41.861613+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.cohe_data_extr_dir', NULL, '/mnt/archive/agric_practices_files/{site}/data_extraction/cohe', '2019-04-12 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.country', NULL, 'CNTRY', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.data_extr_dir', NULL, '/mnt/archive/agric_practices_files/{site}/{year}/data_extraction/{product_type}', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.default_config_path', NULL, '/usr/share/sen2agri/S4C_L4C_Configurations/S4C_L4C_Default_Config.cfg', '2019-10-18 15:27:41.861613+02');
@@ -258,9 +265,8 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.filter_ids_path', NULL, '/mnt/archive/agric_practices_files/{site}/{year}/ts_input_tables/FilterIds/Sen4CAP_L4C_FilterIds.csv', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_amp', NULL, 'N/A', '2019-02-18 15:28:22.404745+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_cohe', NULL, 'N/A', '2019-02-18 15:28:41.060339+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_ndvi', NULL, 'N/A', '2019-02-18 15:27:41.861613+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_l3b', NULL, 'N/A', '2019-02-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.markers_add_no_data_rows', NULL, '1', '2020-12-16 17:31:06.01191+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.ndvi_data_extr_dir', NULL, '/mnt/archive/agric_practices_files/{site}/data_extraction/ndvi', '2019-04-12 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.nrt_data_extr_enabled', NULL, 'true', '2019-04-12 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.practices', NULL, 'NA', '2019-10-18 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.prds_per_group', NULL, '1', '2019-04-12 14:56:57.501918+02');
@@ -285,15 +291,28 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.fcover_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.input_amp', NULL, 'N/A', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.input_cohe', NULL, 'N/A', '2020-12-16 17:31:06.01191+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.input_ndvi', NULL, 'N/A', '2020-12-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.input_l3b', NULL, 'N/A', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.lai_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.ndvi_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.amp_vvvh_enabled', NULL, 'true', '2020-12-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.valid_pixels_enabled', NULL, 'false', '2020-12-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab02_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab03_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab04_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab05_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab06_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab07_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab08_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab8a_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab11_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab12_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+
 
 -- -----------------------------------------------------------
 -- FMask Specific Keys
 -- -----------------------------------------------------------
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.enabled', NULL, '0', '2021-02-10 15:58:31.878939+00');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'sen4x/fmask_extractor', '2021-03-18 14:43:00.720811+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'sen4x/fmask_extractor:0.1', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.image', NULL, 'sen4x/fmask:4.2', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.cog-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00');
@@ -302,7 +321,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.o
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud-shadow', NULL, '3', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.snow', NULL, '0', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.max-retries', NULL, '3', '2021-03-18 14:43:00.720811+00');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.num-workers', NULL, '20', '2021-03-18 14:43:00.720811+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.num-workers', NULL, '2', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.output-path', NULL, '/mnt/archive/fmask_def/{site}/fmask/', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.retry-interval', NULL, '1 minute', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold', NULL, '20', '2021-03-18 14:43:00.720811+00');

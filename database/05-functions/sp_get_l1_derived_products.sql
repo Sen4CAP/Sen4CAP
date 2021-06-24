@@ -4,16 +4,15 @@ CREATE OR REPLACE FUNCTION sp_get_l1_derived_products(
     IN downloader_history_ids json DEFAULT NULL::json,
     IN start_time timestamp with time zone DEFAULT NULL::timestamp with time zone,
     IN end_time timestamp with time zone DEFAULT NULL::timestamp with time zone)
-  RETURNS TABLE("ProductId" integer, "ProcessorId" smallint, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying, 
-                full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, job_id integer,
-                quicklook_image character varying, footprint polygon,  orbit_id integer, tiles character varying[], 
+  RETURNS TABLE("ProductId" integer, "ProductTypeId" smallint, "SiteId" smallint, "SatId" integer, "ProductName" character varying, 
+                full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone, 
+                quicklook_image character varying, geog geography,  orbit_id integer, tiles character varying[], 
                 downloader_history_id integer) AS
 $BODY$
 DECLARE q text;
 BEGIN
     q := $sql$
     SELECT P.id AS ProductId,
-        P.processor_id AS ProcessorId, 
         P.product_type_id AS ProductTypeId,
         P.site_id AS SiteId,
         P.satellite_id AS SatId,
@@ -21,9 +20,8 @@ BEGIN
         P.full_path,
         P.created_timestamp,
         P.inserted_timestamp,
-        P.job_id,
         P.quicklook_image as quicklook,
-        P.footprint,
+        P.geog,
         P.orbit_id,
         P.tiles,
         P.downloader_history_id

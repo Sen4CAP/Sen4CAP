@@ -1216,7 +1216,7 @@ function get_products(siteId, productsEl, formId, filter) {
 	var satS2Checked =  $("#"+formId+" input#"+formId+"_chkS2").is(':checked');
 	var satL8Checked =  $("#"+formId+" input#"+formId+"_chkL8").is(':checked');
     
-    if (productsEl[0].id.indexOf("ndvi") >= 0) {
+    if (productsEl[0].id.indexOf("l3b") >= 0) {
         data.tiles = data.s2_tiles;
         data.tiles = (data.tiles != undefined ? data.tiles.concat(data.l8_tiles) : data.l8_tiles);
     } else if (productsEl[0].id.indexOf("amp") >= 0 || productsEl[0].id.indexOf("cohe") >= 0) {

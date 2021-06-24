@@ -309,10 +309,17 @@ function setup_containers() {
     docker-compose up -d
     cd ..
 
+    docker pull osgeo/gdal:ubuntu-full-3.2.0
+    docker pull sen4x/fmask_extractor:0.1
+    docker pull sen4x/fmask:4.2
+
     docker pull sen4cap/processors:2.0.0
     docker pull sen4cap/grassland_mowing:2.0.0
-    docker pull lnicola/sen2agri-l2a-processors
-    docker pull lnicola/sen2agri-dem
+    docker pull sen4x/l2a-processors:0.1
+    docker pull sen4x/sen2cor:2.9.0-ubuntu-20.04
+    docker pull sen4x/maja:3.2.2-centos-7
+    docker pull sen4x/l2a-l8-alignment:0.1
+    docker pull sen4x/l2a-dem:0.1
 }
 
 function migrate_to_docker() {

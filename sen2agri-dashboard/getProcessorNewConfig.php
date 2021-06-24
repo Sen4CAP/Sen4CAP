@@ -169,8 +169,6 @@ function insertjob($name, $description, $processor_short_name, $site_id, $start_
 	}
 }
 
-// sen2agri
-if (ConfigParams::isSen2Agri()) {
 	if (isset ( $_POST ['l3a'] )) {
 		$processor_short_name = "l3a";
 
@@ -553,48 +551,6 @@ if (ConfigParams::isSen2Agri()) {
 			redirect_page($processor_short_name, "NOK", $result." (".$message.")");
 		}
 	}
-}
-// sen4cap
-else {
-/* -------------------------------------------------------l3b_lai------------------------------------------------------ */
-	if (isset ( $_POST ['l3b_lai'] ) || isset ( $_POST ['l3b'] )) {
-        // TODO: A lot of Duplicated code with the previous ifs. To be made more generic
-		$processor_short_name = "l3b";
-
-		// default parameters
-		$siteId         = $_POST ['siteId'];
-		$input_products = $_POST ['inputFiles'];
-		$resolution     = $_POST ['resolution'];
-
-		// advanced parameters
-		$genmodel = $_POST ['genmodel'];
-
-		$config = array (
-			array ( "key"   => "processor.l3b.generate_models",
-					"value" => $genmodel )
-		);
-
-		// generate json_config (skip configuration parameters with empty values)
-		$fconfig = array();
-		foreach($config as $cfg) {
-			if ($cfg["value"] != "") {
-				array_push($fconfig,  array ( "key"   => $cfg["key"], "value" => $cfg["value"] ));
-			}
-		}
-		$json_config = json_encode( $fconfig );
-
-		// generate json_param (skip parameters with empty values)
-		$params = array (	"resolution"     => $resolution,
-							"input_products" => $input_products
-						);
-		$json_param = json_encode( array_filter($params) );
-
-		// set job name and description and save job
-		$name = $processor_short_name . "_processor" . date ( "m.d.y" );
-		$description = "generated new configuration from site for ".$processor_short_name;
-		insertjob ( $name, $description, $processor_short_name, $siteId, 2, $json_param, $json_config );
-		redirect_page($processor_short_name, "OK", "Your job has been successfully submitted!");
-    }
 	elseif (isset($_POST['s4c_l4a'])) {
         // TODO: A lot of Duplicated code with the previous ifs. To be made more generic
 		$processor_short_name = "s4c_l4a";
@@ -647,7 +603,7 @@ else {
 		$siteId     = $_POST['siteId'];
 		$input_COHE = $_POST['inputFiles_COHE'];
 		$input_AMP  = $_POST['inputFiles_AMP'];
-		$input_NDVI = $_POST['inputFiles_NDVI'];
+		$input_L3B = $_POST['inputFiles_L3B'];
 		
 		// advanced parameters	- dynamically get the 
         $fconfig = array();        
@@ -665,7 +621,7 @@ else {
         $json_config = json_encode( $fconfig );
 		
 		// generate json_param (skip parameters with empty values)
-		$params = array ("input_COHE" => $input_COHE, "input_AMP"  => $input_AMP, "input_NDVI" => $input_NDVI);
+		$params = array ("input_COHE" => $input_COHE, "input_AMP"  => $input_AMP, "input_L3B" => $input_L3B);
 		$json_param = json_encode(array_filter($params));
 		
 		insertjob($name, $description, $processor_short_name, $siteId, 2, $json_param, $json_config);
@@ -674,5 +630,4 @@ else {
 	else {
 		echo "Under Construction";
 	}
-}
 ?>

@@ -486,6 +486,179 @@ begin
             raise notice '%', _statement;
             execute _statement;
 
+
+            _statement := $str$
+                create or replace function sp_insert_default_scheduled_tasks(
+                    _season_id season.id%type,
+                    _processor_id processor.id%type default null
+                )
+                returns void as
+                $$
+                declare _site_id site.id%type;
+                declare _site_name site.short_name%type;
+                declare _processor_name processor.short_name%type;
+                declare _season_name season.name%type;
+                declare _start_date season.start_date%type;
+                declare _mid_date season.start_date%type;
+                begin
+                    select site.short_name
+                    into _site_name
+                    from season
+                    inner join site on site.id = season.site_id
+                    where season.id = _season_id;
+
+                    select processor.short_name
+                    into _processor_name
+                    from processor
+                    where id = _processor_id;
+
+                    if not found then
+                        raise exception 'Invalid season id %', _season_id;
+                    end if;
+
+                    select site_id,
+                           name,
+                           start_date,
+                           mid_date
+                    into _site_id,
+                         _season_name,
+                         _start_date,
+                         _mid_date
+                    from season
+                    where id = _season_id;
+
+                    if _processor_id is null or (_processor_id = 2 and _processor_name = 'l3a') then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_L3A' :: character varying,
+                                    2,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    2::smallint,
+                                    0::smallint,
+                                    31::smallint,
+                                    cast((select date_trunc('month', _start_date) + interval '1 month' - interval '1 day') as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{}' :: json);
+                    end if;
+
+                    if _processor_id is null or (_processor_id = 3 and (_processor_name = 'l3b_lai' or _processor_name = 'l3b'))  then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_L3B' :: character varying,
+                                    3,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    1::smallint,
+                                    1::smallint,
+                                    0::smallint,
+                                    cast((_start_date + 1) as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{"general_params":{"product_type":"L3B"}}' :: json);
+                    end if;
+
+                    if _processor_id is null or (_processor_id = 5 and _processor_name = 'l4a') then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_L4A' :: character varying,
+                                    5,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    2::smallint,
+                                    0::smallint,
+                                    31::smallint,
+                                    cast(_mid_date as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{}' :: json);
+                    end if;
+
+                    if _processor_id is null or (_processor_id = 6 and _processor_name = 'l4b') then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_L4B' :: character varying,
+                                    6,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    2::smallint,
+                                    0::smallint,
+                                    31::smallint,
+                                    cast(_mid_date as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{}' :: json);
+                    end if;
+                    
+                    if _processor_id is null or _processor_name = 's4c_l4a' then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_S4C_L4A' :: character varying,
+                                    9,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    2::smallint,
+                                    0::smallint,
+                                    31::smallint,
+                                    cast(_mid_date as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{}' :: json);
+                    end if;
+
+                    if _processor_id is null or _processor_name = 's4c_l4b' then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_S4C_L4B' :: character varying,
+                                    10,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    2::smallint,
+                                    0::smallint,
+                                    31::smallint,
+                                    cast((_start_date + 31) as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{}' :: json);
+                    end if;
+
+                    if _processor_id is null or _processor_name = 's4c_l4c' then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_S4C_L4C' :: character varying,
+                                    11,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    1::smallint,
+                                    7::smallint,
+                                    0::smallint,
+                                    cast((_start_date + 7) as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{}' :: json);
+                    end if;
+
+                    if _processor_id is null or (_processor_id = 14 and _processor_name = 's4c_mdb1')  then
+                        perform sp_insert_scheduled_task(
+                                    _site_name || '_' || _season_name || '_S4C_MDB1' :: character varying,
+                                    14,
+                                    _site_id :: int,
+                                    _season_id :: int,
+                                    1::smallint,
+                                    1::smallint,
+                                    0::smallint,
+                                    cast((_start_date + 1) as character varying),
+                                    60,
+                                    1 :: smallint,
+                                    '{}' :: json);
+                    end if;
+
+                    if _processor_id is not null and _processor_id not in (2, 3, 5, 6, 9, 10, 11, 12, 13, 14) then
+                        raise exception 'No default jobs defined for processor id %', _processor_id;
+                    end if;
+
+                end;
+                $$
+                    language plpgsql volatile;
+
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
             _statement := $str$
                 UPDATE config_category SET allow_per_site_customization = true;
                 DELETE FROM config_category WHERE id = 16;
@@ -494,16 +667,17 @@ begin
             execute _statement;
 
             _statement := $str$
-                DELETE FROM config where key = 'demmaccs.maccs-launcher';
-                DELETE FROM config where key = 'demmaccs.srtm-path';
-                DELETE FROM config where key = 'demmaccs.swbd-path';
-                DELETE FROM config where key = 'demmaccs.working-dir';
-                DELETE FROM config where key = 'demmaccs.output-path';
-                DELETE FROM config where key = 'demmaccs.gips-path';
-                DELETE FROM config WHERE key = 'demmaccs.compress-tiffs';
-                DELETE FROM config WHERE key = 'demmaccs.cog-tiffs';
-                DELETE FROM config WHERE key = 'demmaccs.remove-sre';
-                DELETE FROM config WHERE key = 'demmaccs.remove-fre';
+                UPDATE config SET key = 'processor.l2a.maja.launcher' WHERE key = 'demmaccs.maccs-launcher';
+                UPDATE config SET key = 'processor.l2a.srtm-path' WHERE key = 'demmaccs.srtm-path';
+                UPDATE config SET key = 'processor.l2a.swbd-path' WHERE key = 'demmaccs.swbd-path';
+                UPDATE config SET key = 'processor.l2a.working-dir' WHERE key = 'demmaccs.working-dir';
+                UPDATE config SET key = 'processor.l2a.optical.output-path' WHERE key = 'demmaccs.output-path';
+                UPDATE config SET key = 'processor.l2a.maja.gipp-path' WHERE key = 'demmaccs.gips-path';
+                UPDATE config SET key = 'processor.l2a.optical.compress-tiffs' WHERE key = 'demmaccs.compress-tiffs';
+                UPDATE config SET key = 'processor.l2a.optical.cog-tiffs' WHERE key = 'demmaccs.cog-tiffs';
+                UPDATE config SET key = 'processor.l2a.maja.remove-sre' WHERE key = 'demmaccs.remove-sre';
+                UPDATE config SET key = 'processor.l2a.maja.remove-fre' WHERE key = 'demmaccs.remove-fre';
+            
                 DELETE FROM config WHERE key = 'processor.l2a.s2.retry-interval';
             
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.s2.implementation', NULL, 'maja', '2020-09-07 14:17:52.846794+03') ON conflict DO nothing;
@@ -522,6 +696,8 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.swbd-path', NULL, '/mnt/archive/swbd', '2016-02-25 11:12:04.008319+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a.working-dir', NULL, '/mnt/archive/demmaccs_tmp/', '2016-02-25 17:31:06.01191+02') ON conflict DO nothing;            
 
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('downloader.use.esa.l2a', NULL, 'false', '2019-12-16 14:56:57.501918+02') ON conflict DO nothing;
+                
                 -- Executor/orchestrator/scheduler changes
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.inter-proc-com-type', NULL, 'http', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
 
@@ -531,21 +707,27 @@ begin
 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.http-server.listen-port', NULL, '8083', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.http-server.listen-ip', NULL, '127.0.0.1', '2020-12-16 17:31:06.01191+02') ON conflict DO nothing;
+                
+                -- Use processors in local or docker
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.use_docker', NULL, '1', '2021-01-14 12:11:21.800537+00') ON conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'sen2agri/processors:2.0.0', '2021-01-14 12:11:21.800537+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen2agri/processors:2.0.0';
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_add_mounts', NULL, '', '2021-01-21 10:23:12.993537+00') ON conflict DO nothing;
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
             _statement := $str$
-                DELETE FROM config_metadata where key = 'demmaccs.maccs-launcher';
-                DELETE FROM config_metadata where key = 'demmaccs.srtm-path';
-                DELETE FROM config_metadata where key = 'demmaccs.swbd-path';
-                DELETE FROM config_metadata where key = 'demmaccs.working-dir';
-                DELETE FROM config_metadata where key = 'demmaccs.output-path';
-                DELETE FROM config_metadata where key = 'demmaccs.gips-path';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.compress-tiffs';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.cog-tiffs';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.remove-sre';
-                DELETE FROM config_metadata WHERE key = 'demmaccs.remove-fre';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.launcher' WHERE key = 'demmaccs.maccs-launcher';
+                UPDATE config_metadata SET key = 'processor.l2a.srtm-path' WHERE key = 'demmaccs.srtm-path';
+                UPDATE config_metadata SET key = 'processor.l2a.swbd-path' WHERE key = 'demmaccs.swbd-path';
+                UPDATE config_metadata SET key = 'processor.l2a.working-dir' WHERE key = 'demmaccs.working-dir';
+                UPDATE config_metadata SET key = 'processor.l2a.optical.output-path' WHERE key = 'demmaccs.output-path';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.gipp-path' WHERE key = 'demmaccs.gips-path';
+                UPDATE config_metadata SET key = 'processor.l2a.optical.compress-tiffs' WHERE key = 'demmaccs.compress-tiffs';
+                UPDATE config_metadata SET key = 'processor.l2a.optical.cog-tiffs' WHERE key = 'demmaccs.cog-tiffs';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.remove-sre' WHERE key = 'demmaccs.remove-sre';
+                UPDATE config_metadata SET key = 'processor.l2a.maja.remove-fre' WHERE key = 'demmaccs.remove-fre';
+
                 DELETE FROM config_metadata WHERE key = 'processor.l2a.s2.retry-interval';
 
                 INSERT INTO config_metadata VALUES ('downloader.skip.existing', 'If enabled, products downloaded for another site will be duplicated, in database only, for the current site', 'bool', false, 15) ON conflict DO nothing;
@@ -564,6 +746,8 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.l2a.srtm-path', 'Path to the DEM dataset', 'directory', false, 2) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'Path to the SWBD dataset', 'directory', false, 2) ON conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'Working directory', 'string', false, 2) ON conflict DO nothing;
+
+                INSERT INTO config_metadata VALUES ('downloader.use.esa.l2a', 'Enable S2 L2A ESA products download', 'bool', false, 15) ON conflict DO nothing;
 
                 -- Executor/orchestrator/scheduler changes
                 INSERT INTO config_metadata VALUES ('general.inter-proc-com-type', 'Type of the interprocess communication', 'string', false, 1) ON conflict DO nothing;

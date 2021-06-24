@@ -89,7 +89,6 @@ INSERT INTO config_metadata VALUES ('scheduled.retry.enabled', 'Scheduled retry 
 INSERT INTO config_metadata VALUES ('executor.processor.l2a.name', 'L2A Processor Name', 'string', true, 8);
 INSERT INTO config_metadata VALUES ('executor.processor.l2a.path', 'L2A Processor Path', 'file', false, 8);
 INSERT INTO config_metadata VALUES ('processor.l2a.maja.gipp-path', 'MAJA GIPP path', 'directory', false, 2);
-INSERT INTO config_metadata VALUES ('processor.l2a.maja.launcher', 'MAJA binary location', 'file', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.maja.remove-fre', 'Remove FRE files from resulted L2A product', 'bool', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.maja.remove-sre', 'Remove SRE files from resulted L2A product', 'bool', false, 2);
 INSERT INTO config_metadata VALUES ('processor.l2a.optical.cog-tiffs', 'Produce L2A tiff files as Cloud Optimized Geotiff', 'bool', false, 2);
@@ -105,8 +104,7 @@ INSERT INTO config_metadata VALUES ('processor.l2a.swbd-path', 'Path to the SWBD
 INSERT INTO config_metadata VALUES ('processor.l2a.working-dir', 'Working directory', 'string', false, 2);
 insert into config_metadata values('processor.l2a.processors_image','L2a processors image name','string',false,2);
 insert into config_metadata values('processor.l2a.sen2cor_image','Sen2Cor image name','string',false,2);
-insert into config_metadata values('processor.l2a.maja4_image','MAJA 4 image name','string',false,2);
-insert into config_metadata values('processor.l2a.maja3_image','MAJA 3 image name','string',false,2);
+insert into config_metadata values('processor.l2a.maja_image','MAJA image name','string',false,2);
 insert into config_metadata values('processor.l2a.gdal_image','GDAL image name','string',false,2);
 insert into config_metadata values('processor.l2a.l8_align_image','L8 align image name','string',false,2);
 insert into config_metadata values('processor.l2a.dem_image','DEM image name','string',false,2);

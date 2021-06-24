@@ -1,0 +1,1 @@
+sudo docker run --rm -i -v /mnt/aster_dem/DEM/ASTER_Northern_Europe:$(realpath ~)"/.snap/auxdata/dem/ASTER 1sec GDEM v3":Z --user $(id -u):$(id -g) sen4cap/snap

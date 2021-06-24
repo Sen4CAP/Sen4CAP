@@ -45,7 +45,9 @@ unzip -o tao-datasources-scihub-*.jar ro/cs/tao/datasource/remote/scihub/scihub.
 
 if [ "${DATA_SOURCE}" == "apihub" ] ; then
     echo "Uncommenting apihub line ..."
-    sed -i 's/^#scihub.search.url = https:\/\/scihub.copernicus.eu\/apihub\/search/scihub.search.url = https:\/\/scihub.copernicus.eu\/apihub\/search/g' ro/cs/tao/datasource/remote/scihub/scihub.properties
+    # updating also for the new address in SciHub
+    sed -i 's/^#scihub.search.url = https:\/\/scihub.copernicus.eu\/apihub\/search/scihub.search.url = https:\/\/apihub.copernicus.eu\/apihub\/search/g' ro/cs/tao/datasource/remote/scihub/scihub.properties
+    sed -i 's/^#scihub.search.url = https:\/\/apihub.copernicus.eu\/apihub\/search/scihub.search.url = https:\/\/apihub.copernicus.eu\/apihub\/search/g' ro/cs/tao/datasource/remote/scihub/scihub.properties
 
     echo "Commenting dhus line ..."
     sed -i 's/^scihub.search.url = https:\/\/scihub.copernicus.eu\/dhus\/search/#scihub.search.url = https:\/\/scihub.copernicus.eu\/dhus\/search/g' ro/cs/tao/datasource/remote/scihub/scihub.properties
@@ -55,6 +57,8 @@ else
 
     echo "Commenting apihub line ..."
     sed -i 's/^scihub.search.url = https:\/\/scihub.copernicus.eu\/apihub\/search/#scihub.search.url = https:\/\/scihub.copernicus.eu\/apihub\/search/g' ro/cs/tao/datasource/remote/scihub/scihub.properties
+    #update for the new address in SciHub
+    sed -i 's/^scihub.search.url = https:\/\/apihub.copernicus.eu\/apihub\/search/#scihub.search.url = https:\/\/apihub.copernicus.eu\/apihub\/search/g' ro/cs/tao/datasource/remote/scihub/scihub.properties
 
 fi 
 echo "Putting scihub.properties back to jar ..."

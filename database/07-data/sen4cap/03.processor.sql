@@ -38,3 +38,7 @@ INSERT INTO processor
 VALUES
 (14, 'S4C Marker Database PR1','s4c_mdb1', 'MD_PR1 &mdash; Marker Database PR1');
 
+INSERT INTO processor
+(id, name, short_name, label)
+VALUES
+(15, 'Validity flags','l2a_msk', 'Validity flags');
