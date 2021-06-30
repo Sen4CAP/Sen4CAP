@@ -342,6 +342,8 @@ class FmaskProcessor(object):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(docker_gid))
+        script_command.append("-e")
+        script_command.append("TZ={}".format(time.tzname[0]))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
         script_command.append("-v")

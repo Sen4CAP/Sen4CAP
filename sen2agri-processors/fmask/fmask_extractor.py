@@ -129,11 +129,14 @@ def fmask_launcher(fmask_context):
         else:
             container_name = "fmask_{}".format(guid)
 
+        #docker run
         cmd_array.append("docker")
         cmd_array.append("run")
         cmd_array.append("--rm")
         cmd_array.append("-u")
         cmd_array.append("{}:{}".format(os.getuid(), os.getgid()))
+        cmd_array.append("-e")
+        cmd_array.append("TZ={}".format(time.tzname[0]))
         cmd_array.append("-v")
         cmd_array.append("{}:{}".format(fmask_context.input, fmask_context.input))
         cmd_array.append("-v")

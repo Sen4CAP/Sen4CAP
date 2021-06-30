@@ -475,6 +475,8 @@ def RunSen2Cor():
         cmd.append("--rm")
         cmd.append("-u")
         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+        cmd.append("-e")
+        cmd.append("TZ={}".format(time.tzname[0]))
         cmd.append("-v")
         cmd.append("{}:{}".format(args.output_dir, args.output_dir))
         cmd.append("-v")

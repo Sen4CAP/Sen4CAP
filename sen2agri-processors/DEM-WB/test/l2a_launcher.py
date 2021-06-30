@@ -1528,6 +1528,8 @@ class Maja(L2aProcessor):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(docker_gid))
+        script_command.append("-e")
+        script_command.append("TZ={}".format(time.tzname[0]))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -1934,6 +1936,8 @@ class Sen2Cor(L2aProcessor):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(docker_gid))
+        script_command.append("-e")
+        script_command.append("TZ={}".format(time.tzname[0]))
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -2021,8 +2025,8 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
         #tmp only for testing purposes
-        #script_command.append("--resolution")
-        #script_command.append(str(60))
+        script_command.append("--resolution")
+        script_command.append(str(60))
         #tmp
 
         l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)
