@@ -2025,8 +2025,8 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--log-level")
         script_command.append(self.l2a_log.level)
         #tmp only for testing purposes
-        script_command.append("--resolution")
-        script_command.append(str(60))
+        #script_command.append("--resolution")
+        #script_command.append(str(60))
         #tmp
 
         l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)
