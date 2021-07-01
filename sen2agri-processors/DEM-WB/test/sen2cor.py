@@ -345,12 +345,12 @@ def CheckOutput():
     else:
         L1C_name = os.path.basename(args.input_dir)
     L1C_name_split = L1C_name.split("_")
-    L1C_satelite = L1C_name_split[0]
+    L1C_satellite = L1C_name_split[0]
     L1C_aquistition = L1C_name_split[2]
     L1C_orbit = L1C_name_split[4]
     L1C_tile = L1C_name_split[5]
     L2a_product_pattern = "{}_MSIL2A_{}_N*_{}_{}_*T*.SAFE".format(
-        L1C_satelite, L1C_aquistition, L1C_orbit, L1C_tile
+        L1C_satellite, L1C_aquistition, L1C_orbit, L1C_tile
     )
 
     # determine if a product with the specified pattern exists
@@ -475,8 +475,13 @@ def RunSen2Cor():
         cmd.append("--rm")
         cmd.append("-u")
         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
-        cmd.append("-e")
-        cmd.append("TZ={}".format(time.tzname[0]))
+        cmd.append("-v")
+        cmd.append("/etc/localtime:/etc/localtime")
+        cmd.append("-v")
+        cmd.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
+        if os.path.exists("/etc/timezone"):
+            cmd.append("-v")
+            cmd.append("/etc/timezone:/etc/timezone")
         cmd.append("-v")
         cmd.append("{}:{}".format(args.output_dir, args.output_dir))
         cmd.append("-v")

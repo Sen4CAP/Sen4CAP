@@ -1084,14 +1084,16 @@ class Maja(L2aProcessor):
             elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
                 footprint_tif_pattern = "**/*.DBL.TIF"
             else:
-                msg = "Can NOT create the footprint, invalid satelite id."
+                msg = "Can NOT create the footprint, invalid satellite id."
                 self.update_rejection_reason(msg)
+                self.log.error(msg, print_msg=True)
                 return False
         elif self.l2a.output_format == THEIA_MUSCATE_OUTPUT_FORMAT:
             footprint_tif_pattern = "**/*_B2.tif"
         else:
-            msg = "Can NOT create the footprint, invalid output format."
-            self.l2a_log.error(msg, print_msg = True)
+            rejection_reason = "Can NOT create the footprint, invalid output format."
+            self.update_rejection_reason(rejection_reason)
+            self.l2a_log.error(rejection_reason, print_msg = True)
             return False
 
         footprint_tif_path = os.path.join(self.l2a.output_path, footprint_tif_pattern)
@@ -1422,7 +1424,7 @@ class Maja(L2aProcessor):
         #check the processed l2a product
         l2a_found = False
 
-        #get and check the product acquistion date and satelite id
+        #get and check the product acquistion date and satellite id
         if self.l2a.output_path.endswith("/"):
             tmp_path = self.l2a.output_path[:-1]
         else:
@@ -1471,7 +1473,7 @@ class Maja(L2aProcessor):
             elif satellite_id == SENTINEL2_SATELLITE_ID:
                 name_pattern = "*_T{}_[CHD]_V*".format(self.lin.tile_id)
             else:
-                rejection_reason = "Invalid satelite id."
+                rejection_reason = "Invalid satellite id."
                 self.update_rejection_reason(rejection_reason)
                 self.l2a_log.error(rejection_reason, print_msg = True)
                 return False
@@ -1528,8 +1530,13 @@ class Maja(L2aProcessor):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(docker_gid))
-        script_command.append("-e")
-        script_command.append("TZ={}".format(time.tzname[0]))
+        script_command.append("-v")
+        script_command.append("/etc/localtime:/etc/localtime")
+        script_command.append("-v")
+        script_command.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
+        if os.path.exists("/etc/timezone"):
+            script_command.append("-v")
+            script_command.append("/etc/timezone:/etc/timezone")
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -1936,8 +1943,13 @@ class Sen2Cor(L2aProcessor):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(docker_gid))
-        script_command.append("-e")
-        script_command.append("TZ={}".format(time.tzname[0]))
+        script_command.append("-v")
+        script_command.append("/etc/localtime:/etc/localtime")
+        script_command.append("-v")
+        script_command.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
+        if os.path.exists("/etc/timezone"):
+            script_command.append("-v")
+            script_command.append("/etc/timezone:/etc/timezone")        
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
