@@ -31,6 +31,7 @@ import signal
 import time
 import datetime
 import pipes
+import json
 from psycopg2.sql import SQL
 from l2a_commons import LogHandler, MASTER_ID
 from l2a_commons import LANDSAT8_SATELLITE_ID, SENTINEL2_SATELLITE_ID
@@ -61,7 +62,7 @@ DB_PROCESSOR_NAME = "fmask"
 S2_20M_RESOLUTION = "5490"
 PRODUCT_STATUS_MSG_TYPE = 1
 CONTAINER_STATUS_MSG_TYPE = 2
-
+DEFAULT_QUICKLOOK_IMAGE_NAME ="qkl.jpeg"
 
 class L1CProduct(object):
     def __init__(self, tile):
@@ -74,6 +75,8 @@ class L1CProduct(object):
         self.rejection_reason = None
         self.should_retry = True
         self.processing_status = None
+        self.orbit_id = tile.orbit_id
+        self.tile_id = tile.tile_id
 
 class FmaskProduct(object):
     def __init__(self):
@@ -87,7 +90,7 @@ class FmaskProduct(object):
         self.site_id = None
         self.product_id = None
         self.footprint = None
-        self.basename = None
+        self.qkl = None
 
 class FmaskProcessor(object):
     def __init__(self, processor_context, unprocessed_tile, master_q, launcher_log):
@@ -155,6 +158,7 @@ class FmaskProcessor(object):
 
         return True
 
+
     def check_lin(self):
 
         self.launcher_log.info(
@@ -177,13 +181,37 @@ class FmaskProcessor(object):
         else:
             return False
 
+    def get_lin_info(self, product_name):
+        acquisition_date = None
+        if product_name.startswith("S2"):
+            m = re.match(r"\w+_V(\d{8}T\d{6})_\w+.SAFE", product_name)
+            # check if the new convention naming aplies
+            if m is None:
+                m = re.match(r"\w+_(\d{8}T\d{6})_\w+.SAFE", product_name)
+            if m is not None:
+                acquisition_date = m.group(1)
+        elif product_name.startswith("LC8"):
+            m = re.match(r"LC8\d{6}(\d{7})[A-Z]{3}\d{2}", product_name)
+            if m is not None:
+                acquisition_date = datetime.datetime.strptime(
+                    "{} {}".format(m.group(1)[0:4], m.group(1)[4:]), "%Y %j"
+                ).strftime("%Y%m%dT%H%M%S")
+        elif product_name.startswith("LC08"):
+            m = re.match(
+                r"LC08_[A-Z0-9]+_\d{6}_(\d{8})_\d{8}_\d{2}_[A-Z0-9]{2}", product_name
+            )
+            if m is not None:
+                acquisition_date = "{}T000000".format(m.group(1))
+
+        return acquisition_date
+
+
     def fmask_setup(self):
         # determine the name of the fmask output dir
-        name_determined = True
         if self.lin.path.endswith("/"):
             lin_basename = os.path.basename(self.lin.path[:-1])
-            
-        lin_basename = os.path.basename(self.lin.path)
+        else:    
+            lin_basename = os.path.basename(self.lin.path)
         if lin_basename.startswith("S2"):
             fmask_basename = lin_basename.replace("L1C", "FMASK")
         elif lin_basename.startswith("LC8"):
@@ -209,42 +237,11 @@ class FmaskProcessor(object):
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason)
             return False
-        self.fmask.basename = fmask_basename
+        self.fmask.name = fmask_basename
 
         # determine the acq date
-        if lin_basename.startswith("S2"):
-            result = re.findall(r"_\d{8}T\d{6}_", lin_basename)
-            if result:
-                acq_date = result[0].strip("_").split("T")[0]
-                acq_year = acq_date[:4]
-                acq_month = acq_date[4:6]
-                acq_day = acq_date[6:]
-            else:
-                rejection_reason = (
-                    "Can NOT obtain the aquisition date on input product: {}".format(
-                        lin_basename
-                    )
-                )
-                self.update_rejection_reason(rejection_reason)
-                self.launcher_log.error(rejection_reason)
-                return False
-        elif lin_basename.startswith("LC"):
-            result = re.findall(r"_\d{8}_", lin_basename)
-            if result:
-                acq_date = result[0].strip("_")
-                acq_year = acq_date[:4]
-                acq_month = acq_date[4:6]
-                acq_day = acq_date[6:]
-            else:
-                rejection_reason = (
-                    "Can NOT obtain the aquisition date on input product: {}".format(
-                        lin_basename
-                    )
-                )
-                self.update_rejection_reason(rejection_reason)
-                self.launcher_log.error(rejection_reason)
-                return False
-        else:
+        lin_acq_date = self.get_lin_info(lin_basename)
+        if lin_acq_date is None:
             rejection_reason = (
                 "Can NOT obtain the aquisition date on input product: {}".format(
                     lin_basename
@@ -253,6 +250,11 @@ class FmaskProcessor(object):
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason)
             return False
+        else:
+            self.fmask.acquisition_date = lin_acq_date
+            acq_year = lin_acq_date[0:4]
+            acq_month = lin_acq_date[4:6]
+            acq_day = lin_acq_date[6:8] 
 
         # determine the path of the fmask product
         fmask_output_path = os.path.join(
@@ -340,6 +342,10 @@ class FmaskProcessor(object):
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
         script_command.append("--group-add")
         script_command.append("{}".format(docker_gid))
+        script_command.append("-v")
+        script_command.append("/etc/localtime:/etc/localtime")
+        script_command.append("-v")
+        script_command.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.working_dir, self.context.working_dir))
         script_command.append("-v")
@@ -453,7 +459,33 @@ class FmaskProcessor(object):
         fmask_file_path = os.path.join(self.fmask.output_path, fmask_file_pattern)
         fmask_files = glob.glob(fmask_file_path)
         if len(fmask_files) == 1:
-            log_file = os.path.join(self.fmask.output_path, self.log_file_name)
+            
+            #compute footprint
+            self.get_fmask_footprint(fmask_files[0])
+
+            #compute quicklook image
+            guid = get_guid(8)
+            output_format = "JPEG"
+            container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
+            notification = ContainerStatusMsg(container_name, True)
+            self.master_q.put(notification)
+            translate_ok = translate(input_img = fmask_files[0],
+                    output_dir = self.fmask.output_path,
+                    output_img_name = DEFAULT_QUICKLOOK_IMAGE_NAME,
+                    output_img_format = output_format,
+                    log = self.fmask_log,
+                    gdal_image = self.context.gdal_image,
+                    name = container_name,
+                    outsize = 1000
+            )
+            if not translate_ok:
+                self.fmask_log.error("Can NOT create quicklook image", print_msg = True)
+            else:
+                self.fmask.qkl = DEFAULT_QUICKLOOK_IMAGE_NAME
+            notification = ContainerStatusMsg(container_name, False)
+            self.master_q.put(notification)
+
+            #fmask image translations
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
                 output_img_name = os.path.basename(fmask_files[0])[:-4] + "_20m.tif"
             elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
@@ -503,7 +535,6 @@ class FmaskProcessor(object):
                 os.remove(fmask_files[0])
             else:
                 shutil.move(fmask_files[0], output_img_name)
-
             fmask_file_ok = True
         else:
             rejection_reason = "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
@@ -746,6 +777,8 @@ class Tile(object):
         self.satellite_id = tile_info[1]
         self.downloader_history_id = tile_info[2]
         self.path = tile_info[3]
+        self.orbit_id = tile_info[4]
+        self.tile_id = tile_info[5]
  
     def is_valid(self, log):
         if self.downloader_history_id is None:
@@ -1038,9 +1071,12 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log):
         site_id = input_prod.site_id
         full_path = fmask_prod.destination_path
         product_name = fmask_prod.name
-        footprint = fmask_prod.footprint
         sat_id = fmask_prod.satellite_id
         acquisition_date = fmask_prod.acquisition_date
+        orbit_id = input_prod.orbit_id
+        processed_tiles = [input_prod.tile_id]
+        qkl = fmask_prod.qkl
+        footprint = fmask_prod.footprint
 
         q1 = SQL("set transaction isolation level serializable")
         cursor.execute(q1)
@@ -1093,10 +1129,10 @@ def db_postrun_update(db_config, input_prod, fmask_prod, log):
                                         "full_path" : full_path,
                                         "created_timestamp" : acquisition_date,
                                         "name" : product_name,
-                                        "quicklook_image" : None,
+                                        "quicklook_image" : qkl,
                                         "footprint" : footprint,
-                                        "orbit_id" : None,
-                                        "tiles" : None,
+                                        "orbit_id" : orbit_id,
+                                        "tiles" : json.dumps(processed_tiles),
                                         "orbit_type_id" : None,
                                         "downloader_history_id" : downloader_product_id
                                     }

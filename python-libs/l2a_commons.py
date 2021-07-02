@@ -72,7 +72,7 @@ class LogHandler(object):
         self.level = level
         self.name = name
         self.emitter_id = emitter_id
-        self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d-%H:%M:%S%z')
+        self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d-%H:%M:%S')
         self.handler = logging.FileHandler(self.path, "a")        
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger(self.name)
@@ -289,6 +289,10 @@ def translate(input_img,
             cmd.append("--rm")
             cmd.append("-u")
             cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+            cmd.append("-v")
+            cmd.append("/etc/localtime:/etc/localtime")
+            cmd.append("-v")
+            cmd.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
             cmd.append("-v")
             cmd.append("{}:{}".format(os.path.abspath(input_img), os.path.abspath(input_img)))
             cmd.append("-v")
