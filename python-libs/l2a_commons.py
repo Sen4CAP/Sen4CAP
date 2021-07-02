@@ -292,10 +292,7 @@ def translate(input_img,
             cmd.append("-v")
             cmd.append("/etc/localtime:/etc/localtime")
             cmd.append("-v")
-            cmd.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
-            if os.path.isfile("/etc/timezone"):
-                cmd.append("-v")
-                cmd.append("/etc/timezone:/etc/timezone")
+            cmd.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
             cmd.append("-v")
             cmd.append("{}:{}".format(os.path.abspath(input_img), os.path.abspath(input_img)))
             cmd.append("-v")

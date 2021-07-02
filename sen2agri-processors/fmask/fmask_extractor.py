@@ -138,10 +138,7 @@ def fmask_launcher(fmask_context):
         cmd_array.append("-v")
         cmd_array.append("/etc/localtime:/etc/localtime")
         cmd_array.append("-v")
-        cmd_array.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
-        if os.path.exists("/etc/timezone"):
-            cmd_array.append("-v")
-            cmd_array.append("/etc/timezone:/etc/timezone")
+        cmd_array.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
         cmd_array.append("-v")
         cmd_array.append("{}:{}".format(fmask_context.input, fmask_context.input))
         cmd_array.append("-v")

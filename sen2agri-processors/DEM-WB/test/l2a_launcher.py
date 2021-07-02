@@ -1533,10 +1533,7 @@ class Maja(L2aProcessor):
         script_command.append("-v")
         script_command.append("/etc/localtime:/etc/localtime")
         script_command.append("-v")
-        script_command.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
-        if os.path.isfile("/etc/timezone"):
-            script_command.append("-v")
-            script_command.append("/etc/timezone:/etc/timezone")
+        script_command.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
@@ -1946,10 +1943,7 @@ class Sen2Cor(L2aProcessor):
         script_command.append("-v")
         script_command.append("/etc/localtime:/etc/localtime")
         script_command.append("-v")
-        script_command.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
-        if os.path.isfile("/etc/timezone"):
-            script_command.append("-v")
-            script_command.append("/etc/timezone:/etc/timezone")        
+        script_command.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
         script_command.append("-v")
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
