@@ -404,8 +404,8 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     cmd_array.append("-v")
     cmd_array.append("/etc/localtime:/etc/localtime")
     cmd_array.append("-v")
-    cmd_array.append("/etc/share/zoneinfo")
-    if os.path.exists("/etc/timezone"):
+    cmd_array.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
+    if os.path.isfile("/etc/timezone"):
         cmd_array.append("-v")
         cmd_array.append("/etc/timezone:/etc/timezone")
     for tile in prev_l2a_tile_path:
@@ -780,8 +780,8 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     cmd_array.append("-v")
     cmd_array.append("/etc/localtime:/etc/localtime")
     cmd_array.append("-v")
-    cmd_array.append("/etc/share/zoneinfo")
-    if os.path.exists("/etc/timezone"):
+    cmd_array.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
+    if os.path.isfile("/etc/timezone"):
         cmd_array.append("-v")
         cmd_array.append("/etc/timezone:/etc/timezone")
     cmd_array.append("-v")
@@ -855,8 +855,8 @@ dem_command.append("{}:{}".format(os.getuid(), os.getgid()))
 dem_command.append("-v")
 dem_command.append("/etc/localtime:/etc/localtime")
 dem_command.append("-v")
-dem_command.append("/etc/share/zoneinfo")
-if os.path.exists("/etc/timezone"):
+dem_command.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
+if os.path.isfile("/etc/timezone"):
     dem_command.append("-v")
     dem_command.append("/etc/timezone:/etc/timezone")
 dem_command.append("-v")

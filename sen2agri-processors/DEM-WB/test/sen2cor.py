@@ -479,7 +479,7 @@ def RunSen2Cor():
         cmd.append("/etc/localtime:/etc/localtime")
         cmd.append("-v")
         cmd.append("/etc/share/zoneinfo:/etc/share/zoneinfo")
-        if os.path.exists("/etc/timezone"):
+        if os.path.isfile("/etc/timezone"):
             cmd.append("-v")
             cmd.append("/etc/timezone:/etc/timezone")
         cmd.append("-v")
