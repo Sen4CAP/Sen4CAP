@@ -151,7 +151,10 @@ begin
             select _site_id,
                 _satellite_id,
                 _downloader_history_id,
-                _path;
+                _path,
+                orbit_id,
+                tile_id;
+
     end if;
 end;
 $$ language plpgsql volatile;
