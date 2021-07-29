@@ -12,6 +12,8 @@ declare _downloader_history_id int;
 declare _path text;
 declare _site_id int;
 declare _product_date timestamp;
+declare _orbit_id integer;
+declare _tile_id text;
 begin
     if (select current_setting('transaction_isolation') not ilike 'serializable') then
         raise exception 'Please set the transaction isolation level to serializable.' using errcode = 'UE001';
@@ -80,12 +82,16 @@ begin
             downloader_history.id,
             downloader_history.product_date,
             downloader_history.full_path,
-            downloader_history.site_id
+            downloader_history.site_id,
+            downloader_history.orbit_id,
+            downloader_history.tiles[1]
         into _satellite_id,
             _downloader_history_id,
             _product_date,
             _path,
-            _site_id
+            _site_id,
+            _orbit_id,
+            _tile_id
         from downloader_history
         inner join site on site.id = downloader_history.site_id
         cross join lateral (
@@ -145,7 +151,10 @@ begin
             select _site_id,
                 _satellite_id,
                 _downloader_history_id,
-                _path;
+                _path,
+                orbit_id,
+                tile_id;
+
     end if;
 end;
 $$ language plpgsql volatile;
