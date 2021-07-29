@@ -82,7 +82,7 @@ begin
             downloader_history.id,
             downloader_history.product_date,
             downloader_history.full_path,
-            downloader_history.site_id
+            downloader_history.site_id,
             downloader_history.orbit_id,
             downloader_history.tiles[1]
         into _satellite_id,
