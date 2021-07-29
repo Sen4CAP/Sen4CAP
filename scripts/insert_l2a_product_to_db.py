@@ -25,7 +25,7 @@ from osgeo import ogr
 
 SENTINEL2_SATELLITE_ID = int(1)
 LANDSAT8_SATELLITE_ID = int(2)
-UNKNOWN_SATELLITE_ID = int(-1)
+UNKNOWN_SATELLITE_ID = None
 general_log_filename = "log.log"
 
 DEBUG = 1

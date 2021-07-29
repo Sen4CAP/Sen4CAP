@@ -100,7 +100,7 @@ $processors = pg_fetch_all($res);
                                             <?php } ?>
 											<span id="specificParam_<?=$processor['short_name']?>"></span>		
 											
-											<?php if($processor['short_name'] == "l3a" || $isSen2Agri){?> 
+											<?php if($processor['short_name'] == "l3a"){?> 
 											<div class="form-group form-group-sm ">
 												<label class="control-label" for="resolution">Resolution:</label>
 												<select class="form-control" id="resolution" name="resolution">
@@ -115,7 +115,7 @@ $processors = pg_fetch_all($res);
 											<?php } ?>
 											
 											<!-- Specific parameters -->
-											<?php if($processor['short_name'] == "l3a" && $isSen2Agri){?> 
+											<?php if($processor['short_name'] == "l3a"){?> 
 											<div class="form-group form-group-sm required" data-provide="datepicker">
 												<label class="control-label" for="synthDate">Synthesis date:</label>
 												<input type="text" class="form-control" id="synthDate" name="synthDate">

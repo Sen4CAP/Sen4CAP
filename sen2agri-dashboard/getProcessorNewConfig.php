@@ -336,8 +336,11 @@ function insertjob($name, $description, $processor_short_name, $site_id, $start_
 		redirect_page($processor_short_name, "OK", "Your job has been successfully submitted!");
 	}
     /* -------------------------------------------------------l3e_pheno------------------------------------------------------ */
-	elseif (isset ( $_POST ['l3e_pheno'] ) || isset ( $_POST ['l3e'] )) {
+	elseif (isset ( $_POST ['l3e_pheno'] ) || isset ( $_POST ['l3e'] ) || isset ( $_POST ['l2a_msk'] )) {
 		$processor_short_name = "l3e";
+        if (isset($_POST['l2a_msk'])) {
+            $processor_short_name = "l2a_msk";
+        }
 
 		// default parameters
 		$siteId         = $_POST ['siteId'];
