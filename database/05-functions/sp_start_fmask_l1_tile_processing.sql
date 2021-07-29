@@ -75,7 +75,7 @@ begin
         set status_id = 1, -- processing
             status_timestamp = now(),
             node_id = _node_id
-        where (fmask_history.downloader_history_id) = (_downloader_history_id);
+        where fmask_history.downloader_history_id = _downloader_history_id;
     else
         select distinct
             downloader_history.satellite_id,
@@ -154,7 +154,6 @@ begin
                 _path,
                 orbit_id,
                 tile_id;
-
     end if;
 end;
 $$ language plpgsql volatile;
