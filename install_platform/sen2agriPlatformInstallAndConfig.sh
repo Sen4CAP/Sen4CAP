@@ -66,6 +66,8 @@ function parse_and_update_slurm_conf_file()
    mkdir -p ${SLURM_CONF_PATH}
    cp $(find ./ -name ${SLURM_CONFIG}) ${SLURM_CONF_PATH}
    cp $(find ./ -name ${SLURM_CONFIG_DB}) ${SLURM_CONF_PATH}
+   chown slurm:slurm ${SLURM_CONF_PATH}/${SLURM_CONFIG_DB}
+   chmod 600 ${SLURM_CONF_PATH}/${SLURM_CONFIG_DB}
 
    sed -ri "s|CPUs=.+|CPUs=${SLURM_MACHINE_NOCPUS}|g" /etc/slurm/slurm.conf
 }
@@ -154,14 +156,7 @@ function config_and_start_slurm_service()
    echo "SLURM DB SERVICE: $(systemctl status slurmdbd | grep "Active")"
 
    ##create the cluster in the accounting system
-   CLUSTER_CREATE=$(expect -c "
-      set timeout 5
-      spawn sacctmgr add cluster \"${SLURM_CLUSTER_NAME}\"
-      expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-      send \"y\r\"
-      expect eof
-   ")
-   echo "$CLUSTER_CREATE"
+   sacctmgr -i add cluster "${SLURM_CLUSTER_NAME}"
 
    ##create SLURM spool and log directories and set permissions accordingly
    mkdir /var/spool/slurm
@@ -244,34 +239,10 @@ function create_system_account()
 function create_slurm_account()
 {
    #create SLURM account for running application
-   SLURM_ACC_CREATE=$(expect -c "
-      set timeout 5
-      spawn sacctmgr add account \"${SYS_ACC_NAME}\"
-      expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-      send \"y\r\"
-      expect eof
-   ")
-   echo "$SLURM_ACC_CREATE"
+   sacctmgr -i add account "${SYS_ACC_NAME}"
 
    #create user associated to the account
-   SLURM_USER_CREATE=$(expect -c "
-      set timeout 5
-      spawn sacctmgr add user \"${SYS_ACC_NAME}\" Account=\"${SYS_ACC_NAME}\"
-      expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-      send \"y\r\"
-      expect eof
-   ")
-   echo "$SLURM_USER_CREATE"
-
-   #add privileges to the user
-   SLURM_USER_LEVEL=$(expect -c "
-      set timeout 5
-      spawn sacctmgr modify user \"${SYS_ACC_NAME}\" set adminlevel=Admin
-      expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-      send \"y\r\"
-      expect eof
-   ")
-   echo "$SLURM_USER_LEVEL"
+   sacctmgr -i add user "${SYS_ACC_NAME}" Account="${SYS_ACC_NAME}" AdminLevel=Admin
 }
 
 #-----------------------------------------------------------#
@@ -282,46 +253,10 @@ function create_and_config_slurm_qos()
 
    #for each qos defined in configuration
    for qosName in "${ADDR[@]}"; do
-      #add qos to slurm
-      SLURM_ADD_QOS=$(expect -c "
-         set timeout 5
-         spawn sacctmgr add qos  \"${qosName}\"
-         expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-         send \"y\r\"
-         expect eof
-      ")
-      echo "$SLURM_ADD_QOS"
-
-      #set qos number of jobs able to run at any given time
-      SLURM_JOBS_PER_QOS=$(expect -c "
-         set timeout 5
-         spawn sacctmgr modify qos "${qosName}" set GrpJobs=1
-         expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-         send \"y\r\"
-         expect eof
-      ")
-      echo "$SLURM_JOBS_PER_QOS"
-
-      #add already created qos to user , and another qos if that qos already exists
-      SLURM_ADD_QOS_TO_ACC=$(expect -c "
-         set timeout 5
-         spawn sacctmgr modify user "${SYS_ACC_NAME}" set qos+="${qosName}"
-         expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-         send \"y\r\"
-         expect eof
-      ")
-      echo "$SLURM_ADD_QOS_TO_ACC"
+        sacctmgr -i add qos "${qosName}" set GrpJobs=1
+        sacctmgr -i modify user "${SYS_ACC_NAME}" set qos+="${qosName}"
    done
-
-   #add implicit SLURM QOS "normal" to user
-   SLURM_ADD_QOS_TO_ACC=$(expect -c "
-      set timeout 5
-      spawn sacctmgr modify user "${SYS_ACC_NAME}" set qos+=normal
-      expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-      send \"y\r\"
-      expect eof
-   ")
-   echo "$SLURM_ADD_QOS_TO_ACC"
+   sacctmgr -i modify user "${SYS_ACC_NAME}" set qos+=normal
 
    #show current configuration for SLURM
    echo "CLUSTER,USERS,QOS INFO:"
@@ -531,22 +466,8 @@ function install_RPMs()
    ##install Sen2Agri Services
    yum -y install ../rpm_binaries/sen2agri-app-*.centos7.x86_64.rpm
 
-   ##########################################################
-   ####  SLURM
-   ##########################################################
-
-   yum -y install ../rpm_binaries/slurm/slurm-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-devel-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-munge-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-perlapi-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-pam_slurm-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-plugins-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-sjobexit-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-sjstat-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-slurmdbd-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-slurmdb-direct-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-sql-15.08.7-1.el7.centos.x86_64.rpm \
-../rpm_binaries/slurm/slurm-torque-15.08.7-1.el7.centos.x86_64.rpm
+   ##install SLURM
+   yum -y install slurm slurm-slurmctld slurm-slurmd slurm-devel slurm-pam_slurm slurm-perlapi slurm-slurmdbd slurm-torque slurm-libs
 }
 
 #-----------------------------------------------------------#

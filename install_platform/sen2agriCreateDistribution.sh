@@ -61,14 +61,8 @@ function prepare_distribution()
    ##create dir "rpm_binaries" inside distribution folder Sen2AgriDistribution
    mkdir -p ${DEFAULT_PATH}/${DEFAULT_INSTALL_DIR}/rpm_binaries
 
-   ##create subdir "slurm" inside distribution folder Sen2AgriDistribution/rpm_binaries
-   mkdir -p ${DEFAULT_PATH}/${DEFAULT_INSTALL_DIR}/rpm_binaries/slurm
-
    ##copy built RPMs for Sen2agri platform into  folder /rpm_binaries
    cp -f ${RPM_DIR_PATH}/*.rpm  ${DEFAULT_PATH}/${DEFAULT_INSTALL_DIR}/rpm_binaries
-
-   ##copy RPMs for SLURM  into  folder /rpm_binaries/slurm
-   cp -f ${SOURCES_DIR_PATH}/install_platform/slurm_rpm_package/*.rpm  ${DEFAULT_PATH}/${DEFAULT_INSTALL_DIR}/rpm_binaries/slurm
 
    #----------------------tools dir--------------------------------------------------------------------#
 
