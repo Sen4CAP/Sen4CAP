@@ -116,16 +116,7 @@ dbus-service.files = dist/org.esa.sen2agri.orchestrator.service
 systemd-service.path = /usr/lib/systemd/system
 systemd-service.files = dist/sen2agri-orchestrator.service
 
-slurmd-override.path = /etc/systemd/system/slurmd.service.d
-slurmd-override.files = dist/slurmd.override.conf
-
-slurmctld-override.path = /etc/systemd/system/slurmctld.service.d
-slurmctld-override.files = dist/slurmctld.override.conf
-
-slurmdbd-override.path = /etc/systemd/system/slurmdbd.service.d
-slurmdbd-override.files = dist/slurmdbd.override.conf
-
-INSTALLS += target interface dbus-policy dbus-service systemd-service slurmd-override slurmctld-override slurmdbd-override
+INSTALLS += target interface dbus-policy dbus-service systemd-service
 
 LIBS += -L$$OUT_PWD/../sen2agri-persistence/ -lsen2agri-persistence
 
