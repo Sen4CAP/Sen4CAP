@@ -5,7 +5,9 @@ returns table (
     site_id int,
     satellite_id smallint,
     downloader_history_id int,
-    path text) as
+    path text,
+    orbit_id int,
+    tile_id text) as
 $$
 declare _satellite_id smallint;
 declare _downloader_history_id int;
@@ -152,8 +154,8 @@ begin
                 _satellite_id,
                 _downloader_history_id,
                 _path,
-                orbit_id,
-                tile_id;
+                _orbit_id,
+                _tile_id;
     end if;
 end;
 $$ language plpgsql volatile;
