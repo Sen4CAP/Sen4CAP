@@ -1,7 +1,7 @@
 ﻿INSERT INTO processor
 (id, name, short_name, label)
 VALUES
-(1, 'L2A Atmospheric Corrections','l2a', 'L2A S2 &mdash; Atmospheric Corrections');
+(1, 'L2A Atmospheric Corrections','l2a', 'L2A &mdash; Atmospheric Corrections');
 
 INSERT INTO processor
 (id, name, short_name, label)

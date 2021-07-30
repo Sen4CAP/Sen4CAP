@@ -1,17 +1,17 @@
 ﻿INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
-(7, 'l1c','L1C product', true);
-
-INSERT INTO product_type
-(id, name, description, is_raster)
-VALUES
 (1, 'l2a','L2A Atmospheric correction', true);
 
 INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
-(3, 'l3b','L3B LAI mono-date product', true);
+(3, 'l3b','L3B product', true);
+
+INSERT INTO product_type
+(id, name, description, is_raster)
+VALUES
+(7, 'l1c','L1C product', true);
 
 INSERT INTO product_type
 (id, name, description, is_raster)
@@ -91,4 +91,6 @@ VALUES
 INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
-(26, 'l2a_fmask','L2A product with FMask cloud mask', true);
+(26, 'l2a_msk','L2A product with validity mask', true);
+
+
