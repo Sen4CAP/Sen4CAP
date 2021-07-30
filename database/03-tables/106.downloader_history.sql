@@ -2,7 +2,8 @@ CREATE TABLE downloader_history
 (
   id serial NOT NULL,
   site_id smallint NOT NULL,
-  satellite_id smallint NOT NULL,
+  satellite_id smallint,
+  product_type_id smallint,
   product_name character varying NOT NULL,
   full_path character varying NOT NULL,
   created_timestamp timestamp with time zone NOT NULL DEFAULT now(),
