@@ -14,4 +14,6 @@ INSERT INTO config_category VALUES (19, 'L4B Grassland Mowing', 15, true);
 INSERT INTO config_category VALUES (20, 'L4C Agricultural Practices', 16, true);
 INSERT INTO config_category VALUES (21, 'LPIS', 17, true);
 INSERT INTO config_category VALUES (26, 'S4C Marker database 1', 4, true);
+INSERT INTO config_category VALUES (27, 'Validity Flags', 17, true);
+
 

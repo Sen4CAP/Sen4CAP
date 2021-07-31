@@ -3,43 +3,22 @@
 -- DROP FUNCTION sp_get_products(smallint, smallint, timestamp with time zone, timestamp with time zone);
 
 CREATE OR REPLACE FUNCTION sp_get_products(
-    IN site_id smallint DEFAULT NULL::smallint,
-    IN product_type_id smallint DEFAULT NULL::smallint,
-    IN start_time timestamp with time zone DEFAULT NULL::timestamp with time zone,
-    IN end_time timestamp with time zone DEFAULT NULL::timestamp with time zone)
-  RETURNS TABLE("ProductId" integer, "Product" character varying, "ProductType" character varying, "ProductTypeId" smallint, "Processor" character varying, 
-                "ProcessorId" smallint, "Site" character varying, "SiteId" smallint, full_path character varying,
-                quicklook_image character varying, footprint polygon, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone) AS
+    IN _site_id smallint DEFAULT NULL::smallint,
+    IN _product_type_id smallint DEFAULT NULL::smallint,
+    IN _start_time timestamp with time zone DEFAULT NULL::timestamp with time zone,
+    IN _end_time timestamp with time zone DEFAULT NULL::timestamp with time zone)
+  RETURNS TABLE(product_id integer, product_type_id smallint, site_id smallint, satellite_id integer, name character varying, 
+                                full_path character varying, created_timestamp timestamp with time zone, inserted_timestamp timestamp with time zone,
+                                quicklook_image character varying, geog geography,  orbit_id integer, tiles character varying[], 
+                                downloader_history_id integer) AS
 $BODY$
 DECLARE q text;
 BEGIN
     q := $sql$
-    WITH site_names(id, name, row) AS (
-            select id, name, row_number() over (order by name)
-            from site
-        ),
-        product_type_names(id, name, row) AS (
-            select id, name, row_number() over (order by name)
-            from product_type
-        )
-	  	SELECT P.id AS ProductId,
-			P.name AS Product,
-  			PT.name AS ProductType,
-  			P.product_type_id AS ProductTypeId,
-            PR.name AS Processor,
-            P.processor_id AS ProcessorId,
-            S.name AS Site,
-            P.site_id AS SiteId,
-            P.full_path,
-            P.quicklook_image,
-            P.footprint,
-            P.created_timestamp,
-            P.inserted_timestamp
-  		FROM product P
-            JOIN product_type_names PT ON P.product_type_id = PT.id
-            JOIN processor PR ON P.processor_id = PR.id
-            JOIN site_names S ON P.site_id = S.id
-    	WHERE TRUE$sql$;
+        SELECT id, product_type_id, site_id, satellite_id, name, 
+             full_path, created_timestamp, inserted_timestamp, 
+             quicklook_image, geog, orbit_id, tiles, downloader_history_id FROM product P 
+        WHERE TRUE$sql$;
 
     IF NULLIF($1, -1) IS NOT NULL THEN
         q := q || $sql$
@@ -58,7 +37,7 @@ BEGIN
             AND P.created_timestamp <= $4$sql$;
     END IF;
     q := q || $SQL$
-        ORDER BY S.row, PT.row, P.name;$SQL$;
+        ORDER BY P.name;$SQL$;
 
     -- raise notice '%', q;
     
