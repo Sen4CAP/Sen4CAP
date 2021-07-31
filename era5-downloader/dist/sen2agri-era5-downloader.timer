@@ -1,0 +1,10 @@
+[Unit]
+Description=ERA5 Weather Data Downloader
+
+[Timer]
+Unit=sen2agri-era5-downloader.service
+OnCalendar=minutely
+Persistent=true
+
+[Install]
+WantedBy=timers.target
