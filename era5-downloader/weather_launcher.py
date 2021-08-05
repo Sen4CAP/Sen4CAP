@@ -9,7 +9,7 @@ import argparse
 from psycopg2.sql import SQL
 from db_commons import DBConfig, handle_retries
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
-from l2a_commons import LogHandler, run_command, stop_containers, get_guid, get_docker_gid
+from l2a_commons import LogHandler, run_command, stop_containers, get_guid, get_docker_gid, create_recursive_dirs
 from l2a_commons import MASTER_ID
 from osgeo import ogr
 
@@ -312,13 +312,6 @@ def db_downloader_history_entry_exists(db_config, site_id, name, log):
         id, no_retries, status = handle_retries(connection, _run, log)
         return id, no_retries, status
 
-def make_dirs(path) :
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if errno.EEXIST != e.errno:
-            raise
-
 
 parser = argparse.ArgumentParser(description="Launcher for Weather script")
 parser.add_argument('-c', '--config', default="/etc/sen2agri/sen2agri.conf", help="configuration file")
@@ -327,8 +320,6 @@ parser.add_argument('-l', '--log-level', default = 'info',
                     help = 'Minimum logging level')
 args = parser.parse_args()
 
-make_dirs(OUTPUT_DIR)
-make_dirs(WRK_DIR)
 
 launcher_log_path = os.path.join(LAUNCHER_LOG_DIR, LAUNCHER_LOG_FILE_NAME)
 launcher_log = LogHandler(launcher_log_path, "launcher_log", args.log_level, MASTER_ID)
@@ -346,6 +337,13 @@ if len(enabled_sites) > 0:
         if site_context.is_valid: #if the site infomration is valid proceed
             site_context.print_info()
             site_output_dir = OUTPUT_DIR.replace("{site_name}",site_context.short_name)
+            if not create_recursive_dirs(site_output_dir):
+                launcher_log.critical("Can NOT create site output dir: {}".format(site_output_dir), print_msg = True)
+                os._exit(1)
+            site_wrk_dir = WRK_DIR.replace("{site_name}", site_context.short_name)
+            if not create_recursive_dirs(site_wrk_dir):
+                launcher_log.critical("Can NOT create site wrk dir: {}".format(site_wrk_dir), print_msg = True)
+                os._exit(1)
             site_log_path = os.path.join(site_output_dir, "weather.log")
             launcher_log.info("Site processing console can be found at: {}".format(site_log_path), print_msg=True)
             start_date = datetime.strptime(site_context.start_date, DATE_FORMAT)
