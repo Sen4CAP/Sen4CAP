@@ -19,7 +19,6 @@ RUN pip install netCDF4
 
 RUN apt-get clean
 
-COPY .cdsapirc /var/lib/cdsapi/
 ENV HOME /var/lib/cdsapi
 WORKDIR /usr/share/weather
 COPY weather.py ./

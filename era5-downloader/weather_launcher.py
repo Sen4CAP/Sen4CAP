@@ -96,6 +96,8 @@ def process_date(site_context, date, log):
     script_command.append("/etc/localtime:/etc/localtime")
     script_command.append("-v")
     script_command.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
+    script_command.append("-v")
+    script_command.append("{}:{}".format("/var/lib/cdsapi","/var/lib/cdsapi"))
     site_wrk_dir = WRK_DIR.replace("{site_name}", site_context.short_name)
     script_command.append("-v")
     script_command.append("{}:{}".format(site_wrk_dir, site_wrk_dir))
