@@ -421,13 +421,3 @@ if len(enabled_sites) > 0:
             launcher_log.error("Invalid site info: {}".format(site), print_msg=True)
 
 launcher_log.info("No more sites to process", print_msg=True)   
-
-
-
-
-
-
-
-
-
-
