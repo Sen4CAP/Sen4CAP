@@ -34,6 +34,7 @@ STRATUM_TYPE_CLASSIFICATION = 1
 STRATUM_TYPE_YIELD = 2
 
 GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.3.1"
+OTB_IMAGE_NAME = "sen4cap/processors:2.0.0"
 
 
 def try_rm_file(f):
@@ -113,7 +114,25 @@ class ComputeClassCountsCommand(object):
         self.output = output
 
     def run(self):
+        output_dir = os.path.dirname(self.output)
         command = []
+        command += ["docker", "run", "--rm"]
+        command += [
+            "-v",
+            "{}:{}".format(
+                self.input,
+                self.input,
+            ),
+        ]
+        command += [
+            "-v",
+            "{}:{}".format(
+                output_dir,
+                output_dir,
+            ),
+        ]
+        command += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
+        command += [OTB_IMAGE_NAME]
         command += ["otbcli", "ComputeClassCounts"]
         command += ["-in", self.input]
         command += ["-out", self.output]
@@ -511,8 +530,7 @@ class DataPreparation(object):
         ]
         cmd += ["-overwrite"]
         cmd += ["-lco", "UNLOGGED=YES"]
-        cmd += ["-lco", "SPATIAL_INDEX=OFF"]
-        cmd += ["-oo", "AUTODETECT_TYPE=YES"]
+        cmd += ["-lco", "SPATIAL_INDEX=NONE"]
         cmd += ["-nln", strata_table_staging]
         cmd += ["-nlt", "POLYGON"]
         run_command(cmd)
@@ -592,6 +610,8 @@ from {}
             "PG:host=/var/run/postgresql dbname={}".format(self.config.dbname),
             os.path.realpath(parcels),
         ]
+        cmd += ["-overwrite"]
+        cmd += ["-lco", "SPATIAL_INDEX=NONE"]
         cmd += ["-nln", self.parcels_table_staging]
         cmd += ["-nlt", "MULTIPOLYGON"]
         run_command(cmd)
@@ -877,9 +897,6 @@ inner join {} polygons using (parcel_id);"""
             if not table_exists(conn, "public", self.parcels_table):
                 logging.info("Parcels table does not exist, skipping export")
                 return
-
-        try_mkdir(self.insitu_path)
-        try_mkdir(self.working_path)
 
         commands = []
         class_counts = []
@@ -1455,14 +1472,6 @@ def read_counts_csv(path):
     return counts
 
 
-def get_import_table_command(destination, source, *options):
-    command = []
-    command += ["ogr2ogr"]
-    command += options
-    command += [destination, source]
-    return command
-
-
 def main():
     parser = argparse.ArgumentParser(description="Imports parcels")
     parser.add_argument(
@@ -1496,6 +1505,9 @@ def main():
 
     config = Config(args)
     data_preparation = DataPreparation(config, args.year, args.working_path)
+
+    try_mkdir(data_preparation.insitu_path)
+    try_mkdir(data_preparation.working_path)
 
     if args.classification_strata:
         data_preparation.prepare_strata(
