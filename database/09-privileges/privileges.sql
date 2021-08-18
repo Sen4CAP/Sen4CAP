@@ -19,3 +19,9 @@ TO admin;
 GRANT USAGE, SELECT
 ON ALL SEQUENCES IN SCHEMA public
 TO "sen2agri-service";
+
+alter default privileges in schema public grant all on sequences to admin;
+alter default privileges in schema public grant all on sequences to "sen2agri-service";
+
+alter default privileges in schema public grant all on tables to admin;
+alter default privileges in schema public grant all on tables to "sen2agri-service";
