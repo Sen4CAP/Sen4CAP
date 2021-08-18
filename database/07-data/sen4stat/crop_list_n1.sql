@@ -1,0 +1,10 @@
+insert into crop_list_n1(code_n1, name) values (1, 'Annual cropland');
+insert into crop_list_n1(code_n1, name) values (2, 'Perennial crops');
+insert into crop_list_n1(code_n1, name) values (3, 'Grassland and meadows');
+insert into crop_list_n1(code_n1, name) values (4, 'Fallows');
+insert into crop_list_n1(code_n1, name) values (5, 'Shrub land');
+insert into crop_list_n1(code_n1, name) values (6, 'Forest');
+insert into crop_list_n1(code_n1, name) values (7, 'Bare soil');
+insert into crop_list_n1(code_n1, name) values (8, 'Build-up surface');
+insert into crop_list_n1(code_n1, name) values (9, 'Water bodies');
+insert into crop_list_n1(code_n1, name) values (0, 'Unknown');
