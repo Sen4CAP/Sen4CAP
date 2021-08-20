@@ -1121,7 +1121,7 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
                     sql,
                     (
                         PRODUCT_TYPE_S4S_PARCELS,
-                        PROCESSOR_S4S_INSITU,
+                        PROCESSOR_LPIS,
                         self.config.site_id,
                         name,
                         self.insitu_path,
