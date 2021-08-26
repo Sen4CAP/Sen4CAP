@@ -624,10 +624,6 @@ from {}
                 parcels_table_staging_id = Identifier(self.parcels_table_staging)
                 parcel_attributes_table_id = Identifier(self.parcel_attributes_table)
 
-                print("Adding computed columns")
-                add_table_column(
-                    conn, "public", self.parcels_table_staging, "new_id", "int"
-                )
 
                 print("Removing old parcels")
                 query = SQL("drop table if exists {};").format(parcels_table_id)
@@ -639,23 +635,8 @@ from {}
                 )
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
-
-                # conn.commit()
-
-                print("Renumbering parcels")
-                query = SQL(
-                    """update {} new
-set new_id = t.rn
-from (
-    select ogc_fid, row_number() over (order by ogc_fid) as rn
-    from {}
-) t
-where new.ogc_fid = t.ogc_fid;"""
-                ).format(parcels_table_staging_id, parcels_table_staging_id)
-                logging.debug(query.as_string(conn))
-                cursor.execute(query)
-
                 conn.commit()
+
                 drop_table_columns(
                     conn, "public", self.parcels_table_staging, ["ogc_fid"]
                 )
@@ -670,7 +651,7 @@ where new.ogc_fid = t.ogc_fid;"""
 
                 query = SQL(
                     """create table if not exists {} (
-new_id int not null,
+parcel_id int not null,
 geom_valid boolean not null,
 duplicate boolean,
 overlap boolean not null,
@@ -711,9 +692,19 @@ pix_10m int not null default 0
                     )
                 query = SQL(
                     """
-insert into {}(new_id, geom_valid, duplicate, overlap, area_meters, shape_index, multipart, stratum_crop_id, stratum_yield_id)
+insert into {} (
+    parcel_id,
+    geom_valid,
+    duplicate,
+    overlap,
+    area_meters,
+    shape_index,
+    multipart,
+    stratum_crop_id,
+    stratum_yield_id
+)
 select
-    new_id,
+    parcel_id,
     coalesce(ST_IsValid(wkb_geometry), false),
     false,
     false,
@@ -762,8 +753,8 @@ from {};"""
 
                 print("Creating indexes")
                 create_spatial_index(conn, self.parcels_table, "wkb_geometry")
-                create_primary_key(conn, self.parcels_table, ["new_id"])
-                create_primary_key(conn, self.parcel_attributes_table, ["new_id"])
+                create_primary_key(conn, self.parcels_table, ["parcel_id"])
+                create_primary_key(conn, self.parcel_attributes_table, ["parcel_id"])
 
     def prepare_statistical_data(
         self,
@@ -771,7 +762,6 @@ from {};"""
     ):
         statistical_data_id = Identifier(self.statistical_data_table)
         statistical_data_staging_id = Identifier(self.statistical_data_table_staging)
-        parcels_table_id = Identifier(self.parcels_table)
 
         print("Importing statistical data")
         cmd = []
@@ -844,7 +834,6 @@ where new.ogc_fid = t.ogc_fid;"""
                 query = SQL(
                     """
 create table {} (
-    new_id int not null,
     like {}
 );
 """
@@ -852,18 +841,9 @@ create table {} (
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
 
-                query = SQL(
-                    """
-insert into {}
-select
-    polygons.new_id,
-    statistical_data.*
-from {} statistical_data
-inner join {} polygons using (parcel_id);"""
-                ).format(
+                query = SQL("insert into {} select * from {};").format(
                     statistical_data_id,
                     statistical_data_staging_id,
-                    parcels_table_id,
                 )
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
@@ -876,7 +856,6 @@ inner join {} polygons using (parcel_id);"""
                 print("Creating indexes")
                 create_primary_key(conn, self.statistical_data_table, ["crop_id"])
                 create_index(conn, self.statistical_data_table, ["parcel_id"])
-                create_index(conn, self.statistical_data_table, ["new_id"])
 
                 conn.commit()
 
@@ -926,7 +905,7 @@ with transformed as (
     from shape_tiles_s2
     where tile_id = {}
 )
-select new_id, ST_Buffer(ST_Transform(wkb_geometry, epsg_code), -10)
+select parcel_id, ST_Buffer(ST_Transform(wkb_geometry, epsg_code), -10)
 from {}, transformed
 where ST_Intersects(wkb_geometry, transformed.geom);
 """
@@ -944,7 +923,7 @@ where ST_Intersects(wkb_geometry, transformed.geom);
                     tile.tile_id,
                     10,
                     sql,
-                    "new_id",
+                    "parcel_id",
                     "EPSG:{}".format(tile.epsg_code),
                     int(dst_xmin),
                     int(dst_ymin),
@@ -1043,7 +1022,7 @@ set pix_10m = upd.pix_10m
 from (select unnest(%s) as id,
              unnest(%s) as pix_10m
      ) upd
-where upd.id = parcel_attributes.new_id;"""
+where upd.id = parcel_attributes.parcel_id;"""
                 )
                 sql = sql.format(Identifier(self.parcel_attributes_table))
 
@@ -1160,7 +1139,7 @@ select parcels.*,
        crop_list_n1.code_n1,
        crop_list_n1.name as name_n1
 from {} parcels
-inner join {} statistical_data using (new_id)
+inner join {} statistical_data using (parcel_id)
 inner join crop_list_n4 on statistical_data.crop_code = crop_list_n4.code_n4
 inner join crop_list_n3 using (code_n3)
 inner join crop_list_n2 using (code_n2)
@@ -1228,7 +1207,7 @@ inner join crop_list_n1 using (code_n1)
                         f.write(wkt)
 
                     sql = SQL(
-                        "select new_id, ST_Buffer(ST_Transform(wkb_geometry, {}), -10) from {}"
+                        "select parcel_id, ST_Buffer(ST_Transform(wkb_geometry, {}), -10) from {}"
                     )
                     sql = sql.format(
                         Literal(epsg_code),
@@ -1326,15 +1305,15 @@ with tile as (
     from shape_tiles_s2
     where tile_id = %s
 )
-select new_id
+select parcel_id
 from tile, {} parcels
-inner join {} parcel_attributes using (new_id)
+inner join {} parcel_attributes using (parcel_id)
 where geom_valid
 and exists (
     select 1
     from {} t
-    inner join {} ta using (new_id)
-    where t.new_id != parcels.new_id
+    inner join {} ta using (parcel_id)
+    where t.parcel_id != parcels.parcel_id
     and ta.geom_valid
     and ST_Intersects(t.wkb_geometry, tile.geom)
     and ST_Intersects(t.wkb_geometry, parcels.wkb_geometry)
@@ -1366,9 +1345,9 @@ with tile as (
     from shape_tiles_s2
     where tile_id = %s
 )
-select new_id
+select parcel_id
 from (
-    select new_id,
+    select parcel_id,
             count(*) over(partition by wkb_geometry) as count
     from {}, tile
     where ST_Intersects(wkb_geometry, tile.geom)
@@ -1391,7 +1370,7 @@ from (
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
-                    sql = SQL("update {} set overlap = true where new_id = any(%s)")
+                    sql = SQL("update {} set overlap = true where parcel_id = any(%s)")
                     sql = sql.format(Identifier(self.parcel_attributes_table))
                     logging.debug(sql.as_string(conn))
                     cursor.execute(sql, (b,))
@@ -1417,7 +1396,9 @@ from (
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
-                    sql = SQL("update {} set duplicate = true where new_id = any(%s)")
+                    sql = SQL(
+                        "update {} set duplicate = true where parcel_id = any(%s)"
+                    )
                     sql = sql.format(Identifier(self.parcel_attributes_table))
                     logging.debug(sql.as_string(conn))
                     cursor.execute(sql, (b,))
