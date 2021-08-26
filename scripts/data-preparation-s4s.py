@@ -669,6 +669,7 @@ overlap boolean not null,
 area_meters real not null,
 shape_index real,
 multipart boolean not null,
+municipality_code text,
 stratum_crop_id smallint not null,
 stratum_yield_id smallint not null,
 pix_10m int not null default 0
@@ -689,6 +690,51 @@ pix_10m int not null default 0
                 cursor.execute(query)
 
                 conn.commit()
+
+                print("Filtering municipalities")
+                query = SQL(
+                    """
+create temporary table site_municipalities (
+    municipality_code text not null,
+    geom geometry not null
+);
+"""
+                )
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
+
+                query = SQL(
+                    """
+with polygons_srid as (
+         select Find_SRID('public', {}, 'wkb_geometry') as srid
+     ),
+     polygons_extent as (
+         select ST_Extent(wkb_geometry) as extent
+         from {}
+     ),
+     polygons_extent_4326 as (
+         select ST_Transform(ST_SetSRID(polygons_extent.extent,
+                                        polygons_srid.srid),
+                             4326) as geog
+         from polygons_extent,
+              polygons_srid
+     )
+insert
+into site_municipalities
+select municipality.municipality_code,
+       ST_Transform(municipality.geom, srid) as geom
+from municipality,
+     polygons_extent_4326,
+     polygons_srid
+where ST_Intersects(municipality.geom, polygons_extent_4326.geog);
+"""
+                ).format(Literal(self.parcels_table_staging), parcels_table_staging_id)
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
+
+                query = SQL("create index on site_municipalities using gist (geom);")
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
 
                 print("Computing polygon attributes")
                 if is_projected:
@@ -711,6 +757,7 @@ insert into {} (
     area_meters,
     shape_index,
     multipart,
+    municipality_code,
     stratum_crop_id,
     stratum_yield_id
 )
@@ -722,21 +769,27 @@ select
     {},
     {} / (2 * sqrt(pi() * nullif({}, 0))),
     ST_NumGeometries(wkb_geometry) > 1,
+    (
+        select site_municipalities.municipality_code
+        from site_municipalities
+        where ST_Intersects(site_municipalities.geom, polygons.wkb_geometry)
+        limit 1
+    ),
     coalesce(
         (select stratum_id
          from stratum
          where (site_id, year, stratum_type_id) = ({}, {}, {})
-           and ST_Intersects({}.wkb_geometry, stratum.wkb_geometry)
+           and ST_Intersects(polygons.wkb_geometry, stratum.wkb_geometry)
          limit 1)
         , 0),
     coalesce(
         (select stratum_id
          from stratum
          where (site_id, year, stratum_type_id) = ({}, {}, {})
-           and ST_Intersects({}.wkb_geometry, stratum.wkb_geometry)
+           and ST_Intersects(polygons.wkb_geometry, stratum.wkb_geometry)
          limit 1)
         , 0)
-from {};"""
+from {} polygons;"""
                 ).format(
                     parcel_attributes_table_id,
                     area_expr,
@@ -745,11 +798,9 @@ from {};"""
                     Literal(self.config.site_id),
                     Literal(self.year),
                     Literal(STRATUM_TYPE_CLASSIFICATION),
-                    parcels_table_staging_id,
                     Literal(self.config.site_id),
                     Literal(self.year),
                     Literal(STRATUM_TYPE_YIELD),
-                    parcels_table_staging_id,
                     parcels_table_staging_id,
                 )
                 logging.debug(query.as_string(conn))
