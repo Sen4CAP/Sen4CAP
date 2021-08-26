@@ -1190,25 +1190,40 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
 
                 sql = SQL(
                     """
-select parcels.*,
-       statistical_data.*,
-       crop_list_n4.code_n4,
-       crop_list_n4.name as name_n4,
+select parcels.parcel_id,
+       parcels.segment_id,
+       parcels.wkb_geometry,
+       parcel_attributes.geom_valid,
+       parcel_attributes.duplicate,
+       parcel_attributes.overlap,
+       parcel_attributes.area_meters,
+       parcel_attributes.shape_index,
+       parcel_attributes.multipart,
+       parcel_attributes.stratum_crop_id,
+       parcel_attributes.stratum_yield_id,
+       parcel_attributes.pix_10m,
+       statistical_data.crop_code,
+       statistical_data.crop_id,
+       statistical_data.harvest_date,
+       statistical_data.yield_estimate,
+       statistical_data.yield_method,
+       statistical_data.crop_density,
+       statistical_data.crop_quality,
+       statistical_data.irrigated,
+       statistical_data.associated,
        crop_list_n3.code_n3,
-       crop_list_n3.name as name_n3,
        crop_list_n2.code_n2,
-       crop_list_n2.name as name_n2,
-       crop_list_n1.code_n1,
-       crop_list_n1.name as name_n1
+       crop_list_n2.code_n1
 from {} parcels
+inner join {} parcel_attributes using (parcel_id)
 inner join {} statistical_data using (parcel_id)
 inner join crop_list_n4 on statistical_data.crop_code = crop_list_n4.code_n4
 inner join crop_list_n3 using (code_n3)
 inner join crop_list_n2 using (code_n2)
-inner join crop_list_n1 using (code_n1)
 """
                 ).format(
                     Identifier(self.parcels_table),
+                    Identifier(self.parcel_attributes_table),
                     Identifier(self.statistical_data_table),
                 )
                 sql = sql.as_string(conn)
