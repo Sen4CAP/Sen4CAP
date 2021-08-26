@@ -624,6 +624,17 @@ from {}
                 parcels_table_staging_id = Identifier(self.parcels_table_staging)
                 parcel_attributes_table_id = Identifier(self.parcel_attributes_table)
 
+                print("Fixing types")
+                query = SQL(
+                    """
+alter table {}
+alter column parcel_id type int,
+alter column parcel_id set not null,
+alter column segment_id type int;
+"""
+                ).format(parcels_table_staging_id)
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
 
                 print("Removing old parcels")
                 query = SQL("drop table if exists {};").format(parcels_table_id)
