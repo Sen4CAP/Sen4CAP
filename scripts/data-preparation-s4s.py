@@ -1175,6 +1175,7 @@ inner join crop_list_n1 using (code_n1)
                 command += [GDAL_IMAGE_NAME]
                 command += ["ogr2ogr"]
                 command += ["-overwrite"]
+                command += ["-lco", "STRING_QUOTING=IF_NEEDED"]
                 command += ["-sql", sql]
                 command += [csv]
                 command += [
