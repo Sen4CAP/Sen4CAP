@@ -39,10 +39,10 @@ def broceliande (image, output, sample, mounts, docker_image):
     for mount in mounts:
         cmd += "-v {} ".format(mount)
     cmd += docker_image + " "
-    cmd += "-i" + image + " "
-    cmd += "-o"+ output + " "
-    cmd += "-g" + sample + " "
-    cmd += "--timeFlag"
+    cmd += "-i " + image + " "
+    cmd += "-o "+ output + " "
+    cmd += "-g " + sample + " "
+    cmd += "--timeFlag "
 
     for i,j in zip(range(0,nombre_bande_par_image,2), range(1,nombre_bande_par_image,2)):
         cmd += " --ndviBands %s,%s"%(i,j)

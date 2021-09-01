@@ -113,8 +113,7 @@ def extract_optical_products(
         print(query.as_string(conn))
         cursor.execute(query)
 
-        rasters_b4 = []
-        rasters_b8 = []
+        all_rasters = []
         for row in cursor:
             product = row[0]
             tile = row[1]
@@ -122,10 +121,9 @@ def extract_optical_products(
             if hdr:
                 raster_b4 = get_product_rasters(hdr, 4)
                 raster_b8 = get_product_rasters(hdr, 8)
-                rasters_b4.append(raster_b4)
-                rasters_b8.append(raster_b8)
+                all_rasters.append(raster_b4)
+                all_rasters.append(raster_b8)
       
-        all_rasters = rasters_b4 + rasters_b8
         save_to_file(all_rasters, file)
 
         conn.commit()

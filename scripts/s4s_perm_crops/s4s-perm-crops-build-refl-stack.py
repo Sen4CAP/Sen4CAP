@@ -55,7 +55,7 @@ def intermediate_vrt (liste, working_dir):
     for i in range(1,nombre_bande_par_image+1):
         for j in liste :
             commande="gdalbuildvrt" + " "
-            commande+=os.path.join(working_dir,"output_b%s_image%s.vrt"%(i,liste.index(j)+1)) + " "
+            commande+=os.path.join(working_dir,"output_b%s_image%05d.vrt"%(i,liste.index(j)+1)) + " "
             commande+="-b " + str(i) + " "
             commande+= j + " "
             run_command(commande)
@@ -69,7 +69,7 @@ def final_vrt_to_tiff (output_path, working_dir):
     # os.makedirs(output_path, exist_ok=True)
     
     # Listing all vrt in temp directory
-    liste_intermediate = glob(os.path.join(working_dir,"*.vrt"))
+    liste_intermediate = sorted(glob(os.path.join(working_dir,"output_b*.vrt")))
 
     # Removing previous list of vrt images in a txt file and creating a new one
     if os.path.exists(os.path.join(working_dir,"intermediate_vrt.txt")):
