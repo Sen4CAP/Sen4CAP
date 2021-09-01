@@ -178,8 +178,8 @@ def get_weather_features(inputs) :
         # print("rad_vals = {}".format(rad_vals))
 
     all_tair_vals_arr = np.array(all_tair_vals)
-    print all_tair_vals_arr.shape[0]
-    print all_tair_vals_arr.shape[1]
+    # print all_tair_vals_arr.shape[0]
+    # print all_tair_vals_arr.shape[1]
 
     return np.array(all_tair_vals), np.array(all_rglb_vals)
     # print all_tair_vals_arr.shape[0]
@@ -206,6 +206,7 @@ def get_updated_weather(weather, parameters) :
     
     
 def load_safy_parameters(json_file) :
+    print("Loading SAFY parameters ...")
     fff = open(json_file, 'r')
     parameters = json.load(fff)
     print(parameters)
@@ -216,41 +217,42 @@ def load_safy_parameters(json_file) :
     # TODO    
 
 def get_safy_range_params(params_dir) :
+    print("Extracting SAFY range parameters ...")
     crop_params = {}
     for crop in CROP_LIST:
         OutFilePar = os.path.join(params_dir, 'SAFYLUT.Parameters_Range_'+crop+'_New.npz')
         print("Extracting safy range params in/from file {}".format(OutFilePar))
+        if crop=='wheat':
+            Pfen_MrgDrange  = np.arange(1,200,2)
+            Pgro_Luerange =  np.arange(0, 6, 0.1)
+            Pfen_SenArange  = np.arange(500,2000,200)
+            Pfen_SenBrange  = np.arange(1000,20000,2000)
+        elif crop=='maize':
+            Pfen_MrgDrange  = np.arange(90,180,2)
+            Pgro_Luerange =  np.arange(0, 6, 0.2)
+            Pfen_SenArange  = np.arange(500,2000,200)
+            Pfen_SenBrange  = np.arange(1000,20000,2000)
+        elif crop=='sunfl':
+            Pfen_MrgDrange  = np.arange(90,180,1)
+            Pgro_Luerange =  np.arange(0, 6, 0.1)
+            Pfen_SenArange  = np.arange(500,2000,200)
+            Pfen_SenBrange  = np.arange(1000,20000,2000)
+        MrgDv,LUEv,SenAv,SenBv=np.meshgrid(Pfen_MrgDrange,Pgro_Luerange,Pfen_SenArange,Pfen_SenBrange)
+        MrgDv = MrgDv.flatten()
+        LUEv  = LUEv.flatten()
+        SenAv = SenAv.flatten() 
+        SenBv = SenBv.flatten() 
+        FourPar = list(zip(MrgDv,LUEv,SenAv,SenBv))
+        FourPar = [list(x) for x in FourPar]  
         if not os.path.isfile(OutFilePar):
-            if crop=='wheat':
-                Pfen_MrgDrange  = np.arange(1,200,2)
-                Pgro_Luerange =  np.arange(0, 6, 0.1)
-                Pfen_SenArange  = np.arange(500,2000,200)
-                Pfen_SenBrange  = np.arange(1000,20000,2000)
-            elif crop=='maize':
-                Pfen_MrgDrange  = np.arange(90,180,2)
-                Pgro_Luerange =  np.arange(0, 6, 0.2)
-                Pfen_SenArange  = np.arange(500,2000,200)
-                Pfen_SenBrange  = np.arange(1000,20000,2000)
-            elif crop=='sunfl':
-                Pfen_MrgDrange  = np.arange(90,180,1)
-                Pgro_Luerange =  np.arange(0, 6, 0.1)
-                Pfen_SenArange  = np.arange(500,2000,200)
-                Pfen_SenBrange  = np.arange(1000,20000,2000)
-            MrgDv,LUEv,SenAv,SenBv=np.meshgrid(Pfen_MrgDrange,Pgro_Luerange,Pfen_SenArange,Pfen_SenBrange)
-            MrgDv = MrgDv.flatten()
-            LUEv  = LUEv.flatten()
-            SenAv = SenAv.flatten() 
-            SenBv = SenBv.flatten() 
-            FourPar = list(zip(MrgDv,LUEv,SenAv,SenBv))
-            FourPar = [list(x) for x in FourPar]  
             np.savez(OutFilePar, MrgDv=MrgDv, LUEv=LUEv, SenAv=SenAv, SenBv=SenBv, FourPar=FourPar)
-        else:
-            npzfile = np.load(OutFilePar)
-            MrgDv = npzfile['MrgDv']
-            LUEv = npzfile['LUEv']
-            SenAv = npzfile['SenAv']
-            SenBv = npzfile['SenBv']
-            FourPar = npzfile['FourPar']
+        # else:
+        #     npzfile = np.load(OutFilePar)
+        #     MrgDv = npzfile['MrgDv']
+        #     LUEv = npzfile['LUEv']
+        #     SenAv = npzfile['SenAv']
+        #     SenBv = npzfile['SenBv']
+        #     FourPar = npzfile['FourPar']
         
         crop_params[crop] = FourPar
     return crop_params
@@ -277,6 +279,7 @@ def main():
     
     # run safy for all the crops and weather grids
     for grid_no in range(0, all_tair_vals_arr.shape[1]):
+        print("Running SAFY for grid {} ...".format(grid_no))
         tair_grid_vals = all_tair_vals_arr[:, grid_no]
         rglb_grid_vals = all_rglb_vals[:, grid_no]
 
@@ -292,6 +295,7 @@ def main():
             
             range_params = safy_range_params[crop]
             
+            print("Running SAFY for crop {} and a number of {} params".format(crop, len(range_params)))
             p = Pool(cpu_count())
             OUT = p.map(partial(RunSafy, range_params, weather_filtered, crop_params), range(len(range_params)))
             p.close()

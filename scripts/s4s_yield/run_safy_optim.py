@@ -33,8 +33,10 @@ from copy import deepcopy
 
 NETCDF_WEATHER_BANDS = ["tmin", "tmax", "rad"]
 CROP_LIST = ['wheat','maize','sunfl']
-ID_COL_NAME = "NewID"
-CT_COL_NAME = "sub_num"
+
+CMN_ID_COL_NAME = "NewID"
+# ID_COL_NAME = "parcel_id"
+CT_COL_NAME = "crop_code"
 
 # Output column names
 D0OUT_COL_NAME = "d0out"
@@ -45,7 +47,7 @@ RMSEMIN_COL_NAME = "RmseMin"
 SIMYIELD_COL_NAME = "Yield"
 CONF_COL_NAME = "Conf"
 
-OUT_HEADER = [ID_COL_NAME, CT_COL_NAME, D0OUT_COL_NAME, ELUEOUT_COL_NAME, SENAOUT_COL_NAME, 
+OUT_HEADER = [CMN_ID_COL_NAME, CT_COL_NAME, D0OUT_COL_NAME, ELUEOUT_COL_NAME, SENAOUT_COL_NAME, 
               SENBOUT_COL_NAME, RMSEMIN_COL_NAME, SIMYIELD_COL_NAME, CONF_COL_NAME]
 
 cropNum={}
@@ -61,37 +63,8 @@ class CmdArgs(object):
         self.output = output
         self.tile = tile
 
-class InputColumnsInfo(object):
-    def __init__(self, header):
-        self.header = header
-        self.id_pos = header.index("NewID")
-
-        # extract the weather column indices
-        self.weather_evap_indices = get_column_indices(header, ["_evap"])
-        self.weather_prec_indices = get_column_indices(header, ["_prec"])
-        self.weather_rad_indices = get_column_indices(header, ["_rad"])
-        self.weather_swvl1_indices = get_column_indices(header, ["_swvl1"])
-        self.weather_swvl2_indices = get_column_indices(header, ["_swvl2"])
-        self.weather_swvl3_indices = get_column_indices(header, ["_swvl3"])
-        self.weather_swvl4_indices = get_column_indices(header, ["_swvl4"])
-        self.weather_tmax_indices = get_column_indices(header, ["_tmax"])
-        self.weather_tmean_indices = get_column_indices(header, ["_tmean"])
-        self.weather_tmin_indices = get_column_indices(header, ["_tmin"])
-        
-        # TODO: Here we should remove the duplicated dates (due to intersection of several S2 tiles)
-                    
-    def get_column_indices(self, header, substr_list) :
-        indices_list = []
-        for substr in substr_list:
-            i = 0
-            for col in header:
-                if substr in col:
-                    indices_list.append(i)
-                i += 1
-        return indices_list
-
 class SelectedColumns(object):
-    def __init__(self, col_names, global_col_indices, id_col_global_idx, crop_type_col_idx, id_col_name = ID_COL_NAME, ct_col_name = CT_COL_NAME):
+    def __init__(self, col_names, global_col_indices, id_col_global_idx, crop_type_col_idx, id_col_name = CMN_ID_COL_NAME, ct_col_name = CT_COL_NAME):
         
         col_names.sort()
         self.columns = col_names
@@ -185,7 +158,7 @@ class LaiFileHandler(object) :
         id_col_global_idx = -1
         crop_type_col_idx = -1
         for name in columns:
-            if name == ID_COL_NAME:
+            if name == CMN_ID_COL_NAME:
                 id_col_global_idx = cur_idx
             elif name == CT_COL_NAME: 
                 crop_type_col_idx = cur_idx
@@ -201,7 +174,7 @@ class LaiFileHandler(object) :
             print("ERROR: Could not select any column from header {}".format(columns))
             sys.exit(1)
         # print("Selected columns: {}".format(col_names))
-        return SelectedColumns(col_names, global_col_indices, id_col_global_idx, crop_type_col_idx, ID_COL_NAME)
+        return SelectedColumns(col_names, global_col_indices, id_col_global_idx, crop_type_col_idx, CMN_ID_COL_NAME)
         
 
 class CalibrateSafyParamsWrp(object) : 
@@ -589,6 +562,10 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
 
         # TODO: Threshold should be configurable
         test = np.array([y>0.8*x for x,y in zip(total_pixels,valid_pixels)])
+        
+        if (len(test) == 0) :
+            continue        
+            
         # print("Test = {}".format(test))
         lai_dates       =  lai_file_handler.selCols.dates[test]
         bi_vals         =  mean_vals[test] / 1e3
@@ -636,8 +613,7 @@ def main():
     )
     parser.add_argument("-y", "--year", type=int, required=True, help="The processing year")
     parser.add_argument("-i", "--input-weather", help="Weather products",  nargs="+", required=True)
-    parser.add_argument("-a", "--input-lai", help="Input extracted features (mean, stddev etc.) for the desired BI", required=True)
-    parser.add_argument("-d", "--parcel-to-grid-file", help="File containing the grid to parcel id mapping", required=True)
+    parser.add_argument("-a", "--parcel-gridded-lai", help="Input extracted features (mean, stddev etc.) for the desired BI with the weather grid id per parcel", required=True)
     parser.add_argument("-g", "--grid-to-parcel-file", help="File containing the grid to parcel id mapping", required=True)
     parser.add_argument("-p", "--safy-params-file", help="JSON file containing the safy parameters", required=True)
     parser.add_argument("-r", "--safy-params-ranges-dir", help="Directory containing the safy parameter ranges files ", required=True)
@@ -646,12 +622,8 @@ def main():
     parser.add_argument("-o", "--out", help="File where the safy optim results will be written", required=True)
     
     args = parser.parse_args()
-    
-    # merge the LAI file with the grid to parcel ids 
-    out_merge_lai_grid = os.path.join(args.working_dir, "lai_with_grid.csv")
-    merge_lai_with_grid(args.input_lai, args.parcel_to_grid_file, out_merge_lai_grid)
-    
-    lai_file_handler = LaiFileHandler(out_merge_lai_grid)
+
+    lai_file_handler = LaiFileHandler(args.parcel_gridded_lai)
     
     # load safy parameters
     crop_jsons = load_safy_parameters(args.safy_params_file)

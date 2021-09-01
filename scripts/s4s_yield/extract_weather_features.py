@@ -29,8 +29,10 @@ from multiprocessing import Pool,cpu_count
 NETCDF_WEATHER_BANDS = ["evap", "prec", "tmax", "tmin", "tmean", "swvl1", "swvl2", "swvl3", "swvl4", "rad"]
 WRITE_BUF_SIZE = 1000
 ID_COL_NAME = "NewID"
+VEC_ID_COL_NAME = "parcel_id"
+
 GRID_NO_COL_NAME = "GridNo"
-CT_COL_NAME = "sub_nb"
+CT_COL_NAME = "crop_code"
 
 class GridDescr(object):
     def __init__(self, grid_no, geom, value):
@@ -125,11 +127,11 @@ def extract_parcel_to_grid_mapping(input, feature, vec) :
             continue
         geom_vec.Transform(wgs84_to_image_trasformation)
         
-        parcel_id = feature.GetField(ID_COL_NAME)
+        parcel_id = feature.GetField(VEC_ID_COL_NAME)
         parcel_ct = feature.GetField(CT_COL_NAME)
         for grid_descr in grid_descrs:
             if geom_vec.Intersects(grid_descr.geom):
-                # print("Parcel found with NewID = {} intersecting grid no {} => Extracting value {} ...".format(feature.GetField(ID_FIELD), grid_descr.grid_no, grid_descr.value))
+                print("Parcel found with NewID = {} intersecting grid no {} => Extracting value {} ...".format(parcel_id, grid_descr.grid_no, parcel_ct))
                 parcels_to_grid.append([parcel_id, grid_descr.grid_no, parcel_ct])
     # sort by parcel id
     parcels_to_grid.sort()
@@ -207,15 +209,6 @@ def extract_parcels_weather_data_async(inputs, working_dir, parcels_to_grid_map)
     exec_results = p.map(partial(extract_parcels_weather_data), exec_inputs)
     p.close() 
     
-def merge_feature_values(inputs, out_file) :
-    command = []
-    command += ["otbcli", "Markers1CsvMerge"]
-    command += ["-out", out_file]
-    command += ["-il"]
-    command.append(inputs)
-
-    run_command(command)
-    
 def write_parcels_to_grid_infos(out_file, parcels_to_grid) :
     if out_file is not None:
         print("Writing parcels to grid file {} ...".format(out_file))
@@ -248,29 +241,18 @@ def main():
     )
     parser.add_argument("-i", "--input-list", nargs="+", help="List of netcdf files containing weather data", required=True)
     parser.add_argument("-v", "--vec", help="Shapefile containing the parcels", required=True)
-    parser.add_argument("-w", "--working-dir", help="Working directory", required=True)
-    parser.add_argument("-o", "--output", help="Output file containing interpolated values", required=True)
+    parser.add_argument("-o", "--out-dir", help="Out directory where feature files are stored", required=True)
     parser.add_argument("-p", "--out-parcels-to-grid-file", help="File containing the mapping between parcel id and the grid number")
     parser.add_argument("-g", "--out-grid-to-parcels-file", help="File containing the mapping between grid number and the parcel id")
     
     args = parser.parse_args()
     
-    working_dir = os.path.join(args.working_dir, "extracted_features")
-    try:
-        os.makedirs(working_dir)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-    
     # extract the mapping parcel_id - grid_no - crop type
     parcels_to_grid = extract_parcel_to_grid_mapping(args.input_list[0], NETCDF_WEATHER_BANDS[0], args.vec)
     
     # extract the weather data for all inputs
-    extract_parcels_weather_data_async(args.input_list, working_dir, parcels_to_grid)
+    extract_parcels_weather_data_async(args.input_list, args.out_dir, parcels_to_grid)
     
-    # merge the parcels extracted data for all dates
-    merge_feature_values(working_dir, args.output)
-
     # write the parcels-grid mapping
     write_parcels_to_grid_infos(args.out_parcels_to_grid_file, parcels_to_grid)
     

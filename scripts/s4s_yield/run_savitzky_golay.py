@@ -82,7 +82,7 @@ class SelectedColumns(object):
         self.dates = np.array(dates)
         self.all_column_names = [self.id_col_name] + self.columns
         
-        print(self.mean_indices)
+        # print(self.mean_indices)
             
     def get_all_columns(self) :
         return self.all_column_names
@@ -104,7 +104,8 @@ def SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0):
     LAI   = bi_vals
     savgol = np.ones(len(DoyList))*np.nan
     if len(LAI)>1:  
-        print("Starting SG for id = {}, dates = {}, values = {}".format(cropfield, dates, bi_vals))
+        # print("Starting SG for id = {}, dates = {}, values = {}".format(cropfield, dates, bi_vals))
+        print("Starting SG for id = {}".format(cropfield))
         Date = dates
         doy = np.array([(x - Date0).days  for x in Date])
         test = (DoyList>=min(doy))&(DoyList<=max(doy))
@@ -144,7 +145,7 @@ def get_selected_columns(columns) :
             id_col_global_idx = cur_idx
         cur_idx = cur_idx+1
 
-    print("Selected columns: {}".format(col_names))
+    # print("Selected columns: {}".format(col_names))
     return SelectedColumns(col_names, global_col_indices, id_col_global_idx, ID_COL_NAME)
 
 def handle_ipc_file(input, output_handler, DoyList, Date0) :
@@ -178,7 +179,6 @@ def handle_csv_file(input, output_handler, DoyList, Date0) :
         header = next(csv_reader)
         selCols = get_selected_columns(header)
         all_column_names = selCols.get_all_columns()
-        print ("Column names to select: {}".format(all_column_names))
         
         N = 1000
         # Extract the relevant columns
@@ -195,8 +195,9 @@ def handle_csv_file(input, output_handler, DoyList, Date0) :
 def compute_crop_partitioning_indices(SG) :
 
     # Extract an array with IndMaxLai IndHalfLai IndEmerg IndEndLai
+    print("Computing crop partitioning indices ...")
     dum, = np.where(SG!=None)
-    print(dum)
+    # print(dum)
     if len(dum)<50:
         print("Cannot extract indices as the length of SG array is {}".format(len(dum)))
         return None
@@ -211,10 +212,10 @@ def compute_crop_partitioning_indices(SG) :
         SG[LastData:] = SG[LastData]
 
     Max  = np.max(SG)
-    print("MAXimum LAI value in the array = {}".format(Max))
+    # print("MAXimum LAI value in the array = {}".format(Max))
     
     IndMaxLai  = NoneInt(np.argmax(SG))
-    print("IndMaxLai (index of the maximum LAI value in the array) = {}".format(IndMaxLai))
+    # print("IndMaxLai (index of the maximum LAI value in the array) = {}".format(IndMaxLai))
     
     # import pdb; pdb.set_trace()
     if IndMaxLai==0:
@@ -223,43 +224,44 @@ def compute_crop_partitioning_indices(SG) :
     else:
         # minimum LAI value from index 0 to index of Max LAI
         MinEmerg = np.min(SG[:IndMaxLai])
-        print("MinEmerg = {}".format(MinEmerg))
+        # print("MinEmerg = {}".format(MinEmerg))
         # SG.max() = Max (above computed)
-        print("SG.max() = {}".format(SG.max()))
+        # print("SG.max() = {}".format(SG.max()))
         # Get all values greater than half of the LAI maximum value in array
         # dum, = np.where(SG>SG.max()/2)
         # print("dum1 = {}".format(dum))
         # get the indices of the values before the maximum index whose difference with min emegence LAI  > half of the max - min LAI
         dum, = np.where((SG[:IndMaxLai]-MinEmerg)/(Max-MinEmerg)>.5)
-        print("dum2 = {}".format(dum))
+        # print("dum2 = {}".format(dum))
         # First value is considered half of LAI
         IndHalfLai = NoneInt(dum[0])
-        print("IndHalfLai = {}".format(IndHalfLai))
+        # print("IndHalfLai = {}".format(IndHalfLai))
         # get the indices before half of LAI whose difference with min emegence LAI  < 10 % of the max - min LAI 
         dum, = np.where((SG[:IndHalfLai]-MinEmerg)/(Max-MinEmerg)<.1)
-        print("dum3 = {}".format(dum))
+        # print("dum3 = {}".format(dum))
         if len(dum)>0:
             IndEmerg = NoneInt(dum[-1]+1)
         else:
             IndEmerg = 0
         # Next value having LAI - min emergence LAI > 10 % of the max - min LAI 
-        print("IndEmerg = {}".format(IndEmerg))
+        # print("IndEmerg = {}".format(IndEmerg))
             
     if IndMaxLai==333:
         IndEndLai=333
     else:
         # Minimum LAI value for senescence - the minimum value after the maximum LAI index
         MinSensc = np.min(SG[IndMaxLai:])
-        print("MinSensc = {}".format(MinSensc))
+        # print("MinSensc = {}".format(MinSensc))
         if MinSensc==Max:
             IndEndLai=333
         else:
             # Get all the values after the maximum LAI whose difference with min senescence LAI  < 10% of Max - minimum senescence LAI 
             dum, = np.where((SG[IndMaxLai:]-MinSensc)/(Max-MinSensc)<.1)
-            print("dum4 = {}".format(dum))
+            # print("dum4 = {}".format(dum))
             IndEndLai = NoneInt(IndMaxLai + dum[0])
     
-    print("IndEndLai = {}".format(IndEndLai)) 
+    # print("IndEndLai = {}".format(IndEndLai)) 
+    print("Crop partitioning indices computation done!")
     return [IndMaxLai, IndHalfLai, IndEmerg, IndEndLai]
 
 def build_lai_metrics_output_record(savgol, indices, orig_lai_max_val) :
@@ -286,7 +288,6 @@ def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler)
     metrics_outputs = []
     for cropfield_descr in all_cropfields:
         # print("cropfield_descr: {}".format(cropfield_descr))
-        # sys.exit(1)
         mean_vals = cropfield_descr[selCols.mean_indices]
         valid_pixels = cropfield_descr[selCols.valid_pix_indices]
         # total_pixels = cropfield_descr[selCols.total_pix_indices]
@@ -295,6 +296,10 @@ def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler)
         # TODO: Threshold should be configurable
         test = np.array([y>0.8*x for x,y in zip(total_pixels,valid_pixels)])
 
+        # print ("Test = {}".format(test))
+        if (len(test) == 0) :
+            continue
+        
         dates       =  selCols.dates[test]
         bi_vals     =  mean_vals[test] / 1e3
         

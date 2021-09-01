@@ -88,7 +88,7 @@ def handle_file(input, writer):
             for row in csv_reader:
                 batch_rows.append(row)
                 if len(batch_rows) == N :
-                    handle_batch_record(batch_rows, writer)
+                    handle_batch_record(batch_rows,column_infos, writer)
                     # reinitialize the batch
                     batch_rows = []
             
@@ -111,6 +111,15 @@ def handle_batch_record(rows, column_infos, writer):
     for row in rows:
         id = row[column_infos.id_pos]
 
+        try:
+            IndMaxLai = int(row[column_infos.crop_indices[0]])
+            IndHalfLai = int(row[column_infos.crop_indices[1]])
+            IndEmerg = int(row[column_infos.crop_indices[2]])
+            IndEndLai = int(row[column_infos.crop_indices[3]])
+        except ValueError:
+            print("Cannot read crop growth indices for id = {}. It will be ignored ...".format(id))
+            continue
+
         weather_evap = np.array(filter_row_values(row, column_infos.weather_evap_indices))
         weather_prec = np.array(filter_row_values(row, column_infos.weather_prec_indices))
         weather_rad = np.array(filter_row_values(row, column_infos.weather_rad_indices))
@@ -122,15 +131,6 @@ def handle_batch_record(rows, column_infos, writer):
         weather_tmean = np.array(filter_row_values(row, column_infos.weather_tmean_indices))
         weather_tmin = np.array(filter_row_values(row, column_infos.weather_tmin_indices))
         
-        IndMaxLai = int(row[column_infos.crop_indices[0]])
-        IndHalfLai = int(row[column_infos.crop_indices[1]])
-        IndEmerg = int(row[column_infos.crop_indices[2]])
-        IndEndLai = int(row[column_infos.crop_indices[3]])
-        
-        safy_yield = filter_row_values(row, column_infos.safy_yield_indices)
-        safy_d0 = filter_row_values(row, column_infos.safy_d0_indices)
-        safy_senb = filter_row_values(row, column_infos.safy_senb_indices)
-
         result = [None] * 37
         result[0]  = int(id)                                                              # ['NewID']    
         result[1]  = int(np.sum(weather_tmin[IndEmerg:IndHalfLai+1]<=0))                  # ['ColdT0']   
@@ -167,6 +167,14 @@ def handle_batch_record(rows, column_infos, writer):
         result[32] = np.mean(weather_swvl4[IndHalfLai:IndMaxLai +1])                      # ['MeanSW41'] 
         result[33] = np.mean(weather_swvl4[IndMaxLai :IndEndLai +1])                      # ['MeanSW42'] 
         
+        safy_yield = filter_row_values(row, column_infos.safy_yield_indices)
+        safy_d0 = filter_row_values(row, column_infos.safy_d0_indices)
+        safy_senb = filter_row_values(row, column_infos.safy_senb_indices)
+        
+        # print("safy_yield = {}".format(safy_yield))
+        # print("safy_d0 = {}".format(safy_d0))
+        # print("safy_senb = {}".format(safy_senb))
+
         result[34] = safy_yield[0]                                                        # ['safyyield'] 
         result[35] = safy_d0[0]                                                           # ['safyd0'] 
         result[36] = safy_senb[0]                                                         # ['safysenb'] 
@@ -176,42 +184,19 @@ def handle_batch_record(rows, column_infos, writer):
     # write batch result lines
     writer.writerows(batch_results)
         
-def run_command(args, env=None):
-    args = list(map(str, args))
-    cmd_line = " ".join(map(pipes.quote, args))
-    print(cmd_line)
-    subprocess.call(args, env=env)
-
-def merge_input_features(weather_file, sg_file, safy_file, out_file) :
-    command = []
-    command += ["otbcli", "Markers1CsvMerge"]
-    command += ["-out", out_file]
-    command += ["-il", weather_file, sg_file, safy_file]
-    command += ["-ignnodatecol", 0]
-
-    run_command(command)
-
 def main():
     parser = argparse.ArgumentParser(
         description="Extracts the weather features corresponding to the parcels provided"
     )
-    parser.add_argument("-e", "--weather-features-file", help="File containing the weather extracted features", required=True)
-    parser.add_argument("-g", "--sg-indices", help="File containing the crop growth indices", required=True)
-    parser.add_argument("-f", "--safy", help="File containing the SAFY features", required=True)
-    parser.add_argument("-v", "--vect", help="Shapefile containing the parcels", required=True)
-    parser.add_argument("-w", "--working-dir", help="Working directory", required=True)
+    parser.add_argument("-i", "--input", help="File containing all merged extracted features (Weather, SG Crop Growth and SAFY)", required=True)
     parser.add_argument("-o", "--output", help="Output file containing the extracted yield features", required=True)
     
     args = parser.parse_args()
     
-    # first merge the weather and Savitzky Golay columns
-    merged_features_file = os.path.join(args.working_dir, "merged_weather_sg_features.csv")
-    merge_input_features(args.weather_features_file, args.sg_indices, args.safy, merged_features_file)
-    
     # handle the created merge file
     with open(args.output, "w") as file:
         writer = csv.writer(file, quoting=csv.QUOTE_MINIMAL)
-        handle_file(merged_features_file, writer)
+        handle_file(args.input, writer)
     
 if __name__ == "__main__":
     main()
