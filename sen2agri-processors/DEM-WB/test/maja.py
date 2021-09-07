@@ -375,7 +375,7 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
         else:
             # something went wrong. shall this be an exit point?
             # shall the mode remain to L2INIT? This behavior may as well hide a bug in a previous demmaccs run (it's possible)...
-            l2a_log.error("Tile failure: Could not create sym link to previous l2a product {}. Exiting".format(prev_l2a_tile_path), print_msg = True)
+            l2a_log.error("Could not create symlink to previous L2A product {}. Exiting".format(prev_l2a_tile_path), print_msg = True)
             return ""
     except SystemExit:
         l2a_log.error("Tile failure: SystemExit caught when trying to create sym links for NOMINAL MACCS/MAJA mode, product {}. Exit!".format(demmaccs_context.input), print_msg = True)
