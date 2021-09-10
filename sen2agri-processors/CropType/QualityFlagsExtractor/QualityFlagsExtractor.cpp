@@ -181,6 +181,9 @@ private:
     AddParameter(ParameterType_InputFilenameList, "il", "The xml files");
     AddParameter(ParameterType_OutputImage, "out", "A raster containing the number of dates for each pixel that have valid land values.");
 
+    AddParameter(ParameterType_InputFilenameList, "ilextmsks", "The list of the external mask files corresponding to each product in il parameter");
+    MandatoryOff("ilextmsks");
+
     AddParameter(ParameterType_Int, "pixsize", "The size of a pixel, in meters");
     SetDefaultParameterInt("pixsize", 10); // The default value is 10 meters
     SetMinimumParameterIntValue("pixsize", 1);
@@ -214,16 +217,26 @@ private:
       }
 
       // Get the list of input files
-      std::vector<std::string> descriptors = this->GetParameterStringList("il");
-
+      const std::vector<std::string> &descriptors = this->GetParameterStringList("il");
       if( descriptors.size()== 0 )
-        {
+      {
         itkExceptionMacro("No input file set...");
-        }
+      }
+      std::vector<std::string> extMsks;
+      if (HasValue("ilextmsks")) {
+         extMsks = this->GetParameterStringList("ilextmsks");
+         if (extMsks.size() != descriptors.size()) {
+             itkExceptionMacro("il and ilextmsks should have the same size while we have " <<
+                               descriptors.size() << " different of " << extMsks.size());
+         }
+      }
 
       auto factory = MetadataHelperFactory::New();
+      int i = 0;
       for (const std::string& desc : descriptors) {
-          m_vectHelpers.push_back(factory->GetMetadataHelper<short>(desc));
+          const std::string &extMsk = extMsks.size() > 0 ? extMsks[i] : "";
+          m_vectHelpers.push_back(factory->GetMetadataHelper<short>(desc, extMsk));
+          i++;
       }
 
       // compute the desired size of the output image

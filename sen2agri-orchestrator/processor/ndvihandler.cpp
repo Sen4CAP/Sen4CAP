@@ -9,6 +9,11 @@
 #include "logger.hpp"
 #include "maccshdrmeananglesreader.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+#include "products/l2aproducthelper.h"
+#include "products/producthelperfactory.h"
+using namespace orchestrator::products;
+
 void NdviHandler::CreateTasksForNewProduct(QList<TaskToSubmit> &outAllTasksList,
                                                     const QList<TileInfos> &tileInfosList,
                                                     bool bRemoveTempFiles) {
@@ -214,9 +219,9 @@ void NdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     std::map<QString, QString> configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
 
     // create and submit the tasks for the received products
-    QMap<QString, QStringList> inputProductToTilesMap;
-    QStringList listTilesMetaFiles = GetL2AInputProductsTiles(ctx, event, inputProductToTilesMap);
-    if(listTilesMetaFiles.size() == 0) {
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
+    if(productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);
         throw std::runtime_error(
             QStringLiteral("No products provided at input or no products available in the specified interval").
@@ -226,20 +231,25 @@ void NdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     // Group the products that belong to the same date
     // the tiles of products from secondary satellite are not included if they happen to be from the same date with tiles from
     // the same date
-    QMap<QDate, QStringList> dateGroupedInputProductToTilesMap = ProcessorHandlerHelper::GroupL2AProductTilesByDate(inputProductToTilesMap);
+    const QMap<QDate, QList<ProductDetails>> &dateGroupedInputProductToTilesMap = ProcessorHandlerHelper::GroupByDate(productDetails);
 
     //container for all task
     QList<TaskToSubmit> allTasksList;
     const QSet<QString> &tilesFilter = GetTilesFilter(parameters, configParameters);
     for(const auto &key : dateGroupedInputProductToTilesMap.keys()) {
-        const QStringList &prdTilesList = dateGroupedInputProductToTilesMap[key];
+        const QList<ProductDetails> &prdsDetails = dateGroupedInputProductToTilesMap[key];
         // create structures providing the models for each tile
         QList<TileInfos> tilesInfosList;
-        for(const QString &prdTile: prdTilesList) {
-            if (FilterTile(tilesFilter, prdTile)) {
-                TileInfos tileInfo;
-                tileInfo.tileFile = prdTile;
-                tilesInfosList.append(tileInfo);
+        for(const ProductDetails &prdDetails: prdsDetails) {
+            std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdDetails);
+            const QStringList &metaFiles = helper->GetProductMetadataFiles();
+            for (const QString &metaFile: metaFiles) {
+                if (FilterTile(tilesFilter, prdDetails)) {
+                    TileInfos tileInfo;
+                    tileInfo.tileFile = metaFile;
+                    tileInfo.prdDetails = prdDetails;
+                    tilesInfosList.append(tileInfo);
+                }
             }
         }
         HandleProduct(ctx, event, tilesInfosList, allTasksList);
@@ -259,37 +269,35 @@ void NdviHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
         RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
     }
     if ((event.module == "ndvi-product-formatter")) {
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder = GetProductFormatterOutputProductPath(ctx, event);
-        if((prodName != "") && ProcessorHandlerHelper::IsValidHighLevelProduct(productFolder)) {
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
+        const QString &prodName = GetOutputProductName(ctx, event);
+        const QString &productFolder = GetOutputProductPath(ctx, event);
+        GenericHighLevelProductHelper prdHelper(productFolder);
+        if(prodName != "" && prdHelper.HasValidStructure()) {
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             ProductType prodType = ProductType::L3BProductTypeId;
 
-            const QStringList &prodTiles = ProcessorHandlerHelper::GetTileIdsFromHighLevelProduct(productFolder);
+            const QStringList &prodTiles = prdHelper.GetTileIdsFromProduct();
 
             // get the satellite id for the product
-            const QStringList &listL3BProdTiles = ProcessorHandlerHelper::GetTileIdsFromHighLevelProduct(productFolder);
-            const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles = GetSiteTiles(ctx, event.siteId);
-            ProcessorHandlerHelper::SatelliteIdType satId = ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN;
-            for(const auto &tileId : listL3BProdTiles) {
+            const QMap<Satellite, TileList> &siteTiles = GetSiteTiles(ctx, event.siteId);
+            Satellite satId = Satellite::Invalid;
+            for(const auto &tileId : prodTiles) {
                 // we assume that all the tiles from the product are from the same satellite
                 // in this case, we get only once the satellite Id for all tiles
-                if(satId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
+                if(satId == Satellite::Invalid) {
                     satId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
                     // ignore tiles for which the satellite id cannot be determined
-                    if(satId != ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
+                    if(satId != Satellite::Invalid) {
                         break;
                     }
                 }
             }
 
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
             int ret = ctx.InsertProduct({ prodType, event.processorId, static_cast<int>(satId), event.siteId, event.jobId,
-                                productFolder, maxDate, prodName,
-                                quicklook, footPrint, std::experimental::nullopt, prodTiles });
+                                productFolder, prdHelper.GetAcqDate(), prodName,
+                                quicklook, footPrint, std::experimental::nullopt, prodTiles, ProductIdsList() });
             Logger::debug(QStringLiteral("InsertProduct for %1 returned %2").arg(prodName).arg(ret));
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));
@@ -328,9 +336,13 @@ QStringList NdviHandler::GetNdviProductFormatterArgs(TaskToSubmit &productFormat
     const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
     QStringList tileIdsList;
     for(const TileInfos &tileInfo: prdTilesInfosList) {
-        ProcessorHandlerHelper::SatelliteIdType satId;
-        const QString &tileId = ProcessorHandlerHelper::GetTileId(tileInfo.tileFile, satId);
-        tileIdsList.append(tileId);
+        const QStringList &tileIds = tileInfo.prdDetails.GetProduct().tiles;
+        if (tileIds.size() == 0) {
+            Logger::error(QStringLiteral("GetNdviProductFormatterArgs: cannot extract tile id from file %1!")
+                          .arg(tileInfo.tileFile));
+            continue;
+        }
+        tileIdsList.append(tileIds.at(0));
     }
 
     const auto &targetFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId);
@@ -415,11 +427,15 @@ QSet<QString> NdviHandler::GetTilesFilter(const QJsonObject &parameters, std::ma
     return retSet;
 }
 
-bool NdviHandler::FilterTile(const QSet<QString> &tilesSet, const QString &prdTileFile)
+bool NdviHandler::FilterTile(const QSet<QString> &tilesSet, const ProductDetails &prdDetail)
 {
-    ProcessorHandlerHelper::SatelliteIdType satId;
-    const QString &tileId = ProcessorHandlerHelper::GetTileId(prdTileFile, satId);
-    return (tilesSet.empty() || tilesSet.contains(tileId));
+    const QStringList &tileIds = prdDetail.GetProduct().tiles;
+    if (tileIds.size() == 0) {
+        Logger::error(QStringLiteral("FilterTile: cannot extract tile id from product %1!")
+                      .arg(prdDetail.GetProduct().fullPath));
+        return false;
+    }
+    return (tilesSet.empty() || tilesSet.contains(tileIds.at(0)));
 }
 
 ProcessorJobDefinitionParams NdviHandler::GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,

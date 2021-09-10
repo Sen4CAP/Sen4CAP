@@ -219,7 +219,7 @@ protected:
 
     const CommonResolution& GetMACCSResolutionInfo(int nResolution);
 
-    virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult,
+    virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult,
                                                                                                 int resolution = -1);
 
 protected:

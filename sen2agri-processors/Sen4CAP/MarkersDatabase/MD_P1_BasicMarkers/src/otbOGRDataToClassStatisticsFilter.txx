@@ -36,6 +36,7 @@ PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
   this->SetNthOutput(1,ClassCountObjectType::New());
     m_ConvertValuesToDecibels = false;
     m_ComputeMinMax = false;
+    m_ComputeValidityPixelsCnt = false;
 // NOT NEEDED FOR AGRICULTURAL PRACTICES
 //  this->SetNthOutput(2,PolygonSizeObjectType::New());
 }
@@ -165,9 +166,9 @@ PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
          if (m_ComputeMinMax) {
             m_MinRadiometricValue[label] = it.second.GetMin();
             m_MaxRadiometricValue[label] = it.second.GetMax();
-
+         }
+         if (m_ComputeValidityPixelsCnt) {
             m_ValidPixelsCnt[label] = count;
-            m_InvalidPixelsCnt[label] = countInvalid;
          }
      }
    }
@@ -199,7 +200,6 @@ PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
   m_MinRadiometricValue.clear();
   m_MaxRadiometricValue.clear();
   m_ValidPixelsCnt.clear();
-  m_InvalidPixelsCnt.clear();
 
 // NOT NEEDED FOR AGRICULTURAL PRACTICES
 //  m_ElmtsInClassThread.resize(this->GetNumberOfThreads());
@@ -308,14 +308,6 @@ PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
 ::GetValidPixelsCntMap() const
 {
     return m_ValidPixelsCnt;
-}
-
-template<class TInputImage, class TMaskImage>
-typename PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>::PixelValueMapType
-PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
-::GetInvalidPixelsCntMap() const
-{
-    return m_InvalidPixelsCnt;
 }
 
 template<class TInputImage, class TMaskImage>
@@ -527,6 +519,34 @@ bool OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::GetComputeMinMax()
 template<class TInputImage, class TMaskImage>
 void
 OGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::SetComputeValidityPixelsCnt(bool exp)
+{
+  this->GetFilter()->SetComputeValidityPixelsCnt(exp);
+}
+
+template<class TInputImage, class TMaskImage>
+bool OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::GetComputeValidityPixelsCnt()
+{
+  return this->GetFilter()->GetComputeValidityPixelsCnt();
+}
+
+template<class TInputImage, class TMaskImage>
+void
+OGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::SetMaskValidValue(int val)
+{
+  this->GetFilter()->SetValidMaskValue(val);
+}
+
+template<class TInputImage, class TMaskImage>
+int OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::GetMaskValidValue()
+{
+  return this->GetFilter()->GetValidMaskValue();
+}
+
+template<class TInputImage, class TMaskImage>
+void
+OGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
 ::SetLayerIndex(int index)
 {
   this->GetFilter()->SetLayerIndex(index);
@@ -619,14 +639,6 @@ OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>
 ::GetValidPixelsCntMap() const
 {
   return this->GetFilter()->GetValidPixelsCntMap();
-}
-
-template<class TInputImage, class TMaskImage>
-typename OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::PixelValueMapType
-OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>
-::GetInvalidPixelsCntMap() const
-{
-  return this->GetFilter()->GetInvalidPixelsCntMap();
 }
 
 } // end of namespace otb

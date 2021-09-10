@@ -567,7 +567,7 @@ std::string SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetSCLFileName(int
 
 template <typename PixelType, typename MasksPixelType>
 typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer
-SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetMasksImage(MasksFlagType nMaskFlags,
+SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetL2AMasksImage(MasksFlagType nMaskFlags,
                                                                 bool binarizeResult,
                                                                 int resolution)
 {

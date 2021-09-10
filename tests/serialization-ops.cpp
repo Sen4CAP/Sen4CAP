@@ -66,7 +66,6 @@ void compare(const KeyedMessage &v1, const KeyedMessage &v2)
 void compare(const Product &v1, const Product &v2)
 {
     compare(v1.productId, v2.productId);
-    compare(v1.processorId, v2.processorId);
     compare(v1.productTypeId, v2.productTypeId);
     compare(v1.siteId, v2.siteId);
     compare(v1.fullPath, v2.fullPath);

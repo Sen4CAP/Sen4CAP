@@ -34,6 +34,11 @@ struct maker<QString> {
 };
 
 template <>
+struct maker<QStringList> {
+    static QStringList make() { return {"hello1", "hello2"}; }
+};
+
+template <>
 struct maker<QDateTime> {
     static QDateTime make() { return QDateTime::currentDateTime(); }
 };
@@ -147,8 +152,11 @@ template <>
 struct maker<Product> {
     static Product make()
     {
-        return { maker<int>::make(), maker<int>::make(),     maker<ProductType>::make(),
-                 maker<int>::make(), maker<QString>::make(), maker<QDateTime>::make(), maker<QDateTime>::make() };
+        return { maker<int>::make(), maker<ProductType>::make(),
+                 maker<int>::make(), maker<QString>::make(), maker<QDateTime>::make(), maker<QDateTime>::make(),
+                 maker<int>::make(), maker<QString>::make(), maker<QString>::make(), maker<QString>::make(),
+                 maker<int>::make(), maker<QStringList>::make(), maker<int>::make()
+        };
     }
 };
 

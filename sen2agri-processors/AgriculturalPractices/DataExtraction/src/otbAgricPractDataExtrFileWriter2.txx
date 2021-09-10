@@ -132,14 +132,17 @@ AgricPractDataExtrFileWriter2<TMeasurementVector>
     std::string fileType;
     std::string polarisation;
     std::string orbit;
+    std::string tile;
+    std::string band;
     time_t fileDate;
-    time_t additionalFileDate = 0;
-    if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate))
+    time_t prevDate = 0;
+    Satellite sat;
+    if (!GetFileInfosFromName(fileName, sat, fileType, polarisation, orbit, fileDate, tile, band, prevDate))
     {
         std::cout << "Error extracting file informations from file name " << fileName << std::endl;
         return;
     }
-    if (additionalFileDate) {
+    if (prevDate) {
         m_bUseDate2 = true;
     }
 
@@ -171,7 +174,7 @@ AgricPractDataExtrFileWriter2<TMeasurementVector>
 
       const std::string &fieldOutFileName = m_bUseMinMax ?
                   boost::filesystem::path(fileName).filename().c_str() :
-                  BuildOutputFileName(fieldId, fileType, polarisation, orbit, fileDate, additionalFileDate);
+                  BuildOutputFileName(fieldId, fileType, polarisation, orbit, fileDate, prevDate);
       const std::string &uniqueId = fieldId + fieldOutFileName;
 
       typename std::map<std::string, FileFieldsInfoType>::iterator containerIt =
@@ -179,7 +182,7 @@ AgricPractDataExtrFileWriter2<TMeasurementVector>
 
       FieldEntriesType fieldEntry;
       fieldEntry.date = fileDate;
-      fieldEntry.additionalFileDate = additionalFileDate;
+      fieldEntry.additionalFileDate = prevDate;
       // we exclude from the header the fid and the date
       fieldEntry.values.resize(m_HeaderFields.size() - 2);
       fieldEntry.values[m_MeanPosInHeader] = meanVal;

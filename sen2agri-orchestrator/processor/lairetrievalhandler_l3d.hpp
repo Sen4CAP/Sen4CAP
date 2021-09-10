@@ -12,17 +12,16 @@ protected:
     void WriteExecutionSpecificParamsValues(const std::map<QString, QString> &configParameters, std::ofstream &stream) override;
     QString GetPrdFormatterRasterFlagName() override;
     QString GetPrdFormatterMskFlagName() override;
-    QList<QMap<QString, TileTemporalFilesInfo>> ExtractL3BMapTiles(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+    QList<QMap<QString, TileTimeSeriesInfo>> ExtractL3BMapTiles(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                                        const QStringList &l3bProducts,
-                                                       const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles) override;
+                                                       const QMap<Satellite, TileList> &siteTiles) override;
     ProductList GetScheduledJobProductList(SchedulingContext &ctx, int siteId, const QDateTime &seasonStartDate,
                                            const QDateTime &seasonEndDate, const QDateTime &qScheduledDate,
                                            const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
-    bool AcceptSchedJobProduct(const QString &l2aPrdHdrPath, ProcessorHandlerHelper::SatelliteIdType satId) override;
+    bool AcceptSchedJobProduct(const QString &l2aPrdHdrPath, Satellite satId) override;
 
-    QMap<QString, TileTemporalFilesInfo> GetL3BMapTiles(EventProcessingContext &ctx,
-                                                        const QStringList &l3bProducts,
-                                                        const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles);
+    QMap<QString, TileTimeSeriesInfo> GetL3BMapTiles(EventProcessingContext &ctx, const QStringList &l3bProducts,
+                                                        const QMap<Satellite, TileList> &siteTiles);
 
 
 };

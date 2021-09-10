@@ -216,7 +216,7 @@ private:
         // Create an output parameter to write the current output image
         OutputImageParameter::Pointer paramOut = OutputImageParameter::New();
         // Set the filename of the current output image
-        paramOut->SetFileName(outImg);
+        paramOut->SetFileName(fileName);
         if(nRes != -1) {
             // resample the image at the given resolution
             imgMsk->UpdateOutputInformation();

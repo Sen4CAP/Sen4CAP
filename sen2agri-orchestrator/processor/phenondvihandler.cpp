@@ -8,6 +8,10 @@
 #include "json_conversions.hpp"
 #include "logger.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+#include "products/producthelperfactory.h"
+using namespace orchestrator::products;
+
 void PhenoNdviHandler::CreateTasksForNewProducts(QList<TaskToSubmit> &outAllTasksList,
                                                 QList<std::reference_wrapper<const TaskToSubmit>> &outProdFormatterParentsList)
 {
@@ -21,9 +25,9 @@ void PhenoNdviHandler::CreateTasksForNewProducts(QList<TaskToSubmit> &outAllTask
 
 void PhenoNdviHandler::HandleNewTilesList(EventProcessingContext &ctx,
                                           const JobSubmittedEvent &event, PhenoGlobalExecutionInfos &globalExecInfos,
-                                          const TileTemporalFilesInfo &tileTemporalFilesInfo)
+                                          const TileTimeSeriesInfo &tileTemporalFilesInfo)
 {
-    QStringList listProducts = ProcessorHandlerHelper::GetTemporalTileFiles(tileTemporalFilesInfo);
+    const QList<TileMetadataDetails> &listProducts = tileTemporalFilesInfo.GetTileTimeSeriesInfoFiles();
 
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
     // Get the resolution value
@@ -59,7 +63,9 @@ void PhenoNdviHandler::HandleNewTilesList(EventProcessingContext &ctx,
         "NdviMaskSeriesExtractor", "-pixsize", resolutionStr,
             "-outndvis", ndviImg, "-outmasks", allMasksImg, "-ndh", "true", "-outdate", dates, "-mission", "SENTINEL",  "-il"
     };
-    bandsExtractorArgs += listProducts;
+    std::for_each(listProducts.begin(), listProducts.end(), [&bandsExtractorArgs](const TileMetadataDetails &prd) {
+        bandsExtractorArgs.append(prd.tileMetaFile);
+    });
 
     QStringList metricsEstimationArgs = {"PhenologicalNDVIMetrics",
         "-in", ndviImg, "-mask", allMasksImg, "-dates", dates, "-out", metricsEstimationImg
@@ -86,15 +92,17 @@ void PhenoNdviHandler::HandleNewTilesList(EventProcessingContext &ctx,
 void PhenoNdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
-    QStringList listProducts = GetL2AInputProductsTiles(ctx, event);
-    if(listProducts.size() == 0) {
+    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
+    if(productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);
         throw std::runtime_error(
             QStringLiteral("No products provided at input or no products available in the specified interval").
                     toStdString());
     }
 
-    const QMap<QString, TileTemporalFilesInfo> &mapTiles = GroupTiles(ctx, event.siteId, listProducts, ProductType::L2AProductTypeId);
+    const TilesTimeSeries &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, productDetails, ProductType::L2AProductTypeId);
     QList<PhenoProductFormatterParams> listParams;
 
     TaskToSubmit productFormatterTask{"product-formatter", {}};
@@ -102,9 +110,9 @@ void PhenoNdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     //container for all task
     //QList<TaskToSubmit> allTasksList;
     QList<PhenoGlobalExecutionInfos> listPhenoInfos;
-    for(auto tileId : mapTiles.keys())
+    for(auto tileId : mapTiles.GetTileIds())
     {
-       const TileTemporalFilesInfo &listTemporalTiles = mapTiles.value(tileId);
+       const TileTimeSeriesInfo &listTemporalTiles = mapTiles.GetTileTimeSeriesInfo(tileId);
        listPhenoInfos.append(PhenoGlobalExecutionInfos());
        PhenoGlobalExecutionInfos &infos = listPhenoInfos[listPhenoInfos.size()-1];
        infos.prodFormatParams.tileId = GetProductFormatterTile(tileId);
@@ -118,7 +126,7 @@ void PhenoNdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     SubmitTasks(ctx, event.jobId, {productFormatterTask});
 
     // finally format the product
-    QStringList productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, event, listProducts, listParams);
+    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, event, productDetails, listParams);
 
     // add these steps to the steps list to be submitted
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
@@ -132,20 +140,19 @@ void PhenoNdviHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
     if (event.module == "product-formatter") {
         ctx.MarkJobFinished(event.jobId);
 
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
-        if(prodName != "" && ProcessorHandlerHelper::IsValidHighLevelProduct(productFolder)) {
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
+        const QString &prodName = GetOutputProductName(ctx, event);
+        const QString &productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
+        GenericHighLevelProductHelper prdHelper(productFolder);
+        if(prodName != "" && prdHelper.HasValidStructure()) {
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
             ctx.InsertProduct({ ProductType::L3EProductTypeId, event.processorId, event.siteId,
-                                event.jobId, productFolder, maxDate,
-                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList() });
+                                event.jobId, productFolder, prdHelper.GetAcqDate(),
+                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList() });
 
             // Now remove the job folder containing temporary files
-            RemoveJobFolder(ctx, event.jobId, "l3e");
+            RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));
         }
@@ -176,7 +183,7 @@ void PhenoNdviHandler::WriteExecutionInfosFile(const QString &executionInfosPath
 }
 
 QStringList PhenoNdviHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                    const QStringList &listProducts, const QList<PhenoProductFormatterParams> &productParams) {
+                                    const QList<ProductDetails> &listProducts, const QList<PhenoProductFormatterParams> &productParams) {
     const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
 
     const auto &targetFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId);
@@ -193,7 +200,13 @@ QStringList PhenoNdviHandler::GetProductFormatterArgs(TaskToSubmit &productForma
                                          "-gipp", executionInfosPath,
                                          "-outprops", outPropsPath};
     productFormatterArgs += "-il";
-    productFormatterArgs += listProducts;
+    std::for_each(listProducts.begin(), listProducts.end(), [&productFormatterArgs](const ProductDetails &prdDetails) {
+        std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdDetails);
+        const QStringList &metaFiles = helper->GetProductMetadataFiles();
+        for (const QString &metaFile: metaFiles) {
+            productFormatterArgs.append(metaFile);
+        }
+    });
 
     productFormatterArgs += "-processor.phenondvi.metrics";
     for(const PhenoProductFormatterParams &params: productParams) {

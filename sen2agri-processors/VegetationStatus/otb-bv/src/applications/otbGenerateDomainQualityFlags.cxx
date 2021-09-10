@@ -108,9 +108,8 @@ class GenerateDomainQualityFlags : public Application
             return *this;
         }
 
-        bool operator!=( const MaskingFunctor &a) const
+        bool operator!=( const MaskingFunctor &) const
         {
-            UNUSED(a);
             return true;
         }
         bool operator==( const MaskingFunctor & other ) const
@@ -163,9 +162,8 @@ class GenerateDomainQualityFlags : public Application
             return *this;
         }
 
-        bool operator!=( const DomainMaskExtractorFunctor &a) const
+        bool operator!=( const DomainMaskExtractorFunctor &) const
         {
-            UNUSED(a);
             return true;
         }
         bool operator==( const DomainMaskExtractorFunctor & other ) const
@@ -303,6 +301,9 @@ private:
                                                  "are extracted otherwise the output domain flags are extracted");
         MandatoryOff("in");
 
+        AddParameter(ParameterType_String, "extmsk", "External mask raster corresponding to the input");
+        MandatoryOff("extmsk");
+
         AddParameter(ParameterType_InputFilename, "laicfgs",
                      "Master file containing the LAI configuration files for each mission.");
         SetParameterDescription( "laicfgs", "Master file containing the LAI configuration files for each mission." );
@@ -324,10 +325,6 @@ private:
 
         AddParameter(ParameterType_Int,  "outres",   "The output resolution");
         MandatoryOff("outres");
-
-//        AddParameter(ParameterType_String,  "fts",   "The input bands");
-//        MandatoryOff("fts");
-
     }
 
     void DoUpdateParameters()
@@ -337,7 +334,11 @@ private:
     {
         const std::string &inMetadataXml = GetParameterString("xml");
         auto factory = MetadataHelperFactory::New();
-        m_pHelper = factory->GetMetadataHelper<float>(inMetadataXml);
+        std::string extMsk;
+        if (HasValue("extmsk")) {
+            extMsk = GetParameterString("extmsk");
+        }
+        m_pHelper = factory->GetMetadataHelper<float>(inMetadataXml, extMsk);
         if (HasValue("in")) {
             HandleOutputDomainFlags(m_pHelper);
         } else {

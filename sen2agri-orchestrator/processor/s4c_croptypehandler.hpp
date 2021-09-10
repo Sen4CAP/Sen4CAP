@@ -66,13 +66,11 @@ private:
                                         const JobSubmittedEvent &event, const QString &tmpPrdDir,
                                         const QDateTime &minDate, const QDateTime &maxDate);
 
-    bool GetL2AProductsInterval(const QMap<QString, QStringList> &mapTilesMeta,
-                                QDateTime &startDate, QDateTime &endDate);
     bool GetStartEndDatesFromProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                      QDateTime &startDate, QDateTime &endDate, QStringList &listTilesMetaFiles);
+                                      QDateTime &startDate, QDateTime &endDate, QList<ProductDetails> &productDetails);
     void UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdate);
     QStringList GetTileIdsFromProducts(EventProcessingContext &ctx,
-                                        const JobSubmittedEvent &event, const QStringList &listProducts);
+                                        const JobSubmittedEvent &event, const QList<ProductDetails> &productDetails);
     bool IsScheduledJobRequest(const QJsonObject &parameters);
     void HandleMarkerProductsAvailable(EventProcessingContext &ctx, const TaskFinishedEvent &event);
 

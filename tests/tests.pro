@@ -20,7 +20,8 @@ SOURCES += main.cpp \
     serialization-ops.cpp \
     schedulertests.cpp \
     testscheduledtaskloader.cpp \
-    testorcherstratorproxy.cpp
+    testorcherstratorproxy.cpp \
+    producthandlertests.cpp
 
 # cannot link to scheduler app, the files will be included in this project
 SOURCES += ../sen2agri-scheduler/taskloader.cpp \
@@ -28,14 +29,23 @@ SOURCES += ../sen2agri-scheduler/taskloader.cpp \
     ../sen2agri-scheduler/taskplanner.cpp \
     ../sen2agri-scheduler/orchestratorproxy.cpp \
     ../sen2agri-scheduler/resourcereader.cpp \
-    ../sen2agri-scheduler/runestimator.cpp
+    ../sen2agri-scheduler/runestimator.cpp \
+    ../sen2agri-orchestrator/processor/products/l2aproducthelper.cpp \
+    ../sen2agri-orchestrator/processor/products/generichighlevelproducthelper.cpp \
+    ../sen2agri-orchestrator/processor/products/s1l2producthelper.cpp \
+    ../sen2agri-orchestrator/processor/products/productdetails.cpp \
+    ../sen2agri-orchestrator/processor/products/producthelper.cpp \
+    ../sen2agri-orchestrator/processor/products/producthelperfactory.cpp \
+    ../sen2agri-orchestrator/processor/products/maskedl2aproducthelper.cpp
 
 LIBS += -L$$OUT_PWD/../sen2agri-common/ -lsen2agri-common
 
 INCLUDEPATH += $$PWD/../sen2agri-common
 INCLUDEPATH += $$PWD/../sen2agri-scheduler
+INCLUDEPATH += $$PWD/../sen2agri-orchestrator
 DEPENDPATH += $$PWD/../sen2agri-common
 DEPENDPATH += $$PWD/../sen2agri-scheduler
+DEPENDPATH += $$PWD/../sen2agri-orchestrator
 
 PRE_TARGETDEPS += $$OUT_PWD/../sen2agri-common/libsen2agri-common.a
 
@@ -62,7 +72,8 @@ HEADERS += \
     pch.hpp \
     schedulertests.h \
     testscheduletaskloader.hpp \
-    testorcherstratorproxy.h
+    testorcherstratorproxy.h \
+    producthandlertests.h
 
 HEADERS += \
     ../sen2agri-scheduler/scheduledtask.hpp \
@@ -71,7 +82,14 @@ HEADERS += \
     ../sen2agri-scheduler/taskplanner.hpp \
     ../sen2agri-scheduler/resourcereader.hpp \
     ../sen2agri-scheduler/orchestratorproxy.hpp \
-    ../sen2agri-scheduler/runestimator.hpp
+    ../sen2agri-scheduler/runestimator.hpp \
+    ../sen2agri-orchestrator/processor/products/l2aproducthelper.h \
+    ../sen2agri-orchestrator/processor/products/generichighlevelproducthelper.h \
+    ../sen2agri-orchestrator/processor/products/s1l2producthelper.h \
+    ../sen2agri-orchestrator/processor/products/producthelper.h \
+    ../sen2agri-orchestrator/processor/products/producthelperfactory.h \
+    ../sen2agri-orchestrator/processor/products/maskedl2aproducthelper.h
+
 
 DISTFILES += \
     reflector.xml

@@ -21,7 +21,9 @@ static QString getScheduledTaskJson(const ScheduledTask &task);
 
 static QString getExecutionStatusListJson(const ExecutionStatusList &statusList);
 static QString getTilesJson(const TileIdList &tilesList);
-static QString getIntListJsonJson(const QList<int> &intList);
+
+template<typename T>
+static QString getJsonFromList(const QList<T> &list);
 
 static void bindStepExecutionStatistics(QSqlQuery &query, const ExecutionStatistics &statistics);
 
@@ -917,7 +919,7 @@ int PersistenceManagerDBProvider::InsertProduct(const NewProduct &product)
         auto query = db.prepareQuery(
             QStringLiteral("select * from sp_insert_product(:productType, :processorId, "
                            ":satelliteId, :siteId, :jobId, :fullPath, :createdTimestamp, :name, "
-                           ":quicklookImage, :footprint, :orbitId, :tiles)"));
+                           ":quicklookImage, :geog, :orbitId, :tiles, :orbitTypeId, :dwnHistId, :parentProductIds)"));
         query.bindValue(QStringLiteral(":productType"), static_cast<int>(product.productType));
         query.bindValue(QStringLiteral(":processorId"), product.processorId);
         query.bindValue(QStringLiteral(":satelliteId"), (product.satelliteId<=0) ? QVariant() : product.satelliteId);
@@ -927,13 +929,16 @@ int PersistenceManagerDBProvider::InsertProduct(const NewProduct &product)
         query.bindValue(QStringLiteral(":createdTimestamp"), product.createdTimestamp);
         query.bindValue(QStringLiteral(":name"), product.name);
         query.bindValue(QStringLiteral(":quicklookImage"), product.quicklookImage);
-        query.bindValue(QStringLiteral(":footprint"), product.footprint);
+        query.bindValue(QStringLiteral(":geog"), product.footprint);
         if (product.orbitId) {
             query.bindValue(QStringLiteral(":orbitId"), *product.orbitId);
         } else {
             query.bindValue(QStringLiteral(":orbitId"), QVariant());
         }
         query.bindValue(QStringLiteral(":tiles"), getTilesJson(product.tiles));
+        query.bindValue(QStringLiteral(":orbitTypeId"), QVariant());
+        query.bindValue(QStringLiteral(":dwnHistId"), QVariant());
+        query.bindValue(QStringLiteral(":parentProductIds"), getJsonFromList<int>(product.parentProductIds));
 
         query.setForwardOnly(true);
         if (!query.exec()) {
@@ -971,23 +976,35 @@ ProductList PersistenceManagerDBProvider::GetProducts(int siteId,
         }
 
         auto dataRecord = query.record();
-        auto productIdCol = dataRecord.indexOf(QStringLiteral("ProductId"));
-        auto processorIdCol = dataRecord.indexOf(QStringLiteral("ProcessorId"));
-        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("ProductTypeId"));
-        auto siteIdCol = dataRecord.indexOf(QStringLiteral("SiteId"));
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
         auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
         auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
         auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+        auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+        auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+        auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+        auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+        auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
 
         ProductList result;
         while (query.next()) {
-            result.append({ query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
+            result.append({ query.value(productIdCol).toInt(),
                             static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
                             query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
                             QDateTime().fromString(query.value(creationDateCol).toString(),
                                                    Qt::ISODate),
                             QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                   Qt::ISODate)});
+                                                   Qt::ISODate),
+                            query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                            query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                            query.value(orbitIdCol).toInt(),
+                            QStringListFromString(query.value(tilesCol).toString()),
+                            query.value(dwnHistIdCol).toInt()
+                        });
         }
 
         return result;
@@ -1017,22 +1034,33 @@ ProductList PersistenceManagerDBProvider::GetProductsByInsertedTime(int siteId,
 
         auto dataRecord = query.record();
         auto productIdCol = dataRecord.indexOf(QStringLiteral("ProductId"));
-        auto processorIdCol = dataRecord.indexOf(QStringLiteral("ProcessorId"));
         auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("ProductTypeId"));
         auto siteIdCol = dataRecord.indexOf(QStringLiteral("SiteId"));
         auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
         auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
         auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+        auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+        auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+        auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+        auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+        auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
 
         ProductList result;
         while (query.next()) {
-            result.append({ query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
+            result.append({ query.value(productIdCol).toInt(),
                             static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
                             query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
                             QDateTime().fromString(query.value(creationDateCol).toString(),
                                                    Qt::ISODate),
                             QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                   Qt::ISODate) });
+                                                   Qt::ISODate),
+                            query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                            query.value(quicklookCol).toString(),
+                            query.value(geogCol).toString(), query.value(orbitIdCol).toInt(),
+                            QStringListFromString(query.value(tilesCol).toString()), query.value(dwnHistIdCol).toInt()
+                         });
         }
 
         return result;
@@ -1055,26 +1083,88 @@ Product PersistenceManagerDBProvider::GetProduct(int productId)
 
             auto dataRecord = query.record();
             auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
-            auto processorIdCol = dataRecord.indexOf(QStringLiteral("processor_id"));
             auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
             auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
             auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
             auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
             auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+            auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+            auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+            auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+            auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+            auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+            auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+            auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
 
             Product result;
-            while (query.next()) {
-                result = { query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
+            if (query.next()) {
+                result = { query.value(productIdCol).toInt(),
                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
                            QDateTime().fromString(query.value(creationDateCol).toString(),
                                                   Qt::ISODate),
                            QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                  Qt::ISODate) };
+                                                  Qt::ISODate),
+                           query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                           query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                           query.value(orbitIdCol).toInt(),
+                           QStringListFromString(query.value(tilesCol).toString()),
+                           query.value(dwnHistIdCol).toInt()
+                        };
             }
 
             return result;
         });
+}
+
+ProductList PersistenceManagerDBProvider::GetProducts(const ProductIdsList &productIds)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query =
+            db.prepareQuery(QStringLiteral("select * from sp_get_products_by_id("
+                                           ":ids)"));
+        query.bindValue(QStringLiteral(":ids"), getJsonFromList<int>(productIds));
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+        auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+        auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+        auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+        auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+        auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+        auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
+
+        ProductList result;
+        while (query.next()) {
+            result.append({ query.value(productIdCol).toInt(),
+                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                            QDateTime().fromString(query.value(creationDateCol).toString(),
+                                                   Qt::ISODate),
+                            QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                                   Qt::ISODate),
+                            query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                            query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                            query.value(orbitIdCol).toInt(),
+                            QStringListFromString(query.value(tilesCol).toString()),
+                            query.value(dwnHistIdCol).toInt()});
+        }
+
+        return result;
+    });
 }
 
 Product PersistenceManagerDBProvider::GetProduct(int siteId, const QString &productName)
@@ -1094,26 +1184,88 @@ Product PersistenceManagerDBProvider::GetProduct(int siteId, const QString &prod
 
             auto dataRecord = query.record();
             auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
-            auto processorIdCol = dataRecord.indexOf(QStringLiteral("processor_id"));
             auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
             auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
             auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
             auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
             auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+            auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+            auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+            auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+            auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+            auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+            auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+            auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
 
             Product result;
             while (query.next()) {
-                result = { query.value(productIdCol).toInt(), query.value(processorIdCol).toInt(),
+                result = { query.value(productIdCol).toInt(),
                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
                            QDateTime().fromString(query.value(creationDateCol).toString(),
                                                   Qt::ISODate),
                            QDateTime().fromString(query.value(insertionDateCol).toString(),
-                                                  Qt::ISODate) };
+                                                  Qt::ISODate),
+                           query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                           query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                           query.value(orbitIdCol).toInt(),
+                           QStringListFromString(query.value(tilesCol).toString()),
+                           query.value(dwnHistIdCol).toInt()
+                         };
             }
 
             return result;
         });
+}
+
+ProductList PersistenceManagerDBProvider::GetProducts(int siteId, const QStringList &productNames)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query =
+            db.prepareQuery(QStringLiteral("select * from sp_get_products_by_name("
+                                           ":siteId, :names)"));
+        query.bindValue(QStringLiteral(":siteId"), siteId);
+        query.bindValue(QStringLiteral(":names"), getJsonFromList<QString>(productNames));
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+        auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+        auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+        auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+        auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+        auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+        auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
+
+        ProductList result;
+        while (query.next()) {
+            result.append({ query.value(productIdCol).toInt(),
+                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                            QDateTime().fromString(query.value(creationDateCol).toString(),
+                                                   Qt::ISODate),
+                            QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                                   Qt::ISODate),
+                            query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                            query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                            query.value(orbitIdCol).toInt(),
+                            QStringListFromString(query.value(tilesCol).toString()),
+                            query.value(dwnHistIdCol).toInt()});
+        }
+
+        return result;
+    });
 }
 
 ProductList PersistenceManagerDBProvider::GetProductsForTile(int siteId, const QString &tileId, ProductType productType,
@@ -1136,21 +1288,235 @@ ProductList PersistenceManagerDBProvider::GetProductsForTile(int siteId, const Q
             }
 
             auto dataRecord = query.record();
+            auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+            auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
+            auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
             auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
-            auto productDateCol = dataRecord.indexOf(QStringLiteral("product_date"));
+            auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+            auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+            auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+            auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+            auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+            auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+            auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+            auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+            auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
+
 
             ProductList result;
             while (query.next()) {
-                Product product;
-                product.fullPath = query.value(fullPathCol).toString();
-                product.created = query.value(productDateCol).toDateTime();
-
-                result.append(std::move(product));
+                result.append({ query.value(productIdCol).toInt(),
+                                static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                                query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                                QDateTime().fromString(query.value(creationDateCol).toString(),
+                                                       Qt::ISODate),
+                                QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                                       Qt::ISODate),
+                                query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                                query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                                query.value(orbitIdCol).toInt(),
+                                QStringListFromString(query.value(tilesCol).toString()),
+                                query.value(dwnHistIdCol).toInt()});
             }
 
             return result;
         });
 }
+
+ProductList PersistenceManagerDBProvider::GetParentProductsByProvenancePresence(int siteId, const QList<ProductType> &sourcePrdTypes, const ProductType &derivedProductType,
+                                                                             const QDateTime &startDate, const QDateTime &endDate, bool parentsArePresent)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query =
+            db.prepareQuery(QStringLiteral("select * from %1("
+                                           ":siteId, :srcPrdTypes, :derivedPrdType, :startDate, :endDate)")
+                            .arg(parentsArePresent ? "sp_get_parent_products_in_provenance" : "sp_get_parent_products_not_in_provenance"));
+        query.bindValue(QStringLiteral(":siteId"), siteId);
+        QList<int> intSrcPrdTypes;
+        std::for_each(sourcePrdTypes.begin(), sourcePrdTypes.end(), [&intSrcPrdTypes](ProductType prdType) {
+            intSrcPrdTypes.append(static_cast<int>(prdType));
+        });
+        query.bindValue(QStringLiteral(":srcPrdTypes"), getJsonFromList<int>(intSrcPrdTypes));
+        query.bindValue(QStringLiteral(":derivedPrdType"), static_cast<int>(derivedProductType));
+        query.bindValue(QStringLiteral(":startDate"), startDate);
+        query.bindValue(QStringLiteral(":endDate"), endDate);
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("ProductId"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("ProductTypeId"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("SiteId"));
+        auto satIdCol = dataRecord.indexOf(QStringLiteral("SatId"));
+        auto nameCol = dataRecord.indexOf(QStringLiteral("ProductName"));
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+        auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+        auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+        auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+        auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
+
+        ProductList result;
+        while (query.next()) {
+            result.append({ query.value(productIdCol).toInt(),
+                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                            QDateTime().fromString(query.value(creationDateCol).toString(),
+                                                   Qt::ISODate),
+                            QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                                   Qt::ISODate),
+                            query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                            query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                            query.value(orbitIdCol).toInt(),
+                            QStringListFromString(query.value(tilesCol).toString()),
+                            query.value(dwnHistIdCol).toInt()});
+        }
+
+        return result;
+    });
+}
+
+ProductList PersistenceManagerDBProvider::GetParentProductsInProvenanceById(int productId, const QList<ProductType> &sourcePrdTypes)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query =
+            db.prepareQuery(QStringLiteral("select * from sp_get_parent_products_in_provenance_by_id("
+                                           ":productId, :srcPrdTypes)"));
+        query.bindValue(QStringLiteral(":productId"), productId);
+        QList<int> intSrcPrdTypes;
+        std::for_each(sourcePrdTypes.begin(), sourcePrdTypes.end(), [&intSrcPrdTypes](ProductType prdType) {
+            intSrcPrdTypes.append(static_cast<int>(prdType));
+        });
+        query.bindValue(QStringLiteral(":srcPrdTypes"), getJsonFromList<int>(intSrcPrdTypes));
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("product_type_id"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("site_id"));
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+        auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto satIdCol = dataRecord.indexOf(QStringLiteral("satellite_id"));
+        auto nameCol = dataRecord.indexOf(QStringLiteral("name"));
+        auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+        auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+        auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+        auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
+
+        ProductList result;
+        while (query.next()) {
+            result.append({ query.value(productIdCol).toInt(),
+                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                            QDateTime().fromString(query.value(creationDateCol).toString(),
+                                                   Qt::ISODate),
+                            QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                                   Qt::ISODate),
+                            query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                            query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                            query.value(orbitIdCol).toInt(),
+                            QStringListFromString(query.value(tilesCol).toString()),
+                            query.value(dwnHistIdCol).toInt()});
+        }
+
+        return result;
+    });
+}
+
+ProductList PersistenceManagerDBProvider::GetL1DerivedProducts(int siteId, const int &prdTypeId, const ProductIdsList &dwnHistIds)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query =
+            db.prepareQuery(QStringLiteral("select * from sp_get_l1_derived_products("
+                                           ":siteId, :prdTypeId, :dwnHistoryIds)"));
+        query.bindValue(QStringLiteral(":siteId"), siteId);
+        query.bindValue(QStringLiteral(":prdTypeId"), prdTypeId);
+        query.bindValue(QStringLiteral(":dwnHistoryIds"), getJsonFromList<int>(dwnHistIds));
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("ProductId"));
+        auto productTypeIdCol = dataRecord.indexOf(QStringLiteral("ProductTypeId"));
+        auto siteIdCol = dataRecord.indexOf(QStringLiteral("SiteId"));
+        auto satIdCol = dataRecord.indexOf(QStringLiteral("SatId"));
+        auto nameCol = dataRecord.indexOf(QStringLiteral("ProductName"));
+        auto fullPathCol = dataRecord.indexOf(QStringLiteral("full_path"));
+        auto creationDateCol = dataRecord.indexOf(QStringLiteral("created_timestamp"));
+        auto insertionDateCol = dataRecord.indexOf(QStringLiteral("inserted_timestamp"));
+        auto quicklookCol = dataRecord.indexOf(QStringLiteral("quicklook_image"));
+        auto geogCol = dataRecord.indexOf(QStringLiteral("geog"));
+        auto orbitIdCol = dataRecord.indexOf(QStringLiteral("orbit_id"));
+        auto tilesCol = dataRecord.indexOf(QStringLiteral("tiles"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
+
+        ProductList result;
+        while (query.next()) {
+            result.append({ query.value(productIdCol).toInt(),
+                            static_cast<ProductType>(query.value(productTypeIdCol).toInt()),
+                            query.value(siteIdCol).toInt(), query.value(fullPathCol).toString(),
+                            QDateTime().fromString(query.value(creationDateCol).toString(),
+                                                   Qt::ISODate),
+                            QDateTime().fromString(query.value(insertionDateCol).toString(),
+                                                   Qt::ISODate),
+                            query.value(satIdCol).toInt(), query.value(nameCol).toString(),
+                            query.value(quicklookCol).toString(), query.value(geogCol).toString(),
+                            query.value(orbitIdCol).toInt(),
+                            QStringListFromString(query.value(tilesCol).toString()),
+                            query.value(dwnHistIdCol).toInt()});
+        }
+
+        return result;
+    });
+}
+
+ProductIdToDwnHistIdMap PersistenceManagerDBProvider::GetDownloaderHistoryIds(const ProductIdsList &prdIds)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query =
+            db.prepareQuery(QStringLiteral("select * from sp_get_products_dwn_hist_ids("
+                                           ":ids)"));
+        query.bindValue(QStringLiteral(":ids"), getJsonFromList<int>(prdIds));
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+
+        auto dataRecord = query.record();
+        auto productIdCol = dataRecord.indexOf(QStringLiteral("product_id"));
+        auto dwnHistIdCol = dataRecord.indexOf(QStringLiteral("downloader_history_id"));
+
+        ProductIdToDwnHistIdMap result;
+        while (query.next()) {
+            result.insert(query.value(productIdCol).toInt(), query.value(dwnHistIdCol).toInt());
+        }
+
+        return result;
+    });
+}
+
 
 L1CProductList PersistenceManagerDBProvider::GetL1CProducts(int siteId,
                                                       const SatellitesList &satelliteIds,
@@ -1165,8 +1531,8 @@ L1CProductList PersistenceManagerDBProvider::GetL1CProducts(int siteId,
             db.prepareQuery(QStringLiteral("select * from sp_get_l1c_products("
                                            ":siteId, :satIds, :statusIds, :startDate, :endDate)"));
         query.bindValue(QStringLiteral(":siteId"), siteId);
-        query.bindValue(QStringLiteral(":satIds"), getIntListJsonJson(satelliteIds));
-        query.bindValue(QStringLiteral(":statusIds"), getIntListJsonJson(statusIds));
+        query.bindValue(QStringLiteral(":satIds"), getJsonFromList<int>(satelliteIds));
+        query.bindValue(QStringLiteral(":statusIds"), getJsonFromList<int>(statusIds));
         query.bindValue(QStringLiteral(":startDate"), startDate);
         query.bindValue(QStringLiteral(":endDate"), endDate);
 
@@ -1372,6 +1738,33 @@ QString PersistenceManagerDBProvider::GetDashboardJobTimeline(int jobId)
         }
 
         return query.value(0).toString();
+    });
+}
+
+JobIdsList PersistenceManagerDBProvider::GetActiveJobsIds(int processorId, int siteId)
+{
+    auto db = getDatabase();
+
+    return provider.handleTransactionRetry(__func__, [&] {
+        auto query = db.prepareQuery(QStringLiteral("select * from sp_get_jobs_active("
+                                    ":processorId, :siteId)"));
+        query.bindValue(QStringLiteral(":processorId"), processorId);
+        query.bindValue(QStringLiteral(":siteId"), siteId);
+
+        query.setForwardOnly(true);
+        if (!query.exec()) {
+            throw_query_error(db, query);
+        }
+
+        JobIdsList result;
+        auto dataRecord = query.record();
+        auto idCol = dataRecord.indexOf(QStringLiteral("job_id"));
+
+        while (query.next()) {
+            result.append({ query.value(idCol).toInt() });
+        }
+
+        return result;
     });
 }
 
@@ -1722,10 +2115,11 @@ static QString getTilesJson(const TileIdList &tilesList)
     return jsonToString(array);
 }
 
-static QString getIntListJsonJson(const QList<int> &intList)
+template <typename T>
+static QString getJsonFromList(const QList<T> &list)
 {
     QJsonArray array;
-    for (const auto &t : intList) {
+    for (const auto &t : list) {
         array.append(t);
     }
 
@@ -1901,7 +2295,7 @@ QString PersistenceManagerDBProvider::GetSiteShortName(int siteId)
     return "";
 }
 
-QList<int> PersistenceManagerDBProvider::QListIntFromString(QString str, const QString &sep)
+QStringList PersistenceManagerDBProvider::QStringListFromString(QString str, const QString &sep)
 {
     int firstPos = 0;
     int nChars = str.length();
@@ -1912,9 +2306,20 @@ QList<int> PersistenceManagerDBProvider::QListIntFromString(QString str, const Q
     }
     QStringRef sref (&str, firstPos, nChars); // Remove braces
     QVector<QStringRef> v = sref.split(sep);
-    QList<int> l;
+    QStringList l;
     for (const QStringRef &r: v) {
-        l << r.toInt();
+        l << r.toString();
+    }
+    return l;
+
+}
+
+QList<int> PersistenceManagerDBProvider::QListIntFromString(QString str, const QString &sep)
+{
+    const QStringList &list = QStringListFromString(str, sep);
+    QList<int> l;
+    for (const QString &s: list) {
+        l << s.toInt();
     }
     return l;
 }

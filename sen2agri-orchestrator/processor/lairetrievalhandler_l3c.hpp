@@ -12,24 +12,24 @@ private:
     void WriteExecutionSpecificParamsValues(const std::map<QString, QString> &configParameters, std::ofstream &stream) override;
     QString GetPrdFormatterRasterFlagName() override;
     QString GetPrdFormatterMskFlagName() override;
-    QList<QMap<QString, TileTemporalFilesInfo>> ExtractL3BMapTiles(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+    QList<QMap<QString, TileTimeSeriesInfo>> ExtractL3BMapTiles(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                                        const QStringList &l3bProducts,
-                                                       const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles) override;
+                                                       const QMap<Satellite, TileList> &siteTiles) override;
     ProductList GetScheduledJobProductList(SchedulingContext &ctx, int siteId, const QDateTime &seasonStartDate,
                                            const QDateTime &seasonEndDate, const QDateTime &qScheduledDate,
                                            const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
-    bool AcceptSchedJobProduct(const QString &l2aPrdHdrPath, ProcessorHandlerHelper::SatelliteIdType satId) override;
+    bool AcceptSchedJobProduct(const QString &l2aPrdHdrPath, Satellite satId) override;
 
     QStringList GetL3BProductsSinceStartOfSeason(EventProcessingContext &ctx, int siteId, const QStringList &listExistingPrds);
 
-    QMap<QString, TileTemporalFilesInfo> GetL3BMapTiles(EventProcessingContext &ctx, const QString &newestL3BProd,
+    QMap<QString, TileTimeSeriesInfo> GetL3BMapTiles(EventProcessingContext &ctx, const QString &newestL3BProd,
                                                         const QStringList &l3bProducts,
-                                                        const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles,
+                                                        const QMap<Satellite, TileList> &siteTiles,
                                                         int limitL3BPrdsPerTile);
     QDateTime GetL3BLastAcqDate(const QStringList &listL3bPrds);
     QDate GetSiteFirstSeasonStartDate(EventProcessingContext &ctx,int siteId);
-    bool HasSufficientProducts(const TileTemporalFilesInfo &tileInfo,
-                               const ProcessorHandlerHelper::SatelliteIdType &tileSatId, int limitL3BPrdsPerTile);
+    bool HasSufficientProducts(const TileTimeSeriesInfo &tileInfo,
+                               const Satellite &tileSatId, int limitL3BPrdsPerTile);
 
 };
 

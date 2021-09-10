@@ -273,7 +273,7 @@ std::string Spot4MetadataHelper<PixelType, MasksPixelType>::getSaturationFileNam
 
 template <typename PixelType, typename MasksPixelType>
 typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer
-        Spot4MetadataHelper<PixelType, MasksPixelType>::GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int) {
+        Spot4MetadataHelper<PixelType, MasksPixelType>::GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int) {
     // we have values for: cloud, (snow, water, valid) and saturation
 
     //Diverse binary masks : water, snow and no_data mask, plus (V2.0) pixels lying in terrain shadows _DIV.TIF

@@ -236,31 +236,51 @@ enum class ProductType {
     S4MDBL4AOptMainProductTypeId = 20,
     S4MDBL4AOptReProductTypeId = 21,
     S4MDBL4ASarMainProductTypeId = 22,
-    S4MDBL4ASarTempProductTypeId = 23
+    S4MDBL4ASarTempProductTypeId = 23,
+    // TODO                      = 24,
+    FMaskProductTypeId           = 25,
+    MaskedL2AProductTypeId       = 26,
+    S4SPermCropsProductTypeId    = 27,
+    S4SYieldFeatProductTypeId    = 28,
+    ERA5WeatherProductTypeId     = 29
 };
 
 QDBusArgument &operator<<(QDBusArgument &argument, const ProductType &productType);
 const QDBusArgument &operator>>(const QDBusArgument &argument, ProductType &productType);
 
+typedef QStringList TileIdList;
+
 class Product
 {
 public:
     int productId;
-    int processorId;
     ProductType productTypeId;
     int siteId;
     QString fullPath;
     QDateTime created;
     QDateTime inserted;
+    int satId;
+    QString name;
+    QString quicklookImage;
+    QString geog;
+    int orbitId;
+    TileIdList tiles;
+    int downloaderHistoryId;
 
     Product();
     Product(int productId,
-            int processorId,
             ProductType productTypeId,
             int siteId,
             QString fullPath,
             QDateTime created,
-            QDateTime inserted);
+            QDateTime inserted,
+            int satId,
+            QString name,
+            QString quicklookImage,
+            QString geog,
+            int orbitId,
+            TileIdList tiles,
+            int downloaderHistoryId);
 
     static void registerMetaTypes();
 };
@@ -297,6 +317,8 @@ public:
 };
 
 typedef QList<L1CProduct> L1CProductList;
+typedef QMap<int,int> ProductIdToDwnHistIdMap;
+typedef QList<int> ProductIdsList;
 typedef QList<int> StatusesList;
 typedef QList<int> SatellitesList;
 
@@ -861,8 +883,6 @@ Q_DECLARE_METATYPE(StepConsoleOutputList)
 QDBusArgument &operator<<(QDBusArgument &argument, const StepConsoleOutput &stepOutput);
 const QDBusArgument &operator>>(const QDBusArgument &argument, StepConsoleOutput &stepOutput);
 
-typedef QList<QString> TileIdList;
-
 class NewProduct
 {
 public:
@@ -878,6 +898,7 @@ public:
     QString footprint;
     std::experimental::optional<int> orbitId;
     TileIdList tiles;
+    ProductIdsList parentProductIds;
 
     NewProduct();
     NewProduct(ProductType productType,
@@ -890,7 +911,8 @@ public:
                QString quicklookImage,
                QString footprint,
                std::experimental::optional<int> orbitId,
-               TileIdList tiles);
+               TileIdList tiles,
+               ProductIdsList parentProductIds);
     NewProduct(ProductType productType,
                int processorId,
                int satelliteId,
@@ -902,7 +924,8 @@ public:
                QString quicklookImage,
                QString footprint,
                std::experimental::optional<int> orbitId,
-               TileIdList tiles);
+               TileIdList tiles,
+               ProductIdsList parentProductIds);
 
     static void registerMetaTypes();
 };
@@ -1047,6 +1070,8 @@ struct ProcessorJobDefinitionParams
 Q_DECLARE_METATYPE(ProcessorJobDefinitionParams)
 QDBusArgument &operator<<(QDBusArgument &argument, const ProcessorJobDefinitionParams &job);
 const QDBusArgument &operator>>(const QDBusArgument &argument, ProcessorJobDefinitionParams &job);
+
+typedef QList<int> JobIdsList;
 
 //** END for orchestartor API
 

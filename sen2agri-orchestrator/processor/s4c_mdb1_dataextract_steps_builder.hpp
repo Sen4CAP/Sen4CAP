@@ -5,7 +5,7 @@
 
 #define MDB1_PROC_SHORT_NAME "s4c_mdb1"
 #define MDB1_CFG_PREFIX     "processor.s4c_mdb1."
-#define LPIS_PATH_CFG_KEY   "processor.lpis.path"
+#define PARCELS_PRD_KEYS_PREFIX   "general.parcels_product."
 
 typedef struct {
     QDateTime productDate;
@@ -13,8 +13,8 @@ typedef struct {
 
     // LPIS informations
     QString fullDeclsFilePath;
-    QString ndviIdsGeomShapePath;
-    QString ampCoheIdsGeomShapePath;
+    QString opticalIdsGeomShapePath;
+    QString sarGeomShapePath;
 
 } LpisInfos;
 
@@ -22,6 +22,11 @@ typedef struct {
     QString marker;
     ProductType prdType;
     QString markerSubstrInFileName;
+    // this is used for rasters having multiple bands like old MAJA FRE format
+    // In this case, the discrimination info is related to the name of the S2
+    // band that will be used from the raster (if correctly mapped, otherwise
+    // it will not be possible to extract the markers)
+    QString bandDiscriminationInfo;
 } MarkerType;
 
 typedef struct {
@@ -38,38 +43,41 @@ class S4CMarkersDB1DataExtractStepsBuilder
 {
 public:
     S4CMarkersDB1DataExtractStepsBuilder();
-    void Initialize(const QString &parentProc, EventProcessingContext &ctx, const JobSubmittedEvent &evt, const QStringList &markersEnabled = {});
+    void Initialize(const QString &parentProc, EventProcessingContext &ctx, const QJsonObject &evtParams,
+                    int siteId, int jobId, const QStringList &markersEnabled = {});
     void CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx) const;
-    void CreateSteps(const MarkerType &marker, QList<TaskToSubmit> &allTasksList, NewStepList &steps, int &curTaskIdx, QStringList &dataExtrDirs) const;
+    void CreateSteps(const MarkerType &marker, QList<TaskToSubmit> &allTasksList, NewStepList &steps,
+                     int &curTaskIdx, QStringList &dataExtrDirs) const;
     QList<MarkerType> GetEnabledMarkers() const;
-    void GetDataExtractionInterval(QDateTime &minDate, QDateTime &maxDate) const;
+    QDateTime GetDataExtractionMinDate() const;
+    QDateTime GetDataExtractionMaxDate() const;
     QString GetDataExtractionDir(const QString &markerName) const;
 
+    static bool HasAnyMarkerEnabled(const ProductType &prdType, const std::map<QString, QString> &cfgParams);
+
+    void SetIdFieldName(const QString &idFieldName) { m_idFieldName = idFieldName; }
+    void SetAllParcelsCsvPattern(const QString &pattern) { m_allParcelsCsvPattern = pattern; }
+    void SetOptParcelsPattern(const QString &pattern) { m_optParcelsPattern = pattern; }
+    void SetSarParcelsPattern(const QString &pattern) { m_sarParcelsPattern = pattern; }
+
 private:
+    void InitEnabledMarkersDescriptions(const QStringList &markersEnabled);
+
     QString GetDataExtractionDir(int year, const QString &markerName) const;
-    QDateTime ExtractDateFromRegex(const QString &fileName, const QString &regex, int minDateGrpIdx, int maxDateGrpIdx = -1);
     void ExtractProductFiles();
-    void RemoveNoLpisProducts();
     QStringList GetDataExtractionArgs(const QString &uidField, const PrdMarkerInfo &inputFileInfo, const QString &outDir) const;
-    ProductList GetLpisProduct(ExecutionContextBase *pCtx, int siteId);
     QMap<int, LpisInfos> ExtractLpisInfos();
 
-    QString GetShortNameForProductType(const ProductType &prdType);
-    int UpdateJobSubmittedParamsFromSchedReq();
-    QList<PrdFileInfo> ExtractMissingDataExtractionProducts(const MarkerType &markerType, const QDateTime &startDate,
-                                                     const QDateTime &endDate, QList<PrdFileInfo> &alreadyProcessedFiles);
     bool IsDataExtractionPerformed(const QString &dataExtrDirPath, const QString &prdPath);
-    QList<PrdFileInfo> FilterAndUpdateAlreadyProcessingPrds(const QList<PrdFileInfo> &missingPrdsFiles, const QList<PrdFileInfo> &processedPrdsFiles, const MarkerType &markerType);
-    void AddProductListToJSonArray(const QList<PrdFileInfo> &prdList, QJsonArray &retArr);
+    QList<PrdFileInfo> FilterAndUpdateAlreadyProcessingPrds(const QList<PrdFileInfo> &missingPrdsFiles,
+                                                            const QList<PrdFileInfo> &processedPrdsFiles,
+                                                            const MarkerType &markerType);
     bool IsScheduledJobRequest(const QJsonObject &parameters);
-
-//    bool CheckExecutionPreconditions(ExecutionContextBase *pCtx, const std::map<QString, QString> &configParameters, int siteId,
-//                                        const QString &siteShortName, QString &errMsg);
     QMap<int, QList<PrdFileInfo>> GroupProductFileInfosByYear(const QList<PrdFileInfo> &fileInfos);
+    void UpdateParcelsPrdDescriptionsFromDB();
 
 private:
     EventProcessingContext *pCtx;
-    JobSubmittedEvent event;
     QJsonObject parameters;
     std::map<QString, QString> configParameters;
     QString parentProcessorName;
@@ -78,20 +86,23 @@ private:
     bool isScheduledJob;
 
     int siteId;
+    int jobId;
     QString siteShortName;
 
-    QDateTime seasonStartDate;
-    QDateTime seasonEndDate;
     QDateTime prdMinDate;
     QDateTime prdMaxDate;
 
-    QList<MarkerType> allMarkerFileTypes;
+    static QList<MarkerType> allMarkerFileTypes;
     QList<MarkerType> enabledMarkers;
-    bool bHasL3BMarkers;
+    QList<ProductType> enabledMarkersProductTypes;
 
     QMap<int, LpisInfos> lpisInfos;
     QList<PrdMarkerInfo> fileInfos;
 
+    QString m_idFieldName;
+    QString m_allParcelsCsvPattern;
+    QString m_optParcelsPattern;
+    QString m_sarParcelsPattern;
 };
 
 

@@ -30,11 +30,11 @@ private:
     void CreateTasksForNewProducts(QList<TaskToSubmit> &outAllTasksList,
                             QList<std::reference_wrapper<const TaskToSubmit>> &outProdFormatterParentsList);
     void HandleNewTilesList(EventProcessingContext &ctx, const JobSubmittedEvent &event, PhenoGlobalExecutionInfos &globalExecInfos,
-                            const TileTemporalFilesInfo &tileTemporalFilesInfo);
+                            const TileTimeSeriesInfo &tileTemporalFilesInfo);
     void WriteExecutionInfosFile(const QString &executionInfosPath,
                                  const QStringList &listProducts);
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                        const QStringList &listProducts, const QList<PhenoProductFormatterParams> &productParams);
+                                        const QList<ProductDetails> &listProducts, const QList<PhenoProductFormatterParams> &productParams);
 
     ProcessorJobDefinitionParams GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;

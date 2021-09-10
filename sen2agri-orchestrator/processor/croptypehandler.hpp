@@ -45,7 +45,7 @@ private:
     void GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event,CropTypeJobConfig &cfg);
     QList<std::reference_wrapper<TaskToSubmit>> CreateTasks(QList<TaskToSubmit> &outAllTasksList);
     NewStepList CreateSteps(EventProcessingContext &ctx, const JobSubmittedEvent &event, QList<TaskToSubmit> &allTasksList,
-                            const CropTypeJobConfig &cfg, const QStringList &listProducts);
+                            const CropTypeJobConfig &cfg, const QList<ProductDetails> &productDetails);
     QStringList GetCropTypeTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event, const CropTypeJobConfig &cfg,
-                                        const QStringList &listProducts, TaskToSubmit &cropTypeTask);
+                                        const QList<ProductDetails> &productDetails, TaskToSubmit &cropTypeTask);
 };

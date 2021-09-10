@@ -18,7 +18,7 @@ otb_create_application(
                  otbMarkers1CsvWriter.h
                  otbMarkers1CsvWriter.txx
 
-  LINK_LIBRARIES ${OTBExtensions} ${OTB_LIBRARIES} ${OTBCommon_LIBRARIES} ${OTBITK_LIBRARIES} MACCSMetadata Sen2AgriPrdMetaWriters ${Boost_LIBRARIES} Sen2AgriCommonUtils
+  LINK_LIBRARIES ${OTBExtensions} ${OTB_LIBRARIES} ${OTBCommon_LIBRARIES} ${OTBITK_LIBRARIES} MACCSMetadata Sen2AgriProductReaders ${Boost_LIBRARIES} Sen2AgriCommonUtils
 )
 
 otb_create_application(

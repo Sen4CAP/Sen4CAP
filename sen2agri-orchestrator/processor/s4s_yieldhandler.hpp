@@ -63,18 +63,19 @@ private:
 
     QStringList GetSGLaiTaskArgs(int year, const QString &mdb1File, const QString &sgOutFile,
                                  const QString &outCropGrowthIndicesFile, const QString &outLaiMetricsFile);
-    QStringList GetWeatherFeaturesTaskArgs(const QStringList &weatherFiles, const QString &parcelsShp, const QString &workingDir,
-                                                            const QString &outWeatherFeatures, const QString &outParcelToGrid,
-                                                            const QString &outGridToParcels);
+    QStringList GetWeatherFeaturesTaskArgs(const QStringList &weatherFiles, const QString &parcelsShp, const QString &outDir,
+                                                            const QString &outGridToParcels, const QString &outParcelToGrid);
+    QStringList GetWeatherFeaturesMergeTaskArgs(const QString &inDir, const QString &outWeatherFeatures);
+
     QStringList GetSafyLutTaskArgs(const QStringList &weatherFiles, const QString &safyParamFile,
                                    const QString &safyParamsRangesDir, const QString &outLutDir);
-    QStringList GetSafyOptimTaskArgs(const QStringList &weatherFiles,  int year, const QString &inputLaiFile,
-                                     const QString &parcelsToGridFile, const QString &gridToParcelsFile,
+    QStringList GetMergeLaiGridTaskArgs(const QString &inputLaiFile, const QString &parcelsToGridFile, const QString &outMergedFile);
+    QStringList GetSafyOptimTaskArgs(const QStringList &weatherFiles,  int year, const QString &inputLaiFile, const QString &gridToParcelsFile,
                                      const QString &safyParamsFile, const QString &safyParamsRangesFile,
                                      const QString &lutDir, const QString &workingDir, const QString &outSafyOptimFile);
-    QStringList GetYieldFeaturesTaskArgs(const QString &weatherFeatFile, const QString &sgCropGrowthIndicesFile,
-                                         const QString &safyFeatsFile,
-                                         const QString &workingDir, const QString &outYieldFeatures);
+    QStringList GetAllFeaturesMergeTaskArgs(const QString &weatherFeatFile, const QString &sgCropGrowthIndicesFile,
+                                            const QString &safyFeatsFile, const QString &outMergedFeatures);
+    QStringList GetYieldFeaturesTaskArgs(const QString &inMergedFeatures, const QString &outYieldFeatures);
 
     bool GetStartEndDatesFromProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                       QDateTime &startDate, QDateTime &endDate, QList<ProductDetails> &productDetails);
@@ -83,5 +84,6 @@ private:
     bool IsScheduledJobRequest(const QJsonObject &parameters);
     QString GetProcessorDirValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                                  const QString &key, const QString &siteShortName, const QString &year, const QString &defVal = "");
+    QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const S4SYieldJobConfig &cfg, const QStringList &listFiles);
 };
 

@@ -196,7 +196,7 @@ const CommonResolution& MACCSMetadataHelperBase<PixelType, MasksPixelType>::GetM
 
 template <typename PixelType, typename MasksPixelType>
 typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer
-         MACCSMetadataHelperBase<PixelType, MasksPixelType>::GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution) {
+         MACCSMetadataHelperBase<PixelType, MasksPixelType>::GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution) {
     // Saturation is the first band from the Quality Image
     // Validity is the 3rd band from the Quality Image
     // Water is the bit 3 in the MSK image

@@ -14,6 +14,7 @@ public:
         } ModelInfos;
         ModelInfos modelInfos;
         QString tileFile;
+        ProductDetails prdDetails;
     } TileInfos;
 
 private:

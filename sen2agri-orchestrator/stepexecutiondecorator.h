@@ -15,16 +15,15 @@ public :
 
     static StepExecutionDecorator *GetInstance();
     NewStep CreateTaskStep(const QString &procName, TaskToSubmit &task, const QString &stepName, const QStringList &stepArgs);
+    QStringList GetDockerMounts(const QString &procName, const QString &taskName);
 
 private:
     QStringList UpdateCommandForDocker(const QString &taskName, const QStringList &arguments,
-                                       const QString& dockerImage, const QString &additionalMounts);
+                                       const QString& dockerImage, const QStringList &dockerMounts);
     // QStringList UpdateSimpleCommandArgs(const QString &taskName, const QStringList &arguments);
     QString GetArchiverRootPath();
     bool IsDockerEnabledForStep(const QString &procName, const QString &taskName);
-    QString GetAllDockerMounts(const QString &procName, const QString &mounts);
     QStringList EnsureUniqueDockerMounts(const QString &mounts);
-    QString GetDockerAdditionalMounts(const QString &procName, const QString &taskName);
     QString GetOrchestratorStepConfigValue(const QString &procName, const QString &taskName, const QString &key, QString &foundRoot);
     QString GetParamValue(const ConfigurationParameterValueList &parameters, const QString &key, const QString &defVal);
     QString GetScratchPathRoot(const QString &procName);

@@ -2,6 +2,11 @@
 #define PROCESSORHANDLERHELPER_H
 
 #include "model.hpp"
+#include "eventprocessingcontext.hpp"
+
+
+#include "processor/products/tilestimeseries.hpp"
+using namespace orchestrator::tiletimeseries;
 
 typedef std::map<QString, QString> TQStrQStrMap;
 typedef std::pair<QString, QString> TQStrQStrPair;
@@ -11,112 +16,22 @@ typedef std::pair<QString, QString> TQStrQStrPair;
 class ProcessorHandlerHelper
 {
 public:
-    typedef enum {L2_PRODUCT_TYPE_UNKNOWN = 0,
-                  L2_PRODUCT_TYPE_S2 = 1,
-                  L2_PRODUCT_TYPE_L8 = 2,
-                  L2_PRODUCT_TYPE_SPOT4 =3,
-                  L2_PRODUCT_TYPE_SPOT5 = 4} L2ProductType;
-
-    typedef enum {SATELLITE_ID_TYPE_UNKNOWN = 0,
-                  SATELLITE_ID_TYPE_S2 = 1,
-                  SATELLITE_ID_TYPE_L8 = 2,
-                  SATELLITE_ID_TYPE_SPOT4 =3,
-                  SATELLITE_ID_TYPE_SPOT5 = 4} SatelliteIdType;
-
-    typedef struct {
-        typedef enum {TILE_IDX=0,
-                     DATE_IDX} REGEX_IDX;
-        L2ProductType productType;
-        SatelliteIdType satelliteIdType;
-        // The expected extension of the tile metadata file
-        QString extension;
-        //Regext for the product name
-        QString tileNameRegex;
-        // If set, this means that the regex is applied on parent dir name
-        bool regexOnParentFolder;
-        // the idx of the tile in the tile name regex
-        int tileIdxInName;
-        // position of the date group in the regex if regex is given
-        // or in the name when split by _
-        int dateIdxInName;
-    } L2MetaTileNameInfos;
-
-    typedef struct InfoTileFile {
-        QString file;
-        SatelliteIdType satId;
-        QString acquisitionDate;
-        QStringList additionalFiles;
-        inline bool operator==(const InfoTileFile& rhs) {
-            if(satId != rhs.satId) {
-                return false;
-            }
-            if(acquisitionDate != rhs.acquisitionDate) {
-                return false;
-            }
-            if(file != rhs.file) {
-                return false;
-            }
-            if(additionalFiles.size() > 0 && rhs.additionalFiles.size() > 0 && additionalFiles[0] != rhs.additionalFiles[0]) {
-                return false;
-            }
-            return true;
-        }
-    } InfoTileFile;
-
-    typedef struct {
-        QString tileId;
-        QList<InfoTileFile> temporalTilesFileInfos;
-        //the unique sattelites ids from the above list
-        QList<SatelliteIdType> uniqueSatteliteIds;
-        SatelliteIdType primarySatelliteId;
-        QMap<SatelliteIdType, TileList> satIntersectingTiles;
-    } TileTemporalFilesInfo;
-
-
     ProcessorHandlerHelper();
 
-    static ProductType GetProductTypeFromFileName(const QString &path, bool useParentDirIfDir = true);
-    static QString GetTileId(const QString &path, SatelliteIdType &satelliteId);
-    static QStringList GetTileIdsFromHighLevelProduct(const QString &prodFolder);
-    static QMap<QString, TileTemporalFilesInfo> GroupTiles(const QStringList &listAllProductsTiles, ProductType productType, QList<SatelliteIdType> &outAllSatIds, SatelliteIdType &outPrimarySatelliteId);
-    static QMap<QDate, QStringList> GroupL2AProductTilesByDate(const QMap<QString, QStringList> &inputProductToTilesMap);
-    static SatelliteIdType GetPrimarySatelliteId(const QList<ProcessorHandlerHelper::SatelliteIdType> &satIds);
-    static QString GetMissionNamePrefixFromSatelliteId(SatelliteIdType satId);
     static QStringList GetTextFileLines(const QString &filePath);
     static QString GetFileNameFromPath(const QString &filePath);
-    static bool IsValidHighLevelProduct(const QString &path);
-    static bool GetHigLevelProductAcqDatesFromName(const QString &productName, QDateTime &minDate, QDateTime &maxDate);
-    static QString GetHigLevelProductTileFile(const QString &tileDir, const QString &fileIdentif, bool isQiData=false);
-    static QMap<QString, QString> GetHigLevelProductFiles(const QString &productDir, const QString &fileIdentif, bool isQiData=false);
-    static QMap<QString, QString> GetHighLevelProductTilesDirs(const QString &productDir);
-    static QString GetHighLevelProductIppFile(const QString &productDir);
-    static QString GetSourceL2AFromHighLevelProductIppFile(const QString &productDir, const QString &tileFilter = "");
-    static bool HighLevelPrdHasL2aSource(const QString &highLevelPrd, const QString &l2aPrd);
-    static QMap<QString, QStringList> GroupHighLevelProductTiles(const QStringList &listAllProductFolders);
 
-    //static QString GetL2ATileMainImageFilePath(const QString &tileMetadataPath);
-    static const L2MetaTileNameInfos &GetL2AProductTileNameInfos(const QFileInfo &metaFileInfo);
-    static SatelliteIdType GetL2ASatelliteFromTile(const QString &tileMetadataPath);
-    static L2ProductType GetL2AProductTypeFromTile(const QString &tileMetadataPath);
-    static QString GetL2AFieldFromPath(const QString &path, L2MetaTileNameInfos::REGEX_IDX regexIdx);
-    static QDateTime GetL2AProductDateFromPath(const QString &path);
-    static bool IsValidL2AMetadataFileName(const QString &path);
-    static bool GetL2AIntevalFromProducts(const QStringList &productsList, QDateTime &minTime, QDateTime &maxTime);
     static bool GetCropReferenceFile(const QString &refDir, QString &shapeFile, QString &referenceRasterFile);
     static bool GetStrataFile(const QString &refDir, QString &strataShapeFile);
     static bool GetCropReferenceFile(const QString &refDir, QString &shapeFile, QString &referenceRasterFile, QString &strataShapeFile);
-    static void AddSatteliteIntersectingProducts(QMap<QString, TileTemporalFilesInfo> &mapSatellitesTilesInfos,
-                                                 QStringList &listSecondarySatLoadedProds, SatelliteIdType secondarySatId,
-                                                 TileTemporalFilesInfo &primarySatInfos);
-    static QString BuildShapeName(const QString &shapeFilesDir, const QString &tileId, int jobId, int taskId);
-    static QString BuildProjectionFileName(const QString &projFilesDir, const QString &tileId, int jobId, int taskId);
-    static QString GetShapeForTile(const QString &shapeFilesDir, const QString &tileId);
-    static QString GetProjectionForTile(const QString &projFilesDir, const QString &tileId);
-    static QStringList GetTemporalTileFiles(const TileTemporalFilesInfo &temporalTileInfo);
-    static QStringList GetTemporalTileAcquisitionDates(const TileTemporalFilesInfo &temporalTileInfo);
-    static bool TemporalTileInfosHasFile(const TileTemporalFilesInfo &temporalTileInfo, const QString &filePath);
-    static void SortTemporalTileInfoFiles(TileTemporalFilesInfo &temporalTileInfo);
-    static SatelliteIdType ConvertSatelliteType(Satellite satId);
+
+    static bool CompareProductDates(const ProductDetails &prd1, const ProductDetails &prd2);
+    static QList<ProductDetails> GetProductDetails(const ProductList &prds, EventProcessingContext &ctx);
+    static TilesTimeSeries GroupTiles(EventProcessingContext &ctx, int siteId, const QList<ProductDetails> &productDetails, ProductType productType);
+    static QMap<QDate, QList<ProductDetails>> GroupByDate(const QList<ProductDetails> &prdDetails);
+    static bool GetIntevalFromProducts(const QList<ProductDetails> &prdDetails, QDateTime &minTime, QDateTime &maxTime);
+    static bool GetIntevalFromProducts(const ProductList &products, QDateTime &minTime, QDateTime &maxTime);
+    static bool GetIntevalFromProducts(const QStringList &productsList, QDateTime &minTime, QDateTime &maxTime);
 
     static void UpdateMinMaxTimes(const QDateTime &newTime, QDateTime &minTime, QDateTime &maxTime);
 
@@ -131,15 +46,13 @@ public:
     static bool GetParameterValueAsInt(const QJsonObject &parameters, const QString &key, int &outVal);
     static bool GetParameterValueAsString(const QJsonObject &parameters, const QString &key, QString &outVal);
 
-    static TQStrQStrMap FilterConfigParameters(const TQStrQStrMap &configParameters, const QString &cfgPrefix);
-    // static int GuessYear(const QDateTime &startDateTime, const QDateTime &endDateTime);
     static QDateTime GetDateTimeFromString(const QString &strTime);
     static QDateTime GetLocalDateTime(const QString &strTime);
-    static SatelliteIdType GetSatIdForTile(const QMap<SatelliteIdType, TileList> &mapSatTiles, const QString &tileId);
+    static Satellite GetSatIdForTile(const QMap<Satellite, TileList> &mapSatTiles, const QString &tileId);
+    static QStringList EnsureMonoDateProductUniqueProc(const QString &filePath, EventProcessingContext &ctx,
+                                                       const QStringList &processingItems, int procId, int siteId, int curJobId);
+    static void CleanupCurrentProductIdsForJob(const QString &filePath, int jbId, const QStringList &processingItems);
 
-private:
-    static QMap<QString, L2MetaTileNameInfos> m_mapSensorL2ATileMetaFileInfos;
-    static QMap<QString, ProductType> m_mapHighLevelProductTypeInfos;
 };
 
 #endif // PROCESSORHANDLERHELPER_H

@@ -3,6 +3,8 @@
 
 #include "processorhandler.hpp"
 
+#define L3B_CFG_PREFIX   "processor.l3b."
+
 class LaiRetrievalHandlerL3BNew : public ProcessorHandler
 {
 public:
@@ -14,11 +16,15 @@ public:
         } ModelInfos;
         ModelInfos modelInfos;
         QString tileFile;
+        QStringList tileIds;
+        QString prdExternalMskFile;
+        Product parentProductInfo;
     } TileInfos;
 
     typedef struct {
         QString tileId;
         QString tileFile;
+        QString inPrdExtMsk;
 
         QString ndviFile;
         QString laiFile;
@@ -32,14 +38,71 @@ public:
         QString faparDomainFlagsFile;
         QString fcoverDomainFlagsFile;
 
-        bool bHasNdvi;
-        bool bHasLai;
-        bool bHasFapar;
-        bool bHasFCover;
-
-        QString resolutionStr;
         QString anglesFile;
     } TileResultFiles;
+
+    class L3BJobContext {
+        public:
+            L3BJobContext(LaiRetrievalHandlerL3BNew *parent, EventProcessingContext *pContext, const JobSubmittedEvent &evt) : event(evt) {
+                QString procPrefix("processor." + parent->processorDescr.shortName + ".");
+                pCtx = pContext;
+                parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
+                configParameters = pCtx->GetJobConfigurationParameters(evt.jobId, L3B_CFG_PREFIX);
+                // siteShortName = pContext->GetSiteShortName(evt.siteId);
+                laiCfgFile = configParameters[procPrefix + "lai.laibandscfgfile"];
+                bGenNdvi = IsParamOrConfigKeySet(parameters, configParameters, "produce_ndvi", procPrefix + "filter.produce_ndvi");
+                bGenLai = IsParamOrConfigKeySet(parameters, configParameters, "produce_lai", procPrefix + "filter.produce_lai");
+                bGenFapar = IsParamOrConfigKeySet(parameters, configParameters, "produce_fapar", procPrefix + "filter.produce_fapar");
+                bGenFCover = IsParamOrConfigKeySet(parameters, configParameters, "produce_fcover", procPrefix + "filter.produce_fcover");
+                bGenInDomainFlags = IsParamOrConfigKeySet(parameters, configParameters, "indomflags", procPrefix + "filter.produce_in_domain_flags");
+
+                int resolution = 0;
+                if(!ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "resolution", resolution) ||
+                        resolution == 0) {
+                    resolution = 10;    // TODO: We should configure the default resolution in DB
+                }
+                resolutionStr = QString::number(resolution);
+
+                bRemoveTempFiles = parent->NeedRemoveJobFolder(*pCtx, event.jobId, parent->processorDescr.shortName);
+
+                lutFile = ProcessorHandlerHelper::GetMapValue(configParameters, procPrefix + "lai.lut_path");
+
+            }
+
+            bool IsParamOrConfigKeySet(const QJsonObject &parameters, std::map<QString, QString> &configParameters,
+                                       const QString &cmdLineParamName, const QString &cfgParamKey, bool defVal = true) {
+                bool bIsConfigKeySet = defVal;
+                if(parameters.contains(cmdLineParamName)) {
+                    const auto &value = parameters[cmdLineParamName];
+                    if(value.isDouble())
+                        bIsConfigKeySet = (value.toInt() != 0);
+                    else if(value.isString()) {
+                        bIsConfigKeySet = (value.toString() == "1");
+                    }
+                } else {
+                    if (cfgParamKey != "") {
+                        bIsConfigKeySet = ((configParameters[cfgParamKey]).toInt() != 0);
+                    }
+                }
+                return bIsConfigKeySet;
+            }
+
+            EventProcessingContext *pCtx;
+            JobSubmittedEvent event;
+            QJsonObject parameters;
+            std::map<QString, QString> configParameters;
+
+            //QString siteShortName;
+            QString laiCfgFile;
+            bool bGenNdvi;
+            bool bGenLai;
+            bool bGenFapar;
+            bool bGenFCover;
+            bool bGenInDomainFlags;
+            QString resolutionStr;
+            bool bRemoveTempFiles;
+            QString lutFile;
+    };
 
 
 private:
@@ -49,16 +112,16 @@ private:
     void HandleTaskFinishedImpl(EventProcessingContext &ctx,
                                 const TaskFinishedEvent &event) override;
 
-    void CreateTasksForNewProduct(EventProcessingContext &ctx, const JobSubmittedEvent &event, QList<TaskToSubmit> &outAllTasksList,
-                                   const QList<TileInfos> &tileInfosList, bool bRemoveTempFiles);
+    void CreateTasksForNewProduct(const L3BJobContext &jobCtx, QList<TaskToSubmit> &outAllTasksList,
+                                   const QList<TileInfos> &tileInfosList);
     int CreateAnglesTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList, int nCurTaskIdx, int & nAnglesTaskId);
     int CreateBiophysicalIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
                                          QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
                                          int nCurTaskIdx);
 
     void GetModelFileList(const QString &folderName, const QString &modelPrefix, QStringList &outModelsList);
-    void WriteExecutionInfosFile(const QString &executionInfosPath,
-                                const QList<TileResultFiles> &tileResultFilesList);
+    void WriteExecutionInfosFile(const QString &executionInfosPath, const QList<TileResultFiles> &tileResultFilesList);
+    void WriteInputPrdIdsInfosFile(const QString &outFilePath, const QList<TileInfos> &prdTilesInfosList);
 
     QStringList GetCreateAnglesArgs(const QString &inputProduct, const QString &anglesFile);
     QStringList GetGdalTranslateAnglesNoDataArgs(const QString &anglesFile, const QString &resultAnglesFile);
@@ -75,54 +138,41 @@ private:
     QStringList GetLaiProcessorArgs(const QString &xmlFile, const QString &anglesFileName, const QString &resolution,
                                     const QString &laiBandsCfg, const QString &monoDateLaiFileName, const QString &indexName);
     QStringList GetQuantifyImageArgs(const QString &inFileName, const QString &outFileName);
-    QStringList GetMonoDateMskFlagsArgs(const QString &inputProduct, const QString &monoDateMskFlgsFileName, const QString &monoDateMskFlgsResFileName, const QString &resStr);
-    QStringList GetLaiMonoProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const JobSubmittedEvent &event, const QList<TileResultFiles> &tileResultFilesList);
-    NewStepList GetStepsForMonodateLai(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                       const QList<TileInfos> &prdTilesList, QList<TaskToSubmit> &allTasksList, bool bRemoveTempFiles, int tasksStartIdx);
-    int GetStepsForStatusFlags(QList<TaskToSubmit> &allTasksList, int curTaskIdx,
+    QStringList GetMonoDateMskFlagsArgs(const QString &inputProduct, const QString &extMsk, const QString &monoDateMskFlgsFileName, const QString &monoDateMskFlgsResFileName, const QString &resStr);
+    QStringList GetLaiMonoProductFormatterArgs(TaskToSubmit &productFormatterTask, const L3BJobContext &jobCtx, const QList<TileInfos> &prdTilesInfosList, const QList<TileResultFiles> &tileResultFilesList);
+    NewStepList GetStepsForMonodateLai(const L3BJobContext &jobCtx,
+                                       const QList<TileInfos> &prdTilesList, QList<TaskToSubmit> &allTasksList, int tasksStartIdx);
+    int GetStepsForStatusFlags(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
                                 TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
-    int GetStepsForNdvi(QList<TaskToSubmit> &allTasksList, int curTaskIdx,
-                                TileResultFiles &tileResultFileInfo, const QString &laiCfgFile, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
+    int GetStepsForNdvi(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
+                                TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
     int GetStepsForAnglesCreation(QList<TaskToSubmit> &allTasksList, int curTaskIdx, TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
-    int GetStepsForMonoDateBI(QList<TaskToSubmit> &allTasksList,
-                               const QString &indexName, int curTaskIdx, const QString &laiCfgFile, TileResultFiles &tileResultFileInfo,
+    int GetStepsForMonoDateBI(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList,
+                               const QString &indexName, int curTaskIdx, TileResultFiles &tileResultFileInfo,
                               NewStepList &steps, QStringList &cleanupTemporaryFilesList);
-    int GetStepsForInDomainFlags(QList<TaskToSubmit> &allTasksList, int curTaskIdx,
-                                const QString &laiCfgFile, TileResultFiles &tileResultFileInfo, NewStepList &steps,
+    int GetStepsForInDomainFlags(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx, TileResultFiles &tileResultFileInfo, NewStepList &steps,
                                 QStringList &cleanupTemporaryFilesList);
 
     const QString& GetDefaultCfgVal(std::map<QString, QString> &configParameters, const QString &key, const QString &defVal);
 
     ProcessorJobDefinitionParams GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
-    bool IsParamOrConfigKeySet(const QJsonObject &parameters, std::map<QString, QString> &configParameters,
-                                                    const QString &cmdLineParamName, const QString &cfgParamKey, bool defVal = true);
-    QSet<QString> GetTilesFilter(const QJsonObject &parameters, std::map<QString, QString> &configParameters);
-    bool FilterTile(const QSet<QString> &tilesSet, const QString &prdTileFile);
-    void InitTileResultFiles(bool bGenNdvi, bool bGenLai, bool bGenFapar, bool bGenFCover, const QString &resolutionStr,
-                             const QString tileFileName, TileResultFiles &tileResultFileInfo);
+    QSet<QString> GetTilesFilter(const L3BJobContext &jobCtx);
+    bool FilterTile(const QSet<QString> &tilesSet, const ProductDetails &prdDetails);
+    void InitTileResultFiles(const TileInfos &tileInfo, TileResultFiles &tileResultFileInfo);
 
-    void HandleProduct(EventProcessingContext &ctx, const JobSubmittedEvent &event, const QList<TileInfos> &prdTilesList,
-                       QList<TaskToSubmit> &allTasksList);
+    void HandleProduct(const L3BJobContext &jobCtx, const QList<TileInfos> &prdTilesList, QList<TaskToSubmit> &allTasksList);
     void SubmitEndOfLaiTask(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                             const QList<TaskToSubmit> &allTasksList);
-    QMap<QDate, QStringList> GroupProductTilesByDate(const QMap<QString, QStringList> &inputProductToTilesMap);
 
-    bool InRange(double middle, double distance, double value);
-    bool ParseModelFileName(const QString &qtModelFileName, double &solarZenith, double &sensorZenith, double &relAzimuth);
-    QString GetExistingModelForTile(const QStringList &modelsList, const QString &tileFile);
 private:
-    int UpdateJobSubmittedParamsFromSchedReq(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                              QJsonObject &parameters, JobSubmittedEvent &newEvent);
-    ProductList GetL2AProductsNotProcessed(EventProcessingContext &ctx,
-                                           int siteId, const QDateTime &startDate, const QDateTime &endDate);
-    QStringList GetL3BSourceL2APrdsPaths(const QString &prdPath);
-    QStringList GetL2ARelPathsFromDB(EventProcessingContext &ctx, int siteId,
-                                     const QDateTime &startDate, const QDateTime &endDate, QStringList &retFullPaths, ProductList &prdList);
-    QStringList GetL2ARelPathsFromProcessedL3Bs(EventProcessingContext &ctx, int siteId,
-                                                const QDateTime &startDate, const QDateTime &endDate, QStringList &retFullPaths);
+    int UpdateJobSubmittedParamsFromSchedReq(const L3BJobContext &jobCtx, ProductList &prdsToProcess);
+    ProductList GetL2AProductsNotProcessedProductProvenance(const L3BJobContext &jobCtx,
+                                                            const QDateTime &startDate, const QDateTime &endDate);
+    QString GetSiteCurrentProcessingPrdsFile(EventProcessingContext &ctx, int jobId, int siteId);
 
     friend class LaiRetrievalHandler;
+    friend class L3BJobContext;
 };
 
 #endif // LAIRETRIEVALHANDLERL3BNEW_HPP

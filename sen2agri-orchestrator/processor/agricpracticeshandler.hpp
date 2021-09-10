@@ -50,7 +50,9 @@ enum AgricPractOperation {none = 0x00,
 class AgricPracticesHandler;
 
 typedef struct AgricPracticesJobPayload {
-    AgricPracticesJobPayload(EventProcessingContext *pContext, const JobSubmittedEvent &evt) : event(evt) {
+    AgricPracticesJobPayload(EventProcessingContext *pContext, const JobSubmittedEvent &evt,
+                             const QDateTime &minDate, const QDateTime &maxDate)
+            : event(evt), minDate(minDate), maxDate(maxDate) {
         pCtx = pContext;
         parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
         configParameters = pCtx->GetJobConfigurationParameters(evt.jobId, L4C_AP_CFG_PREFIX);

@@ -57,7 +57,19 @@ SOURCES += main.cpp \
     executorclient/dbusexecutorproxy.cpp \
     executorclient/httpexecutorproxy.cpp \
     executorclient/executorproxyfactory.cpp \
-    stepexecutiondecorator.cpp
+    stepexecutiondecorator.cpp \
+    processor/products/producthelper.cpp \
+    processor/products/producthelperfactory.cpp \
+    processor/products/s1l2producthelper.cpp \
+    processor/products/l2aproducthelper.cpp \
+    processor/products/generichighlevelproducthelper.cpp \
+    processor/products/maskedl2aproducthelper.cpp \
+    processor/products/tilestimeseries.cpp \
+    processor/masked_l2a_handler.cpp \
+    processor/s4s_permanent_crop_handler.cpp \
+    processor/products/productdetails.cpp \
+    productdetailsbuilder.cpp \
+    processor/s4s_yieldhandler.cpp
 
 HEADERS += \
     pch.hpp \
@@ -94,7 +106,19 @@ HEADERS += \
     executorclient/httpexecutorproxy.hpp \
     executorclient/executorproxy.hpp \
     executorclient/executorproxyfactory.h \
-    stepexecutiondecorator.h
+    stepexecutiondecorator.h \
+    processor/products/producthelper.h \
+    processor/products/producthelperfactory.h \
+    processor/products/s1l2producthelper.h \
+    processor/products/l2aproducthelper.h \
+    processor/products/generichighlevelproducthelper.h \
+    processor/products/maskedl2aproducthelper.h \
+    processor/products/tilestimeseries.hpp \
+    processor/masked_l2a_handler.hpp \
+    processor/s4s_permanent_crop_handler.hpp \
+    processor/products/productdetails.h \
+    productdetailsbuilder.h \
+    processor/s4s_yieldhandler.hpp
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \

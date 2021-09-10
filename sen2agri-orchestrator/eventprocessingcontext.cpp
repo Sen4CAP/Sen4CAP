@@ -127,11 +127,11 @@ int EventProcessingContext::InsertProduct(const NewProduct &product)
     return persistenceManager.InsertProduct(product);
 }
 
-QStringList EventProcessingContext::GetProductFiles(const QString &path,
-                                                    const QString &pattern) const
-{
-    return QDir(path).entryList(QStringList() << pattern, QDir::Files);
-}
+//QStringList EventProcessingContext::GetProductFiles(const QString &path,
+//                                                    const QString &pattern) const
+//{
+//    return QDir(path).entryList(QStringList() << pattern, QDir::Files);
+//}
 
 QString EventProcessingContext::GetJobOutputPath(int jobId, const QString &procName)
 {
@@ -231,53 +231,4 @@ QString EventProcessingContext::GetProductAbsolutePath(int siteId, const QString
         absPath = product.fullPath;
     }
     return absPath;
-}
-
-QStringList EventProcessingContext::findProductFiles(const QString &absPath) {
-    QStringList result;
-    for (const auto &file : QDir(absPath).entryList({ "S2*_OPER_SSC_L2VALD_*.HDR",
-                                                    "L8_*_L8C_L2VALD_*.HDR", "MTD_MSIL2A.xml",
-                                                    "SPOT*.xml"},
-                                                    QDir::Files)) {
-        result.append(QDir::cleanPath(absPath + QDir::separator() + file));
-    }
-    // Check for MAJA product
-    if (result.isEmpty()) {
-        QDirIterator it(absPath, QDir::Dirs | QDir::NoDot | QDir::NoDotDot, QDirIterator::Subdirectories);
-        while(it.hasNext()) {
-            const QString &subDirName = it.fileName();
-            if (subDirName.startsWith("SENTINEL2") || subDirName.startsWith("LANDSAT8")) {
-                const QString &metaFileName = subDirName + "_MTD_ALL.xml";
-                const QString &metaFilePath = QDir(it.filePath()).filePath(metaFileName);
-                if(QFileInfo(metaFilePath).exists()) {
-                    result.append(metaFilePath);
-                    break;
-                }
-            }
-            it.next();
-        }
-    }
-
-    if (result.isEmpty()) {
-        throw std::runtime_error(
-            QStringLiteral(
-                "Unable to find an HDR or xml file in path %1. Unable to determine the product "
-                "metadata file.")
-                .arg(absPath)
-                .toStdString());
-    }
-    return result;
-
-}
-
-QStringList EventProcessingContext::findProductFiles(int siteId, const QString &path)
-{
-    QFileInfo fileInfo(path);
-    QString absPath = path;
-    if(!fileInfo.isAbsolute()) {
-        // if we have the product name, we need to get the product path from the database
-        Product product = persistenceManager.GetProduct(siteId, path);
-        absPath = product.fullPath;
-    }
-    return findProductFiles(absPath);
 }

@@ -8,6 +8,21 @@ import sys
 import psycopg2
 import psycopg2.extras
 
+try:
+    from configparser import ConfigParser
+except ImportError:
+    from ConfigParser import ConfigParser
+
+class Config(object):
+    def __init__(self, args):
+        parser = ConfigParser()
+        parser.read([args.config_file])
+
+        self.host = parser.get("Database", "HostName")
+        self.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
+        self.dbname = parser.get("Database", "DatabaseName")
+        self.user = parser.get("Database", "UserName")
+        self.password = parser.get("Database", "Password")
 
 class Site(object):
 
@@ -44,7 +59,9 @@ class NewJob(object):
 
 
 class Sen2AgriClient(object):
-
+    def __init__(self, config):
+        self.config = config
+        
     def get_sites(self):
         connection = self.get_connection()
         cur = self.get_cursor(connection)
@@ -93,16 +110,15 @@ class Sen2AgriClient(object):
 
         jobId = rows[0][0]
 
-        bus = dbus.SystemBus()
-        orchestrator_proxy = bus.get_object('org.esa.sen2agri.orchestrator',
-                                            '/org/esa/sen2agri/orchestrator')
-        orchestrator_proxy.NotifyEventsAvailable()
+#        bus = dbus.SystemBus()
+#        orchestrator_proxy = bus.get_object('org.esa.sen2agri.orchestrator',
+#                                            '/org/esa/sen2agri/orchestrator')
+#        orchestrator_proxy.NotifyEventsAvailable()
 
         return jobId
 
     def get_connection(self):
-        return psycopg2.connect(
-            "dbname='sen2agri' user='admin' host='localhost' password='sen2agri'")
+        return psycopg2.connect(host=self.config.host, dbname=self.config.dbname, user=self.config.user, password=self.config.password)
 
     def get_cursor(self, connection):
         return connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -111,10 +127,11 @@ class Sen2AgriClient(object):
 class Sen2AgriCtl(object):
 
     def __init__(self):
-        self.client = Sen2AgriClient()
-
         parser = argparse.ArgumentParser(
             description="Controls the Sen2Agri system")
+        
+        parser.add_argument('-c', '--config-file', default='/etc/sen2agri/sen2agri.conf', help="Configuration file location")
+        
         subparsers = parser.add_subparsers()
 
         parser_list_sites = subparsers.add_parser(
@@ -145,25 +162,25 @@ class Sen2AgriCtl(object):
             metavar=('KEY', 'VALUE'), help="override configuration parameter")
         parser_composite.set_defaults(func=self.submit_composite)
 
-        parser_lai = parser_submit_job_subparsers.add_parser(
-            'lai', help="Submits a new LAI retrieval type job")
-        parser_lai.add_argument('-i', '--input',
+        parser_l3b = parser_submit_job_subparsers.add_parser(
+            'l3b', help="Submits a new L3B type job")
+        parser_l3b.add_argument('-i', '--input',
                                       nargs='+', required=True,
                                       help="input products")
-        parser_lai.add_argument(
+        parser_l3b.add_argument(
             '-res', '--resolution', type=int, required=False, help="resolution in m")
-        parser_lai.add_argument(
+        parser_l3b.add_argument(
             '-m', '--monolai', type=int, required=False, help="boolean specifying if LAI mono-date should be done")
-        parser_lai.add_argument(
+        parser_l3b.add_argument(
             '-r', '--reproc', type=int, required=False, help="boolean specifying if reprocessing should be done")
-        parser_lai.add_argument(
+        parser_l3b.add_argument(
             '-f', '--fitted', type=int, required=False, help="boolean specifying if fitted should be done")
-        parser_lai.add_argument(
+        parser_l3b.add_argument(
             '-g', '--genmodel', type=int,required=False,  help="boolean specifying if models should be generated")
-        parser_lai.add_argument(
+        parser_l3b.add_argument(
             '-p', '--parameter', action='append', nargs=2,
             metavar=('KEY', 'VALUE'), help="override configuration parameter")
-        parser_lai.set_defaults(func=self.submit_lai)
+        parser_l3b.set_defaults(func=self.submit_l3b)
 
         parser_pheno_ndvi = parser_submit_job_subparsers.add_parser(
             'phenondvi', help="Submits a new Phenological NDVI Metrics type job")
@@ -240,6 +257,10 @@ class Sen2AgriCtl(object):
         parser_agric_pract.set_defaults(func=self.submit_agricultural_practices)
         
         args = parser.parse_args(sys.argv[1:])
+        
+        config = Config(args)
+        self.client = Sen2AgriClient(config)
+        
         args.func(args)
 
     def list_sites(self, args):
@@ -255,7 +276,7 @@ class Sen2AgriCtl(object):
             parameters['resolution'] = args.resolution
         self.submit_job('l3a', parameters, args)
 
-    def submit_lai(self, args):
+    def submit_l3b(self, args):
         parameters = {'input_products': args.input}
         if args.resolution:
             parameters['resolution'] = args.resolution
@@ -267,7 +288,7 @@ class Sen2AgriCtl(object):
             parameters['reproc'] = args.reproc
         if args.fitted:
             parameters['fitted'] = args.fitted
-        self.submit_job('l3b_lai', parameters, args)
+        self.submit_job('l3b', parameters, args)
 
     def submit_pheno_ndvi(self, args):
         parameters = {'input_products': args.input}

@@ -76,10 +76,6 @@ private:
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
 
 private:
-    QStringList ExtractL3BProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event, QDateTime &minDate, QDateTime &maxDate);
-    QStringList ExtractAmpProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event, QDateTime &minDate, QDateTime &maxDate);
-    QStringList ExtractCoheProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event, QDateTime &minDate, QDateTime &maxDate);
-
     QStringList GetInputShpGeneratorArgs(grassland_mowing::GrasslandMowingExecConfig &cfg, const QString &outShpFile);
     QStringList GetExportProductsArgs(grassland_mowing::GrasslandMowingExecConfig &cfg, const QString &l3bPrdsFile, const QString &s1PrdsFile);
     QStringList GetMowingDetectionArgs(grassland_mowing::GrasslandMowingExecConfig &cfg,
@@ -88,7 +84,7 @@ private:
 
     bool IsScheduledJobRequest(const QJsonObject &parameters);
     bool CheckInputParameters(grassland_mowing::GrasslandMowingExecConfig &cfg, QString &err);
-    void UpdatePrdInfos(grassland_mowing::GrasslandMowingExecConfig &cfg, const QJsonArray &arrPrds, QStringList &whereToAdd, QDateTime &startDate, QDateTime &endDate);
+    void UpdatePrdInfos(grassland_mowing::GrasslandMowingExecConfig &cfg, const QStringList &prdNames, QStringList &whereToAdd, QDateTime &startDate, QDateTime &endDate);
     QString GetProcessorDirValue(grassland_mowing::GrasslandMowingExecConfig &cfg, const QString &key, const QString &defVal);
     QString GetL4BConfigFilePath(grassland_mowing::GrasslandMowingExecConfig &jobCfg);
     int GuessYear(const QDateTime &startDateTime, const QDateTime &endDateTime);

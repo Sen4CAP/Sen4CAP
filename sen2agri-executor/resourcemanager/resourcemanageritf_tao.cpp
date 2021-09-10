@@ -224,18 +224,30 @@ QJsonObject ResourceManagerItf_TAO::GenerateStepJson(const JobStep &taskStep, co
 {
     QString processorPath;
     auto modulePathsEnd = std::end(modulePaths);
-    // first get the executable for this module
-    auto it = modulePaths.find(taskStep.module);
-    if (it == modulePathsEnd) {
-        processorPath = "otbcli";   // default is an OTB application if not found in DB
+    auto arguments = GetStepArguments(taskStep);
+    if (arguments.size() > 0 && arguments.at(0).value == "docker") {
+        processorPath = arguments.at(0).value;
+        arguments.removeFirst();
     } else {
-        processorPath = it->second;
+        auto it = modulePaths.find(taskStep.module);
+        if (it == modulePathsEnd) {
+            // we did not find it configured and the first item in the arguments seems like a path.
+            // In this case we use the first argument as processor path and remove it from arguments
+            if (arguments.size() > 0 && arguments.at(0).value.startsWith('/')) {
+                processorPath = arguments.at(0).value;
+                arguments.removeFirst();
+            } else {
+                processorPath = "otbcli";
+            }
+        } else {
+            processorPath = it->second;
+        }
     }
 
     // add the step command line arguments
     QJsonArray stepCmdParams;
     stepCmdParams.append(processorPath);
-    const StepArgumentList &arguments = GetStepArguments(taskStep);
+    // const StepArgumentList &arguments = GetStepArguments(taskStep);
     for (const StepArgument &stepArg: arguments) {
 
         // Replace the possible occurences of the values in the properties map in the current argument

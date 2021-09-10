@@ -286,6 +286,10 @@ public:
   itkSetMacro(ComputeMinMax, bool);
   itkGetMacro(ComputeMinMax, bool);
 
+  /** Set/Get macro for the flag specifying if min/max should be computed or not */
+  itkSetMacro(ComputeValidityPixelsCnt, bool);
+  itkGetMacro(ComputeValidityPixelsCnt, bool);
+
 protected:
   /** Convert values to decibels before processing, default to 0 */
   bool m_ConvertValuesToDecibels;
@@ -337,11 +341,9 @@ private:
   PixelValueMapType                      m_MaxRadiometricValue;
 
   PixelValueMapType                      m_ValidPixelsCnt;
-  PixelValueMapType                      m_InvalidPixelsCnt;
 
   bool m_ComputeMinMax;
-
-
+  bool m_ComputeValidityPixelsCnt;
 };
 
 /**
@@ -407,6 +409,12 @@ public:
   void SetComputeMinMax(bool exp);
   bool GetComputeMinMax();
 
+  void SetComputeValidityPixelsCnt(bool exp);
+  bool GetComputeValidityPixelsCnt();
+
+  void SetMaskValidValue(int val);
+  int GetMaskValidValue();
+
   void SetLayerIndex(int index);
   int GetLayerIndex();
 
@@ -439,9 +447,6 @@ public:
 
    /** Return the computed the number of valid pixels for each label in the input label image */
    PixelValueMapType GetValidPixelsCntMap() const;
-
-   /** Return the computed the number of invalid pixels for each label in the input label image */
-   PixelValueMapType GetInvalidPixelsCntMap() const;
 
 protected:
   /** Constructor */

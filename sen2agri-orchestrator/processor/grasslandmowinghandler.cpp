@@ -9,6 +9,9 @@
 #include "logger.hpp"
 #include "s4c_utils.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+using namespace orchestrator::products;
+
 using namespace grassland_mowing;
 
 #define L4B_GM_DEF_CFG_DIR   "/mnt/archive/grassland_mowing_files/{site}/{year}/config/"
@@ -162,9 +165,9 @@ bool GrasslandMowingHandler::CheckInputParameters(GrasslandMowingExecConfig &cfg
         cfg.endDate = ProcessorHandlerHelper::GetDateTimeFromString(endDateStr);
 
         // Custom request
-        const QJsonArray &arrPrdsL3B = S4CUtils::GetInputProducts(cfg.parameters, ProductType::L3BProductTypeId);
-        const QJsonArray &arrPrdsAmp = S4CUtils::GetInputProducts(cfg.parameters, ProductType::S4CS1L2AmpProductTypeId);
-        const QJsonArray &arrPrdsCohe = S4CUtils::GetInputProducts(cfg.parameters, ProductType::S4CS1L2CoheProductTypeId);
+        const QStringList &arrPrdsL3B = GetInputProductNames(cfg.parameters, ProductType::L3BProductTypeId);
+        const QStringList &arrPrdsAmp = GetInputProductNames(cfg.parameters, ProductType::S4CS1L2AmpProductTypeId);
+        const QStringList &arrPrdsCohe = GetInputProductNames(cfg.parameters, ProductType::S4CS1L2CoheProductTypeId);
         QDateTime startDate, endDate;
         UpdatePrdInfos(cfg, arrPrdsL3B, cfg.l3bPrds, startDate, endDate);
         UpdatePrdInfos(cfg, arrPrdsAmp, cfg.s1Prds, startDate, endDate);
@@ -228,17 +231,16 @@ void GrasslandMowingHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
     if (event.module == "product-formatter") {
         ctx.MarkJobFinished(event.jobId);
 
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
+        const QString &prodName = GetOutputProductName(ctx, event);
+        const QString &productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
         if(prodName != "") {
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
+            GenericHighLevelProductHelper prdHelper(productFolder);
             ctx.InsertProduct({ ProductType::S4CL4BProductTypeId, event.processorId, event.siteId,
-                                event.jobId, productFolder, maxDate,
-                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList() });
+                                event.jobId, productFolder, prdHelper.GetAcqDate(),
+                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList() });
 
             // Now remove the job folder containing temporary files
             RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
@@ -360,25 +362,6 @@ ProcessorJobDefinitionParams GrasslandMowingHandler::GetProcessingDefinitionImpl
     return params;
 }
 
-QStringList GrasslandMowingHandler::ExtractL3BProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                                    QDateTime &minDate, QDateTime &maxDate)
-{
-    const QStringList &l3bPrds = S4CUtils::GetInputProducts(ctx, event, ProductType::L3BProductTypeId, minDate, maxDate);
-    return S4CUtils::FindL3BProductTiffFiles(ctx, event, l3bPrds, L4B_GM_CFG_PREFIX, "SNDVI");
-}
-
-QStringList GrasslandMowingHandler::ExtractAmpProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                                   QDateTime &minDate, QDateTime &maxDate)
-{
-    return S4CUtils::GetInputProducts(ctx, event, ProductType::S4CS1L2AmpProductTypeId, minDate, maxDate);
-}
-
-QStringList GrasslandMowingHandler::ExtractCoheProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                                    QDateTime &minDate, QDateTime &maxDate)
-{
-    return S4CUtils::GetInputProducts(ctx, event, ProductType::S4CS1L2CoheProductTypeId, minDate, maxDate);
-}
-
 QStringList GrasslandMowingHandler::GetInputShpGeneratorArgs(GrasslandMowingExecConfig &cfg,
                                                              const QString &outShpFile)
 {
@@ -484,14 +467,15 @@ bool GrasslandMowingHandler::IsScheduledJobRequest(const QJsonObject &parameters
 }
 
 void GrasslandMowingHandler::UpdatePrdInfos(GrasslandMowingExecConfig &cfg,
-                                            const QJsonArray &arrPrds, QStringList &whereToAdd,
+                                            const QStringList &prdNames, QStringList &whereToAdd,
                                             QDateTime &startDate, QDateTime &endDate)
 {
-    QDateTime tmpStartDate, tmpEndDate;
-    for (const auto &prd: arrPrds) {
-        const QString &prdPath = cfg.pCtx->GetProductAbsolutePath(cfg.siteId, prd.toString());
-        if (ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prd.toString(), tmpStartDate, tmpEndDate)) {
-            ProcessorHandlerHelper::UpdateMinMaxTimes(tmpEndDate, startDate, endDate);
+    GenericHighLevelProductHelper prdHelper;
+    for (const auto &prd: prdNames) {
+        const QString &prdPath = cfg.pCtx->GetProductAbsolutePath(cfg.siteId, prd);
+        prdHelper.SetProduct(prdPath);
+        if (prdHelper.IsValid()) {
+            ProcessorHandlerHelper::UpdateMinMaxTimes(prdHelper.GetAcqDate(), startDate, endDate);
         }
         whereToAdd.append(prdPath);
     }

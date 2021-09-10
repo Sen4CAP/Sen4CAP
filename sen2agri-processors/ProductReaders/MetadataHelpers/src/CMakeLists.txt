@@ -13,6 +13,7 @@ set(Sen2AgriProductReaders_HEADERS
     MAJAMetadataHelper.h
     MAJAL8MetadataHelper.h
     SEN2CORMetadataHelper.h
+    MaskedL2AMetadataHelper.h
     )
 
 set(Sen2AgriProductReaders_SOURCES

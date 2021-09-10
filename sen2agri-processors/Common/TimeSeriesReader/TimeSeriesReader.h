@@ -74,6 +74,8 @@ typedef otb::VectorImage<float> FloatVectorImageType;
 typedef otb::Image<uint8_t> UInt8ImageType;
 typedef otb::VectorImage<uint8_t> UInt8VectorImageType;
 
+typedef otb::Image<uint8_t, 2> MasksImageType;
+
 typedef otb::GridResampleImageFilter<otb::Wrapper::UInt8VectorImageType,
                                      otb::Wrapper::UInt8VectorImageType,
                                      double>

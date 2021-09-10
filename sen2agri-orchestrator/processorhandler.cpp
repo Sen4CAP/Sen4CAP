@@ -4,10 +4,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFileInfoList>
+#include <fstream>
 
 #include "schedulingcontext.h"
 #include "logger.hpp"
 #include "stepexecutiondecorator.h"
+
+#include "processor/products/producthelperfactory.h"
+using namespace orchestrator::products;
 
 bool removeDir(const QString & dirName)
 {
@@ -30,13 +34,6 @@ bool removeDir(const QString & dirName)
         result = dir.rmdir(dirName);
     }
     return result;
-}
-
-bool compareL2AProductDates(const QString& path1,const QString& path2)
-{
-  QDateTime dtProd1=ProcessorHandlerHelper::GetL2AProductDateFromPath(path1);
-  QDateTime dtProd2=ProcessorHandlerHelper::GetL2AProductDateFromPath(path2);
-  return (dtProd1 < dtProd2);
 }
 
 ProcessorHandler::~ProcessorHandler() {}
@@ -69,6 +66,12 @@ void ProcessorHandler::HandleTaskFinished(EventProcessingContext &ctx,
     HandleTaskFinishedImpl(ctx, event);
 }
 
+void ProcessorHandler::HandleJobUnsuccefulStop(EventProcessingContext &,
+                                          int)
+{
+    // TODO
+}
+
 ProcessorJobDefinitionParams ProcessorHandler::GetProcessingDefinition(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                         const ConfigurationParameterValueMap &requestOverrideCfgValues) {
     return GetProcessingDefinitionImpl(ctx, siteId, scheduledDate, requestOverrideCfgValues);
@@ -82,31 +85,19 @@ void ProcessorHandler::HandleProductAvailableImpl(EventProcessingContext &,
 QString ProcessorHandler::GetFinalProductFolder(EventProcessingContext &ctx, int jobId,
                                                 int siteId) {
     auto configParameters = ctx.GetJobConfigurationParameters(jobId, PRODUCTS_LOCATION_CFG_KEY);
-    QString siteName = ctx.GetSiteShortName(siteId);
+    const QString &siteName = ctx.GetSiteShortName(siteId);
 
-    return GetFinalProductFolder(configParameters, siteName, processorDescr.shortName);
-}
-
-QString ProcessorHandler::GetFinalProductFolder(EventProcessingContext &ctx, int jobId, int siteId,
-                                                const QString &productName) {
-    auto configParameters = ctx.GetJobConfigurationParameters(jobId, PRODUCTS_LOCATION_CFG_KEY);
-    QString siteName = ctx.GetSiteShortName(siteId);
-
-    return GetFinalProductFolder(configParameters, siteName, productName);
-}
-
-QString ProcessorHandler::GetFinalProductFolder(const std::map<QString, QString> &cfgKeys, const QString &siteName,
-                                                const QString &processorName) {
-    auto it = cfgKeys.find(PRODUCTS_LOCATION_CFG_KEY);
-    if (it == std::end(cfgKeys)) {
-        throw std::runtime_error(QStringLiteral("No final product folder configured for site %1 and processor %2")
+    auto it = configParameters.find(PRODUCTS_LOCATION_CFG_KEY);
+    if (it == std::end(configParameters)) {
+        throw std::runtime_error(QStringLiteral("No final product folder configured for site %1 (id = %2) and processor %3")
                                      .arg(siteName)
-                                     .arg(processorName)
+                                     .arg(siteId)
+                                     .arg(processorDescr.shortName)
                                      .toStdString());
     }
     QString folderName = (*it).second;
     folderName = folderName.replace("{site}", siteName);
-    folderName = folderName.replace("{processor}", processorName);
+    folderName = folderName.replace("{processor}", processorDescr.shortName);
 
     return folderName;
 }
@@ -131,10 +122,25 @@ bool ProcessorHandler::RemoveJobFolder(EventProcessingContext &ctx, int jobId, c
     return false;
 }
 
-QString ProcessorHandler::GetProductFormatterOutputProductPath(EventProcessingContext &ctx,
-                                                        const TaskFinishedEvent &event) {
-    const QString &prodFolderOutPath = ctx.GetOutputPath(event.jobId, event.taskId, event.module, processorDescr.shortName) +
-            "/" + PRODUCT_FORMATTER_OUT_PROPS_FILE;
+QString ProcessorHandler::GetTaskOutputPathFromEvt(EventProcessingContext &ctx, const TaskFinishedEvent &event)
+{
+    return ctx.GetOutputPath(event.jobId, event.taskId, event.module, processorDescr.shortName);
+}
+
+void ProcessorHandler::WriteOutputProductPath(TaskToSubmit &prdCreatorTask, const QString &prdPath) {
+    const auto &outPropsPath = prdCreatorTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
+    std::ofstream executionInfosFile;
+    try {
+        executionInfosFile.open(outPropsPath.toStdString().c_str(), std::ofstream::out);
+        executionInfosFile << prdPath.toStdString() << std::endl;
+        executionInfosFile.close();
+    } catch (...) {
+    }
+}
+
+QString ProcessorHandler::GetOutputProductPath(EventProcessingContext &ctx,
+                                               const TaskFinishedEvent &outPrdCreatorTaskEndEvt) {
+    const QString &prodFolderOutPath = GetTaskOutputPathFromEvt(ctx, outPrdCreatorTaskEndEvt) + "/" + PRODUCT_FORMATTER_OUT_PROPS_FILE;
     QStringList fileLines = ProcessorHandlerHelper::GetTextFileLines(prodFolderOutPath);
     if(fileLines.size() > 0) {
         return fileLines[0].trimmed();
@@ -142,9 +148,38 @@ QString ProcessorHandler::GetProductFormatterOutputProductPath(EventProcessingCo
     return "";
 }
 
-QString ProcessorHandler::GetProductFormatterProductName(EventProcessingContext &ctx,
+void ProcessorHandler::WriteOutputProductSourceProductIds(TaskToSubmit &prdCreatorTask, const QList<int> &parentIds) {
+    const auto &outPropsPath = prdCreatorTask.GetFilePath(PRODUCT_FORMATTER_IN_PRD_IDS_FILE);
+    std::ofstream executionInfosFile;
+    try {
+        executionInfosFile.open(outPropsPath.toStdString().c_str(), std::ofstream::out);
+        for(int id : parentIds) {
+            if (id > 0) {
+                executionInfosFile << id << std::endl;
+            }
+        }
+        executionInfosFile.close();
+    } catch (...) {
+    }
+}
+
+ProductIdsList ProcessorHandler::GetOutputProductParentProductIds(EventProcessingContext &ctx,
+                                               const TaskFinishedEvent &outPrdCreatorTaskEndEvt) {
+    const QString &prodFolderOutPath = GetTaskOutputPathFromEvt(ctx, outPrdCreatorTaskEndEvt) + "/" + PRODUCT_FORMATTER_IN_PRD_IDS_FILE;
+    const QStringList &fileLines = ProcessorHandlerHelper::GetTextFileLines(prodFolderOutPath);
+    ProductIdsList ret;
+    for(QString line: fileLines) {
+        int val = line.trimmed().toInt();
+        if (val > 0) {
+            ret.append(val);
+        }
+    }
+    return ret;
+}
+
+QString ProcessorHandler::GetOutputProductName(EventProcessingContext &ctx,
                                                         const TaskFinishedEvent &event) {
-    const QString &productPath = GetProductFormatterOutputProductPath(ctx, event);
+    const QString &productPath = GetOutputProductPath(ctx, event);
     if(productPath.length() > 0) {
         QString name = ProcessorHandlerHelper::GetFileNameFromPath(productPath);
         if(name.trimmed() != "") {
@@ -155,13 +190,10 @@ QString ProcessorHandler::GetProductFormatterProductName(EventProcessingContext 
 }
 
 QString ProcessorHandler::GetProductFormatterQuicklook(EventProcessingContext &ctx,
-                                                        const TaskFinishedEvent &event) {
-    QString prodFolderOutPath = ctx.GetOutputPath(event.jobId, event.taskId, event.module, processorDescr.shortName) +
-            "/" + PRODUCT_FORMATTER_OUT_PROPS_FILE;
-    QStringList fileLines = ProcessorHandlerHelper::GetTextFileLines(prodFolderOutPath);
+                                                        const TaskFinishedEvent &prdFrmtTaskEndEvt) {
+    const QString &mainFolderName = GetOutputProductPath(ctx, prdFrmtTaskEndEvt);
     QString quickLookName("");
-    if(fileLines.size() > 0) {
-        const QString &mainFolderName = fileLines[0];
+    if(mainFolderName.size() > 0) {
         QString legacyFolder = mainFolderName;      // + "/LEGACY_DATA/";
 
         QDirIterator it(legacyFolder, QStringList() << "*.jpg", QDir::Files);
@@ -181,12 +213,9 @@ QString ProcessorHandler::GetProductFormatterQuicklook(EventProcessingContext &c
 }
 
 QString ProcessorHandler::GetProductFormatterFootprint(EventProcessingContext &ctx,
-                                                        const TaskFinishedEvent &event) {
-    QString prodFolderOutPath = ctx.GetOutputPath(event.jobId, event.taskId, event.module, processorDescr.shortName) +
-            "/" + PRODUCT_FORMATTER_OUT_PROPS_FILE;
-    QStringList fileLines = ProcessorHandlerHelper::GetTextFileLines(prodFolderOutPath);
-    if(fileLines.size() > 0) {
-        const QString &mainFolderName = fileLines[0];
+                                                        const TaskFinishedEvent &prdFrmtTaskEndEvt) {
+    const QString &mainFolderName = GetOutputProductPath(ctx, prdFrmtTaskEndEvt);
+    if(mainFolderName.size() > 0) {
         QString legacyFolder = mainFolderName + "/LEGACY_DATA/";
 
         QDirIterator it(legacyFolder, QStringList() << "*.xml", QDir::Files);
@@ -360,127 +389,88 @@ bool ProcessorHandler::GetBestSeasonToMatchDate(SchedulingContext &ctx, int site
     return false;
 }
 
-QStringList ProcessorHandler::GetL2AInputProductNames(const JobSubmittedEvent &event) {
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const auto &inputProducts = parameters["input_products"].toArray();
+QStringList ProcessorHandler::FilterProducts(const QStringList &products, const ProductType &prdType) {
+    QStringList retPrds;
+    for (const auto &prd : products) {
+        if (prdType == ProductHelperFactory::GetProductHelper(prd)->GetProductType()) {
+            retPrds.append(prd);
+        }
+    }
+    return retPrds;
+}
+
+QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters, const QString &paramsCfgKey) {
     QStringList listProducts;
+    const auto &inputProducts = parameters[paramsCfgKey].toArray();
     for (const auto &inputProduct : inputProducts) {
         listProducts.append(inputProduct.toString());
     }
     return listProducts;
 }
 
-QStringList ProcessorHandler::GetL2AInputProducts(EventProcessingContext &ctx,
-                                const JobSubmittedEvent &event) {
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const auto &inputProducts = parameters["input_products"].toArray();
-    QStringList listProducts;
+QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters, const ProductType &prdType) {
+    QString prdTypeStr;
+    if (prdType != ProductType::InvalidProductTypeId || prdType != ProductType::L2AProductTypeId) {
+        // Try to extract the products from the key specific for this product type
+        prdTypeStr = ProductHelper::GetProductTypeShortName(prdType);
+    }
+    if (prdTypeStr.size() > 0) {
+        const QStringList &listProducts = GetInputProductNames(parameters, "input_" + prdTypeStr);
+        if (listProducts.size() > 0) {
+            return listProducts;
+        }
+    }
+    const QStringList &listProducts = GetInputProductNames(parameters, "input_products");
+    return prdTypeStr.size() > 0 ? FilterProducts(listProducts, prdType) : listProducts;
+}
+
+ProductList ProcessorHandler::GetInputProducts(EventProcessingContext &ctx,
+                                                          const QJsonObject &parameters, int siteId,
+                                                          const ProductType &prdType,
+                                                          QDateTime *pMinDate, QDateTime *pMaxDate) {
+    ProductList retPrds;
+    const QStringList &prdNames = GetInputProductNames(parameters, prdType);
 
     // get the products from the input_products or based on date_start or date_end
-    if(inputProducts.size() == 0) {
-        const auto &startDate = QDateTime::fromString(parameters["date_start"].toString(), "yyyyMMdd");
-        const auto &endDateStart = QDateTime::fromString(parameters["date_end"].toString(), "yyyyMMdd");
+    if(prdNames.size() == 0) {
+        const auto &startDate = QDateTime::fromString(parameters["start_date"].toString(), "yyyyMMdd");
+        const auto &endDateStart = QDateTime::fromString(parameters["end_date"].toString(), "yyyyMMdd");
         if(startDate.isValid() && endDateStart.isValid()) {
+            // update min/max dates, if requested
+            if (pMinDate && (!pMinDate->isValid() || *pMinDate > startDate)) {
+                *pMinDate = startDate;
+            }
             // we consider the end of the end date day
             const auto endDate = endDateStart.addSecs(SECONDS_IN_DAY-1);
-            ProductList productsList = ctx.GetProducts(event.siteId, (int)ProductType::L2AProductTypeId,
-                                                       startDate, endDate);
-            for(const auto &product: productsList) {
-                listProducts.append(product.fullPath);
+            if (pMaxDate && (!pMaxDate->isValid() || *pMaxDate < endDate)) {
+                *pMaxDate = endDate;
             }
+
+            return ctx.GetProducts(siteId, (int)prdType, startDate, endDate);
         }
     } else {
-        for (const auto &inputProduct : inputProducts) {
-            listProducts.append(ctx.GetProductAbsolutePath(event.siteId, inputProduct.toString()));
-        }
-    }
-
-    return listProducts;
-}
-
-QStringList ProcessorHandler::GetL2AInputProductsTiles(EventProcessingContext &ctx,
-                                const JobSubmittedEvent &event,
-                                QMap<QString, QStringList> &mapProductToTilesMetaFiles) {
-    QStringList listTilesMetaFiles;
-    const QStringList &listProducts = GetL2AInputProducts(ctx, event);
-    // for each product, get the valid tiles
-    for(const QString &inPrd: listProducts) {
-        const QStringList &tilesMetaFiles = ctx.findProductFiles(event.siteId, inPrd);
-        QStringList listValidTilesMetaFiles;
-        for(const QString &tileMetaFile: tilesMetaFiles) {
-            if(ProcessorHandlerHelper::IsValidL2AMetadataFileName(tileMetaFile)) {
-                listValidTilesMetaFiles.append(tileMetaFile);
-                Logger::debug(QStringLiteral("Using L2A tile: %1").arg(tileMetaFile));
-            }
-        }
-        if(listValidTilesMetaFiles.size() > 0) {
-            listTilesMetaFiles.append(listValidTilesMetaFiles);
-            mapProductToTilesMetaFiles[inPrd] = listValidTilesMetaFiles;
-        }
-    }
-
-    // sort the input products according to their dates
-    qSort(listTilesMetaFiles.begin(), listTilesMetaFiles.end(), compareL2AProductDates);
-
-    return listTilesMetaFiles;
-}
-
-QStringList ProcessorHandler::GetL2AInputProductsTiles(EventProcessingContext &ctx,
-                                const JobSubmittedEvent &event) {
-    QMap<QString, QStringList> map;
-    Q_UNUSED(map);
-    return GetL2AInputProductsTiles(ctx, event, map);
-}
-
-QMap<QString, TileTemporalFilesInfo> ProcessorHandler::GroupTiles(
-        EventProcessingContext &ctx, int siteId,
-        const QStringList &listAllProductsTiles, ProductType productType)
-{
-    // perform a first iteration to see the satellites IDs in all tiles
-    QList<ProcessorHandlerHelper::SatelliteIdType> satIds;
-    // Get the primary satellite id
-    ProcessorHandlerHelper::SatelliteIdType primarySatId;
-    QMap<QString, TileTemporalFilesInfo>  mapTiles = ProcessorHandlerHelper::GroupTiles(listAllProductsTiles, productType,
-                                                                                        satIds, primarySatId);
-    if(productType != ProductType::L2AProductTypeId) return mapTiles;
-
-    // if we have only one sattelite id for all tiles, then perform no filtering
-    if(satIds.size() == 1) return mapTiles;
-
-    // second iteration: add for each primary satelitte tile the intersecting secondary products
-    QMap<QString, TileTemporalFilesInfo>  retMapTiles;
-    QMap<QString, TileTemporalFilesInfo>::iterator i;
-    for (i = mapTiles.begin(); i != mapTiles.end(); ++i) {
-        // this time, get a copy from the map and not the reference to info as we do not want to alter the input map
-        TileTemporalFilesInfo info = i.value();
-        bool isPrimarySatIdInfo = ((info.uniqueSatteliteIds.size() == 1) &&
-                                   (primarySatId == info.uniqueSatteliteIds[0]));
-        for(ProcessorHandlerHelper::SatelliteIdType satId: satIds) {
-            // if is a secondary satellite id, then get the tiles from the database
-            if(isPrimarySatIdInfo && (info.primarySatelliteId != satId)) {
-                const ProductList &satSecProds = ctx.GetProductsForTile(siteId, info.tileId, productType, primarySatId, satId);
-                // get the metadata tiles for all found products intersecting the current tile
-                QStringList listProductsTiles;
-                for(const Product &prod: satSecProds) {
-                    listProductsTiles.append(ctx.findProductFiles(siteId, prod.fullPath));
+        const ProductList &prds = ctx.GetProducts(siteId, prdNames);
+        for (const auto &prd : prds) {
+            if (prdNames.contains(prd.name)) {
+                retPrds.append(prd);
+                if (pMinDate || pMaxDate) {
+                    const QDateTime &prdDate = prd.created;
+                    // update min/max dates, if requested
+                    if (pMinDate && (!pMinDate->isValid() || *pMinDate > prdDate)) {
+                        *pMinDate = prdDate;
+                    }
+                    if (pMaxDate && (!pMaxDate->isValid() || *pMaxDate < prdDate)) {
+                        *pMaxDate = prdDate;
+                    }
                 }
-
-                // add the intersecting products for this satellite id to the current info
-                ProcessorHandlerHelper::AddSatteliteIntersectingProducts(mapTiles, listProductsTiles, satId, info);
+            } else {
+                Logger::error(QStringLiteral("The product path does not exists %1.").arg(prd.name));
+                return ProductList();
             }
-        }
-        // at this stage we know that the infos have only one unique satellite id
-        // we keep in the returning map only the tiles from the primary satellite
-        if(isPrimarySatIdInfo) {
-            // Sort the products by date as maybe we added secondary products at the end
-            ProcessorHandlerHelper::SortTemporalTileInfoFiles(info);
-
-            // add the tile info
-            retMapTiles[info.tileId] = info;
         }
     }
 
-    return retMapTiles;
+    return retPrds;
 }
 
 QString ProcessorHandler::GetProductFormatterTile(const QString &tile) {
@@ -495,12 +485,11 @@ void ProcessorHandler::SubmitTasks(EventProcessingContext &ctx,
     ctx.SubmitTasks(jobId, tasks, processorDescr.shortName);
 }
 
-QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> ProcessorHandler::GetSiteTiles(EventProcessingContext &ctx, int siteId)
+QMap<Satellite, TileList> ProcessorHandler::GetSiteTiles(EventProcessingContext &ctx, int siteId)
 {
-    // TODO: the satellites IDs should be taken from DB but a procedure should be added there
-    QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> retMap;
-    retMap[ProcessorHandlerHelper::SATELLITE_ID_TYPE_S2] = ctx.GetSiteTiles(siteId, ProcessorHandlerHelper::SATELLITE_ID_TYPE_S2);
-    retMap[ProcessorHandlerHelper::SATELLITE_ID_TYPE_L8] = ctx.GetSiteTiles(siteId, ProcessorHandlerHelper::SATELLITE_ID_TYPE_L8);
+    QMap<Satellite, TileList> retMap;
+    retMap[Satellite::Sentinel2] = ctx.GetSiteTiles(siteId, static_cast<int>(Satellite::Sentinel2));
+    retMap[Satellite::Landsat8] = ctx.GetSiteTiles(siteId, static_cast<int>(Satellite::Landsat8));
 
     return retMap;
 }

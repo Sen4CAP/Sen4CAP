@@ -331,7 +331,7 @@ def build_sg_output_header(date_list) :
     return header
 
 def build_indices_output_header(first_date) :
-    header = []
+    header = [ID_COL_NAME]
     first_date_str = first_date.strftime("%Y%m%d")
     for suffix in INDICES_COLUMN_SUFFIXES:
         header += [first_date_str + "_" + suffix]
@@ -339,7 +339,7 @@ def build_indices_output_header(first_date) :
     return header
 
 def build_metrics_output_header(first_date) :
-    header = []
+    header = [ID_COL_NAME]
     first_date_str = first_date.strftime("%Y%m%d")
     for suffix in METRICS_COLUMN_SUFFIXES:
         header += [first_date_str + "_" + suffix]
@@ -383,7 +383,7 @@ def main():
     parser.add_argument("-y", "--year", help="The processing year", required=True)
     
     args = parser.parse_args()
-
+ 
     with open(args.sg_output, "w") as sg_file, open(args.indices_output, "w") as indices_file, open(args.metrics_output, "w") as metrics_file:
         output_handler = OutputsHandler(csv.writer(sg_file, quoting=csv.QUOTE_MINIMAL), 
                                         csv.writer(indices_file, quoting=csv.QUOTE_MINIMAL),

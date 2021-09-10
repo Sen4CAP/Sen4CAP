@@ -425,24 +425,36 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, KeyedMessage &mes
     return argument;
 }
 
-Product::Product() : productId(), processorId(), productTypeId(), siteId()
+Product::Product() : productId(), productTypeId(), siteId(), satId(), orbitId(), downloaderHistoryId()
 {
 }
 
 Product::Product(int productId,
-                 int processorId,
                  ProductType productTypeId,
                  int siteId,
                  QString fullPath,
                  QDateTime created,
-                 QDateTime inserted)
+                 QDateTime inserted,
+                 int satId,
+                 QString name,
+                 QString quicklookImage,
+                 QString geog,
+                 int orbitId,
+                 TileIdList tiles,
+                 int downloaderHistoryId)
     : productId(productId),
-      processorId(processorId),
       productTypeId(productTypeId),
       siteId(siteId),
       fullPath(std::move(fullPath)),
       created(std::move(created)),
-      inserted(std::move(inserted))
+      inserted(std::move(inserted)),
+      satId(satId),
+      name(std::move(name)),
+      quicklookImage(std::move(quicklookImage)),
+      geog(std::move(geog)),
+      orbitId(orbitId),
+      tiles(std::move(tiles)),
+      downloaderHistoryId(downloaderHistoryId)
 {
 }
 
@@ -455,8 +467,11 @@ void Product::registerMetaTypes()
 QDBusArgument &operator<<(QDBusArgument &argument, const Product &product)
 {
     argument.beginStructure();
-    argument << product.productId << product.processorId << product.productTypeId << product.siteId
-             << product.fullPath << product.created << product.inserted;
+
+    argument << product.productId << product.productTypeId << product.siteId
+             << product.fullPath << product.created << product.inserted << product.satId
+             << product.name << product.quicklookImage << product.geog << product.orbitId
+             << product.tiles << product.downloaderHistoryId ;
     argument.endStructure();
 
     return argument;
@@ -465,8 +480,10 @@ QDBusArgument &operator<<(QDBusArgument &argument, const Product &product)
 const QDBusArgument &operator>>(const QDBusArgument &argument, Product &product)
 {
     argument.beginStructure();
-    argument >> product.productId >> product.processorId >> product.productTypeId >>
-        product.siteId >> product.fullPath >> product.created >> product.inserted;
+    argument >> product.productId >> product.productTypeId >> product.siteId
+             >> product.fullPath >> product.created >> product.inserted >> product.satId
+             >> product.name >> product.quicklookImage >> product.geog >> product.orbitId
+             >> product.tiles >> product.downloaderHistoryId ;
     argument.endStructure();
 
     return argument;
@@ -1607,7 +1624,8 @@ NewProduct::NewProduct(ProductType productType,
                        QString quicklookImage,
                        QString footprint,
                        std::experimental::optional<int> orbitId,
-                       TileIdList tiles)
+                       TileIdList tiles,
+                       ProductIdsList parentProductIds)
     : productType(productType),
       processorId(processorId),
       satelliteId(),
@@ -1619,7 +1637,8 @@ NewProduct::NewProduct(ProductType productType,
       quicklookImage(std::move(quicklookImage)),
       footprint(std::move(footprint)),
       orbitId(orbitId),
-      tiles(std::move(tiles))
+      tiles(std::move(tiles)),
+      parentProductIds(std::move(parentProductIds))
 {
 }
 
@@ -1634,7 +1653,8 @@ NewProduct::NewProduct(ProductType productType,
                        QString quicklookImage,
                        QString footprint,
                        std::experimental::optional<int> orbitId,
-                       TileIdList tiles)
+                       TileIdList tiles,
+                       ProductIdsList parentProductIds)
     : productType(productType),
       processorId(processorId),
       satelliteId(satelliteId),
@@ -1646,7 +1666,8 @@ NewProduct::NewProduct(ProductType productType,
       quicklookImage(std::move(quicklookImage)),
       footprint(std::move(footprint)),
       orbitId(orbitId),
-      tiles(std::move(tiles))
+      tiles(std::move(tiles)),
+      parentProductIds(std::move(parentProductIds))
 {
 }
 

@@ -9,6 +9,9 @@
 #include "logger.hpp"
 #include "s4c_utils.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+using namespace orchestrator::products;
+
 #define L4C_AP_GEN_CFG_PREFIX   "processor.s4c_l4c.cfg.gen."
 
 #define L4C_AP_GEN_CC_CFG_PREFIX   "processor.s4c_l4c.cfg.gen.cc."
@@ -139,10 +142,11 @@ void AgricPracticesHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &evt)
 {
     S4CMarkersDB1DataExtractStepsBuilder dataExtrStepsBuilder;
-    dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, evt, {"NDVI", "AMP", "COHE"});
+    const auto &parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
+    dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, parameters, evt.siteId, evt.jobId, {"NDVI", "AMP", "COHE"});
 
-    AgricPracticesJobPayload jobCfg(&ctx, evt);
-    dataExtrStepsBuilder.GetDataExtractionInterval(jobCfg.minDate, jobCfg.maxDate);
+    AgricPracticesJobPayload jobCfg(&ctx, evt, dataExtrStepsBuilder.GetDataExtractionMinDate(),
+                                    dataExtrStepsBuilder.GetDataExtractionMaxDate());
     if (jobCfg.isScheduledJob) {
         // fill also payload season start/end dates if possible
         ConfigurationParameterValueMap mapOverrides;
@@ -186,17 +190,16 @@ void AgricPracticesHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
 {
     if (event.module == "product-formatter") {
 
-        const QString &prodName = GetProductFormatterProductName(ctx, event);
+        const QString &prodName = GetOutputProductName(ctx, event);
         const QString &productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
         if(prodName != "") {
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
+            GenericHighLevelProductHelper prdHelper(productFolder);
             int prdId = ctx.InsertProduct({ ProductType::S4CL4CProductTypeId, event.processorId, event.siteId,
-                                event.jobId, productFolder, maxDate,
-                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList() });
+                                event.jobId, productFolder, prdHelper.GetAcqDate(),
+                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList()  });
 
             const QString &prodFolderOutPath = ctx.GetOutputPath(event.jobId, event.taskId, event.module, processorDescr.shortName) +
                     "/" + "prd_infos.txt";
@@ -212,19 +215,18 @@ void AgricPracticesHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
         }
     } else if (event.module == "extract-l4c-markers") {
 
-        const QString &productPath = GetProductFormatterOutputProductPath(ctx, event);
-        const QString &prodName = GetProductFormatterProductName(ctx, event);
+        const QString &productPath = GetOutputProductPath(ctx, event);
+        const QString &prodName = GetOutputProductName(ctx, event);
         QFileInfo fileInfo(prodName);
         const QString &prdNameNoExt = fileInfo.baseName ();
         if(QFileInfo::exists(productPath) && prdNameNoExt != "") {
             const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prdNameNoExt, minDate, maxDate);
+            GenericHighLevelProductHelper prdHelper(productPath);
             ProductType prdType = ProductType::S4MDB3ProductTypeId;
             ctx.InsertProduct({ prdType, event.processorId, event.siteId,
-                                event.jobId, productPath, maxDate,
-                                prdNameNoExt, "", footPrint, std::experimental::nullopt, TileIdList() });
+                                event.jobId, productPath, prdHelper.GetAcqDate(),
+                                prdNameNoExt, "", footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList()  });
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and path %2").arg(prdNameNoExt).arg(productPath));
         }
@@ -266,14 +268,7 @@ QString AgricPracticesHandler::CreateStepsForExportL4CMarkers(const AgricPractic
     const QString &prdName = QString("SEN4CAP_MDB3_S%1_V%2_%3").arg(QString::number(jobCfg.event.siteId), strTimePeriod,
                                                                   creationDateStr);
     const QString &exportedFile = QString("%1/%2/%3.ipc").arg(targetFolder, prdName, prdName);
-    const auto &outPropsPath = exportTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    std::ofstream executionInfosFile;
-    try {
-        executionInfosFile.open(outPropsPath.toStdString().c_str(), std::ofstream::out);
-        executionInfosFile << exportedFile.toStdString() << std::endl;
-        executionInfosFile.close();
-    } catch (...) {
-    }
+    WriteOutputProductPath(exportTask, exportedFile);
 
     const QString &schedPrdsHistFile = GetSchedL4CPrdsHistoryFile(jobCfg.parameters, jobCfg.configParameters, jobCfg.siteShortName, jobCfg.siteCfg.year);
     const QStringList &exportL4CMarkersProductArgs = { "--site", QString::number(jobCfg.event.siteId),

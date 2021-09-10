@@ -8,17 +8,20 @@
 #include "json_conversions.hpp"
 #include "logger.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+using namespace orchestrator::products;
+
 bool compareL3BProductDates(const QString& path1,const QString& path2)
 {
+    GenericHighLevelProductHelper prdHelper1(path1);
+    GenericHighLevelProductHelper prdHelper2(path2);
     QFileInfo fileInfo1(path1);
     QString filename1(fileInfo1.fileName());
     QFileInfo fileInfo2(path2);
     QString filename2(fileInfo2.fileName());
 
-    QDateTime minDate1, maxDate1;
-    ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(filename1, minDate1, maxDate1);
-    QDateTime minDate2, maxDate2;
-    ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(filename2, minDate2, maxDate2);
+    const QDateTime &minDate1 = prdHelper1.GetAcqDate();
+    const QDateTime &minDate2 = prdHelper2.GetAcqDate();
     if(minDate1 == minDate2) {
         return QString::compare(filename1, filename2, Qt::CaseInsensitive);
     }
@@ -67,10 +70,10 @@ QString LaiRetrievalHandlerL3C::GetPrdFormatterMskFlagName()
     return "-processor.vegetation.filelaireprocflgs";
 }
 
-QList<QMap<QString, TileTemporalFilesInfo>> LaiRetrievalHandlerL3C::ExtractL3BMapTiles(EventProcessingContext &ctx,
+QList<QMap<QString, TileTimeSeriesInfo>> LaiRetrievalHandlerL3C::ExtractL3BMapTiles(EventProcessingContext &ctx,
                                                    const JobSubmittedEvent &event,
                                                    const QStringList &listL3BProducts,
-                                                   const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles)
+                                                   const QMap<Satellite, TileList> &siteTiles)
 {
     const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, GetProcessorDBPrefix());
     const auto &localWindowBwr = ProcessorHandlerHelper::GetMapValue(configParameters, GetProcessorDBPrefix() + "localwnd.bwr");
@@ -78,10 +81,10 @@ QList<QMap<QString, TileTemporalFilesInfo>> LaiRetrievalHandlerL3C::ExtractL3BMa
 
     int limitL3BPrdsPerTile = localWindowBwr.toInt() + localWindowFwr.toInt() + 1;
 
-    QList<QMap<QString, TileTemporalFilesInfo>> retList;
+    QList<QMap<QString, TileTimeSeriesInfo>> retList;
     const QStringList &allL3BProductsList = GetL3BProductsSinceStartOfSeason(ctx, event.siteId, listL3BProducts);
     for(const QString &l3bProd: listL3BProducts) {
-        const QMap<QString, TileTemporalFilesInfo> &l3bMapTiles = GetL3BMapTiles(ctx, l3bProd, allL3BProductsList,
+        const QMap<QString, TileTimeSeriesInfo> &l3bMapTiles = GetL3BMapTiles(ctx, l3bProd, allL3BProductsList,
                                                                                  siteTiles, limitL3BPrdsPerTile);
         retList.append(l3bMapTiles);
     }
@@ -135,9 +138,9 @@ ProductList LaiRetrievalHandlerL3C::GetScheduledJobProductList(SchedulingContext
     return productList;
 }
 
-bool LaiRetrievalHandlerL3C::AcceptSchedJobProduct(const QString &, ProcessorHandlerHelper::SatelliteIdType satId)
+bool LaiRetrievalHandlerL3C::AcceptSchedJobProduct(const QString &, Satellite satId)
 {
-    return (satId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_S2);
+    return (satId == Satellite::Sentinel2);
 }
 
 /**
@@ -168,30 +171,31 @@ QStringList LaiRetrievalHandlerL3C::GetL3BProductsSinceStartOfSeason(EventProces
 
 //TODO: This function should receive the Product and QList<Product> instead of just product path as these can be got from DB
 //      The Product contains already the tiles, the full path and the acquisition date so can be avoided parsing files
-QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(EventProcessingContext &ctx, const QString &newestL3BProd,
+QMap<QString, TileTimeSeriesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(EventProcessingContext &ctx, const QString &newestL3BProd,
                                                                             const QStringList &l3bProducts,
-                                                                            const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles,
+                                                                            const QMap<Satellite, TileList> &siteTiles,
                                                                             int limitL3BPrdsPerTile)
 {
-    QMap<QString, TileTemporalFilesInfo> retL3bMapTiles;
-    const QStringList &listNewestL3BProdTiles = ProcessorHandlerHelper::GetTileIdsFromHighLevelProduct(newestL3BProd);
+    QMap<QString, TileTimeSeriesInfo> retL3bMapTiles;
+    GenericHighLevelProductHelper prdHelper(newestL3BProd);
+    const QStringList &listNewestL3BProdTiles = prdHelper.GetTileIdsFromProduct();
     if (listNewestL3BProdTiles.size() == 0) {
         Logger::debug(QStringLiteral("No tiles ID found for product %1").arg(newestL3BProd));
         return retL3bMapTiles;
     }
 
-    QDateTime minDate, maxDate;
-    ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(newestL3BProd, minDate, maxDate);
-    ProcessorHandlerHelper::SatelliteIdType tileSatId = ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN;
+
+    const QDateTime &minDate = prdHelper.GetAcqDate();
+    Satellite tileSatId = Satellite::Invalid;
 
     // iterate the tiles of the newest L3B product
     for(const auto &tileId : listNewestL3BProdTiles) {
         // we assume that all the tiles from the product are from the same satellite
         // in this case, we get only once the satellite Id for all tiles
-        if(tileSatId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
+        if(tileSatId == Satellite::Invalid) {
             tileSatId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
             // ignore tiles for which the satellite id cannot be determined
-            if(tileSatId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
+            if(tileSatId == Satellite::Invalid) {
                 Logger::debug(QStringLiteral("The satellite ID cannot be extracted for tileId %1 (nb. site tiles is %2)").arg(tileId).arg(siteTiles.size()));
                 continue;
             }
@@ -199,7 +203,7 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(Even
 
         // add the new tile info if missing
         if(!retL3bMapTiles.contains(tileId)) {
-            TileTemporalFilesInfo newTileInfos;
+            TileTimeSeriesInfo newTileInfos;
             newTileInfos.tileId = tileId;
             newTileInfos.primarySatelliteId = tileSatId;
             newTileInfos.uniqueSatteliteIds.append(tileSatId);
@@ -211,8 +215,9 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(Even
             retL3bMapTiles[tileId] = newTileInfos;
             Logger::debug(QStringLiteral("Added tile id %1 from product %2").arg(tileId).arg(newestL3BProd));
         }
-        TileTemporalFilesInfo &tileInfo = retL3bMapTiles[tileId];
+        TileTimeSeriesInfo &tileInfo = retL3bMapTiles[tileId];
         // NOTE: we assume the products are sorted ascending
+        GenericHighLevelProductHelper prdHelper;
         for(int i = l3bProducts.size(); i --> 0; ) {
             const QString &l3bPrd = l3bProducts[i];
             // If we have a limit of maximum temporal products per tile and we reached this limit,
@@ -223,8 +228,8 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(Even
 
             // check if the current product date is greater than the one of the reference product
             // if so, ignore it
-            QDateTime curPrdMinDate, curPrdMaxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(l3bPrd, curPrdMinDate, curPrdMaxDate);
+            prdHelper.SetProduct(l3bPrd);
+            const QDateTime &curPrdMinDate = prdHelper.GetAcqDate();
             if(curPrdMinDate.date() >= minDate.date()) {
                 continue;
             }
@@ -235,7 +240,7 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(Even
         Logger::debug(QStringLiteral("Using for tile %1 a number of %2 tiles").arg(tileId).arg(tileInfo.temporalTilesFileInfos.size()));
         if(tileInfo.temporalTilesFileInfos.size() > 0) {
              // update the primary satellite information
-             tileInfo.primarySatelliteId = ProcessorHandlerHelper::GetPrimarySatelliteId(tileInfo.uniqueSatteliteIds);
+             tileInfo.primarySatelliteId = ProductHelper::GetPrimarySatelliteId(tileInfo.uniqueSatteliteIds);
         }
     }
     // if primary and secondary satellites, then keep only the tiles from primary satellite
@@ -248,10 +253,11 @@ QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3C::GetL3BMapTiles(Even
 QDateTime LaiRetrievalHandlerL3C::GetL3BLastAcqDate(const QStringList &listL3bPrds)
 {
     QDateTime curDate = QDateTime();
+    GenericHighLevelProductHelper prdHelper;
     for (const QString &prd: listL3bPrds) {
-        QDateTime minDate;
-        QDateTime maxDate;
-        if (ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prd, minDate, maxDate)) {
+        prdHelper.SetProduct(prd);
+        const QDateTime &maxDate = prdHelper.GetAcqDate();
+        if (prdHelper.IsValid()) {
             if (!curDate.isValid() || (curDate.isValid() && curDate < maxDate)) {
                 curDate = maxDate;
             }
@@ -269,8 +275,8 @@ QDate LaiRetrievalHandlerL3C::GetSiteFirstSeasonStartDate(EventProcessingContext
     return QDate();
 }
 
-bool LaiRetrievalHandlerL3C::HasSufficientProducts(const TileTemporalFilesInfo &tileInfo,
-                                                   const ProcessorHandlerHelper::SatelliteIdType &tileSatId,
+bool LaiRetrievalHandlerL3C::HasSufficientProducts(const TileTimeSeriesInfo &tileInfo,
+                                                   const Satellite &tileSatId,
                                                    int limitL3BPrdsPerTile)
 {
     // TODO: Should we consider here also the orbit???
@@ -280,7 +286,7 @@ bool LaiRetrievalHandlerL3C::HasSufficientProducts(const TileTemporalFilesInfo &
         // As we do not add in the temp info file the intersecting tiles of the same satellite
         // it is OK to count the occurences of the tile infos having the main satellite
         // as this means it is the same tile ID
-        for(const ProcessorHandlerHelper::InfoTileFile &tempInfoFile: tileInfo.temporalTilesFileInfos) {
+        for(const InfoTileFile &tempInfoFile: tileInfo.temporalTilesFileInfos) {
             if(tempInfoFile.satId == tileSatId) {
                 cntSameSat++;
                 if(cntSameSat > limitL3BPrdsPerTile) {

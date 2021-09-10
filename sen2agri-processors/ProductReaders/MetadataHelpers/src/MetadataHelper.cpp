@@ -44,10 +44,11 @@ MetadataHelper<PixelType, MasksPixelType>::~MetadataHelper()
 }
 
 template<typename PixelType, typename MasksPixelType>
-bool MetadataHelper<PixelType, MasksPixelType>::LoadMetadataFile(const std::string& file)
+bool MetadataHelper<PixelType, MasksPixelType>::LoadMetadataFile(const std::string& file, const std::string &externalMask)
 {
     Reset();
     m_inputMetadataFileName = file;
+    m_externalMask = externalMask;
 
     boost::filesystem::path p(m_inputMetadataFileName);
     p.remove_filename();
@@ -72,6 +73,18 @@ void MetadataHelper<PixelType, MasksPixelType>::Reset()
 
     m_solarMeanAngles.azimuth = m_solarMeanAngles.zenith = 0.0;
     m_bHasDetailedAngles = false;
+}
+
+template<typename PixelType, typename MasksPixelType>
+typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer
+MetadataHelper<PixelType, MasksPixelType>::GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution)
+{
+    if (m_externalMask.size() == 0 || !boost::filesystem::exists(m_externalMask)) {
+        return GetL2AMasksImage(nMaskFlags, binarizeResult, resolution);
+    }
+    typename otb::Wrapper::AppExternalMaskProvider<MasksPixelType>::Pointer appExtMskProvider = otb::Wrapper::AppExternalMaskProvider<MasksPixelType>::New();
+    m_appExtMskProviders.push_back(appExtMskProvider);
+    return appExtMskProvider->GetExternalMask(resolution, binarizeResult, m_externalMask);
 }
 
 template<typename PixelType, typename MasksPixelType>

@@ -7,6 +7,9 @@
 #include "processorhandlerhelper.h"
 #include "s4c_croptypehandler.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+using namespace orchestrator::products;
+
 S4CCropTypeHandler::S4CCropTypeHandler()
 {
     m_cfgKeys = QStringList() << "lc"
@@ -215,40 +218,13 @@ bool S4CCropTypeHandler::GetStartEndDatesFromProducts(EventProcessingContext &ct
                                                       const JobSubmittedEvent &event,
                                                       QDateTime &startDate,
                                                       QDateTime &endDate,
-                                                      QStringList &listTilesMetaFiles)
+                                                      QList<ProductDetails> &productDetails)
 {
-    QMap<QString, QStringList> inputProductToTilesMap;
-    listTilesMetaFiles = GetL2AInputProductsTiles(ctx, event, inputProductToTilesMap);
+    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
 
-    return GetL2AProductsInterval(inputProductToTilesMap, startDate, endDate);
-}
-
-bool S4CCropTypeHandler::GetL2AProductsInterval(const QMap<QString, QStringList> &mapTilesMeta,
-                                                QDateTime &startDate,
-                                                QDateTime &endDate)
-{
-    bool bDatesInitialized = false;
-    for (const QString &prd : mapTilesMeta.keys()) {
-        const QStringList &listFiles = mapTilesMeta.value(prd);
-        if (listFiles.size() > 0) {
-            const QString &tileMeta = listFiles.at(0);
-            const QDateTime &dtPrdDate =
-                ProcessorHandlerHelper::GetL2AProductDateFromPath(tileMeta);
-            if (!bDatesInitialized) {
-                startDate = dtPrdDate;
-                endDate = dtPrdDate;
-                bDatesInitialized = true;
-            } else {
-                if (startDate > dtPrdDate) {
-                    startDate = dtPrdDate;
-                }
-                if (endDate < dtPrdDate) {
-                    endDate = dtPrdDate;
-                }
-            }
-        }
-    }
-    return (bDatesInitialized && startDate.isValid() && endDate.isValid());
+    return ProcessorHandlerHelper::GetIntevalFromProducts(prds, startDate, endDate);
 }
 
 void S4CCropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
@@ -271,19 +247,18 @@ void S4CCropTypeHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
         HandleMarkerProductsAvailable(ctx, event);
 
     } else if (event.module == "product-formatter") {
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder =
+        const QString &prodName = GetOutputProductName(ctx, event);
+        const QString &productFolder =
             GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
         if (prodName != "") {
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
+            GenericHighLevelProductHelper prdHelper(productFolder);
             int prdId = ctx.InsertProduct({ ProductType::S4CL4AProductTypeId, event.processorId,
-                                            event.siteId, event.jobId, productFolder, maxDate,
+                                            event.siteId, event.jobId, productFolder, prdHelper.GetAcqDate(),
                                             prodName, quicklook, footPrint,
-                                            std::experimental::nullopt, TileIdList() });
+                                            std::experimental::nullopt, TileIdList(), ProductIdsList() });
             const QString &prodFolderOutPath =
                 ctx.GetOutputPath(event.jobId, event.taskId, event.module,
                                   processorDescr.shortName) +
@@ -397,12 +372,12 @@ void S4CCropTypeHandler::UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdat
             cfgToUpdate.endDate = ProcessorHandlerHelper::GetDateTimeFromString(strEndDate);
         }
     } else {
-        const QStringList &filterProductNames = GetL2AInputProductNames(cfgToUpdate.event);
+        const QStringList &filterProductNames = GetInputProductNames(cfgToUpdate.parameters);
         cfgToUpdate.SetFilteringProducts(filterProductNames);
 
-        QStringList listProducts;
-        bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, listProducts);
-        if (!ret || listProducts.size() == 0) {
+        QList<ProductDetails> productDetails;
+        bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, productDetails);
+        if (!ret || productDetails.size() == 0) {
             // try to get the start and end date if they are given
             cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
             throw std::runtime_error(
@@ -411,7 +386,7 @@ void S4CCropTypeHandler::UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdat
                     .toStdString());
         }
 
-        cfgToUpdate.tileIds = GetTileIdsFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, listProducts);
+        cfgToUpdate.tileIds = GetTileIdsFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, productDetails);
 
     }
 }
@@ -419,16 +394,15 @@ void S4CCropTypeHandler::UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdat
 
 QStringList S4CCropTypeHandler::GetTileIdsFromProducts(EventProcessingContext &ctx,
                                                        const JobSubmittedEvent &event,
-                                                       const QStringList &listProducts)
+                                                       const QList<ProductDetails> &productDetails)
 {
 
-    const QMap<QString, TileTemporalFilesInfo> &mapTiles =
-        GroupTiles(ctx, event.siteId, listProducts, ProductType::L2AProductTypeId);
+    const TilesTimeSeries &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, productDetails, ProductType::L2AProductTypeId);
 
     // normally, we can use only one list by we want (not necessary) to have the
     // secondary satellite tiles after the main satellite tiles
     QStringList tilesList;
-    for (const auto &tileId : mapTiles.keys()) {
+    for (const auto &tileId : mapTiles.GetTileIds()) {
         tilesList.append(tileId);
     }
     return tilesList;
@@ -490,7 +464,7 @@ void S4CCropTypeHandler::HandleMarkerProductsAvailable(EventProcessingContext &c
                     ctx.InsertProduct({ (ProductType)items[productTypeIdx].toInt(), event.processorId,
                                                 event.siteId, event.jobId, items[pathIdx], QDateTime::fromString(items[creationTimeIdx], "yyyy-MM-dd HH:mm:ss"),
                                                 items[nameIdx], QString(), defFootprint,
-                                                std::experimental::nullopt, TileIdList() });
+                                                std::experimental::nullopt, TileIdList(), ProductIdsList() });
                 } else {
                     Logger::error(QStringLiteral("S4C L4A: One of required headers was not found in the markers products file with name = %1!").arg(outMarkerInfos));
                 }

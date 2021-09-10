@@ -4,11 +4,6 @@
 #include <string>
 #include <vector>
 
-#define UNUSED(expr)                                                                               \
-    do {                                                                                           \
-        (void)(expr);                                                                              \
-    } while (0)
-
 #define LANDSAT_MISSION_STR "LANDSAT"
 #define SENTINEL_MISSION_STR "SENTINEL"
 #define SPOT_MISSION_STR "SPOT"

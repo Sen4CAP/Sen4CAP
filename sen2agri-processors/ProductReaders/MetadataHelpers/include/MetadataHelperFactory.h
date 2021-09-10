@@ -48,7 +48,7 @@ public:
     itkTypeMacro(MetadataHelperFactory, itk::LightObject)
 
     template <typename PixelType, typename MasksPixelType=short>
-    std::unique_ptr<MetadataHelper<PixelType, MasksPixelType>> GetMetadataHelper(const std::string& metadataFileName);
+    std::unique_ptr<MetadataHelper<PixelType, MasksPixelType>> GetMetadataHelper(const std::string& metadataFileName, const std::string& externalMask="");
 /*    {
        std::unique_ptr<MetadataHelper<PixelType, MasksPixelType>> spot4MetadataHelper(new Spot4MetadataHelper<PixelType, MasksPixelType>);
        if (spot4MetadataHelper->LoadMetadataFile(metadataFileName))

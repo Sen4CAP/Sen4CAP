@@ -281,7 +281,7 @@ std::string MAJAMetadataHelper<PixelType, MasksPixelType>::getQualityFileName(in
 
 template <typename PixelType, typename MasksPixelType>
 typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer
-         MAJAMetadataHelper<PixelType, MasksPixelType>::GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution) {
+         MAJAMetadataHelper<PixelType, MasksPixelType>::GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution) {
     // We use:
     //  - MG2 for CloudsMask, WaterMask, SnowMask
     //  - EDG ofor edge masks

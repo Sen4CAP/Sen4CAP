@@ -18,6 +18,9 @@
 #include "processor/grasslandmowinghandler.hpp"
 #include "processor/agricpracticeshandler.hpp"
 #include "processor/s4c_markersdb1.hpp"
+#include "processor/masked_l2a_handler.hpp"
+#include "processor/s4s_permanent_crop_handler.hpp"
+#include "processor/s4s_yieldhandler.hpp"
 #include "json_conversions.hpp"
 #include "schedulingcontext.h"
 #include "logger.hpp"
@@ -49,10 +52,16 @@ std::map<int, std::unique_ptr<ProcessorHandler>> & GetHandlersMap(PersistenceMan
             handlersMap.emplace(procDescr.processorId, std::make_unique<AgricPracticesHandler>());
         } else if(procDescr.shortName == "s2a_l3c") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<LaiRetrievalHandlerL3C>());
+        } else if(procDescr.shortName == "s4s_perm_crop") {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<S4SPermanentCropHandler>());
         } else if(procDescr.shortName == "s2a_l3d") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<LaiRetrievalHandlerL3D>());
-        }else if(procDescr.shortName == "s4c_mdb1") {
+        } else if(procDescr.shortName == "s4c_mdb1") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4CMarkersDB1Handler>());
+        } else if(procDescr.shortName == "l2a_msk") {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<MaskedL2AHandler>());
+        } else if(procDescr.shortName == "s4s_yield_feat") {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<S4SYieldHandler>());
         } else {
             bAdded = false;
             Logger::error(QStringLiteral("Invalid processor configuration found in database: %1, "
@@ -127,7 +136,7 @@ JobDefinition Orchestrator::GetJobDefinition(const ProcessingRequest &request)
         if(jobDef.isValid) {
             QJsonArray inputProductsArr;
             for (const auto &p : procDefParams.productList) {
-                inputProductsArr.append(p.fullPath);
+                inputProductsArr.append(p.name);
             }
             QJsonObject processorParamsObj;
             // add the input products key to the processor params

@@ -24,6 +24,7 @@
 #include "otbStreamingResampleImageFilter.h"
 #include "otbVectorImage.h"
 #include "MetadataHelperDefs.h"
+#include "AppExternalMaskProvider.h"
 
 template <typename PixelType, typename MasksPixelType = short>
 class MetadataHelper
@@ -57,7 +58,7 @@ public:
     MetadataHelper();
     virtual ~MetadataHelper();
 
-    bool LoadMetadataFile(const std::string &file);
+    bool LoadMetadataFile(const std::string &file, const std::string &externalMask = "");
 
     // GENETAL FIELDS API
     virtual std::string GetMissionName() { return m_Mission; }
@@ -101,10 +102,18 @@ public:
     virtual std::string GetNoDataValue() { return m_strNoDataValue; }
 
     // MASKS API
-    // The following 4 functions are not very useful here as are very specific to each sensor
-    // They should be kept only in the derived classes
+
+    // Get the mask from the inner mask files of the L2A product
+    // if binarizeResult is true, it returns a mask image having 0 as valid pixel and 1 for invalid pixels
+    // if binarizeResult is false, the pixels are:
+    // IMG_FLG_LAND=0, IMG_FLG_WATER=1, IMG_FLG_CLOUD_SHADOW=2, IMG_FLG_SNOW=3, IMG_FLG_CLOUD=4, IMG_FLG_SATURATION=5, IMG_FLG_NO_DATA=255
     virtual typename SingleBandMasksImageType::Pointer
-    GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution = -1) = 0;
+    GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution = -1) = 0;
+
+    // Get the mask from the inner mask files of the L2A product except the case when an external
+    // mask was provided, in which case, the external mask is used.
+    virtual typename SingleBandMasksImageType::Pointer
+    GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution = -1);
 
     // DATE API
     // returns the acquisition date in the format YYYYMMDD
@@ -222,6 +231,8 @@ protected:
     std::vector<MetadataHelperViewingAnglesGrid> m_detailedViewingAngles;
     std::vector<MetadataHelperViewingAnglesGrid> m_allDetectorsDetailedViewingAngles;
 
+    std::vector<typename otb::Wrapper::AppExternalMaskProvider<MasksPixelType>::Pointer> m_appExtMskProviders;
+
 protected:
     typedef struct AotInfos {
         AotInfos()
@@ -238,6 +249,7 @@ protected:
     } AotInfos;
 
     std::string m_inputMetadataFileName;
+    std::string m_externalMask; // can be a file or a directory containing the masks
     std::string m_DirName;
     std::vector<int> m_vectResolutions;
 

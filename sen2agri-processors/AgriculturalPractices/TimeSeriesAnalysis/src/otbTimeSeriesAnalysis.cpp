@@ -199,6 +199,10 @@ private:
         MandatoryOff("tlcohthrabs");
         SetDefaultParameterFloat("tlcohthrabs", 0.75);
 
+        AddParameter(ParameterType_String, "tlmonitoringenddate", "Tillage monitoring end date");
+        SetParameterDescription("tlmonitoringenddate", "Tillage monitoring end date");
+        MandatoryOff("tlmonitoringenddate");
+
         AddParameter(ParameterType_Float, "ampthrmin", "BACKSCATTER loss");
         SetParameterDescription("ampthrmin", "for MARKER 3 - BACKSCATTER loss");
 
@@ -790,6 +794,13 @@ private:
         return CohThrAbs;
     }
 
+    std::string GetTLMonitoringEndDate() {
+        if (HasValue("tlmonitoringenddate")) {
+            return GetParameterString("tlmonitoringenddate");
+        }
+        return "";
+    }
+
     // for MARKER 3 - BACKSCATTER loss
     double GetAmpThrMinimum() {
         double AmpThrMinimum = 0.1;
@@ -964,6 +975,7 @@ private:
             pHandler->SetOpticalThrVegCycle(GetOpticalThrVegCycle());
             pHandler->SetCohThrBase(GetTLCohThrBase());
             pHandler->SetCohThrAbs(GetTLCohThrAbs());
+            pHandler->SetTillageMonitoringEndDate(GetTLMonitoringEndDate());
             m_tillageHandler = std::unique_ptr<TsaTillageAnalysisHandler>(pHandler);
         }
     }

@@ -9,56 +9,68 @@
 #include "json_conversions.hpp"
 #include "logger.hpp"
 #include "maccshdrmeananglesreader.hpp"
+#include <unordered_map>
 
-void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+#include <QHash>
+#include <QString>
+#include <functional>
+
+#include "products/generichighlevelproducthelper.h"
+#include "processor/products/producthelper.h"
+#include "processor/products/producthelperfactory.h"
+using namespace orchestrator::products;
+
+// For unordered map and QString as key
+namespace std {
+  template<> struct hash<QString> {
+    std::size_t operator()(const QString& s) const noexcept {
+      return (size_t) qHash(s);
+    }
+  };
+}
+
+#define CURRENT_PROC_PRDS_FILE_NAME     "current_processing_l3b_new.txt"
+
+void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jobCtx,
                                                          QList<TaskToSubmit> &outAllTasksList,
-                                                    const QList<TileInfos> &tileInfosList,
-                                                    bool bRemoveTempFiles) {
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    std::map<QString, QString> configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
-    // TODO: see why is genlai for all the flags
-    bool bGenNdvi = IsParamOrConfigKeySet(parameters, configParameters, "genlai", "processor.l3b.filter.produce_ndvi");
-    bool bGenLai = IsParamOrConfigKeySet(parameters, configParameters, "genlai", "processor.l3b.filter.produce_lai");
-    bool bGenFapar = IsParamOrConfigKeySet(parameters, configParameters, "genlai", "processor.l3b.filter.produce_fapar");
-    bool bGenFCover = IsParamOrConfigKeySet(parameters, configParameters, "genlai", "processor.l3b.filter.produce_fcover");
-    bool bGenInDomainFlags = IsParamOrConfigKeySet(parameters, configParameters, "indomflags", "processor.l3b.filter.produce_in_domain_flags");
+                                                    const QList<TileInfos> &tileInfosList) {
 
     // in allTasksList we might have tasks from other products. We start from the first task of the current product
     int initialTasksNo = outAllTasksList.size();
     int nbLaiMonoProducts = tileInfosList.size();
     for(int i = 0; i<nbLaiMonoProducts; i++) {
         outAllTasksList.append(TaskToSubmit{"lai-processor-mask-flags", {}});
-        if (bGenNdvi) {
+        if (jobCtx.bGenNdvi) {
             outAllTasksList.append(TaskToSubmit{"lai-processor-ndvi-extractor", {}});
         }
-        if (bGenLai || bGenFapar || bGenFCover) {
+        if (jobCtx.bGenLai || jobCtx.bGenFapar || jobCtx.bGenFCover) {
             outAllTasksList.append(TaskToSubmit{"lai-create-angles", {}});
             outAllTasksList.append(TaskToSubmit{"gdal_translate", {}});
             outAllTasksList.append(TaskToSubmit{"gdalbuildvrt", {}});
             outAllTasksList.append(TaskToSubmit{"gdal_translate", {}});
-            if (bGenLai) {
+            if (jobCtx.bGenLai) {
                 outAllTasksList.append(TaskToSubmit{"lai-processor", {}});
                 outAllTasksList.append(TaskToSubmit{"lai-quantify-image", {}});
                 outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
             }
-            if (bGenFapar) {
+            if (jobCtx.bGenFapar) {
                 outAllTasksList.append(TaskToSubmit{"fapar-processor", {}});
                 outAllTasksList.append(TaskToSubmit{"fapar-quantify-image", {}});
                 outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
             }
-            if (bGenFCover) {
+            if (jobCtx.bGenFCover) {
                 outAllTasksList.append(TaskToSubmit{"fcover-processor", {}});
                 outAllTasksList.append(TaskToSubmit{"fcover-quantify-image", {}});
                 outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
             }
         }
-        if (bGenInDomainFlags) {
+        if (jobCtx.bGenInDomainFlags) {
             // add the task for generating domain input flags
             outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
         }
     }
     outAllTasksList.append({"product-formatter", {}});
-    if(bRemoveTempFiles) {
+    if(jobCtx.bRemoveTempFiles) {
         outAllTasksList.append(TaskToSubmit{ "files-remover", {} });
     }
 
@@ -90,29 +102,29 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(EventProcessingContext 
         // lai-processor-ndvi-extraction, lai-processor, fapar-processor, fcover-processor -> lai-processor-mask-flags
         // all these are run in parallel
         int flagsTaskIdx = nCurTaskIdx-1;
-        if (bGenNdvi) {
+        if (jobCtx.bGenNdvi) {
             int ndviRviExtrIdx = nCurTaskIdx++;
             outAllTasksList[ndviRviExtrIdx].parentTasks.append(outAllTasksList[flagsTaskIdx]);
             // add the ndvi task to the list of the product formatter corresponding to this product
             productFormatterParentsRefs.append(outAllTasksList[ndviRviExtrIdx]);
         }
         int nAnglesTaskId = flagsTaskIdx;
-        if (bGenLai || bGenFapar || bGenFCover) {
+        if (jobCtx.bGenLai || jobCtx.bGenFapar || jobCtx.bGenFCover) {
             nCurTaskIdx = CreateAnglesTasks(flagsTaskIdx, outAllTasksList, nCurTaskIdx, nAnglesTaskId);
 
-            if (bGenLai) {
+            if (jobCtx.bGenLai) {
                 nCurTaskIdx = CreateBiophysicalIndicatorTasks(nAnglesTaskId, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
             }
 
-            if (bGenFapar) {
+            if (jobCtx.bGenFapar) {
                 nCurTaskIdx = CreateBiophysicalIndicatorTasks(nAnglesTaskId, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
             }
 
-            if (bGenFCover) {
+            if (jobCtx.bGenFCover) {
                 nCurTaskIdx = CreateBiophysicalIndicatorTasks(nAnglesTaskId, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
             }
         }
-        if (bGenInDomainFlags) {
+        if (jobCtx.bGenInDomainFlags) {
             int nInputDomainIdx = nCurTaskIdx++;
             outAllTasksList[nInputDomainIdx].parentTasks.append(outAllTasksList[flagsTaskIdx]);
             // add the input domain task to the list of the product formatter corresponding to this product
@@ -121,7 +133,7 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(EventProcessingContext 
     }
     int productFormatterIdx = nCurTaskIdx++;
     outAllTasksList[productFormatterIdx].parentTasks.append(productFormatterParentsRefs);
-    if(bRemoveTempFiles) {
+    if(jobCtx.bRemoveTempFiles) {
         // cleanup-intermediate-files -> product formatter
         outAllTasksList[nCurTaskIdx].parentTasks.append(outAllTasksList[nCurTaskIdx-1]);
     }
@@ -163,27 +175,10 @@ int LaiRetrievalHandlerL3BNew::CreateBiophysicalIndicatorTasks(int parentTaskId,
     return nCurTaskIdx;
 }
 
-NewStepList LaiRetrievalHandlerL3BNew::GetStepsForMonodateLai(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                                    const QList<TileInfos> &prdTilesInfosList, QList<TaskToSubmit> &allTasksList,
-                                                    bool bRemoveTempFiles, int tasksStartIdx)
+NewStepList LaiRetrievalHandlerL3BNew::GetStepsForMonodateLai(const L3BJobContext &jobCtx, const QList<TileInfos> &prdTilesInfosList,
+                                                              QList<TaskToSubmit> &allTasksList, int tasksStartIdx)
 {
     NewStepList steps;
-    const QJsonObject &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    std::map<QString, QString> configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
-    const auto &laiCfgFile = configParameters["processor.l3b.lai.laibandscfgfile"];
-    bool bGenNdvi = IsParamOrConfigKeySet(parameters, configParameters, "produce_ndvi", "processor.l3b.filter.produce_ndvi");
-    bool bGenLai = IsParamOrConfigKeySet(parameters, configParameters, "produce_lai", "processor.l3b.filter.produce_lai");
-    bool bGenFapar = IsParamOrConfigKeySet(parameters, configParameters, "produce_fapar", "processor.l3b.filter.produce_fapar");
-    bool bGenFCover = IsParamOrConfigKeySet(parameters, configParameters, "produce_fcover", "processor.l3b.filter.produce_fcover");
-    bool bGenInDomainFlags = IsParamOrConfigKeySet(parameters, configParameters, "indomflags", "processor.l3b.filter.produce_in_domain_flags");
-
-    // Get the resolution value
-    int resolution = 0;
-    if(!ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "resolution", resolution) ||
-            resolution == 0) {
-        resolution = 10;    // TODO: We should configure the default resolution in DB
-    }
-    const auto &resolutionStr = QString::number(resolution);
 
     // in allTasksList we might have tasks from other products. We start from the first task of the current product
     int curTaskIdx = tasksStartIdx;
@@ -194,40 +189,42 @@ NewStepList LaiRetrievalHandlerL3BNew::GetStepsForMonodateLai(EventProcessingCon
     for (int i = 0; i<prdTilesInfosList.size(); i++) {
         TileResultFiles tileResultFileInfo;
         const auto &prdTileInfo = prdTilesInfosList[i];
-        InitTileResultFiles(bGenNdvi, bGenLai, bGenFapar, bGenFCover, resolutionStr, prdTileInfo.tileFile, tileResultFileInfo);
+        InitTileResultFiles(prdTileInfo, tileResultFileInfo);
 
-        curTaskIdx = GetStepsForStatusFlags(allTasksList, curTaskIdx, tileResultFileInfo, steps,
+        curTaskIdx = GetStepsForStatusFlags(jobCtx, allTasksList, curTaskIdx, tileResultFileInfo, steps,
                                             cleanupTemporaryFilesList);
-        if (bGenNdvi) {
-            curTaskIdx = GetStepsForNdvi(allTasksList, curTaskIdx, tileResultFileInfo, laiCfgFile,
+        if (jobCtx.bGenNdvi) {
+            curTaskIdx = GetStepsForNdvi(jobCtx, allTasksList, curTaskIdx, tileResultFileInfo,
                                          steps, cleanupTemporaryFilesList);
         }
-        if (bGenLai || bGenFapar || bGenFCover) {
-            curTaskIdx = GetStepsForAnglesCreation(allTasksList, curTaskIdx, tileResultFileInfo, steps, cleanupTemporaryFilesList);
-            if (bGenLai) {
-                curTaskIdx = GetStepsForMonoDateBI(allTasksList, "lai", curTaskIdx, laiCfgFile,
+        if (jobCtx.bGenLai || jobCtx.bGenFapar || jobCtx.bGenFCover) {
+            curTaskIdx = GetStepsForAnglesCreation(allTasksList, curTaskIdx, tileResultFileInfo, steps,
+                                                   cleanupTemporaryFilesList);
+            if (jobCtx.bGenLai) {
+                curTaskIdx = GetStepsForMonoDateBI(jobCtx, allTasksList, "lai", curTaskIdx,
                                                    tileResultFileInfo, steps, cleanupTemporaryFilesList);
             }
-            if (bGenFapar) {
-                curTaskIdx = GetStepsForMonoDateBI(allTasksList, "fapar", curTaskIdx, laiCfgFile,
+            if (jobCtx.bGenFapar) {
+                curTaskIdx = GetStepsForMonoDateBI(jobCtx, allTasksList, "fapar", curTaskIdx,
                                                    tileResultFileInfo, steps, cleanupTemporaryFilesList);
             }
-            if (bGenFCover) {
-                curTaskIdx = GetStepsForMonoDateBI(allTasksList, "fcover", curTaskIdx, laiCfgFile,
+            if (jobCtx.bGenFCover) {
+                curTaskIdx = GetStepsForMonoDateBI(jobCtx, allTasksList, "fcover", curTaskIdx,
                                                    tileResultFileInfo, steps, cleanupTemporaryFilesList);
             }
         }
-        if (bGenInDomainFlags) {
-            curTaskIdx = GetStepsForInDomainFlags(allTasksList, curTaskIdx, laiCfgFile, tileResultFileInfo, steps, cleanupTemporaryFilesList);
+        if (jobCtx.bGenInDomainFlags) {
+            curTaskIdx = GetStepsForInDomainFlags(jobCtx, allTasksList, curTaskIdx, tileResultFileInfo, steps, cleanupTemporaryFilesList);
         }
 
         tileResultFileInfos.append(tileResultFileInfo);
     }
     TaskToSubmit &laiMonoProductFormatterTask = allTasksList[curTaskIdx++];
-    QStringList productFormatterArgs = GetLaiMonoProductFormatterArgs(laiMonoProductFormatterTask, ctx, event, tileResultFileInfos);
+    const QStringList &productFormatterArgs = GetLaiMonoProductFormatterArgs(laiMonoProductFormatterTask, jobCtx,
+                                                                             prdTilesInfosList, tileResultFileInfos);
     steps.append(CreateTaskStep(laiMonoProductFormatterTask, "ProductFormatter", productFormatterArgs));
 
-    if(bRemoveTempFiles) {
+    if(jobCtx.bRemoveTempFiles) {
         TaskToSubmit &cleanupTemporaryFilesTask = allTasksList[curTaskIdx++];
         // add also the cleanup step
         steps.append(CreateTaskStep(cleanupTemporaryFilesTask, "CleanupTemporaryFiles", cleanupTemporaryFilesList));
@@ -236,16 +233,17 @@ NewStepList LaiRetrievalHandlerL3BNew::GetStepsForMonodateLai(EventProcessingCon
     return steps;
 }
 
-int LaiRetrievalHandlerL3BNew::GetStepsForStatusFlags(QList<TaskToSubmit> &allTasksList, int curTaskIdx,
+int LaiRetrievalHandlerL3BNew::GetStepsForStatusFlags(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
                             TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList) {
 
     TaskToSubmit &genMonoDateMskFagsTask = allTasksList[curTaskIdx++];
     tileResultFileInfo.statusFlagsFile = genMonoDateMskFagsTask.GetFilePath("LAI_mono_date_msk_flgs_img.tif");
     tileResultFileInfo.statusFlagsFileResampled = genMonoDateMskFagsTask.GetFilePath("LAI_mono_date_msk_flgs_img_resampled.tif");
-    QStringList genMonoDateMskFagsArgs = GetMonoDateMskFlagsArgs(tileResultFileInfo.tileFile,
+    const QStringList &genMonoDateMskFagsArgs = GetMonoDateMskFlagsArgs(tileResultFileInfo.tileFile,
+                                                                 tileResultFileInfo.inPrdExtMsk,
                                                                  tileResultFileInfo.statusFlagsFile,
                                                                  tileResultFileInfo.statusFlagsFileResampled,
-                                                                 tileResultFileInfo.resolutionStr);
+                                                                 jobCtx.resolutionStr);
     // add these steps to the steps list to be submitted
     steps.append(CreateTaskStep(genMonoDateMskFagsTask, "GenerateLaiMonoDateMaskFlags", genMonoDateMskFagsArgs));
     cleanupTemporaryFilesList.append(tileResultFileInfo.statusFlagsFile);
@@ -254,16 +252,15 @@ int LaiRetrievalHandlerL3BNew::GetStepsForStatusFlags(QList<TaskToSubmit> &allTa
     return curTaskIdx;
 }
 
-int LaiRetrievalHandlerL3BNew::GetStepsForNdvi(QList<TaskToSubmit> &allTasksList, int curTaskIdx,
-                            TileResultFiles &tileResultFileInfo, const QString &laiCfgFile,
-                            NewStepList &steps, QStringList &cleanupTemporaryFilesList) {
+int LaiRetrievalHandlerL3BNew::GetStepsForNdvi(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
+                            TileResultFiles &tileResultFileInfo,  NewStepList &steps, QStringList &cleanupTemporaryFilesList) {
 
     TaskToSubmit &ndviRviExtractorTask = allTasksList[curTaskIdx++];
     tileResultFileInfo.ndviFile = ndviRviExtractorTask.GetFilePath("single_ndvi.tif");
     const QStringList &ndviRviExtractionArgs = GetNdviRviExtractionNewArgs(tileResultFileInfo.tileFile,
                                                                  tileResultFileInfo.statusFlagsFile,
                                                                  tileResultFileInfo.ndviFile,
-                                                                 tileResultFileInfo.resolutionStr, laiCfgFile);
+                                                                 jobCtx.resolutionStr, jobCtx.laiCfgFile);
     steps.append(CreateTaskStep(ndviRviExtractorTask, "NdviRviExtractionNew", ndviRviExtractionArgs));
     // save the file to be sent to product formatter
     cleanupTemporaryFilesList.append(tileResultFileInfo.ndviFile);
@@ -300,8 +297,8 @@ int LaiRetrievalHandlerL3BNew::GetStepsForAnglesCreation(QList<TaskToSubmit> &al
     return curTaskIdx;
 }
 
-int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(QList<TaskToSubmit> &allTasksList,
-                           const QString &indexName, int curTaskIdx, const QString &laiCfgFile, TileResultFiles &tileResultFileInfo, NewStepList &steps,
+int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList,
+                           const QString &indexName, int curTaskIdx, TileResultFiles &tileResultFileInfo, NewStepList &steps,
                            QStringList &cleanupTemporaryFilesList) {
     const QString &indexNameCaps = indexName.toUpper();
     TaskToSubmit &biProcessorTask = allTasksList[curTaskIdx++];
@@ -310,16 +307,16 @@ int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(QList<TaskToSubmit> &allTas
     const auto & BIFileName = biProcessorTask.GetFilePath(indexNameCaps + "_mono_date_img.tif");
     const auto & quantifiedBIFileName = quantifyBIImageTask.GetFilePath(indexNameCaps + "_mono_date_img_16.tif");
     const QStringList &BIProcessorArgs = GetLaiProcessorArgs(tileResultFileInfo.tileFile, tileResultFileInfo.anglesFile,
-                                                                    tileResultFileInfo.resolutionStr, laiCfgFile,
+                                                                    jobCtx.resolutionStr, jobCtx.laiCfgFile,
                                                                     BIFileName, indexName);
     steps.append(CreateTaskStep(biProcessorTask, "BVLaiNewProcessor" + indexNameCaps, BIProcessorArgs));
 
     const auto & domainFlagsFileName = biDomainFlagsTask.GetFilePath(indexNameCaps + "_out_domain_flags.tif");
     const auto & correctedBIFileName = biDomainFlagsTask.GetFilePath(indexNameCaps + "_corrected_mono_date.tif");
     const QStringList &outDomainFlagsArgs = GetGenerateOutputDomainFlagsArgs(tileResultFileInfo.tileFile, BIFileName,
-                                                                laiCfgFile, indexName,
+                                                                jobCtx.laiCfgFile, indexName,
                                                                 domainFlagsFileName,  correctedBIFileName,
-                                                                tileResultFileInfo.resolutionStr);
+                                                                jobCtx.resolutionStr);
     steps.append(CreateTaskStep(biDomainFlagsTask, "Generate" + indexNameCaps + "InDomainQualityFlags", outDomainFlagsArgs));
 
     const QStringList &quantifyFcoverImageArgs = GetQuantifyImageArgs(correctedBIFileName, quantifiedBIFileName);
@@ -343,14 +340,13 @@ int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(QList<TaskToSubmit> &allTas
     return curTaskIdx;
 }
 
-int LaiRetrievalHandlerL3BNew::GetStepsForInDomainFlags(QList<TaskToSubmit> &allTasksList, int curTaskIdx,
-                            const QString &laiCfgFile, TileResultFiles &tileResultFileInfo, NewStepList &steps,
-                            QStringList &) {
+int LaiRetrievalHandlerL3BNew::GetStepsForInDomainFlags(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
+                            TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &) {
     TaskToSubmit &inputDomainTask = allTasksList[curTaskIdx++];
     tileResultFileInfo.inDomainFlagsFile = inputDomainTask.GetFilePath("Input_domain_flags.tif");
     const QStringList &inDomainFlagsArgs = GetGenerateInputDomainFlagsArgs(tileResultFileInfo.tileFile,
-                                                                laiCfgFile, tileResultFileInfo.inDomainFlagsFile,
-                                                                tileResultFileInfo.resolutionStr);
+                                                                jobCtx.laiCfgFile, tileResultFileInfo.inDomainFlagsFile,
+                                                                jobCtx.resolutionStr);
     steps.append(CreateTaskStep(inputDomainTask, "GenerateInDomainQualityFlags", inDomainFlagsArgs));
 
     return curTaskIdx;
@@ -383,13 +379,28 @@ void LaiRetrievalHandlerL3BNew::WriteExecutionInfosFile(const QString &execution
     }
 }
 
-void LaiRetrievalHandlerL3BNew::HandleProduct(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                            const QList<TileInfos> &prdTilesInfosList, QList<TaskToSubmit> &allTasksList) {
-    bool bRemoveTempFiles = NeedRemoveJobFolder(ctx, event.jobId, "l3b");
+void LaiRetrievalHandlerL3BNew::WriteInputPrdIdsInfosFile(const QString &outFilePath,
+                                               const QList<TileInfos> &prdTilesInfosList) {
+    std::ofstream outFile;
+    try
+    {
+        outFile.open(outFilePath.toStdString().c_str(), std::ofstream::out);
+        for (int i = 0; i<prdTilesInfosList.size(); i++) {
+            outFile << prdTilesInfosList[i].parentProductInfo.productId << std::endl;
+        }
+        outFile.close();
+    }
+    catch(...)
+    {
 
+    }
+}
+
+void LaiRetrievalHandlerL3BNew::HandleProduct(const L3BJobContext &jobCtx,
+                                            const QList<TileInfos> &prdTilesInfosList, QList<TaskToSubmit> &allTasksList) {
     int tasksStartIdx = allTasksList.size();
     // create the tasks
-    CreateTasksForNewProduct(ctx, event, allTasksList, prdTilesInfosList, bRemoveTempFiles);
+    CreateTasksForNewProduct(jobCtx, allTasksList, prdTilesInfosList);
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     for(int i = tasksStartIdx; i < allTasksList.size(); i++) {
@@ -397,12 +408,12 @@ void LaiRetrievalHandlerL3BNew::HandleProduct(EventProcessingContext &ctx, const
         allTasksListRef.append((TaskToSubmit&)task);
     }
     // submit all tasks
-    SubmitTasks(ctx, event.jobId, allTasksListRef);
+    SubmitTasks(*jobCtx.pCtx, jobCtx.event.jobId, allTasksListRef);
 
     NewStepList steps;
 
-    steps += GetStepsForMonodateLai(ctx, event, prdTilesInfosList, allTasksList, bRemoveTempFiles, tasksStartIdx);
-    ctx.SubmitSteps(steps);
+    steps += GetStepsForMonodateLai(jobCtx, prdTilesInfosList, allTasksList, tasksStartIdx);
+    jobCtx.pCtx->SubmitSteps(steps);
 }
 
 void LaiRetrievalHandlerL3BNew::SubmitEndOfLaiTask(EventProcessingContext &ctx,
@@ -428,69 +439,89 @@ void LaiRetrievalHandlerL3BNew::SubmitEndOfLaiTask(EventProcessingContext &ctx,
 void LaiRetrievalHandlerL3BNew::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                              const JobSubmittedEvent &evt)
 {
-    auto parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
-    std::map<QString, QString> configParameters = ctx.GetJobConfigurationParameters(evt.jobId, "processor.l3b.");
+    L3BJobContext jobCtx(this, &ctx, evt);
 
-    // Moved this from the GetProcessingDefinitionImpl function as it might be time consuming and scheduler will
-    // throw exception if timeout exceeded
-    JobSubmittedEvent event;
-    int ret = UpdateJobSubmittedParamsFromSchedReq(ctx, evt, parameters, event);
-    // no products available from the scheduling ... mark also the job as failed
-    if (ret == 0) {
-        ctx.MarkJobFailed(event.jobId);
-        throw std::runtime_error(
-                    QStringLiteral("L3B Scheduled job with id %1 for site %2 marked as done as no products are available for now to process").
-                                         arg(event.jobId).arg(event.siteId).toStdString());
-    }
-
-    bool bGenNdvi = IsParamOrConfigKeySet(parameters, configParameters, "genndvi", "processor.l3b.filter.produce_ndvi");
-    bool bGenLai = IsParamOrConfigKeySet(parameters, configParameters, "genlai", "processor.l3b.filter.produce_lai");
-    bool bGenFapar = IsParamOrConfigKeySet(parameters, configParameters, "genfapar", "processor.l3b.filter.produce_fapar");
-    bool bGenFCover = IsParamOrConfigKeySet(parameters, configParameters, "genfcover", "processor.l3b.filter.produce_fcover");
-    if (!bGenNdvi && !bGenLai && !bGenFapar && !bGenFCover) {
-        ctx.MarkJobFailed(event.jobId);
+    if (!jobCtx.bGenNdvi && !jobCtx.bGenLai && !jobCtx.bGenFapar && !jobCtx.bGenFCover) {
+        ctx.MarkJobFailed(evt.jobId);
         throw std::runtime_error(
             QStringLiteral("No vedgetation index (NDVI, LAI, FAPAR or FCOVER) was configured to be generated").toStdString());
     }
 
+
+    // Moved this from the GetProcessingDefinitionImpl function as it might be time consuming and scheduler will
+    // throw exception if timeout exceeded
+    ProductList prdsToProcess;
+    int ret = UpdateJobSubmittedParamsFromSchedReq(jobCtx, prdsToProcess);
+    // no products available from the scheduling ... mark also the job as failed
+    if (ret == 0) {
+        ctx.MarkJobFailed(evt.jobId);
+        throw std::runtime_error(
+                    QStringLiteral("L3B Scheduled job with id %1 for site %2 marked as done as no products are available for now to process").
+                                         arg(evt.jobId).arg(evt.siteId).toStdString());
+    } else if (ret == -1) {
+        // custom job
+        auto parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
+        const QStringList &prdNames = GetInputProductNames(parameters);
+        prdsToProcess = ctx.GetProducts(evt.siteId, prdNames);
+    }
+    // extract the full paths to avoid extracting product info one by one
+    std::unordered_map<QString, Product> mapInfoPrds;
+    std::for_each(prdsToProcess.begin(), prdsToProcess.end(), [&mapInfoPrds](const Product &prd) {
+        mapInfoPrds[prd.fullPath] = prd;
+    });
+
     // create and submit the tasks for the received products
-    QMap<QString, QStringList> inputProductToTilesMap;
-    const QStringList &listTilesMetaFiles = GetL2AInputProductsTiles(ctx, event, inputProductToTilesMap);
-    if(listTilesMetaFiles.size() == 0) {
-        ctx.MarkJobFailed(event.jobId);
+    const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prdsToProcess, ctx);
+    if(productDetails.size() == 0) {
+        ctx.MarkJobFailed(evt.jobId);
         throw std::runtime_error(
             QStringLiteral("No products provided at input or no products available in the specified interval").
                     toStdString());
     }
-
     // Group the products that belong to the same date
     // the tiles of products from secondary satellite are not included if they happen to be from the same date with tiles from
     // the same date
-    QMap<QDate, QStringList> dateGroupedInputProductToTilesMap = ProcessorHandlerHelper::GroupL2AProductTilesByDate(inputProductToTilesMap);
+    const QMap<QDate, QList<ProductDetails>> &dateGroupedInputProductToTilesMap = ProcessorHandlerHelper::GroupByDate(productDetails);
 
     //container for all task
     QList<TaskToSubmit> allTasksList;
-    const QSet<QString> &tilesFilter = GetTilesFilter(parameters, configParameters);
+    const QSet<QString> &tilesFilter = GetTilesFilter(jobCtx);
     for(const auto &key : dateGroupedInputProductToTilesMap.keys()) {
-        const QStringList &prdTilesList = dateGroupedInputProductToTilesMap[key];
+        const QList<ProductDetails> &prdsDetails = dateGroupedInputProductToTilesMap[key];
         // create structures providing the models for each tile
         QList<TileInfos> tilesInfosList;
-        for(const QString &prdTile: prdTilesList) {
-            if (FilterTile(tilesFilter, prdTile)) {
+        for(const ProductDetails &prdDetails: prdsDetails) {
+            if (FilterTile(tilesFilter, prdDetails)) {
+                std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdDetails);
+                const QStringList &metaFiles = helper->GetProductMetadataFiles();
+                if (metaFiles.size() == 0) {
+                    continue;
+                }
                 TileInfos tileInfo;
-                tileInfo.tileFile = prdTile;
+                tileInfo.tileFile = metaFiles[0];
+                tileInfo.parentProductInfo = prdDetails.GetProduct();
+                const QStringList &extMasks = helper->GetProductMasks();
+                if (extMasks.size() > 0 ) {
+                    tileInfo.prdExternalMskFile = extMasks[0];
+                }
+                tileInfo.tileIds = prdDetails.GetProduct().tiles;
+                if (tileInfo.tileIds.size() == 0) {
+                    Logger::error(QStringLiteral("InitTileResultFiles: the product %1 does not have any associated tiles!")
+                                  .arg(metaFiles[0]));
+                    continue;
+                }
                 tilesInfosList.append(tileInfo);
             }
         }
         // Handle product only if we have at least one tile (we might have all of them filtered)
         if (tilesInfosList.size() > 0) {
-            HandleProduct(ctx, event, tilesInfosList, allTasksList);
+            HandleProduct(jobCtx, tilesInfosList, allTasksList);
         }
     }
 
     // we add a task in order to wait for all product formatter to finish.
     // This will allow us to mark the job as finished and to remove the job folder
-    SubmitEndOfLaiTask(ctx, event, allTasksList);
+    SubmitEndOfLaiTask(ctx, evt, allTasksList);
 }
 
 void LaiRetrievalHandlerL3BNew::HandleTaskFinishedImpl(EventProcessingContext &ctx,
@@ -502,38 +533,43 @@ void LaiRetrievalHandlerL3BNew::HandleTaskFinishedImpl(EventProcessingContext &c
         RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
     }
     if ((event.module == "product-formatter")) {
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder = GetProductFormatterOutputProductPath(ctx, event);
-        if((prodName != "") && ProcessorHandlerHelper::IsValidHighLevelProduct(productFolder)) {
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
-            ProductType prodType = ProductType::L3BProductTypeId;
-
-            const QStringList &prodTiles = ProcessorHandlerHelper::GetTileIdsFromHighLevelProduct(productFolder);
-
+        const QString &prodName = GetOutputProductName(ctx, event);
+        const QString &productFolder = GetOutputProductPath(ctx, event);
+        GenericHighLevelProductHelper prdHelper(productFolder);
+        if(prodName != "" && prdHelper.HasValidStructure()) {
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
+            const QStringList &prodTiles = prdHelper.GetTileIdsFromProduct();
             // get the satellite id for the product
-            const QStringList &listL3BProdTiles = ProcessorHandlerHelper::GetTileIdsFromHighLevelProduct(productFolder);
-            const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles = GetSiteTiles(ctx, event.siteId);
-            ProcessorHandlerHelper::SatelliteIdType satId = ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN;
-            for(const auto &tileId : listL3BProdTiles) {
+            const QMap<Satellite, TileList> &siteTiles = GetSiteTiles(ctx, event.siteId);
+            Satellite satId = Satellite::Invalid;
+            for(const auto &tileId : prodTiles) {
                 // we assume that all the tiles from the product are from the same satellite
                 // in this case, we get only once the satellite Id for all tiles
-                if(satId == ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
+                if(satId == Satellite::Invalid) {
                     satId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
                     // ignore tiles for which the satellite id cannot be determined
-                    if(satId != ProcessorHandlerHelper::SATELLITE_ID_TYPE_UNKNOWN) {
+                    if(satId != Satellite::Invalid) {
                         break;
                     }
                 }
             }
 
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
-            int ret = ctx.InsertProduct({ prodType, event.processorId, static_cast<int>(satId), event.siteId, event.jobId,
-                                productFolder, maxDate, prodName,
-                                quicklook, footPrint, std::experimental::nullopt, prodTiles });
+            const ProductIdsList &prdIds = GetOutputProductParentProductIds(ctx, event);
+            int ret = ctx.InsertProduct({ ProductType::L3BProductTypeId, event.processorId, static_cast<int>(satId), event.siteId, event.jobId,
+                                productFolder, prdHelper.GetAcqDate(), prodName,
+                                quicklook, footPrint, std::experimental::nullopt, prodTiles, prdIds });
             Logger::debug(QStringLiteral("InsertProduct for %1 returned %2").arg(prodName).arg(ret));
+
+            // Cleanup the currently processing products for the current job
+            Logger::info(QStringLiteral("Cleaning up the file containing currently processing products for output product %1 and folder %2 and site id %3 and job id %4").
+                         arg(prodName).arg(productFolder).arg(event.siteId).arg(event.jobId));
+            const QString &curProcPrdsFilePath = GetSiteCurrentProcessingPrdsFile(ctx, event.jobId, event.siteId);
+            QStringList prdStrIds;
+            for(int id: prdIds) { prdStrIds.append(QString::number(id)); }
+            ProcessorHandlerHelper::CleanupCurrentProductIdsForJob(curProcPrdsFilePath, event.jobId, prdStrIds);
+
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));
             // We might have several L3B products, we should not mark it at failed here as
@@ -632,36 +668,43 @@ QStringList LaiRetrievalHandlerL3BNew::GetQuantifyImageArgs(const QString &inFil
     };
 }
 
-QStringList LaiRetrievalHandlerL3BNew::GetMonoDateMskFlagsArgs(const QString &inputProduct, const QString &monoDateMskFlgsFileName,
-                                                         const QString &monoDateMskFlgsResFileName, const QString &resStr) {
-    return { "GenerateLaiMonoDateMaskFlags",
+QStringList LaiRetrievalHandlerL3BNew::GetMonoDateMskFlagsArgs(const QString &inputProduct,
+                                                               const QString &extMsk,
+                                                               const QString &monoDateMskFlgsFileName,
+                                                               const QString &monoDateMskFlgsResFileName,
+                                                               const QString &resStr) {
+    QStringList args = { "GenerateLaiMonoDateMaskFlags",
       "-inxml", inputProduct,
       "-out", monoDateMskFlgsFileName,
       "-outres", resStr,
       "-outresampled", monoDateMskFlgsResFileName
     };
+    if(extMsk.size() > 0) {
+        args += "-extmsk";
+        args += extMsk;
+    }
+    return args;
 }
 
-QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                                                const QList<TileResultFiles> &tileResultFilesList) {
-
-    const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
+QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubmit &productFormatterTask, const L3BJobContext &jobCtx,
+                                                                      const QList<TileInfos> &prdTilesInfosList,
+                                                                      const QList<TileResultFiles> &tileResultFilesList) {
 
     //const auto &targetFolder = productFormatterTask.GetFilePath("");
-    const auto &targetFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId);
+    const auto &targetFolder = GetFinalProductFolder(*jobCtx.pCtx, jobCtx.event.jobId, jobCtx.event.siteId);
     const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
     const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.xml");
-
-    const auto &lutFile = ProcessorHandlerHelper::GetMapValue(configParameters, "processor.l3b.lai.lut_path");
+    const auto &inputPrdsIdsInfosPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_IN_PRD_IDS_FILE);
 
     WriteExecutionInfosFile(executionInfosPath, tileResultFilesList);
+    WriteInputPrdIdsInfosFile(inputPrdsIdsInfosPath, prdTilesInfosList);
 
     QStringList productFormatterArgs = { "ProductFormatter",
                             "-destroot", targetFolder,
                             "-fileclass", "OPER",
                             "-level", "L3B",
                             "-baseline", "01.00",
-                            "-siteid", QString::number(event.siteId),
+                            "-siteid", QString::number(jobCtx.event.siteId),
                             "-processor", "vegetation",
                             "-compress", "1",
                             "-gipp", executionInfosPath,
@@ -671,9 +714,9 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
         productFormatterArgs.append(tileInfo.tileFile);
     }
 
-    if(lutFile.size() > 0) {
+    if(jobCtx.lutFile.size() > 0) {
         productFormatterArgs += "-lut";
-        productFormatterArgs += lutFile;
+        productFormatterArgs += jobCtx.lutFile;
     }
 
     productFormatterArgs += "-processor.vegetation.laistatusflgs";
@@ -688,14 +731,14 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
         productFormatterArgs += tileResultFilesList[i].inDomainFlagsFile;
     }
 
-    if (tileResultFilesList[0].bHasNdvi) {
+    if (jobCtx.bGenNdvi) {
         productFormatterArgs += "-processor.vegetation.laindvi";
         for(int i = 0; i<tileResultFilesList.size(); i++) {
             productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
             productFormatterArgs += tileResultFilesList[i].ndviFile;
         }
     }
-    if (tileResultFilesList[0].bHasLai) {
+    if (jobCtx.bGenLai) {
         productFormatterArgs += "-processor.vegetation.laimonodate";
         for(int i = 0; i<tileResultFilesList.size(); i++) {
             productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
@@ -708,7 +751,7 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
         }
     }
 
-    if (tileResultFilesList[0].bHasFapar) {
+    if (jobCtx.bGenFapar) {
         productFormatterArgs += "-processor.vegetation.faparmonodate";
         for(int i = 0; i<tileResultFilesList.size(); i++) {
             productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
@@ -721,7 +764,7 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
         }
     }
 
-    if (tileResultFilesList[0].bHasFCover) {
+    if (jobCtx.bGenFCover) {
         productFormatterArgs += "-processor.vegetation.fcovermonodate";
         for(int i = 0; i<tileResultFilesList.size(); i++) {
             productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
@@ -734,7 +777,7 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
         }
     }
 
-    if (IsCloudOptimizedGeotiff(configParameters)) {
+    if (IsCloudOptimizedGeotiff(jobCtx.configParameters)) {
         productFormatterArgs += "-cog";
         productFormatterArgs += "1";
     }
@@ -750,35 +793,20 @@ const QString& LaiRetrievalHandlerL3BNew::GetDefaultCfgVal(std::map<QString, QSt
     return defVal;
 }
 
-bool LaiRetrievalHandlerL3BNew::IsParamOrConfigKeySet(const QJsonObject &parameters, std::map<QString, QString> &configParameters,
-                                                const QString &cmdLineParamName, const QString & cfgParamKey, bool defVal) {
-    bool bIsConfigKeySet = defVal;
-    if(parameters.contains(cmdLineParamName)) {
-        const auto &value = parameters[cmdLineParamName];
-        if(value.isDouble())
-            bIsConfigKeySet = (value.toInt() != 0);
-        else if(value.isString()) {
-            bIsConfigKeySet = (value.toString() == "1");
-        }
-    } else {
-        if (cfgParamKey != "") {
-            bIsConfigKeySet = ((configParameters[cfgParamKey]).toInt() != 0);
-        }
-    }
-    return bIsConfigKeySet;
-}
-
-QSet<QString> LaiRetrievalHandlerL3BNew::GetTilesFilter(const QJsonObject &parameters, std::map<QString, QString> &configParameters)
+QSet<QString> LaiRetrievalHandlerL3BNew::GetTilesFilter(const L3BJobContext &jobCtx)
 {
     QString strTilesFilter;
-    if(parameters.contains("tiles_filter")) {
-        const auto &value = parameters["tiles_filter"];
+    if(jobCtx.parameters.contains("tiles_filter")) {
+        const auto &value = jobCtx.parameters["tiles_filter"];
         if(value.isString()) {
             strTilesFilter = value.toString();
         }
     }
     if (strTilesFilter.isEmpty()) {
-        strTilesFilter = configParameters["processor.l3b.lai.tiles_filter"];
+        auto it = jobCtx.configParameters.find("processor.l3b.lai.tiles_filter");
+        if (it != jobCtx.configParameters.end()) {
+            strTilesFilter = it->second;
+        }
     }
     QSet<QString> retSet;
     // accept any of these separators
@@ -793,23 +821,21 @@ QSet<QString> LaiRetrievalHandlerL3BNew::GetTilesFilter(const QJsonObject &param
     return retSet;
 }
 
-bool LaiRetrievalHandlerL3BNew::FilterTile(const QSet<QString> &tilesSet, const QString &prdTileFile)
+bool LaiRetrievalHandlerL3BNew::FilterTile(const QSet<QString> &tilesSet, const ProductDetails &prdDetails)
 {
-    ProcessorHandlerHelper::SatelliteIdType satId;
-    const QString &tileId = ProcessorHandlerHelper::GetTileId(prdTileFile, satId);
-    return (tilesSet.empty() || tilesSet.contains(tileId));
+    const QStringList &tileIds = prdDetails.GetProduct().tiles;
+    if (tileIds.size() == 0) {
+        Logger::error(QStringLiteral("FilterTile: product %1 does not have any associated tiles!")
+                      .arg(prdDetails.GetProduct().fullPath));
+        return false;
+    }
+    return (tilesSet.empty() || tilesSet.contains(tileIds.at(0)));
 }
 
-void LaiRetrievalHandlerL3BNew::InitTileResultFiles(bool bGenNdvi, bool bGenLai, bool bGenFapar, bool bGenFCover, const QString &resolutionStr,
-                         const QString tileFileName, TileResultFiles &tileResultFileInfo) {
-    tileResultFileInfo.bHasNdvi = bGenNdvi;
-    tileResultFileInfo.bHasLai = bGenLai;
-    tileResultFileInfo.bHasFapar = bGenFapar;
-    tileResultFileInfo.bHasFCover = bGenFCover;
-    tileResultFileInfo.resolutionStr = resolutionStr;
-    tileResultFileInfo.tileFile = tileFileName;
-    ProcessorHandlerHelper::SatelliteIdType satId;
-    tileResultFileInfo.tileId = ProcessorHandlerHelper::GetTileId(tileFileName, satId);
+void LaiRetrievalHandlerL3BNew::InitTileResultFiles(const TileInfos &tileInfo, TileResultFiles &tileResultFileInfo) {
+    tileResultFileInfo.tileFile = tileInfo.tileFile;
+    tileResultFileInfo.inPrdExtMsk = tileInfo.prdExternalMskFile;
+    tileResultFileInfo.tileId = tileInfo.tileIds.at(0);
 }
 
 ProcessorJobDefinitionParams LaiRetrievalHandlerL3BNew::GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
@@ -852,8 +878,6 @@ ProcessorJobDefinitionParams LaiRetrievalHandlerL3BNew::GetProcessingDefinitionI
     QDateTime startDate = seasonStartDate;
     QDateTime endDate = qScheduledDate;
 
-//    int productionInterval = mapCfg["processor.l3b.production_interval"].value.toInt();
-//    startDate = endDate.addDays(-productionInterval);
     // Use only the products after the configured start season date
     if(startDate < seasonStartDate) {
         startDate = seasonStartDate;
@@ -865,87 +889,130 @@ ProcessorJobDefinitionParams LaiRetrievalHandlerL3BNew::GetProcessingDefinitionI
                                  "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}");
     params.isValid = true;
 
-//    const ProductList &list  = GetL2AProductsNotProcessed(ctx, siteId, startDate, endDate);
-//    // we consider only products in the current season
-//    for (const Product &prd: list) {
-//        if (prd.created >= seasonStartDate && prd.created < seasonEndDate.addDays(1)) {
-//            params.productList.append(prd);
-//        }
-//    }
-
-    // TODO: Maybe we should perform also a filtering by the creation date, to be inside the season to avoid creation for the
-    // products that are outside the season
-    // Normally, we need at least 1 product available in order to be able to create a L3B product
-    // but if we do not return here, the schedule block waiting for products (that might never happen)
-//    bool waitForAvailProcInputs = (mapCfg["processor.l3b.sched_wait_proc_inputs"].value.toInt() != 0);
-//    if((waitForAvailProcInputs == false) || (params.productList.size() > 0)) {
-//        params.isValid = true;
-//        Logger::debug(QStringLiteral("Executing scheduled job. Scheduler extracted for L3B a number "
-//                                     "of %1 products for site ID %2 with start date %3 and end date %4!")
-//                      .arg(params.productList.size())
-//                      .arg(siteId)
-//                      .arg(startDate.toString())
-//                      .arg(endDate.toString()));
-//    } else {
-//        Logger::debug(QStringLiteral("Scheduled job for L3B and site ID %1 with start date %2 and end date %3 "
-//                                     "will not be executed (no products)!")
-//                      .arg(siteId)
-//                      .arg(startDate.toString())
-//                      .arg(endDate.toString()));
-//    }
-
     return params;
 }
 
-int LaiRetrievalHandlerL3BNew::UpdateJobSubmittedParamsFromSchedReq(EventProcessingContext &ctx,
-                                                                     const JobSubmittedEvent &event, QJsonObject &parameters,
-                                                                    JobSubmittedEvent &newEvent) {
-    // initialize the new event
-    newEvent = event;
-
+int LaiRetrievalHandlerL3BNew::UpdateJobSubmittedParamsFromSchedReq(const L3BJobContext &jobCtx, ProductList &prdsToProcess) {
     int jobVal;
     QString strStartDate, strEndDate;
-    if(ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1) &&
-            ProcessorHandlerHelper::GetParameterValueAsString(parameters, "start_date", strStartDate) &&
-            ProcessorHandlerHelper::GetParameterValueAsString(parameters, "end_date", strEndDate) &&
-            parameters.contains("input_products")) {
-        if (!parameters.contains("input_products") || parameters["input_products"].toArray().size() == 0) {
-            const auto &startDate = ProcessorHandlerHelper::GetLocalDateTime(strStartDate);
-            const auto &endDate = ProcessorHandlerHelper::GetLocalDateTime(strEndDate);
+    if(ProcessorHandlerHelper::GetParameterValueAsInt(jobCtx.parameters, "scheduled_job", jobVal) && (jobVal == 1) &&
+            ProcessorHandlerHelper::GetParameterValueAsString(jobCtx.parameters, "start_date", strStartDate) &&
+            ProcessorHandlerHelper::GetParameterValueAsString(jobCtx.parameters, "end_date", strEndDate) &&
+            jobCtx.parameters.contains("input_products")) {
+        if (!jobCtx.parameters.contains("input_products") || jobCtx.parameters["input_products"].toArray().size() == 0) {
+            auto startDate = ProcessorHandlerHelper::GetLocalDateTime(strStartDate);
+            auto endDate = ProcessorHandlerHelper::GetLocalDateTime(strEndDate);
 
             QString strSeasonStartDate, strSeasonEndDate;
             QDateTime seasonStartDate, seasonEndDate;
-            if (ProcessorHandlerHelper::GetParameterValueAsString(parameters, "season_start_date", strSeasonStartDate) &&
-                    ProcessorHandlerHelper::GetParameterValueAsString(parameters, "season_end_date", strSeasonEndDate)) {
+            if (ProcessorHandlerHelper::GetParameterValueAsString(jobCtx.parameters, "season_start_date", strSeasonStartDate) &&
+                    ProcessorHandlerHelper::GetParameterValueAsString(jobCtx.parameters, "season_end_date", strSeasonEndDate)) {
                 seasonStartDate = ProcessorHandlerHelper::GetLocalDateTime(strSeasonStartDate);
                 seasonEndDate = ProcessorHandlerHelper::GetLocalDateTime(strSeasonEndDate);
-            }
-            Logger::info(QStringLiteral("L3B Scheduled job received for siteId = %1, startDate=%2, endDate=%3").
-                         arg(event.siteId).arg(startDate.toString("yyyyMMddTHHmmss")).arg(endDate.toString("yyyyMMddTHHmmss")));
-            QJsonArray inputProductsArr;
-            const ProductList &list  = GetL2AProductsNotProcessed(ctx, event.siteId, startDate, endDate);
-            // we consider only products in the current season
-            for (const Product &prd: list) {
-                if (!seasonStartDate.isValid() || !seasonEndDate.isValid() ||
-                     (prd.created >= seasonStartDate && prd.created < seasonEndDate.addDays(1))) {
-                    inputProductsArr.append(prd.fullPath);
+                // we consider only products in the current season
+                if(startDate < seasonStartDate.addDays(-1)) {
+                    startDate = seasonStartDate.addDays(-1);
+                }
+                if (endDate > seasonEndDate.addDays(1)) {
+                    endDate = seasonEndDate.addDays(1);
                 }
             }
-            Logger::info(QStringLiteral("L3B Scheduled job : Updating input products for jobId = %1, siteId = %2 with a number of %3 products").
-                         arg(event.jobId).arg(event.siteId).arg(inputProductsArr.size()));
-
-            if (inputProductsArr.size() > 0) {
-                parameters[QStringLiteral("input_products")] = inputProductsArr;
-                newEvent.parametersJson = jsonToString(parameters);
-            }
-            return inputProductsArr.size();
+            Logger::info(QStringLiteral("L3B Scheduled job received for siteId = %1, startDate=%2, endDate=%3").
+                         arg(jobCtx.event.siteId).arg(startDate.toString("yyyyMMddTHHmmss")).arg(endDate.toString("yyyyMMddTHHmmss")));
+            prdsToProcess  = GetL2AProductsNotProcessedProductProvenance(jobCtx, startDate, endDate);
+            return prdsToProcess.size();
         }
     }
     return -1;
 }
 
-ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessed(EventProcessingContext &ctx, int siteId,
+// TODO: This function should be updated to use the ProcessorHandlerHelper::EnsureMonoDateProductUniqueProc function
+ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessedProductProvenance(const L3BJobContext &jobCtx,
                                                                   const QDateTime &startDate, const QDateTime &endDate) {
+
+    // Get the list of L2A products already processed products as L3B
+    const ProductList &existingPrds = jobCtx.pCtx->GetParentProductsInProvenance(jobCtx.event.siteId,
+                                                {ProductType::L2AProductTypeId}, ProductType::L3BProductTypeId, startDate, endDate);
+    // Get the list of L2A products NOT processed products as L3B
+    const ProductList &missingPrds = jobCtx.pCtx->GetParentProductsNotInProvenance(jobCtx.event.siteId,
+                                            {ProductType::L2AProductTypeId}, ProductType::L3BProductTypeId, startDate, endDate);
+
+    std::unordered_map<int, int> mapPresence;
+    std::for_each(existingPrds.begin(), existingPrds.end(), [&mapPresence](const Product &prd) {
+        mapPresence[prd.productId] = 1;
+    });
+
+    ProductList newL2APrdsToProcess;
+
+    Logger::info(QStringLiteral("Found a number of %1 L2A products not processed in L3B").arg(missingPrds.size()));
+    if (missingPrds.size() == 0) {
+        return newL2APrdsToProcess;
+    }
+    for (const Product &prd: missingPrds) {
+        Logger::info(QStringLiteral("  ==> Missing L2A from L3B: %1").arg(prd.fullPath));
+    }
+
+    // Get the active jobs of this site
+    const JobIdsList &activeJobIds = jobCtx.pCtx->GetActiveJobIds(this->processorDescr.processorId, jobCtx.event.siteId);
+
+    // Get the file containing the product ids currently processing by all jobs of this site
+    const QString &filePath = GetSiteCurrentProcessingPrdsFile(*jobCtx.pCtx, jobCtx.event.jobId, jobCtx.event.siteId);
+    QDir().mkpath(QFileInfo(filePath).absolutePath());
+    QFile file( filePath );
+    // First read all the entries in the file to see what are the products that are currently processing
+    QMap<int, int> curProcPrds;
+    if (file.open(QIODevice::ReadOnly)) {
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            const QString &line = in.readLine();
+            const QStringList &pieces = line.split(';');
+            if (pieces.size() == 2) {
+                int prdId = pieces[0].toInt();
+                int jobId = pieces[1].toInt();
+                // add only product ids that were not yet processed or that are currently processing in some active jobs
+                if (prdId != 0) {
+                    // maybe the product was already created meanwhile by a custom job, in this case we should remove it
+                    if (mapPresence.find(prdId) != mapPresence.end()) {
+                        continue;
+                    }
+                    // if the job processing the product is still active, keep the product
+                    if (activeJobIds.contains(jobId)) {
+                        curProcPrds[prdId] = jobId;
+                    }
+                }
+            }
+        }
+        file.close();
+    }
+    // add the products that will be processed next
+    for (int i = 0; i<missingPrds.size(); i++) {
+        if (curProcPrds.find(missingPrds[i].productId) == curProcPrds.end()) {
+            curProcPrds[missingPrds[i].productId] = jobCtx.event.jobId;
+            newL2APrdsToProcess.append(missingPrds[i]);
+        }
+        // else, if the product was already in this list, then it means it was already scheduled for processing
+        // by another schedule operation
+    }
+
+    if ( file.open(QIODevice::ReadWrite | QFile::Truncate) )
+    {
+        QTextStream stream( &file );
+        for(auto prdInfo : curProcPrds.keys()) {
+            stream << prdInfo << ";" << curProcPrds.value(prdInfo) << endl;
+        }
+    }
+
+    Logger::info(QStringLiteral("A number of %1 L2A products needs to be processed in L3B after checking already launched products").
+                 arg(newL2APrdsToProcess.size()));
+    return newL2APrdsToProcess;
+}
+
+QString LaiRetrievalHandlerL3BNew::GetSiteCurrentProcessingPrdsFile(EventProcessingContext &ctx, int jobId, int siteId) {
+    return QDir::cleanPath(GetFinalProductFolder(ctx, jobId, siteId) + QDir::separator() + CURRENT_PROC_PRDS_FILE_NAME);
+}
+
+/*
+ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessed(const L3BJobContext &jobCtx, const QDateTime &startDate, const QDateTime &endDate) {
     QStringList newRelL2APathsToProcess;
     ProductList newL2APrdsToProcess;
 
@@ -953,14 +1020,14 @@ ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessed(EventProcessin
     QStringList fullL2APaths;
     QStringList fullL2APathsFromL3Bs;
     Logger::info("Extracting L2A from DB...");
-    const QStringList &l2aRelPathsFromDb = GetL2ARelPathsFromDB(ctx, siteId, startDate, endDate, fullL2APaths, l2aProducts);
+    const QStringList &l2aRelPathsFromDb = GetL2ARelPathsFromDB(*jobCtx.pCtx, jobCtx.event.siteId, startDate, endDate, fullL2APaths, l2aProducts);
     Logger::info("Extracting L2A from DB...DONE! ");
     for (const QString &relPath: l2aRelPathsFromDb) {
         Logger::info(QStringLiteral("  ==> DB L2A: %1").arg(relPath));
     }
     Logger::info(QStringLiteral("Extracted a number of %1 L2A products from DB. Extracting the L2A from L3B products ...").arg(l2aRelPathsFromDb.size()));
     // Get the relative paths of the products from the L3B products
-    const QStringList &l2aRelPathsFromL3B = GetL2ARelPathsFromProcessedL3Bs(ctx, siteId, startDate, endDate, fullL2APathsFromL3Bs);
+    const QStringList &l2aRelPathsFromL3B = GetL2ARelPathsFromProcessedL3Bs(*jobCtx.pCtx, jobCtx.event.siteId, startDate, endDate, fullL2APathsFromL3Bs);
     Logger::info(QStringLiteral("Extracted a number of %1 L2A products from the L3B products").arg(l2aRelPathsFromL3B.size()));
     for (const QString &relPath: l2aRelPathsFromL3B) {
         Logger::info(QStringLiteral("  ==> L3B L2A: %1").arg(relPath));
@@ -982,7 +1049,7 @@ ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessed(EventProcessin
         Logger::info(QStringLiteral("  ==> Missing L2A from L3B: %1").arg(prd.fullPath));
     }
 
-    const std::map<QString, QString> &mapCfg = ctx.GetConfigurationParameters(PRODUCTS_LOCATION_CFG_KEY);
+    const std::map<QString, QString> &mapCfg = jobCtx.pCtx->GetConfigurationParameters(PRODUCTS_LOCATION_CFG_KEY);
     std::map<QString, QString>::const_iterator it = mapCfg.find(PRODUCTS_LOCATION_CFG_KEY);
     QString fileParentPath;
     if (it != mapCfg.end()) {
@@ -990,7 +1057,7 @@ ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessed(EventProcessin
     } else {
         fileParentPath = "/mnt/archive/{site}/{processor}/";
     }
-    fileParentPath = fileParentPath.replace("{site}", ctx.GetSiteShortName(siteId));
+    fileParentPath = fileParentPath.replace("{site}", jobCtx.pCtx->GetSiteShortName(jobCtx.event.siteId));
     fileParentPath = fileParentPath.replace("{processor}", processorDescr.shortName);
     const QString &filePath = QDir::cleanPath(fileParentPath + QDir::separator() + "current_processing_l3b.txt");
 
@@ -1145,3 +1212,4 @@ QStringList LaiRetrievalHandlerL3BNew::GetL3BSourceL2APrdsPaths(const QString &p
 
     return retPrdsList;
 }
+*/

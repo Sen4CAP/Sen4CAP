@@ -8,6 +8,7 @@ class NdviHandler : public ProcessorHandler
 public:
     typedef struct {
         QString tileFile;
+        ProductDetails prdDetails;
     } TileInfos;
 
 private:
@@ -39,14 +40,13 @@ private:
     ProcessorJobDefinitionParams GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
     QSet<QString> GetTilesFilter(const QJsonObject &parameters, std::map<QString, QString> &configParameters);
-    bool FilterTile(const QSet<QString> &tilesSet, const QString &prdTileFile);
+    bool FilterTile(const QSet<QString> &tilesSet, const ProductDetails &prdDetails);
     void HandleProduct(EventProcessingContext &ctx, const JobSubmittedEvent &event, const QList<TileInfos> &prdTilesList,
                        QList<TaskToSubmit> &allTasksList);
     void SubmitEndOfNdviTask(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                             const QList<TaskToSubmit> &allTasksList);
     void SubmitL3CJobForL3BProduct(EventProcessingContext &ctx, const TaskFinishedEvent &event,
-                                   const ProcessorHandlerHelper::SatelliteIdType &satId,
-                                   const QString &l3bProdName);
+                                   const Satellite &satId, const QString &l3bProdName);
     QMap<QDate, QStringList> GroupProductTilesByDate(const QMap<QString, QStringList> &inputProductToTilesMap);
 
     friend class LaiRetrievalHandler;

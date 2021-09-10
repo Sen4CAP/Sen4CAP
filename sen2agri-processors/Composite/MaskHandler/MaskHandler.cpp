@@ -162,6 +162,9 @@ private:
         MandatoryOff("sentinelres");
         SetDefaultParameterInt("sentinelres", 10);
 
+        AddParameter(ParameterType_String,  "extmsk",   "Input external mask corresponding to the input L2A product");
+        MandatoryOff("extmsk");
+
         AddParameter(ParameterType_OutputImage, "out", "Out file for cloud, water and snow mask");
 
     }
@@ -181,7 +184,12 @@ private:
         if(HasValue("sentinelres")) {
             resolution = GetParameterInt("sentinelres");
         }
-        m_pHelper = factory->GetMetadataHelper<short>(inXml);
+        std::string extMsk;
+        if (HasValue("extmsk")) {
+            extMsk = GetParameterAsString("extmsk");
+        }
+
+        m_pHelper = factory->GetMetadataHelper<short>(inXml, extMsk);
         std::string missionName = m_pHelper->GetMissionName();
         if((missionName.find(SENTINEL_MISSION_STR) != std::string::npos) &&
            !HasValue("sentinelres")) {
@@ -190,7 +198,7 @@ private:
 
         m_MaskExtractor = MaskHandlerFilterType::New();
         m_MaskExtractor->SetFunctor(m_Functor);
-        Int16ImageType::Pointer img = m_pHelper->GetMasksImage((MasksFlagType)(MSK_CLOUD|MSK_WATER|MSK_SNOW), false, resolution);
+        Int16ImageType::Pointer img = m_pHelper->GetMasksImage(ALL, false, resolution);
         img->UpdateOutputInformation();
         m_MaskExtractor->SetInput(img);
         m_MaskExtractor->UpdateOutputInformation();
@@ -199,9 +207,6 @@ private:
 
         SetParameterOutputImagePixelType("out", ImagePixelType_int16);
         SetParameterOutputImage("out", m_MaskExtractor->GetOutput());
-
-//        m_castFilter->SetInput(m_pHelper->GetMasksImage((MasksFlagType)(MSK_CLOUD|MSK_WATER|MSK_SNOW), false));
-//        SetParameterOutputImage("out", m_castFilter->GetOutput());
 
         return;
     }

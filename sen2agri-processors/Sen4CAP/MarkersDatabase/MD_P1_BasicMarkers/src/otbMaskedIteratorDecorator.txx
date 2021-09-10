@@ -33,6 +33,7 @@ MaskedIteratorDecorator<TIteratorType,TMaskIteratorType>
                            ImageType* image,
                           const RegionType& region)
 {
+  m_ValidMaskValue = 0;
   m_ItImage = TIteratorType(image,region);
   if (mask == nullptr)
     {
@@ -128,7 +129,7 @@ MaskedIteratorDecorator<TIteratorType,TMaskIteratorType>
       {
       ++m_ItMask;
       ++m_ItImage;
-      } while (m_ItMask.Value() == 0 && !this->IsAtEnd());
+      } while (m_ItMask.Value() != m_ValidMaskValue && !this->IsAtEnd());
     }
   else
     {
@@ -149,7 +150,7 @@ MaskedIteratorDecorator<TIteratorType,TMaskIteratorType>
       {
       --m_ItMask;
       --m_ItImage;
-      } while (m_ItMask.Value() == 0 && !this->IsAtBegin());
+      } while (m_ItMask.Value() != m_ValidMaskValue && !this->IsAtBegin());
     }
   else
     {
@@ -214,6 +215,14 @@ MaskedIteratorDecorator<TIteratorType,TMaskIteratorType>
   return m_UseMask;
 }
 
+template <typename TIteratorType, typename TMaskIteratorType>
+void
+MaskedIteratorDecorator<TIteratorType,TMaskIteratorType>
+::SetValidMaskValue(int val)
+{
+  m_ValidMaskValue = val;
+}
+
 // Compute begin iterator position taking into account the mask
 template <typename TIteratorType, typename TMaskIteratorType>
 void
@@ -226,7 +235,7 @@ MaskedIteratorDecorator<TIteratorType,TMaskIteratorType>
   m_ItImage.GoToBegin();
 
   // Advance to the first non-masked position, or the end
-  while (m_ItMask.Value() == 0 && !m_ItMask.IsAtEnd() && !m_ItImage.IsAtEnd())
+  while (m_ItMask.Value() != m_ValidMaskValue && !m_ItMask.IsAtEnd() && !m_ItImage.IsAtEnd())
   {
     ++m_ItMask;
     ++m_ItImage;

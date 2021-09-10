@@ -7,6 +7,9 @@
 #include "processorhandlerhelper.h"
 #include "logger.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+using namespace orchestrator::products;
+
 void CropMaskHandler::SetProcessorDescription(const ProcessorDescription &procDescr) {
     this->processorDescr = procDescr;
 }
@@ -124,20 +127,20 @@ QList<std::reference_wrapper<TaskToSubmit>> CropMaskHandler::CreateTasks(QList<T
 }
 
 NewStepList CropMaskHandler::CreateSteps(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-              QList<TaskToSubmit> &allTasksList, const CropMaskJobConfig &cfg, const QStringList &listProducts) {
+              QList<TaskToSubmit> &allTasksList, const CropMaskJobConfig &cfg, const QList<ProductDetails> &prdDetails) {
     int curTaskIdx = 0;
     NewStepList allSteps;
     TaskToSubmit &cropMaskTask = allTasksList[curTaskIdx++];
 
-    QStringList corpTypeArgs = GetCropTypeTaskArgs(ctx, event, cfg, listProducts, cropMaskTask);
+    QStringList corpTypeArgs = GetCropTypeTaskArgs(ctx, event, cfg, prdDetails, cropMaskTask);
     allSteps.append(CreateTaskStep(cropMaskTask, "CropMaskFused", corpTypeArgs));
     return allSteps;
 }
 
 QStringList CropMaskHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                          const CropMaskJobConfig &cfg, const QStringList &listProducts, TaskToSubmit &cropMaskTask) {
+                          const CropMaskJobConfig &cfg, const QList<ProductDetails> &prdDetails, TaskToSubmit &cropMaskTask) {
 
-    const QMap<QString, TileTemporalFilesInfo>  &mapTiles = GroupTiles(ctx, event.siteId, listProducts,
+    const TilesTimeSeries  &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, prdDetails,
                                                                 ProductType::L2AProductTypeId);
 
     const auto &outputDir = cropMaskTask.GetFilePath("");
@@ -184,22 +187,23 @@ QStringList CropMaskHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, co
     // secondary satellite tiles after the main satellite tiles
     QStringList tilePrimarySatFiles;
     QStringList tileSecondarySatFiles;
-    for(auto tileId : mapTiles.keys())
+    for(auto tileId : mapTiles.GetTileIds())
     {
         // get the temporal infos for the current tile
-        const TileTemporalFilesInfo &listTemporalTiles = mapTiles.value(tileId);
-        for(const ProcessorHandlerHelper::InfoTileFile &fileInfo: listTemporalTiles.temporalTilesFileInfos) {
+        const TileTimeSeriesInfo &listTemporalTiles = mapTiles.GetTileTimeSeriesInfo(tileId);
+        for(const InfoTileFile &fileInfo: listTemporalTiles.temporalTilesFileInfos) {
            if(fileInfo.satId == listTemporalTiles.primarySatelliteId) {
-                if(!tilePrimarySatFiles.contains(fileInfo.file)) {
-                    tilePrimarySatFiles.append(fileInfo.file);
+                if(!tilePrimarySatFiles.contains(fileInfo.metaFile)) {
+                    tilePrimarySatFiles.append(fileInfo.metaFile);
                 }
            } else {
-               if(!tileSecondarySatFiles.contains(fileInfo.file)) {
-                    tileSecondarySatFiles.append(fileInfo.file);
+               if(!tileSecondarySatFiles.contains(fileInfo.metaFile)) {
+                    tileSecondarySatFiles.append(fileInfo.metaFile);
                }
            }
         }
     }
+    // TODO: Provide here also via a parameter also the validity masks
     cropMaskArgs += "-input";
     cropMaskArgs += tilePrimarySatFiles;
     cropMaskArgs += tileSecondarySatFiles;
@@ -225,8 +229,10 @@ QStringList CropMaskHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, co
 void CropMaskHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
-    QStringList listProducts = GetL2AInputProductsTiles(ctx, event);
-    if(listProducts.size() == 0) {
+    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
+    if(productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);
         throw std::runtime_error(
             QStringLiteral("No products provided at input or no products available in the specified interval").
@@ -239,7 +245,7 @@ void CropMaskHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     QList<TaskToSubmit> allTasksList;
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList);
     SubmitTasks(ctx, cfg.jobId, allTasksListRef);
-    NewStepList allSteps = CreateSteps(ctx, event, allTasksList, cfg, listProducts);
+    NewStepList allSteps = CreateSteps(ctx, event, allTasksList, cfg, productDetails);
     ctx.SubmitSteps(allSteps);
 }
 
@@ -247,18 +253,17 @@ void CropMaskHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
                                              const TaskFinishedEvent &event)
 {
     if (event.module == "crop-mask-fused") {
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
-        if(prodName != "" && ProcessorHandlerHelper::IsValidHighLevelProduct(productFolder)) {
+        const QString &prodName = GetOutputProductName(ctx, event);
+        const QString &productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
+        if(prodName != "" && GenericHighLevelProductHelper(productFolder).HasValidStructure()) {
             ctx.MarkJobFinished(event.jobId);
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
+            GenericHighLevelProductHelper prdHelper(productFolder);
             ctx.InsertProduct({ ProductType::L4AProductTypeId, event.processorId,
-                                event.siteId, event.jobId, productFolder, maxDate,
-                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList() });
+                                event.siteId, event.jobId, productFolder, prdHelper.GetAcqDate(),
+                                prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList() });
         } else {
             ctx.MarkJobFailed(event.jobId);
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));

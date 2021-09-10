@@ -4,6 +4,7 @@
 #include "testqstring.hpp"
 #include "serialization.hpp"
 #include "schedulertests.h"
+#include "producthandlertests.h"
 
 int main(int argc, char *argv[])
 {
@@ -12,11 +13,15 @@ int main(int argc, char *argv[])
 
     int r = 0;
 
-    Serialization tcSer;
-    r |= QTest::qExec(&tcSer, argc, argv);
+    ProductHandlerTests tcPrdHandlers;
+    r |= QTest::qExec(&tcPrdHandlers, argc, argv);
 
-    SchedulerTests tcSch;
-    r |= QTest::qExec(&tcSch, argc, argv);
+
+//    Serialization tcSer;
+//    r |= QTest::qExec(&tcSer, argc, argv);
+
+//    SchedulerTests tcSch;
+//    r |= QTest::qExec(&tcSch, argc, argv);
 
     return r ? 1 : 0;
 }

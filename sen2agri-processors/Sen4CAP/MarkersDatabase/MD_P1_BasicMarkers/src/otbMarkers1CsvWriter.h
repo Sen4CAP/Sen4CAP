@@ -66,12 +66,26 @@ public:
 
   } FileFieldsInfoType;
 
+  class HeaderInfoType {
+  public:
+      HeaderInfoType() {}
+      HeaderInfoType(const std::string &hdr, bool isDbl) {
+          name = hdr;
+          isDouble = isDbl;
+      }
+      std::string GetName() const {return name;}
+      bool IsDouble() const {return isDouble;}
+    private:
+      std::string name;
+      bool isDouble;
+  };
+
   typedef std::vector<FileFieldsInfoType>         FileFieldsContainer;
 
   /** Method to add a map statistic with a given type */
   template <typename MapType, typename MapMinMaxType>
-  void AddInputMap(const std::string &fileName, const MapType& map, const MapMinMaxType& mapMins, const MapMinMaxType& mapMax,
-                   const MapMinMaxType& mapValidPixels, const MapMinMaxType& mapInvalidPixels);
+  void AddInputMap(const MapType& map, const MapMinMaxType& mapMins, const MapMinMaxType& mapMax,
+                   const MapMinMaxType& mapValidPixels);
 
   void WriteOutputCsvFormat();
   void WriteCsvHeader(std::ofstream &fileStream);
@@ -96,14 +110,29 @@ public:
   /** Set the header fields */
   void SetHeaderFields(const std::string &fileName, const StringVectorType &vec,
                        const std::string &idFieldName, bool bIsInteger);
-  inline StringVectorType GetHeaderFields() {return this->m_HeaderFields;}
+
+  inline void SetUseStdev(bool bUseStdev) {
+      m_bUseStdev = bUseStdev;
+  }
 
   inline void SetUseMinMax(bool bUseMinMax) {
       m_bUseMinMax = bUseMinMax;
   }
 
+  inline void SetUseValidityCnt(bool bValidityCnt) {
+      m_bUseValidityCnt = bValidityCnt;
+  }
+
   inline void SetCsvSeparator(char sep) {
       m_csvSeparator = sep;
+  }
+
+  inline void SetMapValuesIndex(int idx) {
+      m_mapValuesIndex = idx;
+  }
+
+  inline void SetDefaultProductType(const std::string &defType) {
+      m_defaultPrdType = defType;
   }
 
 protected:
@@ -117,7 +146,7 @@ protected:
 private:
 
   std::string BuildHeaderItem(const std::string &dateStr, const std::string &hdrItem, const std::string &fileType,
-                    const std::string &polarisation, const std::string &orbit);
+                    const std::vector<std::string> &additionalFields);
   int GetPositionInHeader(const std::string &name);
   typedef struct {
         void SetIsInt(bool isInt) {m_bIsInt = isInt;}
@@ -134,13 +163,14 @@ private:
   void operator=(const Self&) = delete;
 
   std::string                 m_TargetFileName;
+  std::vector<HeaderInfoType>      m_vecHeaderFields;
 
-  std::vector<std::string>      m_HeaderFields;
-  std::string m_idFieldName;
   bool m_bIdIsInteger;
 
   FileFieldsContainer           m_FileFieldsContainer;
   bool                          m_bUseMinMax;
+  bool                          m_bUseStdev;
+  bool                          m_bUseValidityCnt;
 
 private:
     int m_IdPosInHeader;
@@ -149,8 +179,9 @@ private:
     int m_MinPosInHeader;
     int m_MaxPosInHeader;
     int m_ValidPixelsPosInHeader;
-    int m_InvalidPixelsPosInHeader;
     char m_csvSeparator;
+    int m_mapValuesIndex;
+    std::string m_defaultPrdType;
 }; // end of class Markers1CsvWriter
 
 } // end of namespace otb

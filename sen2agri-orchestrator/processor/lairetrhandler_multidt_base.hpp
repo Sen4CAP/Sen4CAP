@@ -39,11 +39,11 @@ class LaiRetrievalHandlerMultiDateBase : public ProcessorHandler
 
 protected:
     QString GetProcessorDBPrefix();
-    bool AddTileFileInfo(EventProcessingContext &ctx, TileTemporalFilesInfo &temporalTileInfo, const QString &l3bPrd,
-                         const QString &tileId, const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles,
-                         ProcessorHandlerHelper::SatelliteIdType satId, const QDateTime &curPrdMinDate);
-    QMap<QString, TileTemporalFilesInfo> FilterSecondaryProductTiles(const QMap<QString, TileTemporalFilesInfo> &mapTiles,
-                                 const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles);
+    bool AddTileFileInfo(EventProcessingContext &ctx, TileTimeSeriesInfo &temporalTileInfo, const QString &l3bPrd,
+                         const QString &tileId, const QMap<Satellite, TileList> &siteTiles,
+                         Satellite satId, const QDateTime &curPrdMinDate);
+    QMap<QString, TileTimeSeriesInfo> FilterSecondaryProductTiles(const QMap<QString, TileTimeSeriesInfo> &mapTiles,
+                                 const QMap<Satellite, TileList> &siteTiles);
 
 private:
     void HandleJobSubmittedImpl(EventProcessingContext &ctx,
@@ -55,11 +55,11 @@ private:
                                    LAIProductFormatterParams &outProdFormatterParams, bool bCompact, bool bRemoveTempFiles);
 
     void HandleNewTilesList(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                            const TileTemporalFilesInfo &tileTemporalFilesInfo, LAIGlobalExecutionInfos &outGlobalExecInfos, bool bRemoveTempFiles);
+                            const TileTimeSeriesInfo &tileTemporalFilesInfo, LAIGlobalExecutionInfos &outGlobalExecInfos, bool bRemoveTempFiles);
 
     void WriteExecutionInfosFile(const QString &executionInfosPath,
-                                const std::map<QString, QString> &configParameters, const QMap<QString, TileTemporalFilesInfo> &l3bMapTiles,
-                                const QStringList &listProducts);
+                                const std::map<QString, QString> &configParameters, const QMap<QString, TileTimeSeriesInfo> &l3bMapTiles,
+                                const QList<TileMetadataDetails> &listProducts);
 
     // Arguments getters
     QStringList GetTimeSeriesBuilderArgs(const QStringList &monoDateLaiFileNames,
@@ -80,44 +80,43 @@ private:
     virtual ProductList GetScheduledJobProductList(SchedulingContext &ctx, int siteId, const QDateTime &seasonStartDate,
                                                    const QDateTime &seasonEndDate, const QDateTime &qScheduledDate,
                                                    const ConfigurationParameterValueMap &requestOverrideCfgValues) = 0;
-    virtual bool AcceptSchedJobProduct(const QString &l2aPrdHdrPath, ProcessorHandlerHelper::SatelliteIdType satId) = 0;
+    virtual bool AcceptSchedJobProduct(const QString &l2aPrdHdrPath, Satellite satId) = 0;
 
-    virtual QList<QMap<QString, TileTemporalFilesInfo>> ExtractL3BMapTiles(EventProcessingContext &ctx,
+    virtual QList<QMap<QString, TileTimeSeriesInfo>> ExtractL3BMapTiles(EventProcessingContext &ctx,
                                                        const JobSubmittedEvent &event, const QStringList &l3bProducts,
-                                                       const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles) = 0;
+                                                       const QMap<Satellite, TileList> &siteTiles) = 0;
 
     QStringList GetReprocProfileSplitterArgs(const QString &reprocTimeSeriesFileName, const QString &reprocFileListFileName,
                                              const QString &reprocFlagsFileListFileName, const QStringList &listDates);
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx,
-                                        const JobSubmittedEvent &event, const QMap<QString, TileTemporalFilesInfo> &l3bMapTiles,
-                                        const QStringList &listProducts, const QList<LAIProductFormatterParams> &productParams);
+                                        const JobSubmittedEvent &event, const QMap<QString, TileTimeSeriesInfo> &l3bMapTiles,
+                                        const QList<TileMetadataDetails> &listProducts, const QList<LAIProductFormatterParams> &productParams);
 
     ProcessorJobDefinitionParams GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
     bool IsReprocessingCompact(const QJsonObject &parameters, std::map<QString, QString> &configParameters);
 
-    bool GetL2AProductsInterval(const QMap<QString, QStringList> &mapTilesMeta, QDateTime &startDate, QDateTime &endDate);
     QStringList GetL3BProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event);
     int GetIntParameterValue(const QJsonObject &parameters, const QString &key, int defVal);
-    bool AddTileFileInfo(TileTemporalFilesInfo &temporalTileInfo, const QString &l3bProdDir,
-                         const QString &l3bTileDir, ProcessorHandlerHelper::SatelliteIdType satId, const QDateTime &curPrdMinDate,
+    bool AddTileFileInfo(TileTimeSeriesInfo &temporalTileInfo, const QString &l3bProdDir,
+                         const QString &l3bTileDir, Satellite satId, const QDateTime &curPrdMinDate,
                          const Tile *pIntersectingTile = 0);
     void SubmitL3BMapTiles(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                           const QMap<QString, TileTemporalFilesInfo> &l3bMapTiles, bool bRemoveTempFiles, QList<TaskToSubmit> &allTasksList);
+                           const QMap<QString, TileTimeSeriesInfo> &l3bMapTiles, bool bRemoveTempFiles, QList<TaskToSubmit> &allTasksList);
     void SubmitEndOfLaiTask(EventProcessingContext &ctx, const JobSubmittedEvent &event, const QList<TaskToSubmit> &allTasksList);
 
     void CreateTasksForNewProducts_New(QList<TaskToSubmit> &outAllTasksList,
                                    LAIProductFormatterParams &outProdFormatterParams,
                                    bool bNDayReproc, bool bRemoveTempFiles);
-    NewStepList GetStepsForMultiDateReprocessing(const std::map<QString, QString> &configParameters, const TileTemporalFilesInfo &tileTemporalFilesInfo,
+    NewStepList GetStepsForMultiDateReprocessing(const std::map<QString, QString> &configParameters, const TileTimeSeriesInfo &tileTemporalFilesInfo,
                                                  QList<TaskToSubmit> &allTasksList,
                                                  LAIProductFormatterParams &productFormatterParams, int tasksStartIdx, bool bRemoveTempFiles);
 
-    NewStepList GetStepsForCompactMultiDateReprocessing(std::map<QString, QString> &configParameters, const TileTemporalFilesInfo &tileTemporalFilesInfo,
+    NewStepList GetStepsForCompactMultiDateReprocessing(std::map<QString, QString> &configParameters, const TileTimeSeriesInfo &tileTemporalFilesInfo,
                                                  QList<TaskToSubmit> &allTasksList,
                                                  LAIProductFormatterParams &productFormatterParams, int tasksStartIdx, bool bRemoveTempFiles);
 
-    QStringList GetL3BProductRasterFiles(const TileTemporalFilesInfo &tileTemporalFilesInfo, LAI_RASTER_ADDITIONAL_INFO_IDX idx);
+    QStringList GetL3BProductRasterFiles(const TileTimeSeriesInfo &tileTemporalFilesInfo, LAI_RASTER_ADDITIONAL_INFO_IDX idx);
 
 private:
     QString m_procDbPrefix;

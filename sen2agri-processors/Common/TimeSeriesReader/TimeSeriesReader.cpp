@@ -278,7 +278,7 @@ void TimeSeriesReader::GetProductBands(const std::unique_ptr<MetadataHelper<floa
 otb::Wrapper::UInt8ImageType::Pointer TimeSeriesReader::GetProductMask(const std::unique_ptr<MetadataHelper<float, uint8_t>>& pHelper,
                                                                        const TileData& td) {
     // Return the mask associated with the product with 1 if one of the flags is present and 0 otherwise
-    MetadataHelper<float, uint8_t>::SingleBandMasksImageType::Pointer imgMsk = pHelper->GetMasksImage((MasksFlagType)(MSK_CLOUD|MSK_VALID|MSK_SAT), true);
+    MasksImageType::Pointer imgMsk = pHelper->GetMasksImage(ALL, true);
 
     // Resample if needed
     return getResampledBand<UInt8ImageType>(imgMsk, td, true);

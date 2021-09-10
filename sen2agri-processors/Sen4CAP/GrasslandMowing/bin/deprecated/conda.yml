@@ -5,6 +5,7 @@ channels:
 
 dependencies:
   - python=3.6
+  - pip
   - numpy
   - scipy
   - scikit-learn
@@ -19,14 +20,16 @@ dependencies:
   - snappy
   #- graphviz
   - pip:
-    - --process-dependency-links
-    - jupyter
-    - jupyter_nbextensions_configurator
-    - jupyter_contrib_nbextensions
-    - jupyter-tensorboard
+#    - --process-dependency-links
+#    - jupyter
+#    - jupyter_nbextensions_configurator
+#    - jupyter_contrib_nbextensions
+#    - jupyter-tensorboard
     - ipython
-    - screen
+#    - screen
+    - psycopg2-binary
     - psycopg2
+    - pyarrow
     - matplotlib
     - keras
     - scikit-neuralnetwork

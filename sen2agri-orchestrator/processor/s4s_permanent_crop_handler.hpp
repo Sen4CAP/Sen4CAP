@@ -69,5 +69,7 @@ private:
     QStringList GetTileIdsFromProducts(EventProcessingContext &ctx,
                                         const JobSubmittedEvent &event, const QList<ProductDetails> &productDetails);
     bool IsScheduledJobRequest(const QJsonObject &parameters);
+    QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const S4SPermanentCropJobConfig &cfg,
+                                        const QStringList &listFiles);
 };
 

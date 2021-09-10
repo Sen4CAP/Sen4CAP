@@ -107,6 +107,8 @@ public:
   
   const bool& HasMask() const;
 
+  void SetValidMaskValue(int val);
+
 private:
   /** Private method to compute the begin iterator position taking into account
   the mask. Called by the constructor. */
@@ -123,6 +125,7 @@ private:
   // Unmasked bounds
   TMaskIteratorType m_StartMask;
   TIteratorType m_StartImage;
+  int m_ValidMaskValue;
 };
 
 }

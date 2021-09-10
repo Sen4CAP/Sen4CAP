@@ -45,70 +45,6 @@ typedef otb::ImageListToVectorImageFilter<ImageListType, ImageType>       ImageL
 typedef otb::StreamingResampleImageFilter<InternalImageType, InternalImageType, double>     ResampleFilterType;
 
 
-template< class TInput, class TInput2, class TOutput>
-class MaskingFunctor
-{
-public:
-    MaskingFunctor() {}
-    ~MaskingFunctor() {}
-
-    void SetValidationLimits(double min, double max, double tolerance)
-    {
-        minVal = min;
-        maxVal = max;
-        toleranceVal = tolerance;
-        minToleranceVal = min-tolerance;
-        maxToleranceVal = max + tolerance;
-    }
-
-    MaskingFunctor& operator =(const MaskingFunctor& copy)
-    {
-        minVal = copy.minVal;
-        maxVal = copy.maxVal;
-        toleranceVal = copy.toleranceVal;
-        minToleranceVal = copy.minToleranceVal;
-        maxToleranceVal = copy.maxToleranceVal;
-    }
-
-    bool operator!=( const MaskingFunctor &a) const
-    {
-        UNUSED(a);
-        return true;
-    }
-    bool operator==( const MaskingFunctor & other ) const
-    {
-        return !(*this != other);
-    }
-
-    inline TOutput operator()( const TInput & A, const TInput2 & B ) const
-    {
-        TOutput ret(1);
-        ret[0] = A[0];
-
-        if (ret[0] < minToleranceVal) {
-            ret[0] = minVal;
-        } else if (ret[0] > maxToleranceVal) {
-            ret[0] = maxVal;
-        }
-        switch (B) {
-            case IMG_FLG_NO_DATA:
-            case IMG_FLG_CLOUD:
-            case IMG_FLG_SNOW:
-                ret[0] = NO_DATA_VALUE;
-        default:
-            break;
-        }
-        return ret;
-    }
-
-private:
-    double minVal;
-    double maxVal;
-    double toleranceVal;
-    double minToleranceVal;
-    double maxToleranceVal;
-};
-
 namespace otb
 {
 namespace Wrapper
@@ -120,10 +56,6 @@ class BVLaiNewProcessor : public Application
     typedef belcamApplyTrainedNeuralNetworkFilter<ImageType, OutImageType> BelcamNeuronFilter;
     typedef Int16VectorImageType                            AnglesImageType;
 
-    typedef itk::BinaryFunctorImageFilter<OutImageType,MetadataHelper<short>::SingleBandImageType,OutImageType,
-                    MaskingFunctor<
-                        OutImageType::PixelType, MetadataHelper<short>::SingleBandImageType::PixelType,
-                        OutImageType::PixelType> > MaskedOutputFilterType;
 
 public:
     typedef BVLaiNewProcessor Self;
@@ -355,17 +287,6 @@ private:
         osswriter<< "Wrinting flags "<< outImg;
         AddProcess(paramOut->GetWriter(), osswriter.str());
         paramOut->Write();
-    }
-
-    OutImageType::Pointer MaskModelOutput(OutImageType::Pointer img, MaskedOutputFilterType::Pointer maskingFunctor,
-                                          const std::unique_ptr<MetadataHelper<short>> &pHelper, int nOutRes) {
-        MetadataHelper<short>::SingleBandMasksImageType::Pointer imgMsk = pHelper->GetMasksImage(ALL, false);
-
-        imgMsk->UpdateOutputInformation();
-
-        maskingFunctor->SetInput1(img);
-        maskingFunctor->SetInput2(getResampledImage2(imgMsk->GetSpacing()[0], nOutRes, imgMsk));
-        return maskingFunctor->GetOutput();
     }
 
     void loadLaiConfiguration(const std::unique_ptr<MetadataHelper<short>> &pHelper) {

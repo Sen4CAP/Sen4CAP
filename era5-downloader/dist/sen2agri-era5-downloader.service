@@ -5,5 +5,5 @@ Requires=docker.service
 
 [Service]
 Type=simple
-ExecStart=/usr/share/sen2agri/era5_weather_downloader/weather_launcher.py
+ExecStart=/usr/share/sen2agri/era5-downloader/weather_launcher.py
 User=sen2agri-service

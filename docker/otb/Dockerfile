@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM osgeo/gdal:ubuntu-full-3.2.0
 
 LABEL maintainer="sen4cap@c-s.ro" \
        description="Prepare an EO processing environment with commonly used tools."

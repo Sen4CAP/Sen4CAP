@@ -6,6 +6,10 @@
 #include <sys/types.h>
 
 #define ORCHESTRATOR_CFG_KEYS_ROOT "general.orchestrator."
+#define USE_DOCKER_STEP_CFG_KEY "use_docker"
+#define DOCKER_IMAGE_STEP_CFG_KEY "docker_image"
+#define DOCKER_ADD_MOUNTS_STEP_CFG_KEY "docker_add_mounts"
+#define ORCHESTRATOR_TMP_PATH       "general.scratch-path"
 
 
 StepExecutionDecorator::StepExecutionDecorator()
@@ -13,7 +17,7 @@ StepExecutionDecorator::StepExecutionDecorator()
 {
     m_orchestratorConfig = dbProvider.GetConfigurationParameters(ORCHESTRATOR_CFG_KEYS_ROOT);
     m_archiverPath = GetArchiverRootPath();
-    m_ScratchPathConfig = dbProvider.GetConfigurationParameters(QStringLiteral("general.scratch-path"));
+    m_ScratchPathConfig = dbProvider.GetConfigurationParameters(QStringLiteral(ORCHESTRATOR_TMP_PATH));
     m_modulePathsConfig = dbProvider.GetConfigurationParameters(QStringLiteral("executor.module.path."));
     if (m_ScratchPathConfig.empty()) {
         throw std::runtime_error("Please configure the \"general.scratch-path\" parameter with the "
@@ -37,7 +41,8 @@ NewStep StepExecutionDecorator::CreateTaskStep(const QString &procName, TaskToSu
 {
     bool isDockerEnabled = IsDockerEnabledForStep(procName, task.moduleName);
     bool useDocker = false;
-    QString dockerImg, additionalMounts;
+    QString dockerImg;
+    QStringList dockerMounts;
     if (isDockerEnabled) {
         QString foundRoot;
         const QString &dockerImage = GetOrchestratorStepConfigValue(procName, task.moduleName, "docker_image", foundRoot);
@@ -45,14 +50,13 @@ NewStep StepExecutionDecorator::CreateTaskStep(const QString &procName, TaskToSu
             // build the docker arguments
             useDocker = true;
             dockerImg = dockerImage;
-            const QString &additionalDockerMounts = GetDockerAdditionalMounts(procName, task.moduleName);
-            additionalMounts = GetAllDockerMounts(procName, additionalDockerMounts);
+            dockerMounts = GetDockerMounts(procName, task.moduleName);
         }
     }
 
     QStringList newStepArgs;
     if (useDocker) {
-        newStepArgs = UpdateCommandForDocker(task.moduleName, stepArgs, dockerImg, additionalMounts);
+        newStepArgs = UpdateCommandForDocker(task.moduleName, stepArgs, dockerImg, dockerMounts);
     } else {
         newStepArgs = stepArgs; // UpdateSimpleCommandArgs(task.moduleName, stepArgs)
     }
@@ -83,15 +87,14 @@ NewStep StepExecutionDecorator::CreateTaskStep(const QString &procName, TaskToSu
 //}
 
 QStringList
-StepExecutionDecorator::UpdateCommandForDocker(const QString &taskName, const QStringList &arguments, const QString& dockerImage, const QString &additionalMounts)
+StepExecutionDecorator::UpdateCommandForDocker(const QString &taskName, const QStringList &arguments, const QString& dockerImage, const QStringList &dockerMounts)
 {
     // add the docker command parameters
     // docker run --rm -u 1003:1003 -v /mnt/archive:/mnt/archive -v /mnt/scratch:/mnt/scratch sen4cap/processors:2.0.0 crop-type-wrapper.py
     QStringList dockerStepList = {"docker", "run", "--rm", "-u",
                                   QString::number(getuid()) + ":" + QString::number(getgid()) };
     // add also the additional mounts
-    const QStringList &mounts = EnsureUniqueDockerMounts(additionalMounts);
-    for (const QString &mount: mounts) {
+    for (const QString &mount: dockerMounts) {
         dockerStepList.append("-v");
         dockerStepList.append(mount);
     }
@@ -119,7 +122,7 @@ StepExecutionDecorator::UpdateCommandForDocker(const QString &taskName, const QS
 
 bool StepExecutionDecorator::IsDockerEnabledForStep(const QString &procName, const QString &taskName) {
     QString foundRoot;
-    const QString &isDockerEnabled = GetOrchestratorStepConfigValue(procName, taskName, "use_docker", foundRoot);
+    const QString &isDockerEnabled = GetOrchestratorStepConfigValue(procName, taskName, USE_DOCKER_STEP_CFG_KEY, foundRoot);
     if (isDockerEnabled == "") {
         // key not set, return false
         return false;
@@ -128,24 +131,6 @@ bool StepExecutionDecorator::IsDockerEnabledForStep(const QString &procName, con
         return true;
     }
     return false;
-}
-
-QString StepExecutionDecorator::GetAllDockerMounts(const QString &procName, const QString &mounts) {
-    QString allMounts = mounts;
-    // add also by default the scratch path for the processor
-    if (allMounts.size() > 0) {
-        allMounts.append(',');
-    }
-    const QString &scratchPathRoot = GetScratchPathRoot(procName);
-    allMounts.append(scratchPathRoot + ":" + scratchPathRoot);
-    allMounts.append(",");
-    allMounts.append("/mnt/archive/:/mnt/archive/");
-    allMounts.append(",");
-    allMounts.append(m_archiverPath + ":" + m_archiverPath);
-    allMounts.append(",");
-    allMounts.append(QFileInfo(m_archiverPath).canonicalFilePath() + ":" + QFileInfo(m_archiverPath).canonicalFilePath());
-
-    return allMounts;
 }
 
 QString NormalizeMountDirName(const QString &dir) {
@@ -171,14 +156,14 @@ QStringList StepExecutionDecorator::EnsureUniqueDockerMounts(const QString &addi
     return retList;
 }
 
-QString StepExecutionDecorator::GetDockerAdditionalMounts(const QString &procName, const QString &taskName) {
+QStringList StepExecutionDecorator::GetDockerMounts(const QString &procName, const QString &taskName) {
     QString mounts;
-    QString key = ORCHESTRATOR_CFG_KEYS_ROOT + taskName + ".docker_add_mounts";
+    QString key = ORCHESTRATOR_CFG_KEYS_ROOT + taskName + "." + DOCKER_ADD_MOUNTS_STEP_CFG_KEY;
     QString val = GetParamValue(m_orchestratorConfig,  key, "");
     if (val != "") {
         mounts = val;
     }
-    key = ORCHESTRATOR_CFG_KEYS_ROOT + procName + ".docker_add_mounts";
+    key = ORCHESTRATOR_CFG_KEYS_ROOT + procName + "." + DOCKER_ADD_MOUNTS_STEP_CFG_KEY;
     val = GetParamValue(m_orchestratorConfig, key, "");
     if (val != "") {
         if (mounts.size() > 0) {
@@ -186,7 +171,7 @@ QString StepExecutionDecorator::GetDockerAdditionalMounts(const QString &procNam
         }
         mounts += val;
     }
-    key = QString(ORCHESTRATOR_CFG_KEYS_ROOT) + "docker_add_mounts";
+    key = QString(ORCHESTRATOR_CFG_KEYS_ROOT) + DOCKER_ADD_MOUNTS_STEP_CFG_KEY;
     val = GetParamValue(m_orchestratorConfig, key, "");
     if (val != "") {
         if (mounts.size() > 0) {
@@ -195,7 +180,17 @@ QString StepExecutionDecorator::GetDockerAdditionalMounts(const QString &procNam
         mounts += val;
     }
 
-    return mounts;
+    // Add also fixed docker mounts (scratch path, /mnt/archive, archiver path etc.)
+    const QString &scratchPathRoot = GetScratchPathRoot(procName);
+    mounts.append(scratchPathRoot + ":" + scratchPathRoot);
+    mounts.append(",");
+    mounts.append("/mnt/archive/:/mnt/archive/");
+    mounts.append(",");
+    mounts.append(m_archiverPath + ":" + m_archiverPath);
+    mounts.append(",");
+    mounts.append(QFileInfo(m_archiverPath).canonicalFilePath() + ":" + QFileInfo(m_archiverPath).canonicalFilePath());
+
+    return EnsureUniqueDockerMounts(mounts);
 }
 
 QString StepExecutionDecorator::GetOrchestratorStepConfigValue(const QString &procName, const QString &taskName, const QString &key, QString &foundRoot) {
@@ -245,9 +240,10 @@ QString StepExecutionDecorator::GetScratchPathRoot(const QString &procName)
 {
     QString val;
     if (procName != "") {
-        val  = GetParamValue(m_ScratchPathConfig, "general.scratch-path."+procName, "");
-    } else {
-        val = GetParamValue(m_ScratchPathConfig, QStringLiteral("general.scratch-path"), "");
+        val  = GetParamValue(m_ScratchPathConfig, QStringLiteral(ORCHESTRATOR_TMP_PATH) + "." + procName, "");
+    }
+    if (val.size() == 0) {
+        val = GetParamValue(m_ScratchPathConfig, QStringLiteral(ORCHESTRATOR_TMP_PATH), "");
     }
     Q_ASSERT(val != "");
 

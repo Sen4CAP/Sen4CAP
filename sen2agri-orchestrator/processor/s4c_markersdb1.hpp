@@ -6,13 +6,16 @@
 #include "s4c_mdb1_dataextract_steps_builder.hpp"
 
 typedef struct MDB1JobPayload {
-    MDB1JobPayload(EventProcessingContext *pContext, const JobSubmittedEvent &evt) : event(evt) {
+    MDB1JobPayload(EventProcessingContext *pContext, const JobSubmittedEvent &evt,
+                   const QDateTime &minDate, const QDateTime &maxDate)
+        : event(evt), minDate(minDate), maxDate(maxDate) {
         pCtx = pContext;
         parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
         configParameters = pCtx->GetJobConfigurationParameters(evt.jobId, MDB1_CFG_PREFIX);
         siteShortName = pContext->GetSiteShortName(evt.siteId);
         int jobVal;
         isScheduledJob = ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1);
+        ampvvvhEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "amp_vvvh_enabled", MDB1_CFG_PREFIX);
     }
     EventProcessingContext *pCtx;
     JobSubmittedEvent event;
@@ -22,6 +25,7 @@ typedef struct MDB1JobPayload {
     bool isScheduledJob;
     QDateTime minDate;
     QDateTime maxDate;
+    bool ampvvvhEnabled;
 } MDB1JobPayload;
 
 class S4CMarkersDB1Handler : public ProcessorHandler
@@ -36,9 +40,12 @@ private:
     void HandleProductAvailableImpl(EventProcessingContext &ctx,
                                     const ProductAvailableEvent &event) override;
 
-    void CreateTasks(QList<TaskToSubmit> &outAllTasksList, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder);
-    void CreateSteps(QList<TaskToSubmit> &allTasksList,
-                     const MDB1JobPayload &siteCfg, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder, NewStepList &steps);
+    void CreateTasks(QList<TaskToSubmit> &outAllTasksList, const MDB1JobPayload &siteCfg,
+                     const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder);
+    void CreateSteps(QList<TaskToSubmit> &allTasksList, const MDB1JobPayload &siteCfg,
+                     const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder,
+                     NewStepList &steps);
+
     void WriteExecutionInfosFile(const QString &executionInfosPath,
                                  const QStringList &listProducts);
     ProcessorJobDefinitionParams GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
@@ -47,7 +54,7 @@ private:
 private:
     QString CreateStepsForFilesMerge(const QStringList &dataExtrDirs,
                                   NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
-    QString CreateStepsForMdb2Export(const QString &mergedFile,
+    QString CreateStepsForAmpVVVHExtraction(const QString &mergedFile,
                                   NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
     QString CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const QString &inputFile,
                                     NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx, const QString &prdType);

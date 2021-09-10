@@ -402,11 +402,11 @@ bool TsaCatchCropAnalysisHandler::CCEfaMarkersExtraction(time_t ttDateA, time_t 
 
     // number the FALSE markers
     int efaNotCompliant = 0;
-    efaNotCompliant += (efa.ndviPresence == false ? 1 : 0);
-    efaNotCompliant += (efa.ndviGrowth == false ? 1 : 0);
-    efaNotCompliant += (efa.ndviNoLoss == false ? 1 : 0);
-    efaNotCompliant += (efa.ampNoLoss == false ? 1 : 0);
-    efaNotCompliant += (efa.cohNoLoss == false ? 1 : 0);
+    efaNotCompliant += (efa.ndviPresence == false ? 1 : 0); // M6
+    efaNotCompliant += (efa.ndviGrowth == false ? 1 : 0);   // M7
+    efaNotCompliant += (efa.ndviNoLoss == false ? 1 : 0);   // M8
+    efaNotCompliant += (efa.ampNoLoss == false ? 1 : 0);    // M9
+    efaNotCompliant += (efa.cohNoLoss == false ? 1 : 0);    // M10
 
     // # no NDVI values in the catch-crop perid - evaluation is based only on SAR markers (M9,M10)
     if (IsNA(efaNdvi)) {

@@ -23,6 +23,7 @@
 
 #include "otbMarkers1CsvWriter.h"
 #include "itkMacro.h"
+#include "otbWrapperMacros.h"
 #include "itksys/SystemTools.hxx"
 #include "otb_tinyxml.h"
 #include "otbStringUtils.h"
@@ -33,7 +34,7 @@ namespace otb {
 template < class TMeasurementVector >
 Markers1CsvWriter<TMeasurementVector>
 ::Markers1CsvWriter(): m_TargetFileName(""),
-    m_bUseMinMax(false)
+    m_bUseMinMax(false), m_bUseValidityCnt(false)
 {
     m_IdPosInHeader = -1;
     m_MeanPosInHeader = -1;
@@ -41,23 +42,26 @@ Markers1CsvWriter<TMeasurementVector>
     m_MinPosInHeader = -1;
     m_MaxPosInHeader = -1;
     m_ValidPixelsPosInHeader = -1;
-    m_InvalidPixelsPosInHeader = -1;
     m_csvSeparator = ',';
+    m_mapValuesIndex = 0;
 }
 
 template < class TMeasurementVector >
 std::string
 Markers1CsvWriter<TMeasurementVector>
 ::BuildHeaderItem(const std::string &dateStr, const std::string &hdrItem, const std::string &fileType,
-                  const std::string &polarisation, const std::string &orbit)
+                  const std::vector<std::string> &additionalFields)
 {
-    std::string ret = dateStr + "_" + hdrItem + "_" + fileType;
-    if (polarisation.size() > 0) {
-        ret += ("_" + polarisation);
+    std::string ret = dateStr + "_" + hdrItem;
+    if (fileType.size() > 0) {
+        ret += ("_" + fileType);
     }
-    if (orbit.size() > 0) {
-        ret += ("_" + orbit);
+    for (const std::string &addField: additionalFields) {
+        if (addField.size() > 0) {
+            ret += ("_" + addField);
+        }
     }
+
     return ret;
 }
 
@@ -70,64 +74,65 @@ Markers1CsvWriter<TMeasurementVector>
     std::string fileType;
     std::string polarisation;
     std::string orbit;
+    std::string tile;
+    std::string band;
     time_t fileDate;
-    time_t additionalFileDate = 0;
-    if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate))
+    time_t prevDate = 0;
+    Satellite sat;
+    if (!GetFileInfosFromName(fileName, sat, fileType, polarisation, orbit, fileDate, tile, band, prevDate))
     {
         std::cout << "Error extracting file informations from file name " << fileName << std::endl;
-        return;
+        fileType = m_defaultPrdType;
     }
+    std::vector<std::string> headerAdditionalFields = {polarisation, orbit, tile, band};
     char buffer[10];
     struct tm * timeinfo = localtime(&fileDate);
     strftime(buffer, sizeof(buffer), "%Y%m%d", timeinfo);
     const std::string &dateStr = std::string(buffer);
 
-    m_idFieldName = idFieldName;
     m_bIdIsInteger = bIdIsInteger;
+    bool isFieldNameHdrItem;
     for (const auto &hdrItem: vec) {
-        if (hdrItem == idFieldName) {
-            this->m_HeaderFields.push_back(hdrItem);
-        } else {
-            this->m_HeaderFields.push_back(BuildHeaderItem(dateStr, hdrItem, fileType, polarisation, orbit));
-        }
+        isFieldNameHdrItem = (hdrItem == idFieldName);
+        bool isDoubleValHdr = (!isFieldNameHdrItem && (hdrItem == "mean" || hdrItem == "stdev"));
+        const HeaderInfoType &hdrInfo = isFieldNameHdrItem ?
+                    HeaderInfoType(hdrItem, m_bIdIsInteger) :
+                    HeaderInfoType(BuildHeaderItem(dateStr, hdrItem, fileType, headerAdditionalFields),
+                                   isDoubleValHdr);
+        m_vecHeaderFields.emplace_back(hdrInfo);
     }
     m_IdPosInHeader = GetPositionInHeader(idFieldName);
-    m_MeanPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "mean",  fileType, polarisation, orbit));
-    m_StdevPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "stdev",  fileType, polarisation, orbit));
-    m_MinPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "min",  fileType, polarisation, orbit));
-    m_MaxPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "max",  fileType, polarisation, orbit));
-    m_ValidPixelsPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "valid_pixels_cnt",  fileType, polarisation, orbit));
-    m_InvalidPixelsPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "invalid_pixels_cnt",  fileType, polarisation, orbit));
+    m_MeanPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "mean",  fileType, headerAdditionalFields));
+    m_StdevPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "stdev",  fileType, headerAdditionalFields));
+    m_MinPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "min",  fileType, headerAdditionalFields));
+    m_MaxPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "max",  fileType, headerAdditionalFields));
+    m_ValidPixelsPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "valid_pixels_cnt",  fileType, headerAdditionalFields));
 }
 
 template < class TMeasurementVector >
 template <typename MapType, typename MapMinMaxType>
 void
 Markers1CsvWriter<TMeasurementVector>
-::AddInputMap(const std::string &fileName, const MapType& map, const MapMinMaxType& mapMins, const MapMinMaxType& mapMax,
-              const MapMinMaxType& mapValidPixels, const MapMinMaxType& mapInvalidPixels)
+::AddInputMap(const MapType& map, const MapMinMaxType& mapMins, const MapMinMaxType& mapMax,
+              const MapMinMaxType& mapValidPixels)
 {
-    std::string fileType;
-    std::string polarisation;
-    std::string orbit;
-    time_t fileDate;
-    time_t additionalFileDate = 0;
-    if (!GetFileInfosFromName(fileName, fileType, polarisation, orbit, fileDate, additionalFileDate))
-    {
-        std::cout << "Error extracting file informations from file name " << fileName << std::endl;
-        return;
-    }
-    if (additionalFileDate) {
-        fileDate = additionalFileDate;
+    // We ensure that we have the same number of values for these maps as in the input map
+    bool useStdev = false;
+    if (m_bUseStdev && m_StdevPosInHeader > 0) {
+        useStdev = true;
     }
 
-    // We ensure that we have the same number of values for these maps as in the input map
     bool useMinMax = false;
     if (m_bUseMinMax) {
         if (map.size() == mapMins.size() && map.size() == mapMax.size() &&
-                map.size() == mapValidPixels.size() &&
-                map.size() == mapInvalidPixels.size()) {
+                m_MinPosInHeader > 0 && m_MaxPosInHeader > 0) {
             useMinMax = true;
+        }
+    }
+    bool useValidityCnt = false;
+    if (m_bUseValidityCnt) {
+        if (map.size() == mapValidPixels.size() && m_ValidPixelsPosInHeader > 0) {
+            useValidityCnt = true;
         }
     }
 
@@ -135,27 +140,28 @@ Markers1CsvWriter<TMeasurementVector>
     typename MapMinMaxType::const_iterator itMin = mapMins.begin();
     typename MapMinMaxType::const_iterator itMax = mapMax.begin();
     typename MapMinMaxType::const_iterator itValidPixelsCnt = mapValidPixels.begin();
-    typename MapMinMaxType::const_iterator itInvalidPixelsCnt = mapInvalidPixels.begin();
 
     std::string fieldId;
     for ( it = map.begin() ; it != map.end() ; ++it)
     {
       fieldId = boost::lexical_cast<std::string>(it->first);
-      const auto &meanVal = it->second.mean[0];
-      const auto &stdDevVal = it->second.stdDev[0];
+      const auto &meanVal = it->second.mean[m_mapValuesIndex];
 
       FieldEntriesType fieldEntry;
       // we exclude from the header the fid
-      fieldEntry.values.resize(m_HeaderFields.size() - 1);
+      fieldEntry.values.resize(m_vecHeaderFields.size() - 1);
       // exclude header so subtract 1 from the pos in header
       fieldEntry.values[m_MeanPosInHeader-1] = meanVal;
-      fieldEntry.values[m_StdevPosInHeader-1] = stdDevVal;
-      if (useMinMax && m_MinPosInHeader > 0 && m_MaxPosInHeader > 0 &&
-              m_ValidPixelsPosInHeader > 0 && m_InvalidPixelsPosInHeader > 0) {
-          fieldEntry.values[m_MinPosInHeader-1] = itMin->second[0];
-          fieldEntry.values[m_MaxPosInHeader-1] = itMax->second[0];
-          fieldEntry.values[m_ValidPixelsPosInHeader-1] = itValidPixelsCnt->second[0];
-          fieldEntry.values[m_InvalidPixelsPosInHeader-1] = itInvalidPixelsCnt->second[0];
+      if (useStdev) {
+          const auto &stdDevVal = it->second.stdDev[m_mapValuesIndex];
+          fieldEntry.values[m_StdevPosInHeader-1] = stdDevVal;
+      }
+      if (useMinMax) {
+          fieldEntry.values[m_MinPosInHeader-1] = itMin->second[m_mapValuesIndex];
+          fieldEntry.values[m_MaxPosInHeader-1] = itMax->second[m_mapValuesIndex];
+      }
+      if (useValidityCnt) {
+          fieldEntry.values[m_ValidPixelsPosInHeader-1] = itValidPixelsCnt->second[m_mapValuesIndex];
       }
 
       // add it into the container
@@ -167,8 +173,9 @@ Markers1CsvWriter<TMeasurementVector>
       if (useMinMax) {
           ++itMin;
           ++itMax;
+      }
+      if (useValidityCnt) {
           ++itValidPixelsCnt;
-          ++itInvalidPixelsCnt;
       }
     }
 }
@@ -180,6 +187,9 @@ Markers1CsvWriter<TMeasurementVector>
 {
     std::ofstream fileStream;
     fileStream.open(m_TargetFileName, std::ios_base::trunc | std::ios_base::out);
+    if (!fileStream.is_open()) {
+        itkExceptionMacro(<<"Cannot open file " << m_TargetFileName << " for writing. Please check if output folder exists or has the needed rights!");
+    }
 
     // write the header
     WriteCsvHeader(fileStream);
@@ -195,6 +205,8 @@ Markers1CsvWriter<TMeasurementVector>
     {
         WriteEntriesToCsvOutputFile(fileStream, *fileFieldContainerIt);
     }
+    fileStream.flush();
+    fileStream.close();
 }
 
 template < class TMeasurementVector >
@@ -207,10 +219,23 @@ Markers1CsvWriter<TMeasurementVector>
 
     outStream << fileFieldsInfos.fid.c_str() << m_csvSeparator;
     int fieldEntriesSize = fileFieldsInfos.fieldsEntries.size();
+    bool isDoubleFieldVal;
+    int curHdrItemIdx;
+    int hdrVecSize = m_vecHeaderFields.size();  // do not consider the id
     for (int i = 0; i<fieldEntriesSize; i++) {
         const std::vector<double> &curLineVect = fileFieldsInfos.fieldsEntries[i].values;
         for (int j = 0; j<curLineVect.size(); j++) {
-            outStream << DoubleToString(curLineVect[j]).c_str();
+            isDoubleFieldVal = true;
+            curHdrItemIdx = j+1;
+            if (curHdrItemIdx < hdrVecSize) {
+                const HeaderInfoType &hdrItem = m_vecHeaderFields[curHdrItemIdx];
+                isDoubleFieldVal = hdrItem.IsDouble();
+            }
+            if (isDoubleFieldVal) {
+                outStream << DoubleToString(curLineVect[j]).c_str();
+            } else {
+                outStream << (int)curLineVect[j];
+            }
             if (j < curLineVect.size() - 1 ) {
                 outStream << m_csvSeparator;
             }
@@ -240,9 +265,9 @@ template < class TMeasurementVector >
 void
 Markers1CsvWriter<TMeasurementVector>
 ::WriteCsvHeader(std::ofstream &fileStream) {
-    for (int i = 0; i<m_HeaderFields.size(); i++) {
-        fileStream << m_HeaderFields[i];
-        if (i < m_HeaderFields.size()-1) {
+    for (int i = 0; i<m_vecHeaderFields.size(); i++) {
+        fileStream << m_vecHeaderFields[i].GetName();
+        if (i < m_vecHeaderFields.size()-1) {
             fileStream << m_csvSeparator;
         }
     }
@@ -281,14 +306,17 @@ int
 Markers1CsvWriter<TMeasurementVector>
 ::GetPositionInHeader(const std::string &name)
 {
+    auto pred = [name](const HeaderInfoType &hdrItem) {
+        return hdrItem.GetName() == name;
+    };
     // check if the name is found in the headers list
-    std::vector<std::string>::iterator hdrIt = std::find(m_HeaderFields.begin(), m_HeaderFields.end(), name);
-    if (hdrIt == m_HeaderFields.end())
+    typename std::vector<HeaderInfoType>::const_iterator hdrIt =std::find_if(std::begin(m_vecHeaderFields), std::end(m_vecHeaderFields), pred);
+    if (hdrIt == m_vecHeaderFields.end())
     {
         return -1;
     }
     // we exclude from the header the fid and the date
-    return hdrIt - m_HeaderFields.begin();
+    return hdrIt - m_vecHeaderFields.begin();
 }
 
 template < class TMeasurementVector >

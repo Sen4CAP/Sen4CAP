@@ -175,6 +175,11 @@ private:
         SetParameterDescription("sep","The CSV separator");
         MandatoryOff("sep");
 
+        AddParameter(ParameterType_Int, "ignnodatecol", "Ignore columns not starting with a date");
+        SetParameterDescription("ignnodatecol","gnore columns not starting with a date");
+        MandatoryOff("ignnodatecol");
+        SetDefaultParameterInt("ignnodatecol", 1);
+
         AddRAMParameter();
 
         // Doc example parameter settings
@@ -199,7 +204,7 @@ private:
 
         const std::vector<std::string> &inputFilePaths = GetInputFilePaths();
         if(inputFilePaths.size() == 0) {
-            otbAppLogFATAL(<<"No image was given as input!");
+            otbAppLogFATAL(<<"No files were given as input!");
         }
         auto start = std::chrono::system_clock::now();
 
@@ -315,11 +320,13 @@ private:
             if (colName == SEQ_UNIQUE_ID) {
                 continue;
             }
-            // Get the date from the header item
-            time_t ttTime = GetDateFromColumnName(colName);
-            if (ttTime == 0) {
-                // ignore the column
-                continue;
+            if (GetParameterInt("ignnodatecol")) {
+                // Get the date from the header item
+                time_t ttTime = GetDateFromColumnName(colName);
+                if (ttTime == 0) {
+                    // ignore the column
+                    continue;
+                }
             }
             ret.push_back(colName);
         }
@@ -551,8 +558,6 @@ private:
 
     private:
         char m_CsvSeparator;
-
-    //TODO
 };
 
 } // end of namespace Wrapper

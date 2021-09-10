@@ -5,6 +5,7 @@ set(Sen2AgriCommonUtils_HEADERS
     ../include/BandsCfgMappingParser.h
     ../include/ResamplingBandExtractor.h
     ../include/ImageResampler.h
+    ../include/AppExternalMaskProvider.h
     ../include/GenericRSImageResampler.h
     ../include/TimeFunctions.h
     ../include/WStringToString.h)

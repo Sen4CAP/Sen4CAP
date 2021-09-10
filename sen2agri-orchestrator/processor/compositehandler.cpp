@@ -8,9 +8,14 @@
 #include "json_conversions.hpp"
 #include "logger.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+#include "products/producthelperfactory.h"
+
+using namespace orchestrator::products;
+
 void CompositeHandler::CreateTasksForNewProducts(const CompositeJobConfig &cfg, QList<TaskToSubmit> &outAllTasksList,
                                                 QList<std::reference_wrapper<const TaskToSubmit>> &outProdFormatterParentsList,
-                                                const TileTemporalFilesInfo &tileTemporalFilesInfo)
+                                                const TileTimeSeriesInfo &tileTemporalFilesInfo)
 {
     int nbProducts = tileTemporalFilesInfo.temporalTilesFileInfos.size();
     // just create the tasks but with no information so far
@@ -73,12 +78,17 @@ void CompositeHandler::CreateTasksForNewProducts(const CompositeJobConfig &cfg, 
 
 void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
                                           const CompositeJobConfig &cfg,
-                                          const TileTemporalFilesInfo &tileTemporalFilesInfo,
+                                          const TileTimeSeriesInfo &tileTemporalFilesInfo,
                                           CompositeGlobalExecutionInfos &globalExecInfos,
                                           int resolution)
 {
-    QStringList listProducts = ProcessorHandlerHelper::GetTemporalTileFiles(tileTemporalFilesInfo);
-    QString bandsMapping = DeductBandsMappingFile(listProducts, cfg.bandsMapping, resolution);
+    const QList<TileMetadataDetails> &listProducts = tileTemporalFilesInfo.GetTileTimeSeriesInfoFiles();
+    QList<ProductDetails> prdDetails;
+    std::for_each(listProducts.begin(), listProducts.end(), [&prdDetails](const TileMetadataDetails &prd) {
+        prdDetails.append(prd.srcPrdDetails);
+    });
+
+    QString bandsMapping = DeductBandsMappingFile(prdDetails, cfg.bandsMapping, resolution);
     const auto &resolutionStr = QString::number(resolution);
     QString scatCoeffs = ((resolution == 10) ? cfg.scatCoeffs10M : cfg.scatCoeffs20M);
 
@@ -91,9 +101,9 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
 
     QString primaryTileMetadata;
     for(int i = 0; i<tileTemporalFilesInfo.temporalTilesFileInfos.size(); i++) {
-        const ProcessorHandlerHelper::InfoTileFile &tempFileInfo = tileTemporalFilesInfo.temporalTilesFileInfos[i];
+        const InfoTileFile &tempFileInfo = tileTemporalFilesInfo.temporalTilesFileInfos[i];
         if(tempFileInfo.satId == tileTemporalFilesInfo.primarySatelliteId) {
-            primaryTileMetadata = tempFileInfo.file;
+            primaryTileMetadata = tempFileInfo.metaFile;
             break;
         }
     }
@@ -109,7 +119,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
         TaskToSubmit &maskHandler = allTasksList[nCurTaskIdx++];
         SubmitTasks(ctx, cfg.jobId, {maskHandler});
         const auto &masksFile = maskHandler.GetFilePath("all_masks_file.tif");
-        QStringList maskHandlerArgs = { "MaskHandler", "-xml",         inputProduct, "-out",
+        QStringList maskHandlerArgs = { "MaskHandler", "-xml",         inputProduct.tileMetaFile, "-out",
                                         masksFile,     "-sentinelres", resolutionStr };
         steps.append(CreateTaskStep(maskHandler, "MaskHandler", maskHandlerArgs));
         cleanupTemporaryFilesList.append(masksFile);
@@ -122,7 +132,8 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
         auto waterResImg = compositePreprocessing.GetFilePath("water_res.tif");
         auto snowResImg = compositePreprocessing.GetFilePath("snow_res.tif");
         auto aotResImg = compositePreprocessing.GetFilePath("aot_res.tif");
-        QStringList compositePreprocessingArgs = { "CompositePreprocessing", "-xml", inputProduct,
+        // TODO: Provide here also via a parameter also the validity masks (if available instead of MaskHandler mask)
+        QStringList compositePreprocessingArgs = { "CompositePreprocessing", "-xml", inputProduct.tileMetaFile,
                                                    "-bmap", bandsMapping, "-res", resolutionStr,
                                                    "-msk", masksFile, "-outres", outResImgBands,
                                                    "-outcmres", cldResImg, "-outwmres", waterResImg,
@@ -158,7 +169,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
 
         // Weight AOT Step
         const auto &outWeightAotFile = weightAot.GetFilePath("weight_aot.tif");
-        QStringList weightAotArgs = { "WeightAOT",     "-xml",     inputProduct, "-in",
+        QStringList weightAotArgs = { "WeightAOT",     "-xml",     inputProduct.tileMetaFile, "-in",
                                       aotResImg,       "-waotmin", cfg.weightAOTMin, "-waotmax",
                                       cfg.weightAOTMax,    "-aotmax",  cfg.AOTMax,       "-out",
                                       outWeightAotFile };
@@ -167,7 +178,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
 
         // Weight on clouds Step
         const auto &outWeightCldFile = weightOnClouds.GetFilePath("weight_cloud.tif");
-        QStringList weightOnCloudArgs = { "WeightOnClouds", "-inxml",         inputProduct,
+        QStringList weightOnCloudArgs = { "WeightOnClouds", "-inxml",         inputProduct.tileMetaFile,
                                           "-incldmsk",      cldResImg,        "-coarseres",
                                           cfg.coarseRes,        "-sigmasmallcld", cfg.sigmaSmallCloud,
                                           "-sigmalargecld", cfg.sigmaLargeCloud,  "-out", outWeightCldFile };
@@ -176,7 +187,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
 
         // Total weight Step
         const auto &outTotalWeighFile = totalWeight.GetFilePath("weight_total.tif");
-        QStringList totalWeightArgs = { "TotalWeight",    "-xml",           inputProduct,
+        QStringList totalWeightArgs = { "TotalWeight",    "-xml",           inputProduct.tileMetaFile,
                                         "-waotfile",      outWeightAotFile, "-wcldfile",
                                         outWeightCldFile, "-l3adate",       cfg.l3aSynthesisDate,
                                         "-halfsynthesis", cfg.synthalf,         "-wdatemin",
@@ -187,10 +198,10 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
         // Update Synthesis Step
         const auto &outL3AResultFile = updateSynthesis.GetFilePath("L3AResult.tif");
         QStringList updateSynthesisArgs = { "UpdateSynthesis", "-in",   outResImgBands,    "-bmap",
-                                            bandsMapping,      "-xml",  inputProduct,      "-csm",
-                                            cldResImg,         "-wm",   waterResImg,       "-sm",
-                                            snowResImg,        "-wl2a", outTotalWeighFile, "-out",
-                                            outL3AResultFile };
+                                            bandsMapping,      "-xml",  inputProduct.tileMetaFile,
+                                            "-csm", cldResImg,         "-wm",   waterResImg,
+                                            "-sm", snowResImg,        "-wl2a", outTotalWeighFile,
+                                            "-out", outL3AResultFile };
         if (i > 0) {
             updateSynthesisArgs.append("-prevl3aw");
             updateSynthesisArgs.append(prevL3AProdWeights);
@@ -219,7 +230,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
         const auto &outL3AResultRgbFile = compositeSplitter.GetFilePath("L3AResult_rgb.tif");
         bool isLastProduct = (i == (listProducts.size() - 1));
         QStringList compositeSplitterArgs = { "CompositeSplitter2",
-                                              "-in", outL3AResultFile, "-xml", inputProduct, "-bmap", bandsMapping,
+                                              "-in", outL3AResultFile, "-xml", inputProduct.tileMetaFile, "-bmap", bandsMapping,
                                               "-outweights", outL3AResultWeightsFile,
                                               "-outdates", outL3AResultDatesFile,
                                               "-outrefls", outL3AResultReflsFile,
@@ -257,7 +268,7 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
 
 void CompositeHandler::WriteExecutionInfosFile(const QString &executionInfosPath,
                                                const CompositeJobConfig &cfg,
-                                               const QStringList &listProducts)
+                                               const QList<ProductDetails> &productDetails)
 {
     std::ofstream executionInfosFile;
     try {
@@ -266,7 +277,8 @@ void CompositeHandler::WriteExecutionInfosFile(const QString &executionInfosPath
         executionInfosFile << "<metadata>" << std::endl;
         executionInfosFile << "  <General>" << std::endl;
         int resolution = 10;
-        QString bandsMapping = DeductBandsMappingFile(listProducts, cfg.bandsMapping, resolution);
+
+        QString bandsMapping = DeductBandsMappingFile(productDetails, cfg.bandsMapping, resolution);
         executionInfosFile << "    <bands_mapping_file>" << bandsMapping.toStdString()
                            << "</bands_mapping_file>" << std::endl;
         executionInfosFile << "    <scattering_coefficients_10M_file>" << cfg.scatCoeffs10M.toStdString()
@@ -312,9 +324,9 @@ void CompositeHandler::WriteExecutionInfosFile(const QString &executionInfosPath
         executionInfosFile << "  </Dates_information>" << std::endl;
 
         executionInfosFile << "  <XML_files>" << std::endl;
-        for (int i = 0; i < listProducts.size(); i++) {
+        for (int i = 0; i < productDetails.size(); i++) {
             executionInfosFile << "    <XML_" << std::to_string(i) << ">"
-                               << listProducts[i].toStdString() << "</XML_" << std::to_string(i)
+                               << productDetails[i].GetProduct().fullPath.toStdString() << "</XML_" << std::to_string(i)
                                << ">" << std::endl;
         }
         executionInfosFile << "  </XML_files>" << std::endl;
@@ -340,8 +352,10 @@ void CompositeHandler::FilterInputProducts(QStringList &listFiles,
 void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
-    const QStringList &listProducts = GetL2AInputProductsTiles(ctx, event);
-    if(listProducts.size() == 0) {
+    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    const QList<ProductDetails> &prdDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
+    if(prdDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);
         throw std::runtime_error(
             QStringLiteral("No products provided at input or no products available in the specified interval").
@@ -352,19 +366,18 @@ void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     GetJobConfig(ctx, event, cfg);
 
     int resolution = cfg.resolution;
-    const QMap<QString, TileTemporalFilesInfo> &mapTiles = GroupTiles(ctx, event.siteId, listProducts,
-                                                               ProductType::L2AProductTypeId);
+    const TilesTimeSeries &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, prdDetails, ProductType::L2AProductTypeId);
 
     QList<CompositeProductFormatterParams> listParams;
 
     TaskToSubmit productFormatterTask{"product-formatter", {}};
     NewStepList allSteps;
     QList<CompositeGlobalExecutionInfos> listCompositeInfos;
-    for(const auto &tileId : mapTiles.keys())
+    for(const auto &tileId : mapTiles.GetTileIds())
     {
-        const TileTemporalFilesInfo &listTemporalTiles = mapTiles.value(tileId);
+        const TileTimeSeriesInfo &listTemporalTiles = mapTiles.GetTileTimeSeriesInfo(tileId);
         int curRes = resolution;
-        bool bHasS2 = listTemporalTiles.uniqueSatteliteIds.contains(ProcessorHandlerHelper::SATELLITE_ID_TYPE_S2);
+        bool bHasS2 = listTemporalTiles.uniqueSatteliteIds.contains(Satellite::Sentinel2);
         // if we have S2 maybe we want to create products only for 20m resolution
 
         for(int i = 0; i<2; i++)  {
@@ -388,7 +401,7 @@ void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     SubmitTasks(ctx, event.jobId, {productFormatterTask});
 
     // finally format the product
-    QStringList productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, cfg, listProducts, listParams);
+    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, cfg, prdDetails, listParams);
 
     // add these steps to the steps list to be submitted
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
@@ -399,21 +412,20 @@ void CompositeHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
                                               const TaskFinishedEvent &event)
 {
     if (event.module == "product-formatter") {
-        QString prodName = GetProductFormatterProductName(ctx, event);
-        QString productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
-        if(prodName != "" && ProcessorHandlerHelper::IsValidHighLevelProduct(productFolder)) {
+        const QString &prodName = GetOutputProductName(ctx, event);
+        const QString &productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
+        if(prodName != "" && GenericHighLevelProductHelper(productFolder).HasValidStructure()) {
             // mark the job as finished
             ctx.MarkJobFinished(event.jobId);
 
-            QString quicklook = GetProductFormatterQuicklook(ctx, event);
-            QString footPrint = GetProductFormatterFootprint(ctx, event);
+            const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
+            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            const QStringList &prodTiles = ProcessorHandlerHelper::GetTileIdsFromHighLevelProduct(productFolder);
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prodName, minDate, maxDate);
+            GenericHighLevelProductHelper prdHelper(productFolder);
+            const QStringList &prodTiles = prdHelper.GetTileIdsFromProduct();
             ctx.InsertProduct({ ProductType::L3AProductTypeId, event.processorId, event.siteId,
-                                event.jobId, productFolder, maxDate, prodName, quicklook,
-                                footPrint, std::experimental::nullopt, prodTiles });
+                                event.jobId, productFolder, prdHelper.GetAcqDate(), prodName, quicklook,
+                                footPrint, std::experimental::nullopt, prodTiles, ProductIdsList() });
         } else {
             // mark the job as failed
             ctx.MarkJobFailed(event.jobId);
@@ -473,17 +485,17 @@ void CompositeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitt
 }
 
 QStringList CompositeHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const CompositeJobConfig &cfg,
-                                    const QStringList &listProducts, const QList<CompositeProductFormatterParams> &productParams) {
+                                    const QList<ProductDetails> &productDetails, const QList<CompositeProductFormatterParams> &productParams) {
 
     const auto &targetFolder = GetFinalProductFolder(ctx, cfg.jobId, cfg.siteId);
     const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.xml");
     const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
 
-    WriteExecutionInfosFile(executionInfosPath, cfg, listProducts);
+    WriteExecutionInfosFile(executionInfosPath, cfg, productDetails);
 
     QDateTime dtStartDate, dtEndDate;
     QString timePeriod = cfg.l3aSynthesisDate + "_" + cfg.l3aSynthesisDate;
-    if(ProcessorHandlerHelper::GetL2AIntevalFromProducts(listProducts, dtStartDate, dtEndDate)) {
+    if(ProcessorHandlerHelper::GetIntevalFromProducts(productDetails, dtStartDate, dtEndDate)) {
         timePeriod = dtStartDate.toString("yyyyMMdd") + "_" + dtEndDate.toString("yyyyMMdd");
     }
     QStringList productFormatterArgs = { "ProductFormatter",
@@ -497,8 +509,12 @@ QStringList CompositeHandler::GetProductFormatterArgs(TaskToSubmit &productForma
                                          "-compress", "1",
                                          "-gipp", executionInfosPath,
                                          "-outprops", outPropsPath};
-    productFormatterArgs += "-il";
-    productFormatterArgs += listProducts[listProducts.size() - 1];
+    const std::unique_ptr<ProductHelper> &l2aPrdHelper = ProductHelperFactory::GetProductHelper(productDetails[productDetails.size() - 1]);
+    const QStringList &l2aPrdMetaFiles = l2aPrdHelper->GetProductMetadataFiles();
+    if (l2aPrdMetaFiles.size() > 0) {
+        productFormatterArgs += "-il";
+        productFormatterArgs += l2aPrdMetaFiles[0];
+    }
 
     if(cfg.lutPath.size() > 0) {
         productFormatterArgs += "-lut";
@@ -558,54 +574,58 @@ QStringList CompositeHandler::GetMissionsFromBandsMapping(const QString &bandsMa
     return QStringList();
 }
 
-QString CompositeHandler::DeductBandsMappingFile(const QStringList &listProducts,
+QString CompositeHandler::DeductBandsMappingFile(const QList<ProductDetails> &prdDetails,
                                                  const QString &bandsMappingFile, int &resolution) {
+    if (prdDetails.size() == 0) {
+        return bandsMappingFile;
+    }
     QFileInfo fileInfo(bandsMappingFile);
 
     // by default, we consider this is a dir
     QString curBandsMappingPath = bandsMappingFile;
     if(!fileInfo.isDir())
         curBandsMappingPath = fileInfo.dir().absolutePath();
-    QList<ProcessorHandlerHelper::L2ProductType> listUniqueProductTypes;
-    for (int i = 0; i < listProducts.size(); i++) {
-        ProcessorHandlerHelper::L2ProductType productType = ProcessorHandlerHelper::GetL2AProductTypeFromTile(listProducts[i]);
-        if(!listUniqueProductTypes.contains(productType)) {
-            listUniqueProductTypes.append(productType);
+    QList<Satellite> listUniqueSatTypes;
+    for (int i = 0; i < prdDetails.size(); i++) {
+        Satellite satType = (Satellite)prdDetails[i].GetProduct().satId;
+        if(!listUniqueSatTypes.contains(satType)) {
+            listUniqueSatTypes.append(satType);
         }
     }
-    int cntUniqueProdTypes = listUniqueProductTypes.size();
-    if(cntUniqueProdTypes < 1 || cntUniqueProdTypes > 2 ) {
+    int cntUniqueSatTypes = listUniqueSatTypes.size();
+    if(cntUniqueSatTypes < 1 || cntUniqueSatTypes > 2 ) {
         return bandsMappingFile;
     }
-    if(cntUniqueProdTypes == 1) {
-        if(listUniqueProductTypes[0] == ProcessorHandlerHelper::L2_PRODUCT_TYPE_S2) {
+    if(cntUniqueSatTypes == 1) {
+        if(listUniqueSatTypes[0] == Satellite::Sentinel2) {
             return (curBandsMappingPath + "/bands_mapping_s2.txt");
         }
-        if(listUniqueProductTypes[0] == ProcessorHandlerHelper::L2_PRODUCT_TYPE_L8) {
+        if(listUniqueSatTypes[0] == Satellite::Landsat8) {
             resolution = 30;
             return (curBandsMappingPath + "/bands_mapping_L8.txt");
         }
-        if(listUniqueProductTypes[0] == ProcessorHandlerHelper::L2_PRODUCT_TYPE_SPOT4) {
-            resolution = 20;
-            return (curBandsMappingPath + "/bands_mapping_spot4.txt");
-        }
-        if(listUniqueProductTypes[0] == ProcessorHandlerHelper::L2_PRODUCT_TYPE_SPOT5) {
-            resolution = 10;
-            return (curBandsMappingPath + "/bands_mapping_spot5.txt");
-        }
+//        if(listUniqueSatTypes[0] == Satellite::Spot4) {
+//            resolution = 20;
+//            return (curBandsMappingPath + "/bands_mapping_spot4.txt");
+//        }
+//        if(listUniqueSatTypes[0] == Satellite::Spot5) {
+//            resolution = 10;
+//            return (curBandsMappingPath + "/bands_mapping_spot5.txt");
+//        }
     } else {
-        if(listUniqueProductTypes.contains(ProcessorHandlerHelper::L2_PRODUCT_TYPE_L8)) {
-            if(listUniqueProductTypes.contains(ProcessorHandlerHelper::L2_PRODUCT_TYPE_S2)) {
+        if(listUniqueSatTypes.contains(Satellite::Landsat8)) {
+            if(listUniqueSatTypes.contains(Satellite::Sentinel2)) {
                 if((resolution != 10) && (resolution != 20))
                     resolution = 10;
                 return (curBandsMappingPath + "/bands_mapping_s2_L8.txt");
-            } else if(listUniqueProductTypes.contains(ProcessorHandlerHelper::L2_PRODUCT_TYPE_SPOT4)) {
-                resolution = 10;
-                return (curBandsMappingPath + "/bands_mapping_Spot4_L8.txt");
-            } else if(listUniqueProductTypes.contains(ProcessorHandlerHelper::L2_PRODUCT_TYPE_SPOT5)) {
-                resolution = 10;
-                return (curBandsMappingPath + "/bands_mapping_Spot5_L8.txt");
             }
+//            else if(listUniqueSatTypes.contains(Satellite::Spot4)) {
+//                resolution = 10;
+//                return (curBandsMappingPath + "/bands_mapping_Spot4_L8.txt");
+//            } else if(listUniqueSatTypes.contains(Satellite::Spot5)) {
+//                resolution = 10;
+//                return (curBandsMappingPath + "/bands_mapping_Spot5_L8.txt");
+//            }
         }
     }
     return bandsMappingFile;

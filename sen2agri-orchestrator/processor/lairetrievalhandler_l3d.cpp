@@ -8,6 +8,9 @@
 #include "json_conversions.hpp"
 #include "logger.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+using namespace orchestrator::products;
+
 QStringList LaiRetrievalHandlerL3D::GetSpecificReprocessingArgs(const std::map<QString, QString> &)
 {
     QStringList specificArgs = {"-algo", "fit",
@@ -41,13 +44,13 @@ QString LaiRetrievalHandlerL3D::GetPrdFormatterMskFlagName()
     return "-processor.vegetation.filelaifitflgs";
 }
 
-QList<QMap<QString, TileTemporalFilesInfo>> LaiRetrievalHandlerL3D::ExtractL3BMapTiles(EventProcessingContext &ctx,
+QList<QMap<QString, TileTimeSeriesInfo>> LaiRetrievalHandlerL3D::ExtractL3BMapTiles(EventProcessingContext &ctx,
                                                    const JobSubmittedEvent &,
                                                    const QStringList &l3bProducts,
-                                                   const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles)
+                                                   const QMap<Satellite, TileList> &siteTiles)
 {
-    QList<QMap<QString, TileTemporalFilesInfo>> retList;
-    const QMap<QString, TileTemporalFilesInfo> &l3bMapTiles = GetL3BMapTiles(ctx, l3bProducts, siteTiles);
+    QList<QMap<QString, TileTimeSeriesInfo>> retList;
+    const QMap<QString, TileTimeSeriesInfo> &l3bMapTiles = GetL3BMapTiles(ctx, l3bProducts, siteTiles);
     retList.append(l3bMapTiles);
     return retList;
 }
@@ -59,7 +62,7 @@ ProductList LaiRetrievalHandlerL3D::GetScheduledJobProductList(SchedulingContext
     return ctx.GetProducts(siteId, (int)ProductType::L3BProductTypeId, seasonStartDate, seasonEndDate);
 }
 
-bool LaiRetrievalHandlerL3D::AcceptSchedJobProduct(const QString &, ProcessorHandlerHelper::SatelliteIdType )
+bool LaiRetrievalHandlerL3D::AcceptSchedJobProduct(const QString &, Satellite )
 {
     return true;
 }
@@ -67,36 +70,36 @@ bool LaiRetrievalHandlerL3D::AcceptSchedJobProduct(const QString &, ProcessorHan
 
 //TODO: This function should receive the Product and QList<Product> instead of just product path as these can be got from DB
 //      The Product contains already the tiles, the full path and the acquisition date so can be avoided parsing files
-QMap<QString, TileTemporalFilesInfo> LaiRetrievalHandlerL3D::GetL3BMapTiles(EventProcessingContext &ctx,
+QMap<QString, TileTimeSeriesInfo> LaiRetrievalHandlerL3D::GetL3BMapTiles(EventProcessingContext &ctx,
                                                                             const QStringList &l3bProducts,
-                                                                            const QMap<ProcessorHandlerHelper::SatelliteIdType, TileList> &siteTiles)
+                                                                            const QMap<Satellite, TileList> &siteTiles)
 {
-    QMap<QString, TileTemporalFilesInfo> retL3bMapTiles;
+    QMap<QString, TileTimeSeriesInfo> retL3bMapTiles;
+    GenericHighLevelProductHelper prdHelper, prdHelper2;
     for(const QString &l3bProd: l3bProducts) {
-//        QDateTime minDate, maxDate;
-//        ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(l3bProd, minDate, maxDate);
-        const QMap<QString, QString> &mapL3BTiles = ProcessorHandlerHelper::GetHighLevelProductTilesDirs(l3bProd);
-        for(const auto &tileId : mapL3BTiles.keys()) {
+        prdHelper.SetProduct(l3bProd);
+        const QStringList &l3BTiles = prdHelper.GetTileIdsFromProduct();
+        for(const auto &tileId : l3BTiles) {
 
             // TODO: see if a limitation is needed based on the satellite ID (only S2?)
 
-            ProcessorHandlerHelper::SatelliteIdType tileSatId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
+            Satellite tileSatId = ProcessorHandlerHelper::GetSatIdForTile(siteTiles, tileId);
             if(!retL3bMapTiles.contains(tileId)) {
-                TileTemporalFilesInfo newTileInfos;
+                TileTimeSeriesInfo newTileInfos;
                 newTileInfos.tileId = tileId;
                 // add the tile infos to the map
                 retL3bMapTiles[tileId] = newTileInfos;
             }
-            TileTemporalFilesInfo &tileInfo = retL3bMapTiles[tileId];
+            TileTimeSeriesInfo &tileInfo = retL3bMapTiles[tileId];
             for(const QString &curL3bPrd: l3bProducts) {
-                QDateTime minDate, maxDate;
-                ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(curL3bPrd, minDate, maxDate);
+                prdHelper2.SetProduct(curL3bPrd);
+                const QDateTime &minDate = prdHelper2.GetAcqDate();
                 // Fill the tile information for the current tile from the current product
                 AddTileFileInfo(ctx, tileInfo, curL3bPrd, tileId, siteTiles, tileSatId, minDate);
             }
             if(tileInfo.temporalTilesFileInfos.size() > 0) {
                  // update the primary satellite information
-                 tileInfo.primarySatelliteId = ProcessorHandlerHelper::GetPrimarySatelliteId(tileInfo.uniqueSatteliteIds);
+                 tileInfo.primarySatelliteId = ProductHelper::GetPrimarySatelliteId(tileInfo.uniqueSatteliteIds);
             }
         }
     }

@@ -9,6 +9,75 @@
 
 #include "CommonDefs.h"
 
+// Optical L3B product regex
+#define L3B_REGEX          R"(S2AGRI_L3B_S(NDVI|LAI|FAPAR|FCOVER)(?:MONO)?_A(\d{8})T.*\.TIF)"
+// 2017 naming format for coherence and amplitude
+#define S1_REGEX_OLD        R"((\d{8})(-(\d{8}))?_.*(cohe|amp).*_(\d{3})_(VH|VV)_.*\.tiff)"
+// 2018 naming format for coherence and amplitude
+#define S1_REGEX        R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)\.tif)"
+
+#define L3B_REGEX_TYPE_IDX          1
+#define L3B_REGEX_DATE_IDX          2
+
+#define S1_REGEX_DATE_IDX         1           // this is the same for 2017 and 2018 formats
+#define S1_REGEX_DATE2_IDX        2           // 2018
+#define S1_REGEX_POLARISATION_IDX 3           // 2018
+#define S1_REGEX_ORBIT_IDX        4           // 2018
+#define S1_REGEX_TYPE_IDX         5           // 2018
+
+#define S1_REGEX_DATE2_OLD_IDX    3           // this is different for 2017
+#define S1_REGEX_TYPE_OLD_IDX     4           // this is different for 2017
+#define S1_REGEX_ORBIT_OLD_IDX    5           // this is different for 2017
+#define S1_REGEX_POLAR_OLD_IDX    6           // this is different for 2017
+
+#define L2A_FT          "L2A"
+#define NDVI_FT         "NDVI"
+#define LAI_FT          "LAI"
+#define FAPAR_FT        "FAPAR"
+#define FCOVER_FT       "FCOVER"
+#define AMP_FT          "AMP"
+#define COHE_FT         "COHE"
+#define WEATHER_FT      "WEATHER"
+
+#define PRDTYPE_UNAVAILABLE      -1
+#define DATE2_UNAVAILABLE        -1
+#define POLAR_UNAVAILABLE        -1
+#define ORBIT_UNAVAILABLE        -1
+#define TILE_UNAVAILABLE         -1
+#define BAND_UNAVAILABLE         -1
+
+
+typedef struct {
+    Satellite sat;
+    std::string regex;
+    int prdTypeIdx;
+    int dateIdx;
+    int secondDateIdx;
+    int polarisationIdx;
+    int orbitIdx;
+    int tileIdx;
+    int bandIdx;
+    std::string defPrdType;
+} FileNameRegexInfoType;
+
+static FileNameRegexInfoType fileNameRegexInfos[] = {
+    {Satellite::Invalid, L3B_REGEX, L3B_REGEX_TYPE_IDX, L3B_REGEX_DATE_IDX, DATE2_UNAVAILABLE, POLAR_UNAVAILABLE, ORBIT_UNAVAILABLE, TILE_UNAVAILABLE, BAND_UNAVAILABLE, ""},
+    {Satellite::Sentinel1, S1_REGEX, S1_REGEX_TYPE_IDX, S1_REGEX_DATE_IDX, S1_REGEX_DATE2_IDX, S1_REGEX_POLARISATION_IDX, S1_REGEX_ORBIT_IDX, TILE_UNAVAILABLE, BAND_UNAVAILABLE, ""},
+    {Satellite::Sentinel1,S1_REGEX_OLD, S1_REGEX_TYPE_IDX, S1_REGEX_DATE_IDX, S1_REGEX_DATE2_OLD_IDX, S1_REGEX_POLAR_OLD_IDX, S1_REGEX_ORBIT_OLD_IDX, TILE_UNAVAILABLE, BAND_UNAVAILABLE, ""},
+
+    // S2 MAJA raster
+    {Satellite::Sentinel2, R"(SENTINEL2[A-D]_(\d{8})-.*_(L2A)_T(\d{2}[A-Z]{3})_.*_FRE_(B.*).tif)", 2, 1, DATE2_UNAVAILABLE, POLAR_UNAVAILABLE, ORBIT_UNAVAILABLE, 3, 4, L2A_FT},
+    // S2 Sen2Cor raster
+    {Satellite::Sentinel2, R"(T(\d{2}[A-Z]{3})_(\d{8})T\d{6}_(B.*)_[1|2|6]0m\.(tif|jp2))", PRDTYPE_UNAVAILABLE, 2, DATE2_UNAVAILABLE, POLAR_UNAVAILABLE, ORBIT_UNAVAILABLE, 1, 3, L2A_FT},
+    // L8 MACCS format raster
+    {Satellite::Landsat8, R"(L8_.*_(\d{6})_(\d{8})_FRE.DBL.TIF)", PRDTYPE_UNAVAILABLE, 2, DATE2_UNAVAILABLE, POLAR_UNAVAILABLE, ORBIT_UNAVAILABLE, 1, BAND_UNAVAILABLE, L2A_FT},
+    // L8 MAJA format raster
+    {Satellite::Landsat8, R"(LANDSAT8-.*_(\d{8})-.*_(L2A)_(\d{3}-\d{3})_.*_(B\d)\.tif)", 2, 1, DATE2_UNAVAILABLE, POLAR_UNAVAILABLE, ORBIT_UNAVAILABLE, 3, 4, L2A_FT},
+    // ERA5 Weather format raster
+    {Satellite::Invalid, R"(weather_(\d{8})_(.*)_(.*)\.tif)", 2, 1, DATE2_UNAVAILABLE, POLAR_UNAVAILABLE, ORBIT_UNAVAILABLE, 3, BAND_UNAVAILABLE, WEATHER_FT}
+};
+
+
 boost::gregorian::greg_weekday const FirstDayOfWeek = boost::gregorian::Monday;
 
 inline std::vector<std::string> split (const std::string &s, char delim) {
@@ -272,8 +341,68 @@ inline void NormalizeFieldId(std::string &fieldId) {
     fieldId = trim( fieldId);
 }
 
-inline bool GetFileInfosFromName(const std::string &filePath, std::string &fileType, std::string & polarisation,
-                          std::string & orbit, time_t &fileDate, time_t &additionalFileDate)
+//inline bool GetFileInfosFromName(const std::string &filePath, std::string &fileType, std::string & polarisation,
+//                          std::string & orbit, time_t &fileDate, time_t &additionalFileDate)
+//{
+//    boost::filesystem::path p(filePath);
+//    boost::filesystem::path pf = p.filename();
+//    std::string fileName = pf.string();
+
+//    fileType = "";
+//    polarisation = "";
+//    orbit = "";
+//    fileDate = 0;
+//    additionalFileDate = 0;
+
+//    boost::regex regexExp {L3B_REGEX};
+//    boost::smatch matches;
+//    if (boost::regex_match(fileName,matches,regexExp)) {
+//        fileType = matches[L3B_REGEX_TYPE_IDX].str();
+//        fileDate = to_time_t(boost::gregorian::from_undelimited_string(matches[L3B_REGEX_DATE_IDX].str()));
+//    } else {
+//        regexExp = {S1_REGEX};
+//        int dateRegexIdx2 = -1;
+//        if (boost::regex_match(fileName,matches,regexExp)) {
+//            fileType = matches[S1_REGEX_TYPE_IDX].str();
+//            const std::string &fileDateTmp2 = matches[S1_REGEX_DATE_IDX].str();
+//            fileDate = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
+//            orbit = matches[S1_REGEX_ORBIT_IDX].str();
+//            polarisation = matches[S1_REGEX_POLARISATION_IDX].str();
+//            dateRegexIdx2 = S1_REGEX_DATE2_IDX;
+//        } else {
+//            regexExp = {S1_REGEX_OLD};
+//            if (boost::regex_match(fileName,matches,regexExp)) {
+//                fileType = matches[S1_REGEX_TYPE_OLD_IDX].str();
+//                boost::algorithm::to_upper(fileType);
+//                const std::string &fileDateTmp2 = matches[S1_REGEX_DATE_IDX].str();
+//                fileDate = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
+//                orbit = matches[S1_REGEX_ORBIT_OLD_IDX].str();
+//                polarisation = matches[S1_REGEX_POLAR_OLD_IDX].str();
+//                // In 2017 we had only one date in AMP prd
+//                dateRegexIdx2 = (fileType == COHE_FT ? S1_REGEX_DATE2_OLD_IDX : -1);
+//            }
+//        }
+//        if (dateRegexIdx2 != -1) {
+//            const std::string &fileDateTmp2 = matches[dateRegexIdx2].str();
+//            time_t fileDate2 = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
+//            // if we have 2 dates, get the maximum of the dates as we do not know the order
+//            additionalFileDate = fileDate2;
+//            if (fileDate < fileDate2) {
+//                additionalFileDate = fileDate;
+//                fileDate = fileDate2;
+//            }
+//            // additional date for AMP is 0 (irrellevant)
+//            if (fileType == AMP_FT) {
+//                additionalFileDate = 0;
+//            }
+//        }
+//    }
+//    return (fileType.size() > 0);
+//}
+
+
+inline bool GetFileInfosFromName(const std::string &filePath, Satellite &sat, std::string &fileType, std::string &polarisation,
+                          std::string & orbit, time_t &fileDate, std::string &tile, std::string &band, time_t &prevFileDate)
 {
     boost::filesystem::path p(filePath);
     boost::filesystem::path pf = p.filename();
@@ -282,50 +411,49 @@ inline bool GetFileInfosFromName(const std::string &filePath, std::string &fileT
     fileType = "";
     polarisation = "";
     orbit = "";
+    tile = "";
     fileDate = 0;
-    additionalFileDate = 0;
+    prevFileDate = 0;
 
-    boost::regex regexExp {L3B_REGEX};
+    boost::regex regexExp;
     boost::smatch matches;
-    if (boost::regex_match(fileName,matches,regexExp)) {
-        fileType = matches[L3B_REGEX_TYPE_IDX].str();
-        fileDate = to_time_t(boost::gregorian::from_undelimited_string(matches[L3B_REGEX_DATE_IDX].str()));
-    } else {
-        regexExp = {S1_REGEX};
-        int dateRegexIdx2 = -1;
+    for (const FileNameRegexInfoType& info: fileNameRegexInfos) {
+        regexExp = {info.regex.c_str()};
         if (boost::regex_match(fileName,matches,regexExp)) {
-            fileType = matches[S1_REGEX_TYPE_IDX].str();
-            const std::string &fileDateTmp2 = matches[S1_REGEX_DATE_IDX].str();
-            fileDate = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
-            orbit = matches[S1_REGEX_ORBIT_IDX].str();
-            polarisation = matches[S1_REGEX_POLARISATION_IDX].str();
-            dateRegexIdx2 = S1_REGEX_DATE2_IDX;
-        } else {
-            regexExp = {S1_REGEX_OLD};
-            if (boost::regex_match(fileName,matches,regexExp)) {
-                fileType = matches[S1_REGEX_TYPE_OLD_IDX].str();
-                boost::algorithm::to_upper(fileType);
-                const std::string &fileDateTmp2 = matches[S1_REGEX_DATE_IDX].str();
-                fileDate = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
-                orbit = matches[S1_REGEX_ORBIT_OLD_IDX].str();
-                polarisation = matches[S1_REGEX_POLAR_OLD_IDX].str();
-                // In 2017 we had only one date in AMP prd
-                dateRegexIdx2 = (fileType == COHE_FT ? S1_REGEX_DATE2_OLD_IDX : -1);
+            if(info.prdTypeIdx > 0) {
+                fileType = matches[info.prdTypeIdx].str();
+            } else {
+                fileType = info.defPrdType;
             }
-        }
-        if (dateRegexIdx2 != -1) {
-            const std::string &fileDateTmp2 = matches[dateRegexIdx2].str();
-            time_t fileDate2 = to_time_t(boost::gregorian::from_undelimited_string(fileDateTmp2));
-            // if we have 2 dates, get the maximum of the dates as we do not know the order
-            additionalFileDate = fileDate2;
-            if (fileDate < fileDate2) {
-                additionalFileDate = fileDate;
-                fileDate = fileDate2;
+            fileDate = to_time_t(boost::gregorian::from_undelimited_string(matches[info.dateIdx].str()));
+            if (info.orbitIdx > 0) {
+                orbit = matches[info.orbitIdx].str();
             }
-            // additional date for AMP is 0 (irrellevant)
-            if (fileType == AMP_FT) {
-                additionalFileDate = 0;
+            if (info.polarisationIdx > 0) {
+                polarisation = matches[info.polarisationIdx].str();
             }
+            if (info.secondDateIdx > 0) {
+                time_t fileDate2 = to_time_t(boost::gregorian::from_undelimited_string(matches[info.secondDateIdx].str()));
+                prevFileDate = fileDate2;
+                // switch the date in increasing order
+                if (fileDate < fileDate2) {
+                    prevFileDate = fileDate;
+                    fileDate = fileDate2;
+                }
+            }
+            // For L8 we might have row-path
+            if (info.tileIdx > 0) {
+                tile = matches[info.tileIdx].str();
+                boost::erase_all(tile, "-");
+            }
+
+            // we return bands without 0 ex. B1 instead of B01
+            if (info.bandIdx > 0) {
+                band = matches[info.bandIdx].str();
+                boost::erase_all(band, "0");
+            }
+            sat = info.sat;
+            break;
         }
     }
     return (fileType.size() > 0);

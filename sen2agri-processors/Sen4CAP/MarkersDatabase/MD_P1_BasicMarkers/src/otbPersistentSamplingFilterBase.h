@@ -95,6 +95,10 @@ public:
   itkSetMacro(OutLayerName, std::string);
   itkGetMacro(OutLayerName, std::string);
 
+  /** Set/Get macro for the mask valid value */
+  itkSetMacro(ValidMaskValue, int);
+  itkGetMacro(ValidMaskValue, int);
+
   /** Set/Get the field values filter map */
   inline void SetFieldValueFilterIds(const FieldValuesFilterMap &map) {
       m_FieldValueFilterIds = map;
@@ -231,6 +235,9 @@ private:
 
   /** name of the output layers */
   std::string m_OutLayerName;
+
+  /** value representing valid mask */
+  int m_ValidMaskValue;
 
   /** Filter ids for the selected field values */
   FieldValuesFilterMap m_FieldValueFilterIds;

@@ -56,6 +56,9 @@ private:
         SetDocSeeAlso(" ");        
         AddDocTag(Tags::Vector);
         AddParameter(ParameterType_String,  "inxml",   "Input XML corresponding to the LAI mono date");
+        AddParameter(ParameterType_String,  "extmsk",   "Input external mask corresponding to the input L2A product");
+        MandatoryOff("extmsk");
+
         AddParameter(ParameterType_String,  "out",   "The out mask flags image corresponding to the LAI mono date");
         AddParameter(ParameterType_Int, "compress", "If set to a value different of 0, the output is compressed");
         MandatoryOff("compress");
@@ -78,11 +81,15 @@ private:
 
     void DoExecute()
     {
-        const std::string inXml = GetParameterAsString("inxml");
-        std::string outImg = GetParameterAsString("out");
+        const std::string &inXml = GetParameterAsString("inxml");
+        const std::string &outImg = GetParameterAsString("out");
+        std::string extMsk;
+        if (HasValue("extmsk")) {
+            extMsk = GetParameterAsString("extmsk");
+        }
 
         auto factory = MetadataHelperFactory::New();
-        std::unique_ptr<MetadataHelper<short>> pHelper = factory->GetMetadataHelper<short>(inXml);
+        std::unique_ptr<MetadataHelper<short>> pHelper = factory->GetMetadataHelper<short>(inXml, extMsk);
         MetadataHelper<short>::SingleBandMasksImageType::Pointer imgMsk = pHelper->GetMasksImage(ALL, false);
 
         WriteOutput(imgMsk, outImg, -1);

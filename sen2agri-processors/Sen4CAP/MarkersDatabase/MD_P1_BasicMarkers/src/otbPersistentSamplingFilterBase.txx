@@ -40,6 +40,7 @@ PersistentSamplingFilterBase<TInputImage,TMaskImage>
   , m_FieldIndex(0)
   , m_LayerIndex(0)
   , m_OutLayerName(std::string("output"))
+  , m_ValidMaskValue(0)
   , m_OGRLayerCreationOptions()
   , m_AdditionalFields()
   , m_InMemoryInputs()
@@ -426,7 +427,7 @@ PersistentSamplingFilterBase<TInputImage,TMaskImage>
       const TInputImage* img = this->GetInput();
       const TMaskImage* mask = this->GetMask();
       img->TransformPhysicalPointToIndex(imgPoint,imgIndex);
-      if ((mask == nullptr) || mask->GetPixel(imgIndex))
+      if ((mask == nullptr) || mask->GetPixel(imgIndex) == m_ValidMaskValue)
         {
           const typename TInputImage::PixelType &value = img->GetPixel(imgIndex);
         this->ProcessSample(feature, imgIndex, imgPoint, value, threadid);
@@ -516,6 +517,7 @@ PersistentSamplingFilterBase<TInputImage,TMaskImage>
       itk::ImageRegionConstIterator<TMaskImage>,
       itk::ImageRegionConstIterator<TMaskImage> > MaskedIteratorType;
     MaskedIteratorType it(mask, mask, region);
+    it.SetValidMaskValue(m_ValidMaskValue);
     it.GoToBegin();
     while (!it.IsAtEnd())
       {
@@ -560,6 +562,7 @@ PersistentSamplingFilterBase<TInputImage,TMaskImage>
 {
   const TInputImage* img = this->GetInput();
   TMaskImage* mask = const_cast<TMaskImage*>(this->GetMask());
+
   typename TInputImage::IndexType imgIndex;
   typename TInputImage::PointType imgPoint;
   OGRPoint tmpPoint;
@@ -571,6 +574,7 @@ PersistentSamplingFilterBase<TInputImage,TMaskImage>
       itk::ImageRegionConstIterator<TMaskImage>,
       itk::ImageRegionConstIterator<TMaskImage> > MaskedIteratorType;
     MaskedIteratorType it(mask, mask, region);
+    it.SetValidMaskValue(m_ValidMaskValue);
     it.GoToBegin();
     while (!it.IsAtEnd())
       {

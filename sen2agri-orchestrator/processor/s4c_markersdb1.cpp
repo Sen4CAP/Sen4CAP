@@ -9,11 +9,14 @@
 #include "logger.hpp"
 #include "s4c_utils.hpp"
 
+#include "products/generichighlevelproducthelper.h"
+using namespace orchestrator::products;
+
 S4CMarkersDB1Handler::S4CMarkersDB1Handler()
 {
 }
 
-void S4CMarkersDB1Handler::CreateTasks(QList<TaskToSubmit> &outAllTasksList, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder)
+void S4CMarkersDB1Handler::CreateTasks(QList<TaskToSubmit> &outAllTasksList, const MDB1JobPayload &jobCfg, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder)
 {
     int curTaskIdx = 0;
     const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
@@ -40,12 +43,14 @@ void S4CMarkersDB1Handler::CreateTasks(QList<TaskToSubmit> &outAllTasksList, con
     outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[mergeTaskIdx]} });
     curTaskIdx++;
 
-    // Markers DB 2 are computed only for AMP
-    // Add also the tasks to create the markers database 2.
-    // These can be performed in parallel with the export to IPC of MDB1
-    outAllTasksList.append(TaskToSubmit{ "mdb2-csv-extract", {outAllTasksList[mergeTaskIdx]} });
-    int exportMdb2TaskIdx = curTaskIdx++;
-    outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[exportMdb2TaskIdx]} });
+    if (jobCfg.ampvvvhEnabled) {
+        // Markers DB 2 are computed only for AMP
+        // Add also the tasks to create the markers database 2.
+        // These can be performed in parallel with the export to IPC of MDB1
+        outAllTasksList.append(TaskToSubmit{ "mdb2-csv-extract", {outAllTasksList[mergeTaskIdx]} });
+        int exportTaskParent = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[exportTaskParent]} });
+    }
 }
 
 void S4CMarkersDB1Handler::CreateSteps(QList<TaskToSubmit> &allTasksList, const MDB1JobPayload &jobCfg,
@@ -77,24 +82,26 @@ void S4CMarkersDB1Handler::CreateSteps(QList<TaskToSubmit> &allTasksList, const 
                                                              allTasksList, curTaskIdx);
     CreateStepsForExportIpc(jobCfg, mergedFile, steps, allTasksList, curTaskIdx, "MDB1");
 
-    // Steps to merge and create the MDB2 IPC
-    const QString &exportedFile = CreateStepsForMdb2Export(mergedFile, steps,
-                                                           allTasksList, curTaskIdx);
-    CreateStepsForExportIpc(jobCfg, exportedFile, steps, allTasksList, curTaskIdx, "MDB2");
+    if (jobCfg.ampvvvhEnabled) {
+        // Steps to merge and create the MDB2 IPC
+        const QString &exportedFile = CreateStepsForAmpVVVHExtraction(mergedFile, steps,
+                                                               allTasksList, curTaskIdx);
+        CreateStepsForExportIpc(jobCfg, exportedFile, steps, allTasksList, curTaskIdx, "MDB2");
+    }
 }
 
 void S4CMarkersDB1Handler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &evt)
 {
     S4CMarkersDB1DataExtractStepsBuilder dataExtrStepsBuilder;
-    dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, evt);
+    const auto &parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
+    dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, parameters, evt.siteId, evt.jobId);
 
-    MDB1JobPayload jobCfg(&ctx, evt);
-    // initialize the payload min and max date
-    dataExtrStepsBuilder.GetDataExtractionInterval(jobCfg.minDate, jobCfg.maxDate);
+    MDB1JobPayload jobCfg(&ctx, evt, dataExtrStepsBuilder.GetDataExtractionMinDate(),
+                          dataExtrStepsBuilder.GetDataExtractionMaxDate());
 
     QList<TaskToSubmit> allTasksList;
-    CreateTasks(allTasksList, dataExtrStepsBuilder);
+    CreateTasks(allTasksList, jobCfg, dataExtrStepsBuilder);
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     QList<std::reference_wrapper<const TaskToSubmit>> allTasksListRef2;
@@ -119,22 +126,21 @@ void S4CMarkersDB1Handler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
 {
     if (event.module == "mdb-csv-to-ipc-export") {
 
-        const QString &productPath = GetProductFormatterOutputProductPath(ctx, event);
-        const QString &prodName = GetProductFormatterProductName(ctx, event);
+        const QString &productPath = GetOutputProductPath(ctx, event);
+        const QString &prodName = GetOutputProductName(ctx, event);
         QFileInfo fileInfo(prodName);
         const QString &prdNameNoExt = fileInfo.baseName ();
         if(prdNameNoExt != "") {
             const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
-            QDateTime minDate, maxDate;
-            ProcessorHandlerHelper::GetHigLevelProductAcqDatesFromName(prdNameNoExt, minDate, maxDate);
+            GenericHighLevelProductHelper prdHelper(productPath);
             ProductType prdType = ProductType::S4MDB1ProductTypeId;
             if(prdNameNoExt.contains("MDB2")) {
                 prdType = ProductType::S4MDB2ProductTypeId;
             }
             ctx.InsertProduct({ prdType, event.processorId, event.siteId,
-                                event.jobId, productPath, maxDate,
-                                prdNameNoExt, "", footPrint, std::experimental::nullopt, TileIdList() });
+                                event.jobId, productPath, prdHelper.GetAcqDate(),
+                                prdNameNoExt, "", footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList() });
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and path %2").arg(prdNameNoExt).arg(productPath));
         }
@@ -190,44 +196,63 @@ void S4CMarkersDB1Handler::HandleProductAvailableImpl(EventProcessingContext &ct
     QJsonObject parameters;
     auto configParameters = ctx.GetConfigurationParameters(MDB1_CFG_PREFIX, prd.siteId);
 
-    // Check that the product type is L3B, AMP or COHE
-    const QString &prdTypeShortName = GetShortNameForProductType(prd.productTypeId);
-    if (prdTypeShortName.size() == 0) {
+    // check if the NRT data extraction is configured for the site
+    bool nrtDataExtrEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "nrt_data_extr_enabled", MDB1_CFG_PREFIX);
+    if (!nrtDataExtrEnabled) {
         return;
     }
 
-//    QString errMsg;
-//    const QString &siteShortName = ctx.GetSiteShortName(prd.siteId);
-//    const QString &yearStr = MarkersDB1JobCfg::GetYear(parameters, configParameters, siteShortName);
-//    if (!CheckExecutionPreconditions(&ctx, parameters, configParameters, prd.siteId, siteShortName,
-//                                     yearStr, errMsg)) {
-//        Logger::info(QStringLiteral("MarkersDB1 - HandleProductAvailable - Cannot trigger data extraction job "
-//                     "for product %1 and siteid = %2. The error was: %3").arg(prd.fullPath).arg(QString::number((int)prd.siteId))
-//                     .arg(errMsg));
-//        return;
-//    }
-
-    // check if the NRT data extraction is configured for the site
-    bool nrtDataExtrEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "nrt_data_extr_enabled", MDB1_CFG_PREFIX);
-    if (nrtDataExtrEnabled) {
-        // Create a new JOB
-        NewJob newJob;
-        newJob.processorId = processorDescr.processorId;  //send the job to this processor
-        newJob.siteId = prd.siteId;
-        newJob.startType = JobStartType::Triggered;
-
-        QJsonObject processorParamsObj;
-        QJsonArray prodsJsonArray;
-        prodsJsonArray.append(prd.fullPath);
-
-        const QString &prdKey = "input_" + prdTypeShortName;
-        processorParamsObj[prdKey] = prodsJsonArray;
-        processorParamsObj["execution_operation"] = "DataExtraction";
-        newJob.parametersJson = jsonToString(processorParamsObj);
-        ctx.SubmitJob(newJob);
-        Logger::info(QStringLiteral("MarkersDB1 - HandleProductAvailable - Submitted data extraction trigger job "
-                                    "for product %1 and siteid = %2").arg(prd.fullPath).arg(QString::number((int)prd.siteId)));
+    // Check that the product type has a marker enabled
+    if (!S4CMarkersDB1DataExtractStepsBuilder::HasAnyMarkerEnabled(prd.productTypeId, configParameters)) {
+        return;
     }
+    const QString &prdTypeShortName = ProductHelper::GetProductTypeShortName(prd.productTypeId);
+    if (prdTypeShortName.size() == 0) {
+        return;
+    }
+    const ProductList &lpisPrds = S4CUtils::GetLpisProduct(&ctx, prd.siteId);
+    if (lpisPrds.size() == 0) {
+        Logger::info(QStringLiteral("MarkersDB1 - HandleProductAvailable - No LPIS found in the database "
+                                    "for product %1 and siteid = %2")
+                     .arg(prd.fullPath).arg(QString::number(prd.siteId)));
+        return;
+    }
+
+    // check also that the product has an LPIS imported
+    bool hasLpis = false;
+    int prdCreatedYear = prd.created.date().year();
+    for(const Product &lpisPrd: lpisPrds) {
+        // ignore LPIS products from a year where we already added an LPIS product newer
+        if (prdCreatedYear == lpisPrd.created.date().year()) {
+            hasLpis = true;
+            break;
+        }
+    }
+    if (!hasLpis) {
+        Logger::info(QStringLiteral("MarkersDB1 - HandleProductAvailable - No LPIS found in the database "
+                                    "for product %1 and siteid = %2 and year = %3")
+                     .arg(prd.fullPath).arg(QString::number(prd.siteId)).arg(QString::number(prdCreatedYear)));
+        return;
+    }
+
+
+    // Create a new JOB
+    NewJob newJob;
+    newJob.processorId = processorDescr.processorId;  //send the job to this processor
+    newJob.siteId = prd.siteId;
+    newJob.startType = JobStartType::Triggered;
+
+    QJsonObject processorParamsObj;
+    QJsonArray prodsJsonArray;
+    prodsJsonArray.append(prd.fullPath);
+
+    const QString &prdKey = "input_" + prdTypeShortName;
+    processorParamsObj[prdKey] = prodsJsonArray;
+    processorParamsObj["execution_operation"] = "DataExtraction";
+    newJob.parametersJson = jsonToString(processorParamsObj);
+    ctx.SubmitJob(newJob);
+    Logger::info(QStringLiteral("MarkersDB1 - HandleProductAvailable - Submitted data extraction trigger job "
+                                "for product %1 and siteid = %2").arg(prd.fullPath).arg(QString::number((int)prd.siteId)));
 }
 
 ProductList S4CMarkersDB1Handler::GetLpisProduct(ExecutionContextBase *pCtx, int siteId) {
@@ -273,12 +298,12 @@ QString S4CMarkersDB1Handler::CreateStepsForFilesMerge(const QStringList &dataEx
     return mergedFile;
 }
 
-QString S4CMarkersDB1Handler::CreateStepsForMdb2Export(const QString &mergedFile,
+QString S4CMarkersDB1Handler::CreateStepsForAmpVVVHExtraction(const QString &mergedFile,
                                 NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx) {
-    TaskToSubmit &mdb2ExtractTask = allTasksList[curTaskIdx++];
-    const QString &mdb2ExtractFile = mdb2ExtractTask.GetFilePath("MDB1_Extracted_Data_VVVH.csv");
+    TaskToSubmit &ampVVVHExtractTask = allTasksList[curTaskIdx++];
+    const QString &mdb2ExtractFile = ampVVVHExtractTask.GetFilePath("MDB1_Extracted_Data_VVVH.csv");
     const QStringList &mdb2ExtractArgs =  { "Markers2Extractor", "-in", mergedFile, "-out", mdb2ExtractFile };
-    steps.append(CreateTaskStep(mdb2ExtractTask, "Markers2Extractor", mdb2ExtractArgs));
+    steps.append(CreateTaskStep(ampVVVHExtractTask, "Markers2Extractor", mdb2ExtractArgs));
 
     return mdb2ExtractFile;
 }
@@ -295,14 +320,8 @@ QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobC
     const QString &prdName = QString("SEN4CAP_%1_S%2_V%3_%4").arg(prdType, QString::number(jobCfg.event.siteId), strTimePeriod,
                                                                   creationDateStr);
     const QString &exportedFile = QString("%1/%2/%3.ipc").arg(targetFolder, prdName, prdName);
-    const auto &outPropsPath = exportTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    std::ofstream executionInfosFile;
-    try {
-        executionInfosFile.open(outPropsPath.toStdString().c_str(), std::ofstream::out);
-        executionInfosFile << exportedFile.toStdString() << std::endl;
-        executionInfosFile.close();
-    } catch (...) {
-    }
+    WriteOutputProductPath(exportTask, exportedFile);
+
     QStringList exportArgs = { "--in", inputFile, "--out", exportedFile,
                                "--int32-columns", "NewID"};
     steps.append(CreateTaskStep(exportTask, "MarkersDB1Export", exportArgs));

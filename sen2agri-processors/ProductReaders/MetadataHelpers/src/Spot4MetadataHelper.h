@@ -118,7 +118,7 @@ public:
     virtual std::vector<std::string> GetPhysicalBandNames();
     virtual int GetResolutionForBand(const std::string &bandName);
 
-    virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution);
+    virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution);
 
     virtual std::string GetAotImageFileName(int) {return m_AotFileName;}
     virtual float GetAotQuantificationValue(int res);

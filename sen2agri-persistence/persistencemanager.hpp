@@ -73,7 +73,14 @@ public:
     Product GetProduct(int productId);
     Product GetProduct(int siteId, const QString &productName);
     ProductList GetProductsForTile(int siteId, const QString &tileId, ProductType productType, int satelliteId, int targetSatelliteId);
+    ProductList GetProducts(const ProductIdsList &productIds);
+    ProductList GetProducts(int siteId, const QStringList &productNames);
+    ProductList GetParentProductsByProvenancePresence(int siteId, const QList<ProductType> &sourcePrdTypes, const ProductType &derivedProductType,
+                                                   const QDateTime &startDate, const QDateTime &endDate, bool parentsArePresent);
+    ProductList GetParentProductsInProvenanceById(int productId, const QList<ProductType> &sourcePrdTypes);
     L1CProductList GetL1CProducts(int siteId, const SatellitesList &satelliteIds, const StatusesList &statusIds, const QDateTime &startDate, const QDateTime &endDate);
+    ProductList GetL1DerivedProducts(int siteId, const int &prdTypeId, const ProductIdsList &dwnHistIds);
+    ProductIdToDwnHistIdMap GetDownloaderHistoryIds(const ProductIdsList &prdIds);
     TileList GetSiteTiles(int siteId, int satelliteId);
     TileList GetIntersectingTiles(Satellite satellite, const QString &tileId);
 
@@ -82,6 +89,7 @@ public:
     QString GetDashboardProcessorStatistics();
     QString GetDashboardProductAvailability(const QDateTime &since);
     QString GetDashboardJobTimeline(int jobId);
+    JobIdsList GetActiveJobsIds(int processorId, int siteId);
 
     QString GetDashboardProducts(const DashboardSearch &search);
     QString GetDashboardSites();
@@ -102,5 +110,6 @@ public:
 
     SeasonList GetSiteSeasons(int siteId);
 
+    QStringList QStringListFromString(QString str, const QString &sep = ",");
     QList<int> QListIntFromString(QString str, const QString &sep = ",");
 };

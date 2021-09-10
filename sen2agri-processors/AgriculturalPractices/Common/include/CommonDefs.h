@@ -29,33 +29,12 @@
 
 #define SEC_IN_DAY                   86400          // seconds in day = 24 * 3600
 
-// Optical L3B product regex
-#define L3B_REGEX          R"(S2AGRI_L3B_S(NDVI|LAI|FAPAR|FCOVER)(?:MONO)?_A(\d{8})T.*\.TIF)"
-// 2017 naming format for coherence and amplitude
-#define S1_REGEX_OLD        R"((\d{8})(-(\d{8}))?_.*(cohe|amp).*_(\d{3})_(VH|VV)_.*\.tiff)"
-// 2018 naming format for coherence and amplitude
-#define S1_REGEX        R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)\.tif)"
-
-#define L3B_REGEX_TYPE_IDX          1
-#define L3B_REGEX_DATE_IDX          2
-
-#define S1_REGEX_DATE_IDX         1           // this is the same for 2017 and 2018 formats
-#define S1_REGEX_DATE2_IDX        2           // 2018
-#define S1_REGEX_POLARISATION_IDX 3           // 2018
-#define S1_REGEX_ORBIT_IDX        4           // 2018
-#define S1_REGEX_TYPE_IDX         5           // 2018
-
-#define S1_REGEX_DATE2_OLD_IDX    3           // this is different for 2017
-#define S1_REGEX_TYPE_OLD_IDX     4           // this is different for 2017
-#define S1_REGEX_ORBIT_OLD_IDX    5           // this is different for 2017
-#define S1_REGEX_POLAR_OLD_IDX    6           // this is different for 2017
-
-#define NDVI_FT         "NDVI"
-#define LAI_FT          "LAI"
-#define FAPAR_FT        "FAPAR"
-#define FCOVER_FT       "FCOVER"
-#define AMP_FT          "AMP"
-#define COHE_FT         "COHE"
-
+enum class Satellite
+{
+    Invalid = 0,
+    Sentinel2 = 1,
+    Landsat8 = 2,
+    Sentinel1 = 3,
+};
 
 #endif

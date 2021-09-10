@@ -53,7 +53,8 @@ public:
     virtual float GetAotQuantificationValue(int res);
     virtual float GetAotNoDataValue(int res);
     virtual int GetAotBandIndex(int res);
-    virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetMasksImage(MasksFlagType nMaskFlags, bool binarizeResult,
+
+    virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult,
                                                                                                 int resolution = -1);
 protected:
     virtual bool LoadAndCheckMetadata(const std::string &file);
