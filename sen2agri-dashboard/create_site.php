@@ -20,8 +20,9 @@ class PostUploadCmd {
 }
 
 function getUploadFileDescriptorArray() {
+    // error_log("profile: " . ConfigParams::getProfileName());
 	$uploadFileDescriptorArray = array();
-	if (ConfigParams::isSen2Agri()) {
+	if (ConfigParams::getProfileName() == "sen2agri") {
 		$descr = new UploadFileDescriptor();
 		$descr->id = "Insitu";
 		$descr->descr = "Insitu data";
@@ -39,7 +40,92 @@ function getUploadFileDescriptorArray() {
 		$descr->expectedUploadFileExt = ".zip";
 		$descr->fileExt = "shp";
 		$uploadFileDescriptorArray[] = $descr;
-	} else {
+    } else if (ConfigParams::getProfileName() == "sen4stat") {
+        $descr = new UploadFileDescriptor();
+		$descr->id = "S4S_Regions";
+		$descr->descr = "Regions";
+		$descr->dbUploadDirKey = "processor.s4s_parcels.regions_upload_path";
+		$descr->uploadRelPath = "";
+		$descr->expectedUploadFileExt = ".zip";
+		$descr->fileExt = "shp";        
+        $uploadFileDescriptorArray[] = $descr;
+
+        $descr = new UploadFileDescriptor();
+		$descr->id = "S4S_Provinces";
+		$descr->descr = "Provinces";
+		$descr->dbUploadDirKey = "processor.s4s_parcels.provinces_upload_path";
+		$descr->uploadRelPath = "";
+		$descr->expectedUploadFileExt = ".zip";
+		$descr->fileExt = "shp";        
+        $uploadFileDescriptorArray[] = $descr;
+
+        $descr = new UploadFileDescriptor();
+		$descr->id = "S4S_Municipalities";
+		$descr->descr = "Municipalities";
+		$descr->dbUploadDirKey = "processor.s4s_parcels.municipalities_upload_path";
+		$descr->uploadRelPath = "";
+		$descr->expectedUploadFileExt = ".zip";
+		$descr->fileExt = "shp";        
+        $uploadFileDescriptorArray[] = $descr;
+        
+        $descr = new UploadFileDescriptor();
+		$descr->id = "S4S_Segments";
+		$descr->descr = "Segments";
+		$descr->dbUploadDirKey = "processor.s4s_parcels.segments_upload_path";
+		$descr->uploadRelPath = "";
+		$descr->expectedUploadFileExt = ".zip";
+		$descr->fileExt = "shp";        
+        $uploadFileDescriptorArray[] = $descr;        
+
+        $descr = new UploadFileDescriptor();
+		$descr->id = "S4S_Parcels";
+		$descr->descr = "Parcels";
+		$descr->dbUploadDirKey = "processor.s4s_parcels.parcels_upload_dir";
+		$descr->uploadRelPath = "";
+		$descr->expectedUploadFileExt = ".zip";
+		$descr->fileExt = "shp"; 
+        $descr->addParams = '[
+						{"id":"year",
+						 "label":"Year:",
+						 "type":"text",
+						 "required":1
+						}
+					]';        
+        $uploadFileDescriptorArray[] = $descr;
+
+        $descr = new UploadFileDescriptor();
+		$descr->id = "S4S_ParcelStats";
+		$descr->descr = "Parcel Statistics";
+		$descr->dbUploadDirKey = "processor.s4s_parcels.parcel_stats_upload_dir";
+		$descr->uploadRelPath = "";
+		$descr->expectedUploadFileExt = ".csv";
+		$descr->fileExt = "csv";
+		$descr->addParams = '[
+						{"id":"year",
+						 "label":"Year:",
+						 "type":"text",
+						 "required":1
+						}
+					]';
+        $uploadFileDescriptorArray[] = $descr;
+
+        $descr = new UploadFileDescriptor();
+		$descr->id = "S4S_SAFY_Params";
+		$descr->descr = "Safy Params";
+		$descr->dbUploadDirKey = "processor.s4s_yield.safy_params_upload_dir";
+		$descr->uploadRelPath = "";
+		$descr->expectedUploadFileExt = ".json";
+		$descr->fileExt = "json";
+		$descr->addParams = '[
+						{"id":"year",
+						 "label":"Year:",
+						 "type":"text",
+						 "required":1
+						}
+					]';
+        $uploadFileDescriptorArray[] = $descr;
+
+    } else {
 		$descr = new UploadFileDescriptor();
 		$descr->id = "Lpis";
 		$descr->descr = "Declarations";
@@ -163,6 +249,7 @@ function getUploadFileDescriptorArray() {
 		     $uploadFileDescriptorArray[] = $descr;
 		}
 	}
+    
 	return $uploadFileDescriptorArray;
 }
 
@@ -170,6 +257,36 @@ function getPostUploadCmds() {
 	$cmds = array();
 	if (ConfigParams::isSen2Agri()) {
 		
+    } else if (ConfigParams::getProfileName() == "sen4stat") {
+        // data-preparation-s4s.py -s 2 --year 2018 --parcels-geom esp_2018_polygons.shp --statistical-data esp_2018_in_situ.csv --working-path .
+		$cmd = new PostUploadCmd();
+		$cmd->isAsyncCmd = 1;
+		$cmd->triggerUpDescrIds = array();
+		$cmd->triggerUpDescrIds[] = "S4S_Parcels";
+		$cmd->triggerUpDescrIds[] = "S4S_ParcelStats";
+		$cmd->cmd = "data-preparation-s4s.py -s {site_id} {param1} {param2} {param3}";
+		$cmd->params = '[
+							{"id":"param1",
+							 "key": "--year {value}",
+							 "refUp":"S4S_Parcels",
+							 "refUpParam":"year",
+							 "required":0
+							},
+							{"id":"param2",
+							 "key": "--parcels-geom {value}",
+							 "refUp":"S4S_Parcels",
+							 "refUpParam":"",
+							 "required":1
+							},
+							{"id":"param3",
+							 "key": "--statistical-data {value}",
+							 "refUp":"S4S_ParcelStats",
+							 "refUpParam":"",
+							 "required":1
+							}                        
+						]';
+		$cmds[] = $cmd;
+        
 	} else {
 		$cmd = new PostUploadCmd();
 		$cmd->isAsyncCmd = 1;
@@ -529,9 +646,11 @@ function isCommandTriggered($cmdObj, $succUpFiles) {
 function buildCommand($cmdObj, $cmdParams, $succUpFiles, $errUpFiles) {
 	$cmdStr = $cmdObj->cmd;
 	$siteShortName = $_REQUEST ["shortname"];
+    $site_id      = $_REQUEST ['edit_siteid'];
 	
 	// First replace the site name in the command
 	$cmdStr = str_replace('{site_shortname}', $siteShortName, $cmdStr);
+    $cmdStr = str_replace('{site_id}', $site_id, $cmdStr);
 	
 	foreach ($cmdParams as $param) {
 		// check if the file was successfuly uploaded for the current parameter
@@ -985,7 +1104,7 @@ if (isset($_REQUEST["upload_file"]) && isset($_REQUEST["site_shortname"])) {
 }
 
 // processing LPIS/LUT Import
-$arrStartImportTokens = array("LPIS", "L4bCfg", "L4cCfg", "CC", "FL", "NFC", "NA");
+$arrStartImportTokens = array("LPIS", "L4bCfg", "L4cCfg", "CC", "FL", "NFC", "NA", "S4S_Parcels", "S4S_ParcelStats", "S4S_SAFY_Params");
 $startImportSet = 0;
 
 error_log(json_encode($_REQUEST), 0);
@@ -1058,6 +1177,30 @@ if ($startImportSet == 1){
             $restResult = CallRestAPI("GET", $practiceCfgUrl);
             $globalRestResult = $globalRestResult . "S4C " . $practice . " Practice Import Result : " . $restResult;
         }
+    }
+    
+    if (isset($_REQUEST['s4s_parcels_start_import']) && $_REQUEST['s4s_parcels_start_import'] == 'S4S_Parcels Start Import') {
+        
+        $s4sParcelsUrl = ConfigParams::$REST_SERVICES_URL . "/auxdata/import/s4sparcels?siteId=" . $_REQUEST['importSiteId'] . "&year=" . $_REQUEST['importYear'];
+        // add Parcels parameters
+        $s4sParcelsUrl .= "&parcelsFile="       . $_REQUEST['s4sParcelsFile'];
+        // add Parcel Statistics parameters
+        $s4sParcelsUrl .= "&parcelStatsFile=" . $_REQUEST['s4sParcelStatsFile'];
+        
+        error_log($s4sParcelsUrl, 0);
+        
+        //CallRestAPI($method, $url, $data = false)
+        $restResult = CallRestAPI("GET", $s4sParcelsUrl);
+        $globalRestResult = $restResult;
+    }    
+    
+    if (isset($_REQUEST['s4s_safy_params_start_import']) && $_REQUEST['s4s_safy_params_start_import'] == 'SAFY Params Start Import'){
+        $s4sSafyParamsUrl = ConfigParams::$REST_SERVICES_URL . "/auxdata/import/s4syield?siteId=" . $_REQUEST['importSiteId'] . "&year=" . $_REQUEST['importYear'];
+        $s4sSafyParamsUrl .= "&s4sSafyParamsFile="       . $_REQUEST['s4sSafyParamsFile'];
+        error_log($s4sSafyParamsUrl, 0);
+        //CallRestAPI($method, $url, $data = false)
+        $restResult = CallRestAPI("GET", $s4sSafyParamsUrl);
+        $globalRestResult = $globalRestResult . "S4S SAFY Params Import Result : " . $restResult;
     }
     
 	$restResult = str_replace("'", "`", $restResult);
@@ -1873,12 +2016,7 @@ $(document).ready( function() {
 			// Start LPIS/LUT processing
 			var lpisStatus = uploadStatus("Lpis");
 			var lutStatus  = uploadStatus("lut");
-            var l4bCfgStatus  = uploadStatus("L4bCfg");
-            var l4cCfgStatus  = uploadStatus("L4cCfg");
-            var l4cCCStatus  = uploadStatus("L4cCCPractices");
-            var l4cFLStatus  = uploadStatus("L4cFLPractices");
-            var l4cNFCStatus  = uploadStatus("L4cNFCPractices");
-            var l4cNAStatus  = uploadStatus("L4cCCPractices");
+            
             var importFormStr = '<form action="create_site.php" method="post">';
             var formStrCreated = 0;
             
@@ -1928,6 +2066,24 @@ $(document).ready( function() {
                                         '<input type="hidden" name="' + practiceName.toLowerCase() + '_start_import" value="' + practiceName + ' Start Import">' +
                                         '<input type="hidden" name="l4c' + practiceName + 'PracticesFile" value="' + encodeURIComponent(practiceStatus.fileName) + '">';
                 }
+            }
+
+            var s4sParcelsStatus  = uploadStatus("S4S_Parcels");
+            var s4sParcStatsStatus  = uploadStatus("S4S_ParcelStats");
+            if ((s4sParcelsStatus.uploaded > 0) && (s4sParcStatsStatus.uploaded > 0) && (s4sParcelsStatus.failed == 0) && (s4sParcStatsStatus.failed == 0)) {
+                formStrCreated = 1;
+				importFormStr = importFormStr +
+									'<input type="hidden" name="s4s_parcels_start_import" value="S4S_Parcels Start Import">' +
+									'<input type="hidden" name="s4sParcelsFile" value="' + encodeURIComponent(s4sParcelsStatus.fileName) + '">' +
+                                    '<input type="hidden" name="s4sParcelStatsFile" value="' + encodeURIComponent(s4sParcStatsStatus.fileName) + '">';
+            }
+
+   			var s4sSafyParamsStatus = uploadStatus("S4S_SAFY_Params");
+			if ((s4sSafyParamsStatus.uploaded > 0) && (s4sSafyParamsStatus.failed == 0)) {
+                formStrCreated = 1;
+				importFormStr = importFormStr +
+									'<input type="hidden" name="s4s_safy_params_start_import" value="SAFY Params Start Import">' +
+									'<input type="hidden" name="s4sSafyParamsFile" value="' + encodeURIComponent(s4sSafyParamsStatus.fileName) + '">';
             }
 
             if (formStrCreated == 1) {

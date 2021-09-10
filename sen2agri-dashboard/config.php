@@ -18,7 +18,7 @@ function getParameters($current_processor_name, $adv){
             FROM config_metadata cm
             INNER JOIN config_category cfc ON cm.config_category_id = cfc.id
             LEFT JOIN config cf ON lower(cf.key) = lower(cm.key)
-            WHERE cfc.id IN (3,4,5,6,18,19,20,21,22,23,24,25,26) AND cm.Key ilike 'processor.{$current_processor_name}.%' AND is_site_visible=true 
+            WHERE cfc.id IN (3,4,5,6,18,19,20,21,22,23,24,25,26,27,28,29,30) AND cm.Key ilike 'processor.{$current_processor_name}.%' AND is_site_visible=true 
             AND is_advanced='".$adv."' 
             ORDER BY cfc.display_order";
 	

@@ -46,6 +46,10 @@ class ConfigParams {
         return self::$DB_NAME == "sen2agri";
     }
 
+    public function getProfileName(){
+        return self::$DB_NAME;
+    }
+
     static function getServicesUrl(){
         $props_file = "/usr/share/sen2agri/sen2agri-services/config/services.properties";
         if( file_exists("/usr/share/sen2agri/" . self::$DB_NAME . "-services/config/services.properties")){

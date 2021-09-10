@@ -338,9 +338,9 @@ function insertjob($name, $description, $processor_short_name, $site_id, $start_
     /* -------------------------------------------------------l3e_pheno------------------------------------------------------ */
 	elseif (isset ( $_POST ['l3e_pheno'] ) || isset ( $_POST ['l3e'] ) || isset ( $_POST ['l2a_msk'] )) {
 		$processor_short_name = "l3e";
-        if (isset($_POST['l2a_msk'])) {
-            $processor_short_name = "l2a_msk";
-        }
+                if (isset($_POST['l2a_msk'])) {
+                    $processor_short_name = "l2a_msk";
+                }
 
 		// default parameters
 		$siteId         = $_POST ['siteId'];
@@ -554,10 +554,13 @@ function insertjob($name, $description, $processor_short_name, $site_id, $start_
 			redirect_page($processor_short_name, "NOK", $result." (".$message.")");
 		}
 	}
-	elseif (isset($_POST['s4c_l4a'])) {
+	elseif (isset($_POST['s4c_l4a']) || isset($_POST['s4s_perm_crop'])) {
         // TODO: A lot of Duplicated code with the previous ifs. To be made more generic
 		$processor_short_name = "s4c_l4a";
-        $processor_cfg_prefix = "processor." . $processor_short_name . ".";
+                if (isset($_POST['s4s_perm_crop'])) {
+                    $processor_short_name = "s4s_perm_crop";
+                }
+                $processor_cfg_prefix = "processor." . $processor_short_name . ".";
 		// set job name and description and save job
 		$name = $processor_short_name . "_processor" . date ( "m.d.y" );
 		$description = "generated new configuration from site for ".$processor_short_name;
