@@ -694,17 +694,7 @@ pix_10m int not null default 0
                 print("Filtering municipalities")
                 query = SQL(
                     """
-create temporary table site_municipalities (
-    municipality_code text not null,
-    geom geometry not null
-);
-"""
-                )
-                logging.debug(query.as_string(conn))
-                cursor.execute(query)
-
-                query = SQL(
-                    """
+create temporary table site_municipalities as
 with polygons_srid as (
          select Find_SRID('public', {}, 'wkb_geometry') as srid
      ),
