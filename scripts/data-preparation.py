@@ -5,6 +5,7 @@ import argparse
 import csv
 from collections import defaultdict
 from datetime import date
+import docker
 import logging
 import multiprocessing.dummy
 import os
@@ -20,11 +21,11 @@ import shutil
 import subprocess
 import sys
 
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
+from configparser import ConfigParser
 
+
+GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.3.2"
+OTB_IMAGE_NAME = "sen4cap/processors:2.0.0"
 
 PRODUCT_TYPE_LPIS = 14
 PROCESSOR_LPIS = 8
@@ -49,12 +50,17 @@ def try_mkdir(p):
         pass
 
 
-class Config(object):
+class Config:
     def __init__(self, args):
         parser = ConfigParser()
         parser.read([args.config_file])
 
         self.host = parser.get("Database", "HostName")
+
+        # work around Docker networking scheme
+        if self.host == "127.0.0.1" or self.host == "::1" or self.host == "localhost":
+            self.host = "172.17.0.1"
+
         self.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
         self.dbname = parser.get("Database", "DatabaseName")
         self.user = parser.get("Database", "UserName")
@@ -63,7 +69,7 @@ class Config(object):
         self.site_id = args.site_id
 
 
-class RasterizeDatasetCommand(object):
+class RasterizeDatasetCommand:
     def __init__(
         self,
         input,
@@ -81,16 +87,19 @@ class RasterizeDatasetCommand(object):
         self.input = input
         self.output = output
         self.tile = tile
-        self.resolution = resolution
+        self.resolution = str(resolution)
         self.sql = sql
         self.field = field
         self.srs = srs
-        self.dst_xmin = dst_xmin
-        self.dst_ymin = dst_ymin
-        self.dst_xmax = dst_xmax
-        self.dst_ymax = dst_ymax
+        self.dst_xmin = str(dst_xmin)
+        self.dst_ymin = str(dst_ymin)
+        self.dst_xmax = str(dst_xmax)
+        self.dst_ymax = str(dst_ymax)
 
     def run(self):
+        output_dir = os.path.dirname(self.output)
+        client = docker.from_env()
+        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
         command = []
         command += ["gdal_rasterize", "-q"]
         command += ["-a", self.field]
@@ -102,33 +111,144 @@ class RasterizeDatasetCommand(object):
         command += ["-co", "COMPRESS=DEFLATE"]
         command += ["-co", "PREDICTOR=2"]
         command += [self.input, self.output]
-        run_command(command)
+        client.containers.run(
+            image=GDAL_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
 
 
-class ComputeClassCountsCommand(object):
+class ExportParcelsCsvCommand:
+    def __init__(self, sql, destination, source):
+        self.sql = sql
+        self.destination = destination
+        self.source = source
+
+    def run(self):
+        output_dir = os.path.dirname(self.destination)
+        client = docker.from_env()
+        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
+        command = []
+        command += ["ogr2ogr"]
+        command += ["-lco", "STRING_QUOTING=IF_NEEDED"]
+        command += ["-sql", self.sql]
+        command += [self.destination]
+        command += [self.source]
+        client.containers.run(
+            image=GDAL_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
+
+
+class ExportParcelsGpkgCommand:
+    def __init__(self, srs, sql, destination, source):
+        self.srs = srs
+        self.sql = sql
+        self.destination = destination
+        self.source = source
+
+    def run(self):
+        output_dir = os.path.dirname(self.destination)
+        client = docker.from_env()
+        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
+        command = []
+        command += ["ogr2ogr"]
+        command += ["-a_srs", self.srs]
+        command += ["-fieldTypeToString", "DateTime"]
+        command += ["-sql", self.sql]
+        command += [self.destination]
+        command += [self.source]
+        client.containers.run(
+            image=GDAL_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
+
+
+class ExportParcelsShpCommand:
+    def __init__(self, sql, destination, source):
+        self.sql = sql
+        self.destination = destination
+        self.source = source
+
+    def run(self):
+        output_dir = os.path.dirname(self.destination)
+        client = docker.from_env()
+        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
+        command = []
+        command += ["ogr2ogr"]
+        command += ["-overwrite"]
+        command += ["-sql", self.sql]
+        command += [self.destination]
+        command += [self.source]
+        client.containers.run(
+            image=GDAL_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
+
+
+class ComputeClassCountsCommand:
     def __init__(self, input, output):
         self.input = input
         self.output = output
 
     def run(self):
+        output_dir = os.path.dirname(self.output)
+        client = docker.from_env()
+        volumes = {
+            self.input: {"bind": self.input, "mode": "ro"},
+            output_dir: {"bind": output_dir, "mode": "rw"},
+        }
         command = []
         command += ["otbcli", "ComputeClassCounts"]
         command += ["-in", self.input]
         command += ["-out", self.output]
-        run_command(command)
+        client.containers.run(
+            image=OTB_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
 
 
-class MergeClassCountsCommand(object):
+class MergeClassCountsCommand:
     def __init__(self, inputs, output):
         self.inputs = inputs
         self.output = output
 
     def run(self):
+        # inputs should be in the same directory
+        output_dir = os.path.dirname(self.output)
+        client = docker.from_env()
+        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
         command = []
         command += ["merge-counts"]
         command += [self.output]
         command += self.inputs
-        run_command(command)
+        client.containers.run(
+            image=OTB_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
 
 
 def run_command(args, env=None):
@@ -145,7 +265,7 @@ def get_esri_wkt(epsg_code):
     return srs.ExportToWkt()
 
 
-class Tile(object):
+class Tile:
     def __init__(self, tile_id, epsg_code, tile_extent):
         self.tile_id = tile_id
         self.epsg_code = epsg_code
@@ -370,7 +490,7 @@ inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id;"""
         return result
 
 
-class DataPreparation(object):
+class DataPreparation:
     DB_UPDATE_BATCH_SIZE = 1000
 
     def __init__(self, config, year, working_path):
@@ -466,16 +586,26 @@ class DataPreparation(object):
     def prepare_lut(self, lut_path):
         with self.get_connection() as conn:
             print("Importing LUT")
-            cmd = get_import_table_command(
-                self.get_ogr_connection_string(),
-                lut_path,
+            client = docker.from_env()
+            volumes = {lut_path: {"bind": lut_path, "mode": "ro"}}
+            command = []
+            command += ["ogr2ogr"]
+            command += [
                 "-nln",
                 self.lut_table,
                 "-overwrite",
                 "-oo",
                 "AUTODETECT_TYPE=YES",
+            ]
+            command += [self.get_ogr_connection_string(), lut_path]
+            client.containers.run(
+                image=GDAL_IMAGE_NAME,
+                remove=True,
+                user=f"{os.getuid()}:{os.getgid()}",
+                volumes=volumes,
+                command=command,
             )
-            run_command(cmd)
+            client.close()
 
             print("Preparing LUT")
             with conn.cursor() as cursor:
@@ -526,7 +656,11 @@ add constraint {} unique(ori_crop);"""
         parcel_id_offset,
         holding_id_offset,
     ):
-        ds = ogr.Open(lpis, 0)
+        if os.path.splitext(lpis)[1].lower() == ".zip":
+            lpis_adj = f"/vsizip/{lpis}"
+        else:
+            lpis_adj = lpis
+        ds = ogr.Open(lpis_adj, 0)
         layer = ds.GetLayer()
         srs = layer.GetSpatialRef()
         is_projected = srs.IsProjected()
@@ -537,20 +671,31 @@ add constraint {} unique(ori_crop);"""
         crop_code_col = crop_code_col.lower()
 
         print("Importing LPIS")
-        cmd = get_import_table_command(
-            self.get_ogr_connection_string(),
-            lpis,
+        input_dir = os.path.dirname(lpis)
+        client = docker.from_env()
+        volumes = {input_dir: {"bind": input_dir, "mode": "ro"}}
+        command = []
+        command += ["ogr2ogr"]
+        command += [
             "-lco",
             "UNLOGGED=YES",
             "-lco",
-            "SPATIAL_INDEX=OFF",
+            "SPATIAL_INDEX=NONE",
             "-nlt",
             "MULTIPOLYGON",
             "-nln",
             self.lpis_table_staging,
             "-overwrite",
+        ]
+        command += [self.get_ogr_connection_string(), lpis_adj]
+        client.containers.run(
+            image=GDAL_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
         )
-        run_command(cmd)
+        client.close()
 
         print("Preparing LPIS")
         with self.get_connection() as conn:
@@ -969,7 +1114,7 @@ and not is_deleted;"""
                     sql = sql.format(
                         Literal(self.lpis_table),
                         Literal(tile.tile_id),
-                        Literal(int(-resolution / 2)),
+                        Literal(int(-resolution // 2)),
                         Identifier(self.lpis_table),
                     )
                     sql = sql.as_string(conn)
@@ -998,7 +1143,10 @@ and not is_deleted;"""
 
         def work(w):
             (c, cost) = w
-            c.run()
+            try:
+                c.run()
+            except Exception as e:
+                logging.error(e)
             q.put(cost)
 
         res = self.pool.map_async(work, commands)
@@ -1225,6 +1373,8 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
                 csv = "{}.csv".format(self.lpis_table)
                 csv = os.path.join(self.lpis_path, csv)
 
+                try_rm_file(csv)
+
                 gpkg = "{}.gpkg".format(self.lpis_table)
                 gpkg_working = os.path.join(self.working_path, gpkg)
                 gpkg = os.path.join(self.lpis_path, gpkg)
@@ -1240,21 +1390,16 @@ where not is_deleted"""
                 ).format(Identifier(self.lpis_table), Identifier(self.lut_table))
                 sql = sql.as_string(conn)
 
-                command = []
-                command += ["ogr2ogr"]
-                command += ["-sql", sql]
-                command += [csv]
-                command += [self.get_ogr_connection_string()]
+                command = ExportParcelsCsvCommand(
+                    sql, csv, self.get_ogr_connection_string()
+                )
                 commands.append((command, 5))
 
                 srid = get_site_srid(conn, self.lpis_table)
-                command = []
-                command += ["ogr2ogr"]
-                command += ["-a_srs", "EPSG:{}".format(srid)]
-                command += ["-fieldTypeToString", "DateTime"]
-                command += ["-sql", sql]
-                command += [gpkg_working]
-                command += [self.get_ogr_connection_string()]
+                srs = f"EPSG:{srid}"
+                command = ExportParcelsGpkgCommand(
+                    srs, sql, gpkg_working, self.get_ogr_connection_string()
+                )
                 commands.append((command, 12))
 
                 for epsg_code in epsg_codes:
@@ -1264,7 +1409,7 @@ where not is_deleted"""
                         if resolution == 10 and epsg_code == 3035:
                             continue
 
-                        buf = resolution / 2
+                        buf = resolution // 2
                         output = "{}_{}_buf_{}m.shp".format(
                             self.lpis_table, epsg_code, buf
                         )
@@ -1274,7 +1419,7 @@ where not is_deleted"""
                         )
                         prj = os.path.join(self.lpis_path, prj)
 
-                        with open(prj, "wb") as f:
+                        with open(prj, "wt") as f:
                             f.write(wkt)
 
                         sql = SQL(
@@ -1287,17 +1432,21 @@ where not is_deleted"""
                         )
                         sql = sql.as_string(conn)
 
-                        command = []
-                        command += ["ogr2ogr"]
-                        command += [output, self.get_ogr_connection_string()]
-                        command += ["-sql", sql]
+                        try_rm_file(output)
+
+                        command = ExportParcelsShpCommand(
+                            sql, output, self.get_ogr_connection_string()
+                        )
                         commands.append((command, 23))
 
         q = multiprocessing.dummy.Queue()
 
         def work(w):
             (c, cost) = w
-            run_command(c)
+            try:
+                c.run()
+            except Exception as e:
+                logging.error(e)
             q.put(cost)
 
         res = self.pool.map_async(work, commands)
@@ -1503,14 +1652,6 @@ def read_counts_csv(path):
     return counts
 
 
-def get_import_table_command(destination, source, *options):
-    command = []
-    command += ["ogr2ogr"]
-    command += options
-    command += [destination, source]
-    return command
-
-
 def main():
     parser = argparse.ArgumentParser(description="Imports an LPIS or LUT")
     parser.add_argument(
@@ -1570,9 +1711,11 @@ def main():
     data_preparation = DataPreparation(config, args.year, args.working_path)
 
     if args.lut is not None:
+        args.lut = os.path.realpath(args.lut)
         data_preparation.prepare_lut(args.lut)
 
     if args.lpis is not None:
+        args.lpis = os.path.realpath(args.lpis)
         data_preparation.prepare_lpis_staging(
             mode,
             args.parcel_id_cols,
