@@ -2,30 +2,14 @@
 from __future__ import print_function
 
 import argparse
-from collections import defaultdict
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
-from glob import glob
-import multiprocessing.dummy
+from configparser import ConfigParser
 import os
 import os.path
-from osgeo import osr
-from osgeo import gdal
-from gdal import gdalconst
 import pipes
 import psycopg2
 from psycopg2.sql import SQL, Literal, Identifier
 import psycopg2.extras
 import subprocess
-import re
-import sys
-import csv
-
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
 
 
 class Config(object):
@@ -82,66 +66,65 @@ def exportPracticesFile(config, conn, pg_path, practice, site_id, out_file):
 
     srid = get_srid(conn, lpis_table)
 
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-                select
-                lpis."NewID" as "SEQ_ID",
-                lpis.ori_id as "FIELD_ID",
-                ap.country as "COUNTRY",
-                ap.year as "YEAR",
-                ap.main_crop as "MAIN_CROP",
-                ap.veg_start as "VEG_START",
-                ap.h_start as "H_START",
-                ap.h_end as "H_END",
-                ap.practice as "PRACTICE",
-                ap.p_type as "P_TYPE",
-                ap.p_start as "P_START",
-                ap.p_end as "P_END",
-                lpis."GeomValid",
-                lpis."Duplic",
-                lpis."Overlap",
-                lpis."Area_meters" as "Area_meter",
-                lpis."ShapeInd",
-                lut.ctnum as "CTnum",
-                lut.ct as "CT",
-                lut.lc as "LC",
-                lpis."S1Pix",
-                lpis."S2Pix"
-            from l4c_practices ap
-            inner join {} lpis on lpis.ori_id = ap.orig_id
-            natural join {} lut
-            where ap.site_id = {} and ap.year = {} and ap.practice_short_name = {}
-            and not lpis.is_deleted order by lpis."NewID" """
-        )
-        query = query.format(
-            Identifier(lpis_table),
-            Identifier(lut_table),
-            Literal(site_id),
-            Literal(config.year),
-            Literal(practice),
-        )
-        query_str = query.as_string(conn)
-        print(query_str)
+    query = SQL(
+        """
+            select
+            lpis."NewID" as "SEQ_ID",
+            lpis.ori_id as "FIELD_ID",
+            ap.country as "COUNTRY",
+            ap.year as "YEAR",
+            ap.main_crop as "MAIN_CROP",
+            ap.veg_start as "VEG_START",
+            ap.h_start as "H_START",
+            ap.h_end as "H_END",
+            ap.practice as "PRACTICE",
+            ap.p_type as "P_TYPE",
+            ap.p_start as "P_START",
+            ap.p_end as "P_END",
+            lpis."GeomValid",
+            lpis."Duplic",
+            lpis."Overlap",
+            lpis."Area_meters" as "Area_meter",
+            lpis."ShapeInd",
+            lut.ctnum as "CTnum",
+            lut.ct as "CT",
+            lut.lc as "LC",
+            lpis."S1Pix",
+            lpis."S2Pix"
+        from l4c_practices ap
+        inner join {} lpis on lpis.ori_id = ap.orig_id
+        natural join {} lut
+        where ap.site_id = {} and ap.year = {} and ap.practice_short_name = {}
+        and not lpis.is_deleted order by lpis."NewID" """
+    )
+    query = query.format(
+        Identifier(lpis_table),
+        Identifier(lut_table),
+        Literal(site_id),
+        Literal(config.year),
+        Literal(practice),
+    )
+    query_str = query.as_string(conn)
+    print(query_str)
 
-        # TODO: change natural join with inner join lut_nld_2019_2019 lut using (ori_crop) or something like this
+    # TODO: change natural join with inner join lut_nld_2019_2019 lut using (ori_crop) or something like this
 
-        name = os.path.basename(out_file)
-        table_name = os.path.splitext(name)[0].lower()
-        command = get_export_table_command(
-            config.ogr2ogr_path,
-            out_file,
-            pg_path,
-            "-nln",
-            table_name,
-            "-sql",
-            query_str,
-            "-a_srs",
-            "EPSG:" + str(srid),
-            "-gt",
-            100000,
-        )
-        run_command(command)
+    name = os.path.basename(out_file)
+    table_name = os.path.splitext(name)[0].lower()
+    command = get_export_table_command(
+        config.ogr2ogr_path,
+        out_file,
+        pg_path,
+        "-nln",
+        table_name,
+        "-sql",
+        query_str,
+        "-a_srs",
+        "EPSG:" + str(srid),
+        "-gt",
+        100000,
+    )
+    run_command(command)
 
 
 def exportFilterIdsFile(config, conn, pg_path, site_id, out_file):
@@ -149,38 +132,35 @@ def exportFilterIdsFile(config, conn, pg_path, site_id, out_file):
 
     srid = get_srid(conn, lpis_table)
 
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-            select
-                lpis."NewID" as "SEQ_ID"
-            from l4c_practices ap
-            inner join {} lpis on lpis.ori_id = ap.orig_id
-            where ap.site_id = {} and ap.year = {}
-            and not lpis.is_deleted order by lpis."NewID" """
-        )
-        query = query.format(
-            Identifier(lpis_table), Literal(site_id), Literal(config.year)
-        )
-        query_str = query.as_string(conn)
-        print(query_str)
+    query = SQL(
+        """
+        select
+            lpis."NewID" as "SEQ_ID"
+        from l4c_practices ap
+        inner join {} lpis on lpis.ori_id = ap.orig_id
+        where ap.site_id = {} and ap.year = {}
+        and not lpis.is_deleted order by lpis."NewID" """
+    )
+    query = query.format(Identifier(lpis_table), Literal(site_id), Literal(config.year))
+    query_str = query.as_string(conn)
+    print(query_str)
 
-        name = os.path.basename(out_file)
-        table_name = os.path.splitext(name)[0].lower()
-        command = get_export_table_command(
-            config.ogr2ogr_path,
-            out_file,
-            pg_path,
-            "-nln",
-            table_name,
-            "-sql",
-            query_str,
-            "-a_srs",
-            "EPSG:" + str(srid),
-            "-gt",
-            100000,
-        )
-        run_command(command)
+    name = os.path.basename(out_file)
+    table_name = os.path.splitext(name)[0].lower()
+    command = get_export_table_command(
+        config.ogr2ogr_path,
+        out_file,
+        pg_path,
+        "-nln",
+        table_name,
+        "-sql",
+        query_str,
+        "-a_srs",
+        "EPSG:" + str(srid),
+        "-gt",
+        100000,
+    )
+    run_command(command)
 
 
 def getSiteId(conn, siteShortName):
@@ -380,7 +360,7 @@ def generatePracticesFiles(config, conn, pg_path, site_id):
     # Generate also the filter ids file
     filterIdsPath = getFilterIdsFilePath(config, conn, site_id)
 
-    print("Filter ids path is : ".format(filterIdsPath))
+    print("Filter ids path is: {}".format(filterIdsPath))
     exportFilterIdsFile(config, conn, pg_path, site_id, filterIdsPath)
 
 

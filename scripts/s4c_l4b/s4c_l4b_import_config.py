@@ -2,32 +2,15 @@
 from __future__ import print_function
 
 import argparse
-from collections import defaultdict
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
-from glob import glob
-import multiprocessing.dummy
+from configparser import ConfigParser
 import os
 import os.path
-from osgeo import osr
-from osgeo import gdal
-from gdal import gdalconst
 import pipes
 import psycopg2
-from psycopg2.sql import SQL, Literal, Identifier
+from psycopg2.sql import SQL, Literal
 import psycopg2.extras
 import subprocess
-import re
-import sys
-import csv
 from shutil import copyfile
-
-
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
 
 
 class Config(object):

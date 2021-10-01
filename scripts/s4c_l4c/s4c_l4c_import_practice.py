@@ -2,30 +2,14 @@
 from __future__ import print_function
 
 import argparse
-from collections import defaultdict
-from datetime import date
-from datetime import datetime
-from datetime import timedelta
-from glob import glob
-import multiprocessing.dummy
-import os
-import os.path
-from osgeo import osr
-from osgeo import gdal
-from gdal import gdalconst
+from configparser import ConfigParser
 import pipes
 import psycopg2
 from psycopg2.sql import SQL, Literal, Identifier
 import psycopg2.extras
 import subprocess
-import re
 import sys
 import csv
-
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
 
 
 class Config(object):
@@ -72,7 +56,7 @@ def checkInputFileColumnNames(cols):
     newCols = [x.upper() for x in cols]
     print(newCols)
     for col in expected_columns:
-        if not col in newCols:
+        if col not in newCols:
             print("Column {} was not found in the file columns!".format(col))
             return False
     return True
