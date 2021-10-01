@@ -50,14 +50,16 @@ def main():
     if code_field_idx == -1:
         code_field_idx = None
 
-    spatialRef = osr.SpatialReference()
-    spatialRef.ImportFromEPSG(4326)
+    spatial_ref = osr.SpatialReference()
+    spatial_ref.ImportFromEPSG(4326)
+    spatial_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+
     layer_srs = layer.GetSpatialRef()
     if not layer_srs:
         print("Input has no spatial reference (projection)")
         return ERR_BAD_FILE
 
-    transform = osr.CoordinateTransformation(layer_srs, spatialRef)
+    transform = osr.CoordinateTransformation(layer_srs, spatial_ref)
 
     if args.bounds and featureCount != 1:
         union = ogr.Geometry(ogr.wkbMultiPolygon)
