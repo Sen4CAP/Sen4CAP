@@ -27,6 +27,7 @@ try:
 except ImportError:
     from ConfigParser import ConfigParser
 
+
 class Config(object):
     def __init__(self, args):
         parser = ConfigParser()
@@ -38,10 +39,15 @@ class Config(object):
         self.user = parser.get("Database", "UserName")
         self.password = parser.get("Database", "Password")
 
+        # work around Docker networking scheme
+        if self.host == "127.0.0.1" or self.host == "::1" or self.host == "localhost":
+            self.host = "172.17.0.1"
+
         self.site_short_name = args.site_short_name
         self.year = args.year
         self.country = args.country
         self.ogr2ogr_path = args.ogr2ogr_path
+
 
 def get_export_table_command(ogr2ogr_path, destination, source, *options):
     command = []
@@ -49,7 +55,8 @@ def get_export_table_command(ogr2ogr_path, destination, source, *options):
     command += [destination, source]
     command += options
     return command
-    
+
+
 def get_srid(conn, lpis_table):
     with conn.cursor() as cursor:
         query = SQL("select Find_SRID('public', {}, 'wkb_geometry')")
@@ -60,19 +67,21 @@ def get_srid(conn, lpis_table):
         srid = cursor.fetchone()[0]
         conn.commit()
         return srid
-   
+
+
 def run_command(args, env=None):
     args = list(map(str, args))
     cmd_line = " ".join(map(pipes.quote, args))
     print(cmd_line)
     subprocess.call(args, env=env)
 
+
 def exportPracticesFile(config, conn, pg_path, practice, site_id, out_file):
     lpis_table = "decl_{}_{}".format(config.site_short_name, config.year)
     lut_table = "lut_{}_{}".format(config.site_short_name, config.year)
-    
+
     srid = get_srid(conn, lpis_table)
-    
+
     with conn.cursor() as cursor:
         query = SQL(
             """
@@ -96,7 +105,7 @@ def exportPracticesFile(config, conn, pg_path, practice, site_id, out_file):
                 lpis."ShapeInd",
                 lut.ctnum as "CTnum",
                 lut.ct as "CT",
-                lut.lc as "LC",                
+                lut.lc as "LC",
                 lpis."S1Pix",
                 lpis."S2Pix"
             from l4c_practices ap
@@ -105,22 +114,41 @@ def exportPracticesFile(config, conn, pg_path, practice, site_id, out_file):
             where ap.site_id = {} and ap.year = {} and ap.practice_short_name = {}
             and not lpis.is_deleted order by lpis."NewID" """
         )
-        query = query.format(Identifier(lpis_table), Identifier(lut_table), Literal(site_id), Literal(config.year), Literal(practice))
+        query = query.format(
+            Identifier(lpis_table),
+            Identifier(lut_table),
+            Literal(site_id),
+            Literal(config.year),
+            Literal(practice),
+        )
         query_str = query.as_string(conn)
         print(query_str)
 
-# TODO: change natural join with inner join lut_nld_2019_2019 lut using (ori_crop) or something like this
+        # TODO: change natural join with inner join lut_nld_2019_2019 lut using (ori_crop) or something like this
 
         name = os.path.basename(out_file)
         table_name = os.path.splitext(name)[0].lower()
-        command = get_export_table_command(config.ogr2ogr_path, out_file, pg_path, "-nln", table_name, "-sql", query_str, "-a_srs", "EPSG:" + str(srid), "-gt", 100000)
+        command = get_export_table_command(
+            config.ogr2ogr_path,
+            out_file,
+            pg_path,
+            "-nln",
+            table_name,
+            "-sql",
+            query_str,
+            "-a_srs",
+            "EPSG:" + str(srid),
+            "-gt",
+            100000,
+        )
         run_command(command)
 
-def exportFilterIdsFile(config, conn, pg_path, site_id, out_file) :
+
+def exportFilterIdsFile(config, conn, pg_path, site_id, out_file):
     lpis_table = "decl_{}_{}".format(config.site_short_name, config.year)
-    
+
     srid = get_srid(conn, lpis_table)
-    
+
     with conn.cursor() as cursor:
         query = SQL(
             """
@@ -131,14 +159,29 @@ def exportFilterIdsFile(config, conn, pg_path, site_id, out_file) :
             where ap.site_id = {} and ap.year = {}
             and not lpis.is_deleted order by lpis."NewID" """
         )
-        query = query.format(Identifier(lpis_table), Literal(site_id), Literal(config.year))
+        query = query.format(
+            Identifier(lpis_table), Literal(site_id), Literal(config.year)
+        )
         query_str = query.as_string(conn)
         print(query_str)
 
         name = os.path.basename(out_file)
         table_name = os.path.splitext(name)[0].lower()
-        command = get_export_table_command(config.ogr2ogr_path, out_file, pg_path, "-nln", table_name, "-sql", query_str, "-a_srs", "EPSG:" + str(srid), "-gt", 100000)
+        command = get_export_table_command(
+            config.ogr2ogr_path,
+            out_file,
+            pg_path,
+            "-nln",
+            table_name,
+            "-sql",
+            query_str,
+            "-a_srs",
+            "EPSG:" + str(srid),
+            "-gt",
+            100000,
+        )
         run_command(command)
+
 
 def getSiteId(conn, siteShortName):
     site_id = -1
@@ -158,8 +201,9 @@ def getSiteId(conn, siteShortName):
         conn.commit()
     return site_id
 
+
 def getSiteConfigKey(conn, key, site_id):
-    value = ''
+    value = ""
     with conn.cursor() as cursor:
         query = SQL(
             """
@@ -174,9 +218,9 @@ def getSiteConfigKey(conn, key, site_id):
         for row in cursor:
             value = row[0]
         conn.commit()
-        
+
         # get the default value if not found
-        if value == '' :
+        if value == "":
             query = SQL(
                 """ select value from config where key = {} and site_id is null """
             )
@@ -187,42 +231,51 @@ def getSiteConfigKey(conn, key, site_id):
             for row in cursor:
                 value = row[0]
             conn.commit()
-        
+
     return value
 
-def getCountry(conn, site_id):
-    return getSiteConfigKey(conn, 'processor.s4c_l4c.country', site_id)
 
-def getFilterIdsFilePath( config,conn, site_id):
-    filter_ids_file = getSiteConfigKey(conn, 'processor.s4c_l4c.filter_ids_path', site_id)
+def getCountry(conn, site_id):
+    return getSiteConfigKey(conn, "processor.s4c_l4c.country", site_id)
+
+
+def getFilterIdsFilePath(config, conn, site_id):
+    filter_ids_file = getSiteConfigKey(
+        conn, "processor.s4c_l4c.filter_ids_path", site_id
+    )
     filter_ids_file = filter_ids_file.replace("{site}", config.site_short_name)
     filter_ids_file = filter_ids_file.replace("{year}", str(config.year))
     if not os.path.exists(os.path.dirname(filter_ids_file)):
-        os.makedirs(os.path.dirname(filter_ids_file)) 
+        os.makedirs(os.path.dirname(filter_ids_file))
     return filter_ids_file
 
+
 def getConfiguredPractices(conn, site_id):
-    practicesVal = getSiteConfigKey(conn, 'processor.s4c_l4c.practices', site_id)
-    return [x.strip() for x in practicesVal.split(',')]
+    practicesVal = getSiteConfigKey(conn, "processor.s4c_l4c.practices", site_id)
+    return [x.strip() for x in practicesVal.split(",")]
+
 
 def getPracticeOutFile(config, conn, site_id, practice):
-    practicesDir = getSiteConfigKey(conn, 'processor.s4c_l4c.ts_input_tables_dir', site_id)
+    practicesDir = getSiteConfigKey(
+        conn, "processor.s4c_l4c.ts_input_tables_dir", site_id
+    )
     # the key might be something like "/mnt/archive/agric_practices_files/{site}/ts_input_tables/{practice}/"
     practicesDir = practicesDir.replace("{site}", config.site_short_name)
     practicesDir = practicesDir.replace("{practice}", practice)
     practicesDir = practicesDir.replace("{year}", str(config.year))
     if not os.path.exists(practicesDir):
-        os.makedirs(practicesDir) 
+        os.makedirs(practicesDir)
 
     practiceFileName = "Sen4CAP_L4C_" + practice + "_" + str(config.year) + ".csv"
     return os.path.join(practicesDir, practiceFileName)
 
+
 def hasPracticeImported(conn, site_id, practice, year):
     count_parcels = 0
     # test the existance of the table l4c_practices
-    if (not checkTableExists(conn, "l4c_practices")) :
+    if not checkTableExists(conn, "l4c_practices"):
         return False
-        
+
     with conn.cursor() as cursor:
         query = SQL(
             """
@@ -239,8 +292,9 @@ def hasPracticeImported(conn, site_id, practice, year):
         conn.commit()
     return count_parcels != 0
 
+
 def getLpisProduct(conn, site_id):
-    lpis_prod = ''
+    lpis_prod = ""
     with conn.cursor() as cursor:
         query = SQL(
             """
@@ -257,19 +311,19 @@ def getLpisProduct(conn, site_id):
         conn.commit()
     return lpis_prod
 
-    
+
 def checkTableExists(conn, tablename):
     cursor = conn.cursor()
     query = SQL(
-            """
+        """
             SELECT COUNT(*)
             FROM information_schema.tables
             WHERE table_name = {}
             """
-        )
+    )
     query = query.format(Literal(tablename))
     print(query.as_string(conn))
-    
+
     cursor.execute(query)
     if cursor.fetchone()[0] == 1:
         cursor.close()
@@ -278,66 +332,99 @@ def checkTableExists(conn, tablename):
     cursor.close()
     return False
 
-def checkLpisAndLutExists(config, conn, site_id) :
+
+def checkLpisAndLutExists(config, conn, site_id):
     lpis_table = "decl_{}_{}".format(config.site_short_name, config.year)
     lut_table = "lut_{}_{}".format(config.site_short_name, config.year)
 
-    if (getLpisProduct(conn, site_id) == '') or (not checkTableExists(conn, lpis_table)) or (not checkTableExists(conn, lut_table)):
+    if (
+        (getLpisProduct(conn, site_id) == "")
+        or (not checkTableExists(conn, lpis_table))
+        or (not checkTableExists(conn, lut_table))
+    ):
         return False
-        
+
     return True
 
-    
-def generatePracticesFiles(config, conn, pg_path, site_id) :
-    if not checkLpisAndLutExists(config, conn, site_id) : 
+
+def generatePracticesFiles(config, conn, pg_path, site_id):
+    if not checkLpisAndLutExists(config, conn, site_id):
         # No LPIS product available yet
-        print("Cannot extract practices. The L4C practices files will not be generated as no LPIS/GSAA product yet!")
+        print(
+            "Cannot extract practices. The L4C practices files will not be generated as no LPIS/GSAA product yet!"
+        )
         return
     practices = getConfiguredPractices(conn, site_id)
-    if len(practices) == 0 : 
+    if len(practices) == 0:
         # No configuration file available yet, practices cannot be extracted
-        print("Cannot extract practices. The configuration might not have been uploaded!")
+        print(
+            "Cannot extract practices. The configuration might not have been uploaded!"
+        )
         return
     for practice in practices:
         # Check if we have the practice imported into the database
-        if not hasPracticeImported(conn, site_id, practice, config.year) :
-            print("Cannot extract practices. Not all practices were imported. Missing practice is {}".format(practice))
-            return 
+        if not hasPracticeImported(conn, site_id, practice, config.year):
+            print(
+                "Cannot extract practices. Not all practices were imported. Missing practice is {}".format(
+                    practice
+                )
+            )
+            return
     # Now iterate again through all the practices and export the files
     for practice in practices:
         # Generate the file - build the file path
         practiceFilePath = getPracticeOutFile(config, conn, site_id, practice)
         # export the file
         exportPracticesFile(config, conn, pg_path, practice, site_id, practiceFilePath)
-        
+
     # Generate also the filter ids file
     filterIdsPath = getFilterIdsFilePath(config, conn, site_id)
-    
-    print ("Filter ids path is : ".format(filterIdsPath))
+
+    print("Filter ids path is : ".format(filterIdsPath))
     exportFilterIdsFile(config, conn, pg_path, site_id, filterIdsPath)
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Handles the change of an LPIS, LUT or practices import")
-    parser.add_argument('-c', '--config-file', default='/etc/sen2agri/sen2agri.conf', help="Configuration file location")
-    parser.add_argument('-s', '--site-short-name', help="Site short name for which the file was uploaded")
-    parser.add_argument('-y', '--year', type=int, help="The year")
-    parser.add_argument('-t', '--country', help="The country short name")
-    parser.add_argument('-g', '--ogr2ogr-path', default='ogr2ogr', help="The path to ogr2ogr")
+    parser = argparse.ArgumentParser(
+        description="Handles the change of an LPIS, LUT or practices import"
+    )
+    parser.add_argument(
+        "-c",
+        "--config-file",
+        default="/etc/sen2agri/sen2agri.conf",
+        help="Configuration file location",
+    )
+    parser.add_argument(
+        "-s",
+        "--site-short-name",
+        help="Site short name for which the file was uploaded",
+    )
+    parser.add_argument("-y", "--year", type=int, help="The year")
+    parser.add_argument("-t", "--country", help="The country short name")
+    parser.add_argument(
+        "-g", "--ogr2ogr-path", default="ogr2ogr", help="The path to ogr2ogr"
+    )
     args = parser.parse_args()
 
     config = Config(args)
-    
-    pg_path = 'PG:dbname={} host={} port={} user={} password={}'.format(config.dbname, config.host,
-                                                                        config.port, config.user, config.password)
 
-    with psycopg2.connect(host=config.host, dbname=config.dbname, user=config.user, password=config.password) as conn:
+    pg_path = "PG:dbname={} host={} port={} user={} password={}".format(
+        config.dbname, config.host, config.port, config.user, config.password
+    )
+
+    with psycopg2.connect(
+        host=config.host,
+        dbname=config.dbname,
+        user=config.user,
+        password=config.password,
+    ) as conn:
         site_id = getSiteId(conn, config.site_short_name)
-        if not args.country :
+        if not args.country:
             config.country = getCountry(conn, site_id)
-        
+
         # generate the practices files
         generatePracticesFiles(config, conn, pg_path, site_id)
 
-        
+
 if __name__ == "__main__":
     main()
