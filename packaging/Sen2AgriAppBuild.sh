@@ -17,7 +17,7 @@
 ### CONFIG PATHS FOR SCRIPT
 : ${DEFAULT_DIR:=$(pwd)}
 : ${PLATFORM_NAME_DIR:="Sen2AgriApp"}
-  VERSION="2.1.101"
+  VERSION="3.0.0"
 : ${INSTALL_DIR:="install"}
 : ${RPM_DIR:="rpm_binaries"}
 : ${BUILD_DIR:="build"}
@@ -69,6 +69,10 @@ function build_SEN2AGRI_app_RPM_Package()
    ##sen2agri-services services will be installed in folder : usr/lib/systemd/system
    mkdir -p ${APP_INSTALL_PATH}/usr/lib/systemd/system
    cp -f ${SOURCES_DIR_PATH}/sen2agri-services/dist/* ${APP_INSTALL_PATH}/usr/lib/systemd/system
+   
+   mkdir -p ${APP_INSTALL_PATH}/usr/share/sen2agri/era5-downloader
+   cp -f ${SOURCES_DIR_PATH}/era5-downloader/weather_launcher.py ${APP_INSTALL_PATH}/usr/share/sen2agri/era5-downloader
+   cp -f ${SOURCES_DIR_PATH}/era5-downloader/dist/* ${APP_INSTALL_PATH}/usr/lib/systemd/system
 
    ##build RPM package
    fpm -s dir -t rpm -n sen2agri-app -C ${APP_INSTALL_PATH}/ ${PLATFORM_INSTALL_DEP} \
