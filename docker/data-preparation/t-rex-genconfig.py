@@ -1,0 +1,1 @@
+../../scripts/t-rex-genconfig.py
