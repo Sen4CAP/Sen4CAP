@@ -71,11 +71,9 @@ install(FILES ../scripts/insert_l2a_product_to_db.py
               ../scripts/s4c_l4c_manual_exec/extract_practices_infos.sh
               ../scripts/s4c_l4c_manual_exec/launch_agric_practices.sh
               ../scripts/import_theia.sh
-              ../scripts/arrow/extract_l4c_markers.py
-              ../scripts/arrow/extract_l4c_markers_wrapper.py
-              ../scripts/arrow/run_csv_to_ipc.sh
               ../scripts/arrow/csv_to_ipc.py
               ../scripts/arrow/ipc_to_csv.py
+              ../scripts/arrow/extract_mdb3_markers.py
         DESTINATION usr/bin/
 	    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                     GROUP_READ GROUP_EXECUTE
