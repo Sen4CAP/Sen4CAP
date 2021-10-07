@@ -36,7 +36,7 @@ VALUES
 INSERT INTO product_type
 (id, name, description)
 VALUES
-(14, 'lpis', 'LPIS raster product');
+(14, 'lpis', 'LPIS product');
 
 INSERT INTO product_type
 (id, name, description, is_raster)

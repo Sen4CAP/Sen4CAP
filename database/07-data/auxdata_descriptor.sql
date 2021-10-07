@@ -1,0 +1,7 @@
+INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (1, 'declaration', 'Declarations', 'year') ON conflict(id) DO UPDATE SET name = 'declaration', label = 'Declarations', unique_by = 'year';
+INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (2, 'l4b_config', 'L4B Configuration', 'year') ON conflict(id) DO UPDATE SET name = 'l4b_config', label = 'L4B Configuration', unique_by = 'year';
+INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (3, 'l4c_config', 'L4C Configuration', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_config', label = 'L4C Configuration', unique_by = 'year';
+INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (4, 'l4c_cc_info', 'L4C CC practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_cc_info', label = 'L4C CC practices infos', unique_by = 'year';
+INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (5, 'l4c_fl_info', 'L4C FL practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_fl_info', label = 'L4C FL practices infos', unique_by = 'year';
+INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (6, 'l4c_nfc_info', 'L4C NFC practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_nfc_info', label = 'L4C NFC practices infos', unique_by = 'year';
+INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (7, 'l4c_na_info', 'L4C NA practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_na_info', label = 'L4C NA practices infos', unique_by = 'year';

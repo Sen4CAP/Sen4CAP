@@ -1,34 +1,5 @@
 #!/bin/sh
 
-USE_SNAP_8_DOCKER=0
-
-POSITIONAL=()
-while [[ $# -gt 0 ]]
-do
-key="$1"
-
-case $key in
-    -s|--snap8-docker)
-    USE_SNAP8_DOCKER="$2"
-    shift # past argument
-    shift # past value
-    ;;
-    *)    # unknown option
-    POSITIONAL+=("$1") # save it in an array for later
-    shift # past argument
-    ;;
-esac
-done
-set -- "${POSITIONAL[@]}" # restore positional parameters
-
-if [ -z ${USE_SNAP8_DOCKER} ] ; then
-    USE_SNAP_8_DOCKER=0
-else
-    if [[ "$USE_SNAP8_DOCKER" == "1" || "$USE_SNAP8_DOCKER" == "true" ]] ; then
-        USE_SNAP_8_DOCKER=1
-    fi
-fi
-
 INSTAL_CONFIG_FILE="./config/install_config.conf"
 HAS_S2AGRI_SERVICES=false
 
@@ -470,78 +441,16 @@ if [ "$DB_NAME" == "sen2agri" ] ; then
     resetDownloadFailedProducts
 else
     # Install and config SNAP
-    if [ $USE_SNAP_8_DOCKER -eq 1 ] ; then
-        # check if docker image already exists
-        # TODO: "docker image inspect sen4cap/snap" might be also used instead images -q
-        #if [[ "$(docker images -q sen4cap/snap 2> /dev/null)" == "" ]]; then
-            wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
-            mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
-            chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
-            docker build -t sen4cap/snap -f ./docker/snap8/Dockerfile ./docker/snap8/
-        #else
-        #    echo "No need to install SNAP container, it already exists ..."
-        #fi
-    else
-        if grep -q "6.0" "/opt/snap/VERSION.txt"; then
-            wget http://step.esa.int/downloads/7.0/installers/esa-snap_sentinel_unix_7_0.sh && \
-            cp -f esa-snap_sentinel_unix_7_0.sh /tmp/ && \
-            chmod +x /tmp/esa-snap_sentinel_unix_7_0.sh && \
-            /tmp/esa-snap_sentinel_unix_7_0.sh -q && \
-            /opt/snap/bin/snap --nosplash --nogui --modules --update-all
-            rm -f ./esa-snap_sentinel_unix_7_0.sh /tmp/esa-snap_sentinel_unix_7_0.sh
-            if [ ! -h /usr/local/bin/gpt ]; then sudo ln -s /opt/snap/bin/gpt /usr/local/bin/gpt;fi
-
-            cp -f ${GPT_CONFIG_FILE} /opt/snap/bin/
-        fi
-    fi
-#    # Install R-devel
-#    yum install -y R-devel
-#    echo 'install.packages(c("e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily"), repos = c(CRAN = "https://cran.rstudio.com"))' | Rscript -
-
-    # Install Miniconda and the environment for the execution of processors
-#    SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
-#    cp "${SCRIPTPATH}/../tools/miniconda/Miniconda3-latest-Linux-x86_64.sh" "/mnt/archive/"
-#    cp "${SCRIPTPATH}/../tools/miniconda/sen4cap_conda.yml" "/mnt/archive/"
-
-#     echo "Installing conda ..."
-#     if [ -f /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh ] ; then
-#         echo "/home/sen2agri-service/miniconda3/etc/profile.d/conda.sh found ..."
-#         echo "Miniconda already installed for user sen2agri-service. Nothing to do ..."
-#     else
-#         sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b"
-#         # sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b -p /mnt/archive/sen4cap_miniconda/miniconda3/"
-#         # sudo -u sen2agri-service bash -c 'echo ". /mnt/archive/sen4cap_miniconda/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
-#         sudo su -l sen2agri-service -c bash -c "conda update -y -n base -c defaults conda"
-#         echo "Updating bashrc ..."
-#         sudo -u sen2agri-service bash -c 'echo ". /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
-#     fi
-#     echo "Setting report_errors to false..."
-#     sudo su -l sen2agri-service -c bash -c "conda config --set report_errors false"
-#     CUR_SEN4CAP_ENV_VAL=$(sudo su -l sen2agri-service -c bash -c "conda info --envs" | grep sen4cap)
-#     if [ -z "$CUR_SEN4CAP_ENV_VAL" ]; then
-#         echo "Creating sen4cap conda environment ..."
-#         sudo su -l sen2agri-service -c bash -c "conda env create --file=/mnt/archive/sen4cap_conda.yml"
-#         echo "Printing current environments ..."
-#         sudo su -l sen2agri-service -c bash -c "conda info --envs"
-#     else
-#         echo "sen4cap conda environment already exists. Checking for pyarrow installation ..."
-#         sudo su -l sen2agri-service -c bash -c "conda activate sen4cap &&  pip install pyarrow"
-#         echo "Environments:"
-#         sudo su -l sen2agri-service -c bash -c "conda info --envs"
-#     fi
-#
-#     rm "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh"
-#     rm "/mnt/archive/sen4cap_conda.yml"
-
-    echo "Updating R packages..."
-    Rscript - <<- EOF
-    packages <- c("arrow", "e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily", "caTools", "tidyverse", "data.table")
-    diff <- setdiff(packages, rownames(installed.packages()))
-    if (length(diff) > 0) {
-        install.packages(diff, repos = c(CRAN = "https://cran.rstudio.com"))
-    }
-EOF
-
+    # check if docker image already exists
+    # TODO: "docker image inspect sen4cap/snap" might be also used instead images -q
+    #if [[ "$(docker images -q sen4cap/snap 2> /dev/null)" == "" ]]; then
+        wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
+        mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
+        chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
+        docker build -t sen4cap/snap:8.0 -f ./docker/snap8/Dockerfile ./docker/snap8/
+    #else 
+    #    echo "No need to install SNAP container, it already exists ..."
+    #fi
 fi
 
 if [ ! -d /var/log/sen2agri ]; then

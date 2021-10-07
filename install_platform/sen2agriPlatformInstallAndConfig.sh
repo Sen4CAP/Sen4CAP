@@ -298,8 +298,8 @@ function config_docker()
     docker pull sen4x/fmask_extractor:0.1
     docker pull sen4x/fmask:4.2
 
-    docker pull sen4cap/processors:2.0.0
-    docker pull sen4cap/grassland_mowing:2.0.0
+    docker pull sen4cap/processors:3.0.0
+    docker pull sen4cap/grassland_mowing:3.0.0
     docker pull sen4x/l2a-processors:0.1
     docker pull sen4x/sen2cor:2.9.0-ubuntu-20.04
     docker pull sen4x/maja:3.2.2-centos-7
@@ -478,48 +478,7 @@ function install_additional_packages()
         wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
         mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
         chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
-        docker build -t sen4cap/snap -f ./docker/snap8/Dockerfile ./docker/snap8/
-
-        # TODO: This should be removed
-        wget http://step.esa.int/downloads/7.0/installers/esa-snap_sentinel_unix_7_0.sh && \
-        cp -f esa-snap_sentinel_unix_7_0.sh /tmp/ && \
-        chmod +x /tmp/esa-snap_sentinel_unix_7_0.sh && \
-        /tmp/esa-snap_sentinel_unix_7_0.sh -q && \
-        /opt/snap/bin/snap --nosplash --nogui --modules --update-all
-        rm -f ./esa-snap_sentinel_unix_7_0.sh /tmp/esa-snap_sentinel_unix_7_0.sh
-        if [ ! -h /usr/local/bin/gpt ]; then sudo ln -s /opt/snap/bin/gpt /usr/local/bin/gpt;fi
-
-        cp -f ${GPT_CONFIG_FILE} /opt/snap/bin/
-
-        # Install R
-        yum install -y R-devel libcurl-devel openssl-devel libxml2-devel
-        Rscript - <<- EOF
-        packages <- c("arrow", "e1071", "caret", "dplyr", "gsubfn", "ranger", "readr", "smotefamily", "caTools", "tidyverse", "data.table")
-        diff <- setdiff(packages, rownames(installed.packages()))
-        if (length(diff) > 0) {
-            install.packages(diff, repos = c(CRAN = "https://cran.rstudio.com"))
-        }
-EOF
-
-#        # Install Miniconda and the environment for the execution of processors
-#        SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
-#        cp "${SCRIPTPATH}/../tools/miniconda/Miniconda3-latest-Linux-x86_64.sh" "/mnt/archive/"
-#        cp "${SCRIPTPATH}/../tools/miniconda/sen4cap_conda.yml" "/mnt/archive/"
-#
-#        sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b"
-#      # sudo su -l sen2agri-service -c bash -c "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh -b -p /mnt/archive/sen4cap_miniconda/miniconda3/"
-#        sudo -u sen2agri-service bash -c 'echo ". /home/sen2agri-service/miniconda3/etc/profile.d/conda.sh" >> /home/sen2agri-service/.bashrc'
-#        sudo su -l sen2agri-service -c bash -c "conda config --set report_errors false"
-#        if [ -d "/home/sen2agri-service/miniconda3/envs/sen4cap" ] ; then
-#            sudo rm -fR /home/sen2agri-service/miniconda3/envs/sen4cap
-#        fi
-#        sudo su -l sen2agri-service -c bash -c "conda update -y -n base conda"
-#        sudo su -l sen2agri-service -c bash -c "conda env create --file=/mnt/archive/sen4cap_conda.yml"
-#        sudo su -l sen2agri-service -c bash -c "conda info --envs"
-#
-#        rm "/mnt/archive/Miniconda3-latest-Linux-x86_64.sh"
-#        rm "/mnt/archive/sen4cap_conda.yml"
-
+        docker build -t sen4cap/snap:8.0 -f ./docker/snap8/Dockerfile ./docker/snap8/
     fi
 }
 

@@ -130,8 +130,6 @@ insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem
 -- -----------------------------------------------------------
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('archiver.max_age.l3a', NULL, '1', '2015-06-02 11:39:40.357184+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3a.keep_job_folders', NULL, '0', '2016-03-09 16:41:20.194169+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3a.name', NULL, 'L3A', '2015-06-03 17:02:50.028002+03');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3a.path', NULL, '/bin/false', '2015-07-20 16:31:23.208369+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3a.slurm_qos', NULL, 'qoscomposite', '2015-08-24 17:44:38.29255+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l3a', NULL, '/mnt/archive/orchestrator_temp/l3a/{job_id}/{task_id}-{module}', '2015-07-10 17:54:17.288095+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3a.bandsmapping', NULL, '/usr/share/sen2agri/bands_mapping_s2.txt', '2016-02-29 14:08:01.731357+02');
@@ -156,8 +154,6 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3a.wei
 -- -----------------------------------------------------------
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('archiver.max_age.l3b', NULL, '1', '2015-06-02 11:39:45.99546+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3b.keep_job_folders', NULL, '0', '2016-03-09 16:41:20.194169+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3b.name', NULL, 'L3B', '2015-06-03 17:02:50.028002+03');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3b.path', NULL, '/bin/false', '2015-07-20 16:31:23.208369+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l3b.slurm_qos', NULL, 'qoslai', '2015-08-24 17:44:38.29255+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l3b', NULL, '/mnt/archive/orchestrator_temp/l3b/{job_id}/{task_id}-{module}', '2015-07-10 17:54:17.288095+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.cloud_optimized_geotiff_output', NULL, '0', '2017-10-24 14:56:57.501918+02');
@@ -166,6 +162,8 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.fil
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.filter.produce_in_domain_flags', NULL, '0', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.filter.produce_lai', NULL, '1', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.filter.produce_ndvi', NULL, '1', '2017-10-24 14:56:57.501918+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.filter.produce_ndwi', NULL, '0', '2017-10-24 14:56:57.501918+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.filter.produce_brightness', NULL, '0', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.generate_models', NULL, '1', '2016-02-29 12:03:08.445828+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.l1c_availability_days', NULL, '20', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.lai.global_bv_samples_file', NULL, '/usr/share/sen2agri/LaiCommonBVDistributionSamples.txt', '2016-02-29 14:08:07.963143+02');
@@ -179,6 +177,11 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.lai
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.production_interval', NULL, '10', '2016-02-29 12:03:31.197823+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.reproc_production_interval', NULL, '30', '2016-02-29 12:03:31.197823+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.sched_wait_proc_inputs', NULL, '0', '2015-07-10 17:54:17.288095+03');
+
+-- -----------------------------------------------------------
+-- L2A Masked Specific Keys
+-- -----------------------------------------------------------
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l2a_msk', NULL, '/mnt/archive/orchestrator_temp/l2a_msk/{job_id}/{task_id}-{module}', '2021-05-18 17:54:17.288095+03');
 
 -- -----------------------------------------------------------
 -- S2A_L3C Specific Keys
@@ -212,8 +215,6 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3e.sch
 -- -----------------------------------------------------------
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('archiver.max_age.l4a', NULL, '1', '2015-06-02 11:39:50.928228+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4a.keep_job_folders', NULL, '0', '2016-03-09 16:41:20.194169+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4a.name', NULL, 'L4A', '2015-06-03 17:02:50.028002+03');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4a.path', NULL, '/bin/false', '2015-07-20 16:31:23.208369+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4a.slurm_qos', NULL, 'qoscropmask', '2015-08-24 17:44:38.29255+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l4a', NULL, '/mnt/archive/orchestrator_temp/l4a/{job_id}/{task_id}-{module}', '2015-07-10 17:54:17.288095+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l4a.classifier', NULL, 'rf', '2016-03-10 18:27:19.634909+02');
@@ -251,8 +252,6 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l4a.win
 -- -----------------------------------------------------------
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('archiver.max_age.l4b', NULL, '1', '2015-06-02 11:39:56.99407+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4b.keep_job_folders', NULL, '0', '2016-03-09 16:41:20.194169+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4b.name', NULL, 'L4B', '2015-06-03 17:02:50.028002+03');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4b.path', NULL, '/bin/false', '2015-07-20 16:31:23.208369+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.l4b.slurm_qos', NULL, 'qoscroptype', '2015-08-24 17:44:38.29255+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l4b', NULL, '/mnt/archive/orchestrator_temp/l4b/{job_id}/{task_id}-{module}', '2015-07-10 17:54:17.288095+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l4b.classifier', NULL, 'rf', '2016-03-10 18:29:07.926989+02');

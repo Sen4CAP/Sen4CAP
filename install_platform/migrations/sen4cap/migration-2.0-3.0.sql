@@ -30,6 +30,8 @@ begin
                 ALTER TABLE downloader_history ADD COLUMN IF NOT EXISTS product_type_id smallint;
                 ALTER TABLE downloader_history ALTER COLUMN satellite_id DROP NOT NULL;
 
+                ALTER TABLE node_resource_log ALTER COLUMN timestamp SET DATA TYPE timestamp with time zone;
+                
                 -- New Tables
                 CREATE TABLE IF NOT EXISTS auxdata_descriptor (
                     id smallint NOT NULL,
@@ -42,30 +44,37 @@ begin
             
                 CREATE TABLE IF NOT EXISTS auxdata_operation (
                     id smallserial NOT NULL,
-                    auxdata_descriptor_id smallint NOT NULL,
+                    auxdata_file_id smallint NOT NULL,
                     operation_order smallint NOT NULL,
                     name character varying NOT NULL,
                     output_type character varying,
                     handler_path character varying,
                     processor_id smallint NOT NULL,
+                    async boolean NOT NULL DEFAULT false,
                     parameters json,
                     CONSTRAINT auxdata_operation_pkey PRIMARY KEY (id),
-                    CONSTRAINT u_auxdata_operation UNIQUE (auxdata_descriptor_id, operation_order),
-                    CONSTRAINT fk_auxdata_descriptor FOREIGN KEY (auxdata_descriptor_id) REFERENCES auxdata_descriptor(id),
-                    CONSTRAINT fk_auxdata_operation_processor FOREIGN KEY (processor_id) REFERENCES processor(id)
+                    CONSTRAINT u_auxdata_operation UNIQUE (auxdata_file_id, operation_order),
+                    CONSTRAINT fk_auxdata_file FOREIGN KEY (auxdata_file_id)
+                        REFERENCES auxdata_file (id) MATCH SIMPLE
+                        ON UPDATE NO ACTION ON DELETE NO ACTION,
+                    CONSTRAINT fk_auxdata_operation_processor FOREIGN KEY (processor_id)
+                        REFERENCES processor (id) MATCH SIMPLE
+                        ON UPDATE NO ACTION ON DELETE NO ACTION    
                 );
             
-                CREATE TABLE IF NOT EXISTS auxdata_operation_file (
+                CREATE TABLE IF NOT EXISTS auxdata_file (
                     id smallserial NOT NULL,
-                    auxdata_operation_id smallint NOT NULL,
+                    auxdata_descriptor_id smallint NOT NULL,
                     file_order smallint NOT NULL,
                     name character varying,
                     label character varying NOT NULL,
                     extensions character varying[],
                     required boolean DEFAULT false,
-                    CONSTRAINT auxdata_operation_file_pkey PRIMARY KEY (id),
-                    CONSTRAINT u_auxdata_operation_file UNIQUE (auxdata_operation_id, file_order),
-                    CONSTRAINT fk_auxdata_file FOREIGN KEY (auxdata_operation_id) REFERENCES auxdata_operation(id)
+                    CONSTRAINT auxdata_file_pkey PRIMARY KEY (id),
+                    CONSTRAINT u_auxdata_descriptor_file UNIQUE (auxdata_descriptor_id, file_order),
+                    CONSTRAINT fk_auxdata_descriptor_file FOREIGN KEY (auxdata_descriptor_id)
+                        REFERENCES auxdata_descriptor (id) MATCH SIMPLE
+                        ON UPDATE NO ACTION ON DELETE NO ACTION    
                 );
             
                 CREATE TABLE IF NOT EXISTS site_auxdata (
@@ -81,14 +90,310 @@ begin
                     output character varying,
                     CONSTRAINT site_auxdata_pkey PRIMARY KEY (id),
                     CONSTRAINT u_site_auxdata UNIQUE (site_id, auxdata_descriptor_id, year, season_id, auxdata_file_id),
-                    CONSTRAINT fk_site_auxdata_activity_status FOREIGN KEY (status_id) REFERENCES activity_status(id),
-                    CONSTRAINT fk_site_auxdata_descriptor FOREIGN KEY (auxdata_descriptor_id) REFERENCES auxdata_descriptor(id),
-                    CONSTRAINT fk_site_auxdata_operation_file FOREIGN KEY (auxdata_file_id) REFERENCES auxdata_operation_file(id)
+                    CONSTRAINT fk_site_auxdata_descriptor FOREIGN KEY (auxdata_descriptor_id)
+                        REFERENCES auxdata_descriptor (id) MATCH SIMPLE
+                        ON UPDATE NO ACTION ON DELETE NO ACTION,
+                    CONSTRAINT fk_site_auxdata_file FOREIGN KEY (auxdata_file_id)
+                        REFERENCES auxdata_file (id) MATCH SIMPLE
+                        ON UPDATE NO ACTION ON DELETE NO ACTION,
+                    CONSTRAINT fk_site_auxdata_activity_Status FOREIGN KEY (status_id)
+                        REFERENCES activity_status (id) MATCH SIMPLE
+                        ON UPDATE NO ACTION ON DELETE NO ACTION    
                 );
 
                 -- Functions
+                DROP FUNCTION sp_pad_left_json_history_array(json, timestamp, varchar);
+                CREATE OR REPLACE FUNCTION sp_pad_left_json_history_array(
+                IN _history json,
+                IN _since timestamp with time zone,
+                IN _interval varchar
+                )
+                RETURNS json AS $$
+                DECLARE temp_array json[];
+                DECLARE temp_json json;
+                DECLARE previous_timestamp timestamp with time zone;
+                BEGIN
+
+                    -- Get the array of timestamp - value json pairs
+                    SELECT array_agg(history_array.value::json) INTO temp_array FROM (SELECT * FROM json_array_elements(_history)) AS history_array;
+
+                    -- If the array is not empty, get the oldes timestamp
+                    IF temp_array IS NULL OR array_length(temp_array,1) = 0 THEN
+                        previous_timestamp := now();
+                    ELSE
+                        previous_timestamp := timestamp with time zone 'epoch' + (temp_array[1]::json->>0)::bigint / 1000 * INTERVAL '1 second';
+                    END IF;
+
+                    -- Add values to the left of the array until the desired "since" timestamp is reached
+                    LOOP
+                        -- Compute the new previous timestamp
+                        previous_timestamp := previous_timestamp - _interval::interval;
+
+                        -- If using the new previous timestamp would take the array beyond the since, break
+                        IF previous_timestamp < _since THEN
+                            EXIT;
+                        END IF;
+
+                        temp_json := json_build_array(extract(epoch from previous_timestamp)::bigint * 1000, null);
+                        temp_array := array_prepend(temp_json, temp_array);
+                    END LOOP;
+
+                    temp_json := array_to_json(temp_array);
+
+                    RETURN temp_json;
+
+                END;
+                $$ LANGUAGE plpgsql;
+                
+                -- 
+                CREATE OR REPLACE FUNCTION sp_get_dashboard_server_resource_data()
+                    RETURNS json AS $$
+                    DECLARE current_node RECORD;
+                    DECLARE temp_json json;
+                    DECLARE temp_json2 json;
+                    DECLARE cpu_user_history_json json;
+                    DECLARE cpu_system_history_json json;
+                    DECLARE ram_history_json json;
+                    DECLARE swap_history_json json;
+                    DECLARE load_1min_history_json json;
+                    DECLARE load_5min_history_json json;
+                    DECLARE load_15min_history_json json;
+
+                    DECLARE since timestamp with time zone;
+                    BEGIN
+
+                        CREATE TEMP TABLE current_nodes (
+                            name character varying,
+                            cpu_user_now smallint,
+                            cpu_user_history json,
+                            cpu_system_now smallint,
+                            cpu_system_history json,
+                            ram_now real,
+                            ram_available real,
+                            ram_unit character varying,
+                            ram_history json,
+                            swap_now real,
+                            swap_available real,
+                            swap_unit character varying,
+                            swap_history json,
+                            disk_used real,
+                            disk_available real,
+                            disk_unit character varying,
+                            load_1min real,
+                            load_5min real,
+                            load_15min real,
+                            load_1min_history json,
+                            load_5min_history json,
+                            load_15min_history json
+                            ) ON COMMIT DROP;
+
+                        -- Get the list of nodes to return the resources for
+                        INSERT INTO current_nodes (name)
+                        SELECT DISTINCT	node_name
+                        FROM node_resource_log ORDER BY node_resource_log.node_name;
+
+                        -- Ensure that default values are set for some of the fields
+                        UPDATE current_nodes
+                        SET
+                            cpu_user_now = 0,
+                            cpu_system_now = 0,
+                            ram_now = 0,
+                            ram_available = 0,
+                            ram_unit = 'GB',
+                            swap_now = 0,
+                            swap_available = 0,
+                            swap_unit = 'GB',
+                            disk_used = 0,
+                            disk_available = 0,
+                            disk_unit = 'GB',
+                            load_1min = 0,
+                            load_5min = 0,
+                            load_15min = 0;
+
+                        -- Go through the nodes and compute their data
+                        FOR current_node IN SELECT * FROM current_nodes ORDER BY name LOOP
+
+                            -- First, get the NOW data
+                            UPDATE current_nodes
+                            SET
+                                cpu_user_now = coalesce(current_node_now.cpu_user,0) / 10,
+                                cpu_system_now = coalesce(current_node_now.cpu_system,0) / 10,
+                                ram_now = round(coalesce(current_node_now.mem_used_kb,0)::numeric / 1048576::numeric, 2),	-- Convert to GB
+                                ram_available = round(coalesce(current_node_now.mem_total_kb,0)::numeric / 1048576::numeric, 2),	-- Convert to GB
+                                ram_unit = 'GB',
+                                swap_now = round(coalesce(current_node_now.swap_used_kb,0)::numeric / 1048576::numeric, 2),	-- Convert to GB
+                                swap_available = round(coalesce(current_node_now.swap_total_kb,0)::numeric / 1048576::numeric, 2),	-- Convert to GB
+                                swap_unit = 'GB',
+                                disk_used = round(coalesce(current_node_now.disk_used_bytes,0)::numeric / 1073741824::numeric, 2),	-- Convert to GB
+                                disk_available = round(coalesce(current_node_now.disk_total_bytes,0)::numeric / 1073741824::numeric, 2),	-- Convert to GB
+                                disk_unit = 'GB',
+                                load_1min = coalesce(current_node_now.load_avg_1m,0) / 100,
+                                load_5min = coalesce(current_node_now.load_avg_5m,0) / 100,
+                                load_15min = coalesce(current_node_now.load_avg_15m,0) / 100
+                            FROM (SELECT * FROM node_resource_log WHERE node_resource_log.node_name = current_node.name
+                            AND timestamp >= now() - '1 minute'::interval
+                            ORDER BY timestamp DESC LIMIT 1) AS current_node_now
+                            WHERE current_nodes.name = current_node.name;
+
+                            -- The history will be shown since:
+                            since := now() - '15 minutes'::interval;
+
+                            -- Next, get the HISTORY data
+                            SELECT
+                                array_to_json(array_agg( json_build_array(extract(epoch from resource_history.timestamp)::bigint * 1000, resource_history.cpu_user / 10))),
+                                array_to_json(array_agg( json_build_array(extract(epoch from resource_history.timestamp)::bigint * 1000, resource_history.cpu_system / 10))),
+                                array_to_json(array_agg( json_build_array(extract(epoch from resource_history.timestamp)::bigint * 1000, round(resource_history.mem_used_kb::numeric / 1048576::numeric, 2)))),	-- Convert to GB
+                                array_to_json(array_agg( json_build_array(extract(epoch from resource_history.timestamp)::bigint * 1000, round(resource_history.swap_used_kb::numeric / 1048576::numeric, 2)))),	-- Convert to GB
+                                array_to_json(array_agg( json_build_array(extract(epoch from resource_history.timestamp)::bigint * 1000, resource_history.load_avg_1m / 100))),
+                                array_to_json(array_agg( json_build_array(extract(epoch from resource_history.timestamp)::bigint * 1000, resource_history.load_avg_5m / 100))),
+                                array_to_json(array_agg( json_build_array(extract(epoch from resource_history.timestamp)::bigint * 1000, resource_history.load_avg_15m / 100)))
+                            INTO
+                                cpu_user_history_json,
+                                cpu_system_history_json,
+                                ram_history_json,
+                                swap_history_json,
+                                load_1min_history_json,
+                                load_5min_history_json,
+                                load_15min_history_json
+                            FROM (
+                                SELECT
+                                timestamp,
+                                cpu_user,
+                                cpu_system,
+                                mem_used_kb,
+                                swap_used_kb,
+                                load_avg_1m,
+                                load_avg_5m,
+                                load_avg_15m
+                                FROM node_resource_log
+                                WHERE node_resource_log.node_name = current_node.name
+                                AND node_resource_log.timestamp >= since
+                                ORDER BY timestamp DESC) resource_history;
+
+                            -- Make sure that there are enough entries in the arrays so that the graph is shown as coming from right to left in the first 15 minutes
+                            cpu_user_history_json := sp_pad_left_json_history_array(cpu_user_history_json, since, '1 minute');
+                            cpu_system_history_json := sp_pad_left_json_history_array(cpu_system_history_json, since, '1 minute');
+                            ram_history_json := sp_pad_left_json_history_array(ram_history_json, since, '1 minute');
+                            swap_history_json := sp_pad_left_json_history_array(swap_history_json, since, '1 minute');
+                            load_1min_history_json := sp_pad_left_json_history_array(load_1min_history_json, since, '1 minute');
+                            load_5min_history_json := sp_pad_left_json_history_array(load_5min_history_json, since, '1 minute');
+                            load_15min_history_json := sp_pad_left_json_history_array(load_15min_history_json, since, '1 minute');
+
+                            -- Make sure that there are entries added in the arrays even if there isn't data up to now
+                            cpu_user_history_json := sp_pad_right_json_history_array(cpu_user_history_json, since, '1 minute');
+                            cpu_system_history_json := sp_pad_right_json_history_array(cpu_system_history_json, since, '1 minute');
+                            ram_history_json := sp_pad_right_json_history_array(ram_history_json, since, '1 minute');
+                            swap_history_json := sp_pad_right_json_history_array(swap_history_json, since, '1 minute');
+                            load_1min_history_json := sp_pad_right_json_history_array(load_1min_history_json, since, '1 minute');
+                            load_5min_history_json := sp_pad_right_json_history_array(load_5min_history_json, since, '1 minute');
+                            load_15min_history_json := sp_pad_right_json_history_array(load_15min_history_json, since, '1 minute');
+
+                            UPDATE current_nodes
+                            SET
+                                cpu_user_history = cpu_user_history_json,
+                                cpu_system_history = cpu_system_history_json,
+                                ram_history = ram_history_json,
+                                swap_history = swap_history_json,
+                                load_1min_history = load_1min_history_json,
+                                load_5min_history = load_5min_history_json,
+                                load_15min_history = load_15min_history_json
+                            WHERE current_nodes.name = current_node.name;
+
+                        END LOOP;
+
+                        SELECT array_to_json(array_agg(row_to_json(current_nodes_details, true))) INTO temp_json
+                        FROM (SELECT * FROM current_nodes) AS current_nodes_details;
+
+                        temp_json2 := json_build_object('server_resources', temp_json);
+
+                        RETURN temp_json2;
+
+
+                    END;
+                    $$ LANGUAGE plpgsql;
+
+                --
+                DROP FUNCTION sp_pad_right_json_history_array(json, timestamp, varchar);
+                CREATE OR REPLACE FUNCTION sp_pad_right_json_history_array(
+                IN _history json,
+                IN _since timestamp with time zone,
+                IN _interval varchar
+                )
+                RETURNS json AS $$
+                DECLARE temp_array json[];
+                DECLARE temp_json json;
+                DECLARE previous_timestamp timestamp with time zone;
+                DECLARE to_timestamp timestamp with time zone;
+                BEGIN
+
+                    -- Get the array of timestamp - value json pairs
+                    SELECT array_agg(history_array.value::json) INTO temp_array FROM (SELECT * FROM json_array_elements(_history)) AS history_array;
+
+                    -- The previous timestamp always starts from now
+                    previous_timestamp := now();
+
+                    -- If the array is not empty, get the newest timestamp; otherwise use _since as the oldest entry to go to
+                    IF temp_array IS NULL OR array_length(temp_array,1) = 0 THEN
+                        to_timestamp := _since;
+                    ELSE
+                        to_timestamp := timestamp with time zone 'epoch' + (temp_array[array_length(temp_array, 1)]::json->>0)::bigint / 1000 * INTERVAL '1 second';
+                    END IF;
+
+                    -- Add values to the right of the array until the desired "to" timestamp is reached
+                    LOOP
+                        -- Compute the new previous timestamp
+                        previous_timestamp := previous_timestamp - _interval::interval;
+
+                        -- If using the new previous timestamp would take the array beyond the to, or beyond the _since, break. This keeps the array from growing larger than needed.
+                        IF previous_timestamp < to_timestamp OR previous_timestamp < _since THEN
+                            EXIT;
+                        END IF;
+
+                        temp_json := json_build_array(extract(epoch from previous_timestamp)::bigint * 1000, null);
+                        temp_array := array_append(temp_array, temp_json);
+                    END LOOP;
+
+                    temp_json := array_to_json(temp_array);
+
+                    RETURN temp_json;
+
+                END;
+                $$ LANGUAGE plpgsql;
+                
+                
+                --
+                DROP FUNCTION sp_get_job_output(integer);
+                create or replace function sp_get_job_output(
+                    _job_id job.id%type
+                ) returns table (
+                    step_name step.name%type,
+                    command text,
+                    stdout_text step_resource_log.stdout_text%type,
+                    stderr_text step_resource_log.stderr_text%type,
+                    exit_code step.exit_code%type,
+                    execution_status step.status_id%type
+                ) as
+                $$
+                begin
+                    return query
+                        select step.name,
+                               array_to_string(array_prepend(config.value :: text, array(select json_array_elements_text(json_extract_path(step.parameters, 'arguments')))), ' ') as command,
+                               step_resource_log.stdout_text,
+                               step_resource_log.stderr_text,
+                               step.exit_code,
+                               step.status_id
+                        from task
+                        inner join step on step.task_id = task.id
+                        left outer join step_resource_log on step_resource_log.step_name = step.name and step_resource_log.task_id = task.id
+                        left outer join config on config.site_id is null and config.key = 'executor.module.path.' || task.module_short_name
+                        where task.job_id = _job_id
+                        order by step.submit_timestamp;
+                end;
+                $$
+                    language plpgsql stable;
+
                 DROP FUNCTION IF EXISTS insert_season_descriptors() CASCADE;
-                CREATE OR REPLACE FUNCTION insert_season_descriptors()
+                CREATE OR REPLACE FUNCTION public.insert_season_descriptors()
                     RETURNS trigger AS
                 $BODY$
                 BEGIN
@@ -100,13 +405,14 @@ begin
                 $BODY$
                 LANGUAGE plpgsql VOLATILE
                   COST 100;
-                ALTER FUNCTION insert_season_descriptors()
+                ALTER FUNCTION public.insert_season_descriptors()
                   OWNER TO admin;
 
                 CREATE TRIGGER tr_season_insert
-                    AFTER INSERT ON season
+                    AFTER INSERT
+                    ON public.season
                     FOR EACH ROW
-                    EXECUTE PROCEDURE insert_season_descriptors();
+                    EXECUTE FUNCTION public.insert_season_descriptors();
 
                 -- Trigger before delete
 
@@ -133,38 +439,40 @@ begin
 
 
                 DROP FUNCTION IF EXISTS sp_get_auxdata_descriptor_instances(smallint, smallint, integer);
-                CREATE OR REPLACE FUNCTION sp_get_auxdata_descriptor_instances(
-                    IN _site_id smallint, 
-                    IN _season_id smallint,
-                    IN _year integer)
-                  RETURNS TABLE(site_id smallint, auxdata_descriptor_id smallint, year integer, season_id smallint, auxdata_file_id smallint, file_name character varying, parameters json) AS
-                $BODY$
+                CREATE OR REPLACE FUNCTION public.sp_get_auxdata_descriptor_instances(
+                    _site_id smallint,
+                    _season_id smallint,
+                    _year integer)
+                    RETURNS TABLE(site_id smallint, auxdata_descriptor_id smallint, year integer, season_id smallint, auxdata_file_id smallint, file_name character varying, parameters json) 
+                    LANGUAGE 'plpgsql'
+                    COST 100
+                    STABLE PARALLEL UNSAFE
+                    ROWS 1000
+                AS $BODY$
 
                 BEGIN 
                     RETURN QUERY 
+
                     WITH last_ops AS (
-                        SELECT ao.auxdata_descriptor_id, MAX(ao.operation_order) AS operation_order 
-                            FROM auxdata_operation ao
-                            GROUP BY ao.auxdata_descriptor_id)
+                        SELECT f.id, COALESCE(MAX(o.operation_order), 0) AS operation_order 
+                            FROM auxdata_file f LEFT JOIN auxdata_operation o on o.auxdata_file_id = f.id
+                            GROUP BY f.id)
                     SELECT _site_id as site_id, d.id AS auxdata_descriptor_id, 
                         CASE WHEN d.unique_by = 'year' THEN _year ELSE null::integer END AS "year", 
-                        CASE WHEN d.unique_by = 'season' THEN null::smallint ELSE _season_id END AS season_id, 
+                        CASE WHEN d.unique_by = 'season' THEN _season_id ELSE null::smallint END AS season_id, 
                         f.id AS auxdata_file_id, null::character varying AS "file_name",
-                        (SELECT o2.parameters 
-                            FROM auxdata_operation o2 
-                                JOIN last_ops ON last_ops.auxdata_descriptor_id = o2.auxdata_descriptor_id AND last_ops.operation_order = o2.operation_order 
-                            WHERE o2.auxdata_descriptor_id = d.id) AS parameters
+                        o.parameters
                     FROM 	auxdata_descriptor d
-                        JOIN auxdata_operation o ON o.auxdata_descriptor_id = d.id
-                        JOIN auxdata_operation_file f ON f.auxdata_operation_id = o.id
+                        JOIN auxdata_file f ON f.auxdata_descriptor_id = d.id
+                        JOIN last_ops l ON l.id = f.id
+                        LEFT JOIN auxdata_operation o ON o.auxdata_file_id = f.id AND o.operation_order = l.operation_order
                     WHERE d.id NOT IN (SELECT s.auxdata_descriptor_id from site_auxdata s WHERE s.auxdata_descriptor_id = d.id AND s.site_id = _site_id AND ((d.unique_by = 'year' AND s.year = _year) OR (d.unique_by = 'season' AND s.season_id = _season_id)))
                     ORDER BY d.id, f.id;
                 END
-                $BODY$
-                  LANGUAGE plpgsql STABLE
-                  COST 100
-                  ROWS 1000;
-                ALTER FUNCTION sp_get_auxdata_descriptor_instances(smallint, smallint, integer)
+
+                $BODY$;
+
+                ALTER FUNCTION public.sp_get_auxdata_descriptor_instances(smallint, smallint, integer)
                   OWNER TO admin;
 
                 DROP FUNCTION IF EXISTS sp_get_season_scheduled_processors(_season_id smallint);
@@ -378,26 +686,26 @@ begin
                 
                 
                 -- Files descriptors
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 1, null, 'LPIS','{zip}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 1 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 2, null, 'LUT','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 1 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
                 
                 -- L4B 
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 1, null, 'L4B Cfg','{cfg}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 2 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
 
                 -- L4C config 
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 1, null, 'L4C Cfg','{cfg}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 3 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
 
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 4 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 5 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 6 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_operation_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
+                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
                             (SELECT id, 1, null, 'Practice file', '{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 7 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
 
             $str$;
@@ -1057,6 +1365,9 @@ begin
 
             -- FMask Upgrades
             _statement := $str$
+                INSERT INTO config_category VALUES (27, 'Validity Flags', 17, true) on conflict DO nothing;
+                INSERT INTO config_category VALUES (31, 'FMask', 18, true) on conflict DO nothing;
+
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'sen4x/fmask_extractor:0.1', '2021-03-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4x/fmask_extractor:0.1';
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.image', NULL, 'sen4x/fmask:4.2', '2021-03-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4x/fmask:4.2';
@@ -1075,7 +1386,24 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold.s2', NULL, '20', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.working-dir', NULL, '/mnt/archive/fmask_tmp/', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
                 
-                INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 2) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 31, FALSE, 'Controls whether to run Fmask on optical products', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.extractor_image', 'FMask extractor docker image name', 'string', false, 31, FALSE, 'FMask extractor docker image name', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.gdal_image', 'gdal docker image for FMask', 'string', false, 31, FALSE, 'gdal docker image for FMask', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.image', 'FMask docker image', 'string', false, 31, FALSE, 'FMask docker image', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.cog-tiffs', 'Output rasters as COG', 'bool', false, 31, FALSE, 'Output rasters as COG', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.compress-tiffs', 'Compress output rasters', 'bool', false, 31, FALSE, 'Compress output rasters', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.cloud-shadow', 'Cloud shaddow dilation percent', 'int', false, 31, FALSE, 'Cloud shaddow dilation percent', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.cloud', 'Cloud dilation percent', 'int', false, 31, FALSE, 'Cloud dilation percent', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.snow', 'Snow dilation percent', 'int', false, 31, FALSE, 'Snow dilation percent', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.max-retries', 'Maximum number of retries for a product', 'int', false, 31, FALSE, 'Maximum number of retries for a product', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.num-workers', 'Number of workers', 'int', false, 31, FALSE, 'Number of workers', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.output-path', 'Output path', 'string', false, 31, FALSE, 'Output path', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.retry-interval', 'Retry interval', 'int', false, 31, FALSE, 'Retry interval', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.l8', 'Threshold for L8', 'int', false, 31, FALSE, 'Threshold for L8', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.s2', 'Threshold for S2', 'int', false, 31, FALSE, 'Threshold for S2', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold', 'Global threshold', 'int', false, 31, FALSE, 'Global threshold', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'bool', false, 31, FALSE, 'Working directory', NULL) on conflict DO nothing;
+                
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -1694,26 +2022,26 @@ begin
                 DELETE FROM config WHERE key = 'processor.s4c_l4b.gen_input_shp_path';
             
             
-                INSERT INTO config_metadata VALUES ('processor.l2a.s2.implementation', 'L2A processor to use for Sentinel-2 products (`maja` or `sen2cor`)', 'string', false, 2, false, null, '{ "allowed_values": [{ "value": "maja", "display": "MAJA" }, { "value": "sen2cor", "display": "Sen2Cor" }] }') ON conflict(key) DO UPDATE SET values = '{ "allowed_values": [{ "value": "maja", "display": "MAJA" }, { "value": "sen2cor", "display": "Sen2Cor" }] }';
+                INSERT INTO config_metadata VALUES ('processor.l2a.s2.implementation', 'L2A processor to use for Sentinel-2 products (`maja` or `sen2cor`)', 'string', false, 2, false, 'L2A processor to use for Sentinel-2 products (`maja` or `sen2cor`)', '{ "allowed_values": [{ "value": "maja", "display": "MAJA" }, { "value": "sen2cor", "display": "Sen2Cor" }] }') ON conflict(key) DO UPDATE SET label = 'L2A processor to use for Sentinel-2 products (`maja` or `sen2cor`)', values = '{ "allowed_values": [{ "value": "maja", "display": "MAJA" }, { "value": "sen2cor", "display": "Sen2Cor" }] }';
                 
                 -- L4A config_metadata updates for 3.0
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.best-s2-pix', 'Minimum number of S2 pixels for parcels to use in training', 'int', TRUE, 5, TRUE, 'Minimum number of S2 pixels for parcels to use in training', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 100 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-node-size', 'Minimum node size', 'int', TRUE, 5, TRUE, 'Minimum node size', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 100 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-s1-pix', 'Minimum number of S1 pixels', 'int', TRUE, 5, TRUE, 'Minimum number of S1 pixels', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 100 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-s2-pix', 'Minimum number of S2 pixels', 'int', TRUE, 5, TRUE, 'Minimum number of S2 pixels', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 100 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.num-trees', 'Number of RF trees', 'int', TRUE, 5, TRUE, 'Number of RF trees', '{ "bounds": { "min": 0, "max": 1000 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 1000 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-min', 'Minimum parcels to assess a crop type', 'int', TRUE, 5, TRUE, 'Minimum parcels to assess a crop type', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 100 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-train-h', 'Upper threshold for parcel counts by crop type', 'int', TRUE, 5, TRUE, 'Upper threshold for parcel counts by crop type', '{ "bounds": { "min": 0, "max": 5000 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 5000 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-train-l', 'Lower threshold for parcel counts by crop type', 'int', TRUE, 5, TRUE, 'Lower threshold for parcel counts by crop type', '{ "bounds": { "min": 0, "max": 5000 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 5000 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.smote-k', 'Number of SMOTE neighbours', 'int', TRUE, 5, TRUE, 'Number of SMOTE neighbours', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 100 } }';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.smote-target', 'Target sample count for SMOTE', 'int', TRUE, 5, TRUE, 'Target sample count for SMOTE', '{ "bounds": { "min": 0, "max": 5000 } }')  ON conflict(key) DO UPDATE SET values = '{ "bounds": { "min": 0, "max": 5000 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.best-s2-pix', 'Minimum number of S2 pixels for parcels to use in training', 'int', TRUE, 5, TRUE, 'Minimum number of S2 pixels for parcels to use in training', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 100 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-node-size', 'Minimum node size', 'int', TRUE, 5, TRUE, 'Minimum node size', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 100 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-s1-pix', 'Minimum number of S1 pixels', 'int', TRUE, 5, TRUE, 'Minimum number of S1 pixels', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 100 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-s2-pix', 'Minimum number of S2 pixels', 'int', TRUE, 5, TRUE, 'Minimum number of S2 pixels', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 100 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.num-trees', 'Number of RF trees', 'int', TRUE, 5, TRUE, 'Number of RF trees', '{ "bounds": { "min": 0, "max": 1000 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 1000 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-min', 'Minimum parcels to assess a crop type', 'int', TRUE, 5, TRUE, 'Minimum parcels to assess a crop type', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 100 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-train-h', 'Upper threshold for parcel counts by crop type', 'int', TRUE, 5, TRUE, 'Upper threshold for parcel counts by crop type', '{ "bounds": { "min": 0, "max": 5000 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 5000 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-train-l', 'Lower threshold for parcel counts by crop type', 'int', TRUE, 5, TRUE, 'Lower threshold for parcel counts by crop type', '{ "bounds": { "min": 0, "max": 5000 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 5000 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.smote-k', 'Number of SMOTE neighbours', 'int', TRUE, 5, TRUE, 'Number of SMOTE neighbours', '{ "bounds": { "min": 0, "max": 100 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 100 } }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.smote-target', 'Target sample count for SMOTE', 'int', TRUE, 5, TRUE, 'Target sample count for SMOTE', '{ "bounds": { "min": 0, "max": 5000 } }')  ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "bounds": { "min": 0, "max": 5000 } }';
                 
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.mode', 'Mode', 'string', FALSE, 5, TRUE, 'Mode (both, s1-only, s2-only)', '{ "allowed_values": [{ "value": "s1-only", "display": "S1 Only" }, { "value": "s2-only", "display": "S2 only" }, { "value": "both", "display": "Both" }] }') ON conflict(key) DO UPDATE SET values = '{ "allowed_values": [{ "value": "s1-only", "display": "S1 Only" }, { "value": "s2-only", "display": "S2 only" }, { "value": "both", "display": "Both" }] }';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.mode', 'Mode', 'string', FALSE, 5, TRUE, 'Mode (both, s1-only, s2-only)', '{ "allowed_values": [{ "value": "s1-only", "display": "S1 Only" }, { "value": "s2-only", "display": "S2 only" }, { "value": "both", "display": "Both" }] }') ON conflict(key) DO UPDATE SET config_category_id = 22, values = '{ "allowed_values": [{ "value": "s1-only", "display": "S1 Only" }, { "value": "s2-only", "display": "S2 only" }, { "value": "both", "display": "Both" }] }';
 
                 -- cleanup for existing invalid values
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.lc', 'LC classes to assess', 'string', TRUE, 5, TRUE, 'LC classes to assess', null) ON conflict(key) DO UPDATE SET values = null;
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.sample-ratio-h', 'Training ratio for common crop types', 'float', TRUE, 5, TRUE, 'Training ratio for common crop types', null)  ON conflict(key) DO UPDATE SET values = null;
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.sample-ratio-l', 'Training ratio for uncommon crop types', 'float', TRUE, 5, TRUE, 'Training ratio for uncommon crop types', null)  ON conflict(key) DO UPDATE SET values = null;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.lc', 'LC classes to assess', 'string', TRUE, 5, TRUE, 'LC classes to assess', null) ON conflict(key) DO UPDATE SET config_category_id = 22, values = null;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.sample-ratio-h', 'Training ratio for common crop types', 'float', TRUE, 5, TRUE, 'Training ratio for common crop types', null)  ON conflict(key) DO UPDATE SET config_category_id = 22, values = null;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4a.sample-ratio-l', 'Training ratio for uncommon crop types', 'float', TRUE, 5, TRUE, 'Training ratio for uncommon crop types', null)  ON conflict(key) DO UPDATE SET config_category_id = 22, values = null;
 
                 
             $str$;
@@ -1754,10 +2082,168 @@ begin
 
             _statement := $str$
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l2a_msk', NULL, '/mnt/archive/orchestrator_temp/l2a_msk/{job_id}/{task_id}-{module}', '2021-05-18 17:54:17.288095+03') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.parcels_product.parcel_id_col_name', NULL, 'NewID', '2019-10-11 16:15:00.0+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.parcels_product.parcels_csv_file_name_pattern', NULL, 'decl_.*_\d{4}.csv', '2019-10-11 16:15:00.0+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.parcels_product.parcels_optical_file_name_pattern', NULL, '.*_buf_5m.shp', '2019-10-11 16:15:00.0+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.parcels_product.parcels_sar_file_name_pattern', NULL, '.*_buf_10m.shp', '2019-10-11 16:15:00.0+02') on conflict DO nothing;
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.filter.produce_ndwi', NULL, '0', '2017-10-24 14:56:57.501918+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l3b.filter.produce_brightness', NULL, '0', '2017-10-24 14:56:57.501918+02') on conflict DO nothing;
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.mdb3-input-tables-extract.docker_image', NULL, 'sen4cap/data-preparation:0.1', '2021-02-19 14:43:00.720811+00') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.mdb3-input-tables-extract.use_docker', NULL, '1', '2021-01-18 14:43:00.720811+00') on conflict DO nothing;
+
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.mdb3-input-tables-extract', NULL, 's4c_mdb3_input_tables.py', '2021-01-15 22:39:08.407059+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.mdb3-extract-markers', NULL, 'extract_mdb3_markers.py', '2021-01-15 22:39:08.407059+02') on conflict DO nothing;
+
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.mdb3_enabled', NULL, 'false', '2021-10-01 17:31:06.01191+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.mdb3_input_tables', NULL, '/mnt/archive/marker_database_files/mdb1/{site}/{year}/input_tables.csv', '2021-05-16 17:31:06.01191+02') on conflict DO nothing;
+
+                -- delete keys needed for the 
+                DELETE from config WHERE key = 'executor.module.path.extract-l4c-markers';
+                DELETE from config WHERE key = 'general.orchestrator.mdb-csv-to-ipc-export.use_docker';
+                DELETE from config WHERE key = 'executor.module.path.extract-l4c-markers';
+                DELETE from config WHERE key = 'general.orchestrator.extract-l4c-markers.use_docker';
+                
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
+            _statement := $str$
+                INSERT INTO config_metadata VALUES ('downloader.l8.query.days.back', 'Number of back days for L8 download', 'int', false, 15, FALSE, 'Number of back days for L8 download', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('downloader.s1.query.days.back', 'Number of back days for S1 download', 'int', false, 15, FALSE, 'Number of back days for S1 download', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('downloader.s2.query.days.back', 'Number of back days for S2 download', 'int', false, 15, FALSE, 'Number of back days for S2 download', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('downloader.L8.query.days.back', 'Number of back days for L8 download', 'int', false, 15, FALSE, 'Number of back days for L8 download', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('downloader.S1.query.days.back', 'Number of back days for S1 download', 'int', false, 15, FALSE, 'Number of back days for S1 download', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('downloader.S2.query.days.back', 'Number of back days for S2 download', 'int', false, 15, FALSE, 'Number of back days for S2 download', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('executor.module.path.export-product-launcher', 'Script for exporting L4A/L4C products to shapefiles', 'file', true, 8, FALSE, 'Script for exporting L4A/L4C products to shapefiles', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.l4b_cfg_import', 'Script for importing S4C L4B config file', 'file', true, 8, FALSE, 'Script for importing S4C L4B config file', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.l4c_cfg_import', 'Script for importing S4C L4C config file', 'file', true, 8, FALSE, 'Script for importing S4C L4C config file', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.l4c_practices_export', 'Script for exported S4C L4C files', 'file', true, 8, FALSE, 'Script for exported S4C L4C files', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.l4c_practices_import', 'Script for importing S4C L4C practices file', 'file', true, 8, FALSE, 'Script for importing S4C L4C practices file', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.lpis_import', 'Script for importing S4C LPIS/GSAA file(s)', 'file', true, 8, FALSE, 'Script for importing S4C LPIS/GSAA file(s)', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.mdb3-extract-markers', 'Script for importing MDB3 markers from a TSA result', 'file', true, 8, FALSE, 'Script for importing MDB3 markers from a TSA result', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.mdb3-input-tables-extract', 'Script for preparing MDB3 input tables', 'file', true, 8, FALSE, 'Script for preparing MDB3 input tables', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.ogr2ogr', 'ogr2ogr file path', 'file', true, 8, FALSE, 'ogr2ogr file path', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.s4c-grassland-extract-products', 'Script for extracting S4C L4B input products', 'file', true, 8, FALSE, 'Script for extracting S4C L4B input products', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.s4c-grassland-gen-input-shp', 'Script for generating S4C L4B input shapefile', 'file', true, 8, FALSE, 'Script for generating S4C L4B input shapefile', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.s4c-l4a-extract-parcels', 'Script for extracting S4C L4A input parcels', 'file', true, 8, FALSE, 'Script for extracting S4C L4A input parcels', NULL) on conflict DO nothing;
+
+                INSERT INTO config_metadata VALUES ('scheduled.reports.enabled', 'Reports scheduler enabled', 'bool', false, 15, FALSE, 'Reports scheduler enabled', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('scheduled.reports.interval', 'Interval for reports update scheduling', 'int', false, 15, FALSE, 'Interval for reports update scheduling', NULL) on conflict DO nothing;
+                
+                
+                INSERT INTO config_metadata VALUES ('processor.l2s1.compute.amplitude', 'Compute amplitude', 'bool', false, 23, FALSE, 'Compute amplitude', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.compute.coherence', 'Compute coherence', 'bool', false, 23, FALSE, 'Compute coherence', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.gpt.parallelism', 'GPT parallelism', 'int', false, 23, FALSE, 'GPT parallelism', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.gpt.tile.cache.size', 'GPT tile cache size', 'int', false, 23, FALSE, 'GPT tile cache size', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.join.amplitude.steps', 'Join amplitude steps', 'bool', false, 23, FALSE, 'Join amplitude steps', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.join.coherence.steps', 'Join coherence steps', 'bool', false, 23, FALSE, 'Join coherence steps', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_ndwi', 'L3B processor will produce NDWI', 'int', false, 4, FALSE, 'Produce NDVI', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_brightness', 'L3B processor will produce brightness', 'int', false, 4, FALSE, 'Produce brightness', NULL) on conflict DO nothing;
+                
+                DELETE from config_metadata where key = 'processor.s4c_mdb1.input_ndvi';
+                DELETE from config_metadata where key = 'processor.s4c_l4b.input_ndvi';
+                DELETE from config_metadata where key = 'processor.s4c_l4c.input_ndvi';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
+
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.cfg_dir', 'Config files directory', 'string', FALSE, 19, FALSE, 'Config files directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.cfg_upload_dir', 'Site upload files directory', 'string', FALSE, 19, FALSE, 'Site upload files directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_product_types', 'Input product types', 'string', FALSE, 19, FALSE, 'Input product types', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s1_py_script', 'Script for S1 detection', 'string', FALSE, 19, FALSE, 'Script for S1 detection', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s2_py_script', 'Script for S2 detection', 'string', FALSE, 19, FALSE, 'Script for S1 detection', NULL) on conflict DO nothing;
+
+                -- TODO: See if these 2 are used, if not, they should be removed
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.sub_steps', 'Substeps', 'string', FALSE, 19, FALSE, 'Substeps', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.working_dir', 'Working directory', 'string', FALSE, 19, FALSE, 'Working directory', NULL) on conflict DO nothing;
+
+
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_dir', 'Config files directory', 'string', FALSE, 20, FALSE, 'Config files directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_upload_dir', 'Site upload files directory', 'string', FALSE, 20, FALSE, 'Site upload files directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.country', 'Site country', 'string', FALSE, 20, FALSE, 'Site country', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.data_extr_dir', 'Data extraction directory', 'string', FALSE, 20, FALSE, 'Data extraction directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.execution_operation', 'Execution operation', 'string', FALSE, 20, FALSE, 'Execution operation', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.filter_ids_path', 'Filtering parcels ids file', 'string', FALSE, 20, FALSE, 'Filtering parcels ids file', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.nrt_data_extr_enabled', 'NRT data extration enabled', 'int', FALSE, 20, FALSE, 'NRT data extration enabled', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.practices', 'Configured practices list', 'string', FALSE, 20, FALSE, 'Configured practices list', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.sub_steps', 'Substeps', 'string', FALSE, 20, FALSE, 'Substeps', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable tillage monitoring', 'int', FALSE, 20, FALSE, 'Enable tillage monitoring', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tsa_min_acqs_no', 'TSA min number of acquisitions', 'int', FALSE, 20, FALSE, 'TSA min number of acquisitions', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_dir', 'TSA input tables directory', 'string', FALSE, 20, FALSE, 'TSA input tables directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_upload_root_dir', 'Input tables upload root directory', 'string', FALSE, 20, FALSE, 'Input tables upload root directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.use_prev_prd', 'Use previous TSA', 'int', FALSE, 20, FALSE, 'Use previous TSA', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.keep_job_folders', 'Keep MDB1 temporary product files for the orchestrator jobs', 'string', true, 8, FALSE, 'Keep MDB1 temporary product files for the orchestrator jobs', NULL)  on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('general.orchestrator.use_docker', 'Orchestrator use docker when invoking processors', 'int', false, 1, FALSE, 'Use docker when invoking processors', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.docker_image', 'Processors docker image', 'string', false, 1, FALSE, 'Processors docker image', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.docker_add_mounts', 'Additional docker mounts for processors', 'string', false, 1, FALSE, 'Additional docker mounts for processors', NULL) on conflict DO nothing;
+                -- TODO: The next ones should be moved in the sections corresponding to processors
+                INSERT INTO config_metadata VALUES ('general.orchestrator.export-product-launcher.use_docker', 'Export product use docker', 'int', false, 1, FALSE, 'Export product use docker', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.mdb3-input-tables-extract.docker_image', 'MDB3 input tables extraction docker image', 'string', false, 1, FALSE, 'MDB3 input tables extraction docker image', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.mdb3-input-tables-extract.use_docker', 'MDB3 input tables extraction use docker', 'int', false, 1, FALSE, 'MDB3 input tables extraction use docker', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.s4c-grassland-extract-products.use_docker', 'S4C L4B products extraction use docker', 'int', false, 1, FALSE, 'S4C L4B products extraction use docker', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.s4c-grassland-gen-input-shp.use_docker', 'S4C L4B inputs shp extraction use docker', 'int', false, 1, FALSE, 'S4C L4B inputs shp extraction use docker', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.s4c-grassland-mowing.docker_image', 'S4C L4B docker image', 'string', false, 1, FALSE, 'S4C L4B docker image', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.s4c-grassland-mowing.use_docker', 'S4C L4B use docker', 'int', false, 1, FALSE, 'S4C L4B use docker', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.s4c-l4a-extract-parcels.use_docker', 'S4C L4A extract parcels use docker', 'int', false, 1, FALSE, 'S4C L4A extract parcels use docker', NULL) on conflict DO nothing;
+
+                INSERT INTO config_metadata VALUES ('general.scratch-path.l2a_msk', 'Path for Masked L2A temporary files', 'string', false, 27, FALSE, 'Path for Masked L2A temporary files', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('gdal.apps.path', 'Gdal applications path', 'string', false, 1, FALSE, 'Gdal applications path', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('gdal.installer', 'Gdal installer', 'string', false, 1, FALSE, 'Gdal installer', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.parcels_product.parcels_csv_file_name_pattern', 'Parcels product csv file name pattern', 'string', false, 1, FALSE, 'Parcels product csv file name pattern', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.parcels_product.parcels_optical_file_name_pattern', 'Parcels product optical file name pattern', 'string', false, 1, FALSE, 'Parcels product optical file name pattern', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.parcels_product.parcels_sar_file_name_pattern', 'Parcels product SAR file name pattern', 'string', false, 1, FALSE, 'Parcels product SAR file name pattern', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.parcels_product.parcel_id_col_name', 'Parcels parcels id columns name', 'string', false, 1, FALSE, 'Parcels parcels id columns name', NULL) on conflict DO nothing;
+
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_enabled', 'MDB3 markers extraction enabled', 'bool', true, 26, FALSE, 'MDB3 markers extraction enabled', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'bool', true, 26, FALSE, 'MDB3 input tables location', NULL) on conflict DO nothing;
+
+                INSERT INTO config_metadata VALUES ('processor.lpis.path', 'The path to the pre-processed LPIS products', 'string', false, 21, FALSE, 'The path to the pre-processed LPIS products', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.lpis.lut_upload_path', 'Site LUT upload path', 'string', false, 21, FALSE, 'Site LUT upload path', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.lpis.upload_path', 'Site LPIS upload path', 'string', false, 21, FALSE, 'Site LPIS upload path', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('disk.monitor.interval', 'Disk Monitor interval', 'int', false, 13, FALSE, 'Disk Monitor interval', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('downloader.query.timeout', 'Download query timeout', 'int', false, 15, FALSE, 'Download query timeout', NULL)
+                
+                
+                INSERT INTO config_metadata VALUES ('dem.name', 'DEM name', 'string', false, 23, FALSE, 'DEM name', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('primary.sensor', 'Primary sensor', 'string', false, 23, FALSE, 'Primary sensor', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.acquisition.delay', 'Acquisition delay', 'int', false, 23, FALSE, 'Acquisition delay', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.copy.locally', 'Copy input products locally', 'bool', false, 23, FALSE, 'Copy input products locally', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.crop.nodata', 'Crop NODATA', 'bool', false, 23, FALSE, 'Crop NODATA', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.crop.output', 'Crop output', 'bool', false, 23, FALSE, 'Crop output', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.extract.histogram', 'Extract histogram', 'bool', false, 23, FALSE, 'Extract histogram', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.interval', 'Interval', 'int', false, 23, FALSE, 'Interval', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.keep.intermediate', 'Keep intermediate files', 'bool', false, 23, FALSE, 'Keep intermediate files', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.master', 'S1 master name', 'string', false, 23, FALSE, 'S1 master name', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.min.intersection', 'Minimum intersection', 'float', false, 23, FALSE, 'Minimum intersection', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.output.extension', 'Output extension', 'string', false, 23, FALSE, 'Output extension', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.output.format', 'Output format', 'string', false, 23, FALSE, 'Output format', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.overwrite.existing', 'Overwrite existing products', 'bool', false, 23, FALSE, 'Overwrite existing products', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.parallel.steps.enabled', 'Parallel steps enabled', 'bool', false, 23, FALSE, 'Parallel steps enabled', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.pixel.spacing', 'Pixel spacing', 'float', false, 23, FALSE, 'Pixel spacing', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.polarisations', 'Polarisations', 'string', false, 23, FALSE, 'Polarisations', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.process.newest', 'Process newest first', 'bool', false, 23, FALSE, 'Process newest first', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.projection', 'Projection', 'string', false, 23, FALSE, 'Projection', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.resolve.links', 'Resolve links', 'bool', false, 23, FALSE, 'Resolve links', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.step.timeout', 'Step timeout', 'int', false, 23, FALSE, 'Step timeout', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.temporal.filter.interval', 'Temporal filter interval', 'int', false, 23, FALSE, 'Temporal filter interval', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.version', 'Processor version', 'string', false, 23, FALSE, 'Processor version', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.min.memory', 'Minimum memory to run step', 'string', false, 23, FALSE, 'Minimum memory to run step', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.min.disk', 'Minimum disk to run step', 'string', false, 23, FALSE, 'Minimum disk to run step', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('downloader.skip.existing', 'If enabled, products downloaded for another site will be duplicated, in database only, for the current site', 'bool', false, 15, FALSE, 'Use products already downloaded on another site', NULL) on conflict DO nothing;
+                        
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
 
            _statement := 'update meta set version = ''3.0'';';
             raise notice '%', _statement;
