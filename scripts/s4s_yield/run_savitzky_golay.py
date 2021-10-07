@@ -271,10 +271,10 @@ def build_lai_metrics_output_record(savgol, indices, orig_lai_max_val) :
     IndEmerg = indices[2]
     IndEndLai = indices[3]
     
-    MeanLaiSGWinter = np.mean(indices[0:IndEmerg+1 ])
-    SumLaiSGInt0 = np.sum(indices[IndEmerg  :IndHalfLai+1])
-    SumLaiSGInt1 = np.sum(indices[IndHalfLai:IndMaxLai +1] )
-    SumLaiSGInt2 = np.sum(indices[IndMaxLai :IndEndLai +1] )
+    MeanLaiSGWinter = np.mean(savgol[0:IndEmerg+1 ])
+    SumLaiSGInt0 = np.sum(savgol[IndEmerg  :IndHalfLai+1])
+    SumLaiSGInt1 = np.sum(savgol[IndHalfLai:IndMaxLai +1] )
+    SumLaiSGInt2 = np.sum(savgol[IndMaxLai :IndEndLai +1] )
     Laimax  = orig_lai_max_val
     LaiSGmax  = np.max(savgol)
     LaiSGdaymax  = np.argmax(savgol)
