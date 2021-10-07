@@ -49,16 +49,17 @@ protected:
     QString GetOutputProductName(EventProcessingContext &ctx, const TaskFinishedEvent &event);
     QString GetProductFormatterQuicklook(EventProcessingContext &ctx, const TaskFinishedEvent &prdFrmtTaskEndEvt);
     QString GetProductFormatterFootprint(EventProcessingContext &ctx, const TaskFinishedEvent &prdFrmtTaskEndEvt);
+    Season GetSeason(ExecutionContextBase &ctx, int siteId, const QDateTime &executionDate);
     bool GetSeasonStartEndDates(const SeasonList &seasons,
                                    QDateTime &startTime, QDateTime &endTime,
                                    const QDateTime &executionDate,
                                    const ConfigurationParameterValueMap &requestOverrideCfgValues);
 
-    bool GetSeasonStartEndDates(SchedulingContext &ctx, int siteId,
+    bool GetSeasonStartEndDates(ExecutionContextBase &ctx, int siteId,
                                    QDateTime &startTime, QDateTime &endTime,
                                    const QDateTime &executionDate,
                                    const ConfigurationParameterValueMap &requestOverrideCfgValues);
-    bool GetBestSeasonToMatchDate(SchedulingContext &ctx, int siteId,
+    bool GetBestSeasonToMatchDate(ExecutionContextBase &ctx, int siteId,
                                   QDateTime &startTime, QDateTime &endTime,
                                   const QDateTime &executionDate, const ConfigurationParameterValueMap &requestOverrideCfgValues);
     QString GetProductFormatterTile(const QString &tile);

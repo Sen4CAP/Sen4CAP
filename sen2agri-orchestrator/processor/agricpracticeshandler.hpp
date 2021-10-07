@@ -118,8 +118,9 @@ private:
     void WriteExecutionInfosFile(const QString &executionInfosPath,
                                  const QStringList &listProducts);
     QStringList GetExportProductLauncherArgs(const AgricPracticesJobPayload &jobCfg, const QString &productFormatterPrdFileIdFile);
-    QString CreateStepsForExportL4CMarkers(const AgricPracticesJobPayload &jobCfg, NewStepList &steps, QList<TaskToSubmit> &allTasksList,
-                                               int &curTaskIdx, const QString &productFormatterPrdFileIdFile);
+    // TO BE REMOVED - M1 - M5 are now extracted by MDB1 independtly
+//    QString CreateStepsForExportL4CMarkers(const AgricPracticesJobPayload &jobCfg, NewStepList &steps, QList<TaskToSubmit> &allTasksList,
+//                                               int &curTaskIdx, const QString &productFormatterPrdFileIdFile);
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const AgricPracticesJobPayload &jobCfg,
                                         const QStringList &listFiles);
 

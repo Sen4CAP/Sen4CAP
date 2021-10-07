@@ -186,6 +186,8 @@ QStringList StepExecutionDecorator::GetDockerMounts(const QString &procName, con
     mounts.append(",");
     mounts.append("/mnt/archive/:/mnt/archive/");
     mounts.append(",");
+    mounts.append("/etc/sen2agri/:/etc/sen2agri/");
+    mounts.append(",");
     mounts.append(m_archiverPath + ":" + m_archiverPath);
     mounts.append(",");
     mounts.append(QFileInfo(m_archiverPath).canonicalFilePath() + ":" + QFileInfo(m_archiverPath).canonicalFilePath());

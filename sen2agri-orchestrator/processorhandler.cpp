@@ -296,6 +296,17 @@ bool IsInSeason(const QDate &startSeasonDate, const QDate &endSeasonDate, const 
     return false;
 }
 
+Season ProcessorHandler::GetSeason(ExecutionContextBase &ctx, int siteId, const QDateTime &executionDate) {
+    const SeasonList &seasons = ctx.GetSiteSeasons(siteId);
+    const QDate &date = executionDate.date();
+    for (const Season &season: seasons) {
+        if (date >= season.startDate && date < season.endDate.addDays(1)) {
+            return season;
+        }
+    }
+    return Season();
+}
+
 bool ProcessorHandler::GetSeasonStartEndDates(const SeasonList &seasons, QDateTime &startTime, QDateTime &endTime,
                                               const QDateTime &executionDate,
                                               const ConfigurationParameterValueMap &requestOverrideCfgValues) {
@@ -325,14 +336,14 @@ bool ProcessorHandler::GetSeasonStartEndDates(const SeasonList &seasons, QDateTi
     return false;
 }
 
-bool ProcessorHandler::GetSeasonStartEndDates(SchedulingContext &ctx, int siteId,
+bool ProcessorHandler::GetSeasonStartEndDates(ExecutionContextBase &ctx, int siteId,
                                               QDateTime &startTime, QDateTime &endTime,
                                               const QDateTime &executionDate,
                                               const ConfigurationParameterValueMap &requestOverrideCfgValues) {
     return GetSeasonStartEndDates(ctx.GetSiteSeasons(siteId), startTime, endTime, executionDate, requestOverrideCfgValues);
 }
 
-bool ProcessorHandler::GetBestSeasonToMatchDate(SchedulingContext &ctx, int siteId,
+bool ProcessorHandler::GetBestSeasonToMatchDate(ExecutionContextBase &ctx, int siteId,
                                               QDateTime &startTime, QDateTime &endTime,
                                               const QDateTime &executionDate,
                                               const ConfigurationParameterValueMap &requestOverrideCfgValues) {

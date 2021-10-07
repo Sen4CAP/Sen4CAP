@@ -16,6 +16,7 @@ typedef struct MDB1JobPayload {
         int jobVal;
         isScheduledJob = ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1);
         ampvvvhEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "amp_vvvh_enabled", MDB1_CFG_PREFIX);
+        mdb3M1M5Enabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "mdb3_enabled", MDB1_CFG_PREFIX);
     }
     EventProcessingContext *pCtx;
     JobSubmittedEvent event;
@@ -26,6 +27,7 @@ typedef struct MDB1JobPayload {
     QDateTime minDate;
     QDateTime maxDate;
     bool ampvvvhEnabled;
+    bool mdb3M1M5Enabled;       // L4C M1-M5 markers extraction
 } MDB1JobPayload;
 
 class S4CMarkersDB1Handler : public ProcessorHandler
@@ -56,15 +58,15 @@ private:
                                   NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
     QString CreateStepsForAmpVVVHExtraction(const QString &mergedFile,
                                   NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
+    QString PrepareIpcExport(const MDB1JobPayload &jobCfg, TaskToSubmit &exportTask, const QString &prdType);
     QString CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const QString &inputFile,
                                     NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx, const QString &prdType);
     ProductList GetLpisProduct(ExecutionContextBase *pCtx, int siteId);
 
     QString GetShortNameForProductType(const ProductType &prdType);
     QString GetDataExtractionDir(const MDB1JobPayload &jobCfg, int year, const QString &markerName);
-
-    bool CheckExecutionPreconditions(ExecutionContextBase *pCtx, const std::map<QString, QString> &configParameters, int siteId,
-                                        const QString &siteShortName, QString &errMsg);
+    QString CreateMdb3Steps(const MDB1JobPayload &jobCfg, const Season &season, const QString &mergedFile,
+                                NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx);
     QStringList GetFilesMergeArgs(const QStringList &listInputPaths, const QString &outFileName);
 };
 

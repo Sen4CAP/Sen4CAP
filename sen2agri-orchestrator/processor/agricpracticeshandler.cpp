@@ -75,11 +75,12 @@ void AgricPracticesHandler::CreateTasks(const AgricPracticesJobPayload &jobCfg, 
             outAllTasksList[productFormatterIdx].parentTasks.append(outAllTasksList[idx]);
         }
         int exportPrdLauncherParentIdx = productFormatterIdx;
-        if (jobCfg.isScheduledJob) {
-            // add task for generating also the l4c markers db product
-            outAllTasksList.append(TaskToSubmit{ "extract-l4c-markers", {outAllTasksList[productFormatterIdx]} });
-            exportPrdLauncherParentIdx = curTaskIdx++;
-        }
+        // TO BE REMOVED - M1 - M5 are now extracted by MDB1 independtly
+//        if (jobCfg.isScheduledJob) {
+//            // add task for generating also the l4c markers db product
+//            outAllTasksList.append(TaskToSubmit{ "extract-l4c-markers", {outAllTasksList[productFormatterIdx]} });
+//            exportPrdLauncherParentIdx = curTaskIdx++;
+//        }
         // task for exporting the product as shp
         outAllTasksList.append(TaskToSubmit{ "export-product-launcher", {outAllTasksList[exportPrdLauncherParentIdx]} });
     }
@@ -129,9 +130,10 @@ void AgricPracticesHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,
 
         const auto & productFormatterPrdFileIdFile = productFormatterTask.GetFilePath("prd_infos.txt");
 
-        if (jobCfg.isScheduledJob) {
-            CreateStepsForExportL4CMarkers(jobCfg, steps, allTasksList, curTaskIdx, productFormatterPrdFileIdFile);
-        }
+        // TO BE REMOVED - M1 - M5 are now extracted by MDB1 independtly
+//        if (jobCfg.isScheduledJob) {
+//            CreateStepsForExportL4CMarkers(jobCfg, steps, allTasksList, curTaskIdx, productFormatterPrdFileIdFile);
+//        }
         TaskToSubmit &exportCsvToShpProductTask = allTasksList[curTaskIdx++];
         const QStringList &exportCsvToShpProductArgs = GetExportProductLauncherArgs(jobCfg, productFormatterPrdFileIdFile);
         steps.append(CreateTaskStep(exportCsvToShpProductTask, "export-product-launcher", exportCsvToShpProductArgs));
@@ -213,24 +215,26 @@ void AgricPracticesHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));
         }
-    } else if (event.module == "extract-l4c-markers") {
-
-        const QString &productPath = GetOutputProductPath(ctx, event);
-        const QString &prodName = GetOutputProductName(ctx, event);
-        QFileInfo fileInfo(prodName);
-        const QString &prdNameNoExt = fileInfo.baseName ();
-        if(QFileInfo::exists(productPath) && prdNameNoExt != "") {
-            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
-            // Insert the product into the database
-            GenericHighLevelProductHelper prdHelper(productPath);
-            ProductType prdType = ProductType::S4MDB3ProductTypeId;
-            ctx.InsertProduct({ prdType, event.processorId, event.siteId,
-                                event.jobId, productPath, prdHelper.GetAcqDate(),
-                                prdNameNoExt, "", footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList()  });
-        } else {
-            Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and path %2").arg(prdNameNoExt).arg(productPath));
-        }
     }
+// TO BE REMOVED - M1 - M5 are now extracted by MDB1 independtly
+//    else if (event.module == "extract-l4c-markers") {
+
+//        const QString &productPath = GetOutputProductPath(ctx, event);
+//        const QString &prodName = GetOutputProductName(ctx, event);
+//        QFileInfo fileInfo(prodName);
+//        const QString &prdNameNoExt = fileInfo.baseName ();
+//        if(QFileInfo::exists(productPath) && prdNameNoExt != "") {
+//            const QString &footPrint = GetProductFormatterFootprint(ctx, event);
+//            // Insert the product into the database
+//            GenericHighLevelProductHelper prdHelper(productPath);
+//            ProductType prdType = ProductType::S4MDB3ProductTypeId;
+//            ctx.InsertProduct({ prdType, event.processorId, event.siteId,
+//                                event.jobId, productPath, prdHelper.GetAcqDate(),
+//                                prdNameNoExt, "", footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList()  });
+//        } else {
+//            Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and path %2").arg(prdNameNoExt).arg(productPath));
+//        }
+//    }
     else if ((event.module == "export-product-launcher") || (event.module.endsWith("-data-extraction-only"))) {
         ctx.MarkJobFinished(event.jobId);
         // Now remove the job folder containing temporary files
@@ -256,31 +260,32 @@ QStringList AgricPracticesHandler::GetExportProductLauncherArgs(const AgricPract
     return exportCsvToShpProductArgs;
 }
 
-QString AgricPracticesHandler::CreateStepsForExportL4CMarkers(const AgricPracticesJobPayload &jobCfg,
-                                                                  NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx,
-                                                                const QString &productFormatterPrdFileIdFile) {
+// TO BE REMOVED - M1 - M5 are now extracted by MDB1 independtly
+//QString AgricPracticesHandler::CreateStepsForExportL4CMarkers(const AgricPracticesJobPayload &jobCfg,
+//                                                                  NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx,
+//                                                                const QString &productFormatterPrdFileIdFile) {
 
-    TaskToSubmit &exportTask = allTasksList[curTaskIdx++];
-    const auto &targetFolder = GetFinalProductFolder(*jobCfg.pCtx, jobCfg.event.jobId, jobCfg.event.siteId);
-    const QString &strTimePeriod = QString("%1_%2").arg(jobCfg.minDate.toString("yyyyMMdd"),
-                                                        jobCfg.maxDate.toString("yyyyMMdd"));
-    const QString &creationDateStr = QDateTime::currentDateTime().toString("yyyyMMddTHHmmss");
-    const QString &prdName = QString("SEN4CAP_MDB3_S%1_V%2_%3").arg(QString::number(jobCfg.event.siteId), strTimePeriod,
-                                                                  creationDateStr);
-    const QString &exportedFile = QString("%1/%2/%3.ipc").arg(targetFolder, prdName, prdName);
-    WriteOutputProductPath(exportTask, exportedFile);
+//    TaskToSubmit &exportTask = allTasksList[curTaskIdx++];
+//    const auto &targetFolder = GetFinalProductFolder(*jobCfg.pCtx, jobCfg.event.jobId, jobCfg.event.siteId);
+//    const QString &strTimePeriod = QString("%1_%2").arg(jobCfg.minDate.toString("yyyyMMdd"),
+//                                                        jobCfg.maxDate.toString("yyyyMMdd"));
+//    const QString &creationDateStr = QDateTime::currentDateTime().toString("yyyyMMddTHHmmss");
+//    const QString &prdName = QString("SEN4CAP_MDB3_S%1_V%2_%3").arg(QString::number(jobCfg.event.siteId), strTimePeriod,
+//                                                                  creationDateStr);
+//    const QString &exportedFile = QString("%1/%2/%3.ipc").arg(targetFolder, prdName, prdName);
+//    WriteOutputProductPath(exportTask, exportedFile);
 
-    const QString &schedPrdsHistFile = GetSchedL4CPrdsHistoryFile(jobCfg.parameters, jobCfg.configParameters, jobCfg.siteShortName, jobCfg.siteCfg.year);
-    const QStringList &exportL4CMarkersProductArgs = { "--site", QString::number(jobCfg.event.siteId),
-                                                     "--year", jobCfg.siteCfg.year,
-                                                     "--new-prd-info-file", productFormatterPrdFileIdFile,
-                                                     "--prds-history-files", schedPrdsHistFile,
-                                                     "--add-no-data-rows", QString::number(jobCfg.siteCfg.bMarkersAddNoDataRows),
-                                                     "-o", exportedFile
-                                                };
-    steps.append(CreateTaskStep(exportTask, "export-l4c-markers", exportL4CMarkersProductArgs));
-    return exportedFile;
-}
+//    const QString &schedPrdsHistFile = GetSchedL4CPrdsHistoryFile(jobCfg.parameters, jobCfg.configParameters, jobCfg.siteShortName, jobCfg.siteCfg.year);
+//    const QStringList &exportL4CMarkersProductArgs = { "--site", QString::number(jobCfg.event.siteId),
+//                                                     "--year", jobCfg.siteCfg.year,
+//                                                     "--new-prd-info-file", productFormatterPrdFileIdFile,
+//                                                     "--prds-history-files", schedPrdsHistFile,
+//                                                     "--add-no-data-rows", QString::number(jobCfg.siteCfg.bMarkersAddNoDataRows),
+//                                                     "-o", exportedFile
+//                                                };
+//    steps.append(CreateTaskStep(exportTask, "export-l4c-markers", exportL4CMarkersProductArgs));
+//    return exportedFile;
+//}
 
 QStringList AgricPracticesHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const AgricPracticesJobPayload &jobCfg,
                                                            const QStringList &listFiles) {

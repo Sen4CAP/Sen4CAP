@@ -50,6 +50,18 @@ void S4CMarkersDB1Handler::CreateTasks(QList<TaskToSubmit> &outAllTasksList, con
         outAllTasksList.append(TaskToSubmit{ "mdb2-csv-extract", {outAllTasksList[mergeTaskIdx]} });
         int exportTaskParent = curTaskIdx++;
         outAllTasksList.append(TaskToSubmit{ "mdb-csv-to-ipc-export", {outAllTasksList[exportTaskParent]} });
+        curTaskIdx++;
+    }
+
+    if (jobCfg.mdb3M1M5Enabled) {
+        // Markers DB 3 are normally computed by the L4C processor but can be also extracted here
+        // without other infos about harvest or practices
+        outAllTasksList.append(TaskToSubmit{ "mdb3-input-tables-extract", {outAllTasksList[mergeTaskIdx]}});
+        int inputTablesExtrIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "mdb3-tsa", {outAllTasksList[inputTablesExtrIdx]}});
+        int mdb3TsaIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "mdb3-extract-markers", {outAllTasksList[mdb3TsaIdx]} });
+        curTaskIdx++;
     }
 }
 
@@ -88,6 +100,13 @@ void S4CMarkersDB1Handler::CreateSteps(QList<TaskToSubmit> &allTasksList, const 
                                                                allTasksList, curTaskIdx);
         CreateStepsForExportIpc(jobCfg, exportedFile, steps, allTasksList, curTaskIdx, "MDB2");
     }
+
+    if (jobCfg.mdb3M1M5Enabled) {
+        const QDateTime &maxDate = dataExtrStepsBuilder.GetDataExtractionMaxDate();
+        const Season &season = GetSeason(*(jobCfg.pCtx), jobCfg.event.siteId, maxDate);
+        CreateMdb3Steps(jobCfg, season, mergedFile, steps, allTasksList, curTaskIdx);
+    }
+
 }
 
 void S4CMarkersDB1Handler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
@@ -124,7 +143,7 @@ void S4CMarkersDB1Handler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
 void S4CMarkersDB1Handler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
                                               const TaskFinishedEvent &event)
 {
-    if (event.module == "mdb-csv-to-ipc-export") {
+    if (event.module == "mdb-csv-to-ipc-export" || event.module == "mdb3-extract-markers") {
 
         const QString &productPath = GetOutputProductPath(ctx, event);
         const QString &prodName = GetOutputProductName(ctx, event);
@@ -137,6 +156,8 @@ void S4CMarkersDB1Handler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
             ProductType prdType = ProductType::S4MDB1ProductTypeId;
             if(prdNameNoExt.contains("MDB2")) {
                 prdType = ProductType::S4MDB2ProductTypeId;
+            } else if(prdNameNoExt.contains("MDB3")) {
+                prdType = ProductType::S4MDB3ProductTypeId;
             }
             ctx.InsertProduct({ prdType, event.processorId, event.siteId,
                                 event.jobId, productPath, prdHelper.GetAcqDate(),
@@ -274,20 +295,6 @@ QString S4CMarkersDB1Handler::GetShortNameForProductType(const ProductType &prdT
     }
 }
 
-bool S4CMarkersDB1Handler::CheckExecutionPreconditions(ExecutionContextBase *pCtx, const std::map<QString, QString> &,
-                                                        int siteId, const QString &siteShortName, QString &errMsg) {
-    errMsg = "";
-    // We take it the last LPIS product for this site.
-    const ProductList &lpisPrds = GetLpisProduct(pCtx, siteId);
-    if (lpisPrds.size() == 0) {
-        errMsg = QStringLiteral("ERROR Markers DB 1: No LPIS product found for site %1.").
-                                 arg(siteShortName);
-        return false;
-    }
-
-    return true;
-}
-
 QString S4CMarkersDB1Handler::CreateStepsForFilesMerge(const QStringList &dataExtrDirs, NewStepList &steps,
                               QList<TaskToSubmit> &allTasksList, int &curTaskIdx) {
     TaskToSubmit &mergeTask = allTasksList[curTaskIdx++];
@@ -308,11 +315,7 @@ QString S4CMarkersDB1Handler::CreateStepsForAmpVVVHExtraction(const QString &mer
     return mdb2ExtractFile;
 }
 
-QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const QString &inputFile,
-                              NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx, const QString &prdType) {
-
-    TaskToSubmit &exportTask = allTasksList[curTaskIdx++];
-
+QString S4CMarkersDB1Handler::PrepareIpcExport(const MDB1JobPayload &jobCfg, TaskToSubmit &exportTask, const QString &prdType) {
     const auto &targetFolder = GetFinalProductFolder(*jobCfg.pCtx, jobCfg.event.jobId, jobCfg.event.siteId);
     const QString &strTimePeriod = QString("%1_%2").arg(jobCfg.minDate.toString("yyyyMMdd"),
                                                         jobCfg.maxDate.toString("yyyyMMdd"));
@@ -322,11 +325,65 @@ QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobC
     const QString &exportedFile = QString("%1/%2/%3.ipc").arg(targetFolder, prdName, prdName);
     WriteOutputProductPath(exportTask, exportedFile);
 
-    QStringList exportArgs = { "--in", inputFile, "--out", exportedFile,
+    return exportedFile;
+}
+
+QString S4CMarkersDB1Handler::CreateStepsForExportIpc(const MDB1JobPayload &jobCfg, const QString &inputFile,
+                              NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx, const QString &prdType) {
+
+    TaskToSubmit &exportTask = allTasksList[curTaskIdx++];
+    const QString &exportedFile = PrepareIpcExport(jobCfg, exportTask, prdType);
+    QStringList exportArgs = { "-i", inputFile, "-o", exportedFile,
                                "--int32-columns", "NewID"};
     steps.append(CreateTaskStep(exportTask, "MarkersDB1Export", exportArgs));
 
     return exportedFile;
+}
+
+QString S4CMarkersDB1Handler::CreateMdb3Steps(const MDB1JobPayload &jobCfg, const Season &season, const QString &mergedFile,
+                                                  NewStepList &steps, QList<TaskToSubmit> &allTasksList, int &curTaskIdx)
+{
+
+    TaskToSubmit &inputTablesExtractTask = allTasksList[curTaskIdx++];
+    const QString &inputTablesExtrFile = inputTablesExtractTask.GetFilePath("mdb3_input_tables.csv");
+    QString yearStr = QString::number(season.startDate.year());
+    const QStringList &inputTablesExtractTaskArgs = { "--year", yearStr,
+                                                      "--site-short-name", jobCfg.siteShortName,
+                                                      "--out", inputTablesExtrFile };
+    steps.append(CreateTaskStep(inputTablesExtractTask, "MDB3InputTablesExtraction", inputTablesExtractTaskArgs));
+
+    TaskToSubmit &mdb3TsaTask = allTasksList[curTaskIdx++];
+    const QString &mdb3ExtrDir = mdb3TsaTask.GetFilePath("");
+    const QStringList &mdb3TsaTaskArgs = { "TimeSeriesAnalysis", "-intype", "mcsv", "-debug", "0", "-allowgaps", "1", "-plotgraph", "1",
+                                          "-rescontprd", "0", "-country", "NA", "-practice", "NA", "-year", yearStr,
+                                          // TODO: for the next 3 lines values should be taken from config table  or other part
+                                          "-optthrvegcycle", "350", "-ndvidw", "300", "-ndviup", "350", "-ndvistep", "5",
+                                          "-optthrmin", "100", "-cohthrbase", "0.05", "-cohthrhigh", "0.15", "-cohthrabs", "0.75",
+                                          "-ampthrmin", "0.1",
+                                          "-harvestshp", inputTablesExtrFile,
+                                          "-diramp", mergedFile, "-dircohe", mergedFile, "-dirndvi", mergedFile,
+                                          "-outdir", mdb3ExtrDir };
+    steps.append(CreateTaskStep(mdb3TsaTask, "TimeSeriesAnalysis", mdb3TsaTaskArgs));
+
+    TaskToSubmit &markersExtractTask = allTasksList[curTaskIdx++];
+    const QString &tsaResFileName = "Sen4CAP_L4C_NA_NA_" + yearStr + "_CSV.csv";
+    const QString &tsaResFilePath = QDir(mdb3ExtrDir).filePath(tsaResFileName);
+    const QString &mdb3IpcFile = PrepareIpcExport(jobCfg, markersExtractTask, "MDB3");
+    const QString &dateStr = jobCfg.maxDate.toString("yyyyMMdd");
+    QStringList mdb3MarkersExtrTaskArgs = { "-i", tsaResFilePath, "-d", dateStr, "-w", mdb3ExtrDir, "-o",  mdb3IpcFile};
+
+    // We use previous MDB3 product only if scheduled jobs
+    // TODO: we should also keep track of the scheduled jobs list
+    if (jobCfg.isScheduledJob) {
+        const ProductList &mdb3PrdsList = jobCfg.pCtx->GetProducts(jobCfg.event.siteId, (int)ProductType::S4MDB3ProductTypeId, jobCfg.minDate, jobCfg.maxDate);
+        if (mdb3PrdsList.size() > 0) {
+            mdb3MarkersExtrTaskArgs += "-p";
+            mdb3MarkersExtrTaskArgs += mdb3PrdsList[mdb3PrdsList.size()-1].fullPath;
+        }
+    }
+    steps.append(CreateTaskStep(markersExtractTask, "MDB3MarkersExtraction", mdb3MarkersExtrTaskArgs));
+
+    return mdb3IpcFile;
 }
 
 QStringList S4CMarkersDB1Handler::GetFilesMergeArgs(const QStringList &listInputPaths, const QString &outFileName)
@@ -340,3 +397,4 @@ QStringList S4CMarkersDB1Handler::GetFilesMergeArgs(const QStringList &listInput
 //    }
     return retArgs;
 }
+
