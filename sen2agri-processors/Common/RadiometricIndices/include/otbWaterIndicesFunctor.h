@@ -23,11 +23,36 @@
 
 #include "otbMath.h"
 #include "otbRadiometricIndex.h"
+#include "GlobalDefs.h"
 
 namespace otb
 {
 namespace Functor
 {
+template <class TInput, class TOutput, class TInput2=TInput>
+class WaterIndicesFunctorBase : public RadiometricIndex<TInput, TOutput, TInput2>
+{
+public:
+    /// Enum Among which bands are used
+    using BandNameType = CommonBandNames;
+
+    WaterIndicesFunctorBase(const std::set<BandNameType>& requiredBands) :
+        RadiometricIndex<TInput, TOutput, TInput2>(requiredBands)
+    {
+    }
+
+    virtual TOutput operator()(const itk::VariableLengthVector<TInput>& input) const = 0;
+
+    TOutput operator()(const itk::VariableLengthVector<TInput>& input, const itk::VariableLengthVector<TInput2>& mask) const override
+    {
+        if(mask[0] != IMG_FLG_LAND && mask[0] != IMG_FLG_WATER)
+        {
+            return this->m_bHasNoData ? this->m_NoDataValue : 0.;
+        }
+        return (*this)(input);
+    }
+};
+
 /** \class NDWI
  *  \brief This functor computes the Normalized Difference Water Index (NDWI)
  *  \brief Also called :
@@ -43,10 +68,10 @@ namespace Functor
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class NDWI : public RadiometricIndex<TInput, TOutput, TInput2>
+class NDWI : public WaterIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  NDWI() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::NIR, CommonBandNames::MIR})
+  NDWI() : WaterIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::NIR, CommonBandNames::MIR})
   {
   }
 
@@ -62,6 +87,14 @@ public:
 
     return (nir - mir) / (nir + mir);
   }
+  TOutput operator()(const itk::VariableLengthVector<TInput>& input, const itk::VariableLengthVector<TInput2>& mask) const override
+  {
+      if(mask[0] != IMG_FLG_LAND)
+      {
+          return this->m_bHasNoData ? this->m_NoDataValue : 0.;
+      }
+      return (*this)(input);
+  }
 };
 
 /** \class NDWI2
@@ -75,10 +108,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class NDWI2 : public RadiometricIndex<TInput, TOutput, TInput2>
+class NDWI2 : public WaterIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  NDWI2() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::NIR, CommonBandNames::GREEN})
+  NDWI2() : WaterIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::NIR, CommonBandNames::GREEN})
   {
   }
 
@@ -111,10 +144,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class MNDWI : public RadiometricIndex<TInput, TOutput, TInput2>
+class MNDWI : public WaterIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  MNDWI() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::MIR, CommonBandNames::GREEN})
+  MNDWI() : WaterIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::MIR, CommonBandNames::GREEN})
   {
   }
 
@@ -130,6 +163,7 @@ public:
 
     return (green - mir) / (green + mir);
   }
+
 };
 
 /** \class NDTI
@@ -143,10 +177,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class NDTI : public RadiometricIndex<TInput, TOutput, TInput2>
+class NDTI : public WaterIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  NDTI() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
+  NDTI() : WaterIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
   {
   }
 

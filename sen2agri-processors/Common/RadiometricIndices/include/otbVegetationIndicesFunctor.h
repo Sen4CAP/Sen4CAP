@@ -32,13 +32,13 @@ namespace Functor
 {
 
 template <class TInput, class TOutput, class TInput2=TInput>
-class VegetationIdicesFunctorBase : public RadiometricIndex<TInput, TOutput, TInput2>
+class VegetationIndicesFunctorBase : public RadiometricIndex<TInput, TOutput, TInput2>
 {
 public:
     /// Enum Among which bands are used
     using BandNameType = CommonBandNames;
 
-    VegetationIdicesFunctorBase(const std::set<BandNameType>& requiredBands) :
+    VegetationIndicesFunctorBase(const std::set<BandNameType>& requiredBands) :
         RadiometricIndex<TInput, TOutput, TInput2>(requiredBands)
     {
     }
@@ -66,10 +66,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class NDVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class NDVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-    NDVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+    NDVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
     {
     }
 
@@ -96,7 +96,7 @@ public:
     // This static compute will be used in indices derived from NDVI
     static double Compute(const double& red, const double& nir)
     {
-        if (std::abs(nir + red) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+        if (std::abs(nir + red) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
         {
             return 0.;
         }
@@ -116,10 +116,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class RVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class RVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  RVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  RVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -132,7 +132,7 @@ public:
         return this->m_NoDataValue;
     }
 
-    if (std::abs(red) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(red) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }
@@ -155,10 +155,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class PVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class PVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  PVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  PVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -191,10 +191,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class SAVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class SAVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  SAVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  SAVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -207,7 +207,7 @@ public:
         return this->m_NoDataValue;
     }
 
-    if (std::abs(nir + red + L) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(nir + red + L) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }
@@ -229,10 +229,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class TSAVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class TSAVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  TSAVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  TSAVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -247,7 +247,7 @@ public:
 
     double denominator = A * nir + red + X * (1. + A * A);
 
-    if (std::abs(denominator) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(denominator) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }
@@ -272,11 +272,11 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class WDVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class WDVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
   /// Constructor
-  WDVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  WDVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -313,10 +313,10 @@ public:
  */
 
 template <class TInput, class TOutput, class TInput2=TInput>
-class MSAVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class MSAVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  MSAVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  MSAVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -336,7 +336,7 @@ public:
 
     double denominator = nir + red + L;
 
-    if (std::abs(denominator) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(denominator) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }
@@ -360,10 +360,10 @@ private:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class MSAVI2 : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class MSAVI2 : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  MSAVI2() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  MSAVI2() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -396,10 +396,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class GEMI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class GEMI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  GEMI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  GEMI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -416,7 +416,7 @@ public:
     double num_nu;
     double denom_nu = nir + red + 0.5;
 
-    if (std::abs(denom_nu) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(denom_nu) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       nu = 0;
     }
@@ -427,7 +427,7 @@ public:
     }
 
     double denom_GEMI = 1 - red;
-    if (std::abs(denom_GEMI) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(denom_GEMI) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }
@@ -448,10 +448,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class AVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class AVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  AVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::GREEN, CommonBandNames::RED, CommonBandNames::NIR})
+  AVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::GREEN, CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -469,7 +469,7 @@ public:
     constexpr double dfact2 = (LambdaR - LambdaG) / LambdaR;
     double           dterm1;
     double           dterm2;
-    if (std::abs(nir - red) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(nir - red) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       dterm1 = 0;
     }
@@ -478,7 +478,7 @@ public:
       dterm1 = std::atan(dfact1 / (nir - red));
     }
 
-    if (std::abs(green - red) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(green - red) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       dterm2 = 0;
     }
@@ -513,10 +513,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class ARVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class ARVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  ARVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::BLUE, CommonBandNames::RED, CommonBandNames::NIR})
+  ARVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::BLUE, CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -532,7 +532,7 @@ public:
 
     double RHOrb       = red - Gamma * (blue - red);
     double denominator = nir + RHOrb;
-    if (std::abs(denominator) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(denominator) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }
@@ -556,10 +556,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class EVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class EVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  EVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::BLUE, CommonBandNames::RED, CommonBandNames::NIR})
+  EVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::BLUE, CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -574,7 +574,7 @@ public:
     }
 
     double denominator = nir + C1 * red - C2 * blue + L;
-    if (std::abs(denominator) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(denominator) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return (static_cast<TOutput>(0.));
     }
@@ -605,10 +605,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class IPVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class IPVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  IPVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  IPVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -621,7 +621,7 @@ public:
         return this->m_NoDataValue;
     }
 
-    if (std::abs(nir + red) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(nir + red) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }
@@ -643,10 +643,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class TNDVI : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class TNDVI : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  TNDVI() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  TNDVI() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -689,11 +689,11 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class LAIFromNDVILogarithmic : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class LAIFromNDVILogarithmic : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
   LAIFromNDVILogarithmic()
-    : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR}), m_NdviSoil(0.1), m_NdviInf(0.89), m_ExtinctionCoefficient(0.71)
+    : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR}), m_NdviSoil(0.1), m_NdviInf(0.89), m_ExtinctionCoefficient(0.71)
   {
   }
 
@@ -772,10 +772,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class LAIFromReflectancesLinear : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class LAIFromReflectancesLinear : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  LAIFromReflectancesLinear() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR}), m_RedCoef(-17.91), m_NirCoef(12.26)
+  LAIFromReflectancesLinear() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR}), m_RedCoef(-17.91), m_NirCoef(12.26)
   {
   }
 
@@ -836,10 +836,10 @@ public:
 
 
 template <class TInput, class TOutput, class TInput2=TInput>
-class LAIFromNDVIFormosat2Functor : public VegetationIdicesFunctorBase<TInput, TOutput, TInput2>
+class LAIFromNDVIFormosat2Functor : public VegetationIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  LAIFromNDVIFormosat2Functor() : VegetationIdicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
+  LAIFromNDVIFormosat2Functor() : VegetationIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::NIR})
   {
   }
 
@@ -852,7 +852,7 @@ public:
         return this->m_NoDataValue;
     }
 
-    if (std::abs(nir + red) < VegetationIdicesFunctorBase<TInput, TOutput>::Epsilon)
+    if (std::abs(nir + red) < VegetationIndicesFunctorBase<TInput, TOutput>::Epsilon)
     {
       return static_cast<TOutput>(0.);
     }

@@ -5,6 +5,8 @@
 
 #define L3B_CFG_PREFIX   "processor.l3b."
 
+
+
 class LaiRetrievalHandlerL3BNew : public ProcessorHandler
 {
 public:
@@ -26,10 +28,7 @@ public:
         QString tileFile;
         QString inPrdExtMsk;
 
-        QString ndviFile;
-        QString laiFile;
-        QString faparFile;
-        QString fcoverFile;
+        QMap<QString, QString> mapIndexFile;
 
         QString statusFlagsFile;
         QString statusFlagsFileResampled;
@@ -41,20 +40,32 @@ public:
         QString anglesFile;
     } TileResultFiles;
 
+    typedef struct {
+        QString name;
+        QString type;
+        QString paramName;
+    } SpectralIndexDescr;
+
     class L3BJobContext {
         public:
-            L3BJobContext(LaiRetrievalHandlerL3BNew *parent, EventProcessingContext *pContext, const JobSubmittedEvent &evt) : event(evt) {
+            L3BJobContext(LaiRetrievalHandlerL3BNew *parent, EventProcessingContext *pContext, const JobSubmittedEvent &evt) :
+                event(evt), hasBiophysicalIndex(false) {
                 QString procPrefix("processor." + parent->processorDescr.shortName + ".");
                 pCtx = pContext;
                 parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
                 configParameters = pCtx->GetJobConfigurationParameters(evt.jobId, L3B_CFG_PREFIX);
                 // siteShortName = pContext->GetSiteShortName(evt.siteId);
                 laiCfgFile = configParameters[procPrefix + "lai.laibandscfgfile"];
-                bGenNdvi = IsParamOrConfigKeySet(parameters, configParameters, "produce_ndvi", procPrefix + "filter.produce_ndvi");
-                bGenLai = IsParamOrConfigKeySet(parameters, configParameters, "produce_lai", procPrefix + "filter.produce_lai");
-                bGenFapar = IsParamOrConfigKeySet(parameters, configParameters, "produce_fapar", procPrefix + "filter.produce_fapar");
-                bGenFCover = IsParamOrConfigKeySet(parameters, configParameters, "produce_fcover", procPrefix + "filter.produce_fcover");
+                for (const QString &index: spectralIndicators.keys()) {
+                    mapIndexGenFlags[index] = IsParamOrConfigKeySet(parameters, configParameters, "produce_" + index, procPrefix + "filter.produce_" + index);
+                }
+                for (const QString &index: biophysicalIndicatorNames) {
+                    bool genIdx = IsParamOrConfigKeySet(parameters, configParameters, "produce_" + index, procPrefix + "filter.produce_" + index);
+                    mapIndexGenFlags[index] = genIdx;
+                    hasBiophysicalIndex |= genIdx;
+                }
                 bGenInDomainFlags = IsParamOrConfigKeySet(parameters, configParameters, "indomflags", procPrefix + "filter.produce_in_domain_flags");
+                parallelizeProducts = IsParamOrConfigKeySet(parameters, configParameters, "parallelize_products", procPrefix + "filter.parallelize_products");
 
                 int resolution = 0;
                 if(!ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "resolution", resolution) ||
@@ -93,15 +104,17 @@ public:
             std::map<QString, QString> configParameters;
 
             //QString siteShortName;
+            QMap<QString, bool> mapIndexGenFlags;
+            bool hasBiophysicalIndex;
             QString laiCfgFile;
-            bool bGenNdvi;
-            bool bGenLai;
-            bool bGenFapar;
-            bool bGenFCover;
             bool bGenInDomainFlags;
             QString resolutionStr;
             bool bRemoveTempFiles;
             QString lutFile;
+            bool parallelizeProducts;
+
+            static QMap<QString, SpectralIndexDescr> spectralIndicators;
+            static QStringList biophysicalIndicatorNames;
     };
 
 
@@ -115,6 +128,9 @@ private:
     void CreateTasksForNewProduct(const L3BJobContext &jobCtx, QList<TaskToSubmit> &outAllTasksList,
                                    const QList<TileInfos> &tileInfosList);
     int CreateAnglesTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList, int nCurTaskIdx, int & nAnglesTaskId);
+    int CreateSpectralIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
+                                         QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
+                                         int nCurTaskIdx);
     int CreateBiophysicalIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
                                          QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
                                          int nCurTaskIdx);
@@ -133,18 +149,18 @@ private:
                                                 const QString &laiBandsCfg, const QString &indexName,
                                                 const QString &outFlagsFileName,  const QString &outCorrectedLaiFile, const QString &outRes);
 
-    QStringList GetNdviRviExtractionNewArgs(const QString &inputProduct, const QString &msksFlagsFile,
-                                            const QString &ndviFile, const QString &resolution, const QString &laiBandsCfg);
+    QStringList GetSpectralIndicatorsExtractionArgs(const QString &inputProduct, const QString &indicator, const QString &msksFlagsFile,
+                                            const QString &indicatorFile);
     QStringList GetLaiProcessorArgs(const QString &xmlFile, const QString &anglesFileName, const QString &resolution,
                                     const QString &laiBandsCfg, const QString &monoDateLaiFileName, const QString &indexName);
     QStringList GetQuantifyImageArgs(const QString &inFileName, const QString &outFileName);
     QStringList GetMonoDateMskFlagsArgs(const QString &inputProduct, const QString &extMsk, const QString &monoDateMskFlgsFileName, const QString &monoDateMskFlgsResFileName, const QString &resStr);
     QStringList GetLaiMonoProductFormatterArgs(TaskToSubmit &productFormatterTask, const L3BJobContext &jobCtx, const QList<TileInfos> &prdTilesInfosList, const QList<TileResultFiles> &tileResultFilesList);
-    NewStepList GetStepsForMonodateLai(const L3BJobContext &jobCtx,
+    NewStepList GetStepsForNewProduct(const L3BJobContext &jobCtx,
                                        const QList<TileInfos> &prdTilesList, QList<TaskToSubmit> &allTasksList, int tasksStartIdx);
     int GetStepsForStatusFlags(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
                                 TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
-    int GetStepsForNdvi(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
+    int GetStepsForSpectralIndicator(QList<TaskToSubmit> &allTasksList, const QString &indexName, int curTaskIdx,
                                 TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
     int GetStepsForAnglesCreation(QList<TaskToSubmit> &allTasksList, int curTaskIdx, TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
     int GetStepsForMonoDateBI(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList,

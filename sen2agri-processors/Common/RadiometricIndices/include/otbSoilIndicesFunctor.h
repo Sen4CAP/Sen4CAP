@@ -23,11 +23,37 @@
 
 #include "otbMath.h"
 #include "otbRadiometricIndex.h"
+#include "GlobalDefs.h"
 
 namespace otb
 {
 namespace Functor
 {
+
+template <class TInput, class TOutput, class TInput2=TInput>
+class SoilIndicesFunctorBase : public RadiometricIndex<TInput, TOutput, TInput2>
+{
+public:
+    /// Enum Among which bands are used
+    using BandNameType = CommonBandNames;
+
+    SoilIndicesFunctorBase(const std::set<BandNameType>& requiredBands) :
+        RadiometricIndex<TInput, TOutput, TInput2>(requiredBands)
+    {
+    }
+
+    virtual TOutput operator()(const itk::VariableLengthVector<TInput>& input) const = 0;
+
+    TOutput operator()(const itk::VariableLengthVector<TInput>& input, const itk::VariableLengthVector<TInput2>& mask) const override
+    {
+        if(mask[0] != IMG_FLG_LAND)
+        {
+            return this->m_bHasNoData ? this->m_NoDataValue : 0.;
+        }
+        return (*this)(input);
+    }
+};
+
 /** \class RI
  *  \brief This functor computes the Redness Index (RI)
  *
@@ -43,10 +69,10 @@ namespace Functor
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class RI : public RadiometricIndex<TInput, TOutput, TInput2>
+class RI : public SoilIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  RI() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
+  RI() : SoilIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
   {
   }
 
@@ -79,10 +105,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class CI : public RadiometricIndex<TInput, TOutput, TInput2>
+class CI : public SoilIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  CI() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
+  CI() : SoilIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
   {
   }
 
@@ -111,10 +137,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class BI : public RadiometricIndex<TInput, TOutput, TInput2>
+class BI : public SoilIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  BI() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
+  BI() : SoilIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN})
   {
   }
 
@@ -138,10 +164,10 @@ public:
  * \ingroup OTBIndices
  */
 template <class TInput, class TOutput, class TInput2=TInput>
-class BI2 : public RadiometricIndex<TInput, TOutput, TInput2>
+class BI2 : public SoilIndicesFunctorBase<TInput, TOutput, TInput2>
 {
 public:
-  BI2() : RadiometricIndex<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN, CommonBandNames::NIR})
+  BI2() : SoilIndicesFunctorBase<TInput, TOutput, TInput2>({CommonBandNames::RED, CommonBandNames::GREEN, CommonBandNames::NIR})
   {
   }
 

@@ -45,52 +45,19 @@
 #define TIF_EXTENSION                   ".TIF"
 #define JPEG_EXTENSION                  ".jpg"
 
-#define REFLECTANCE_SUFFIX              "SRFL"
-#define WEIGHTS_SUFFIX                  "MWGT"
-#define COMPOSITE_DATES_SUFFIX          "MDAT"
-#define COMPOSITE_FLAGS_SUFFIX          "MFLG"
-#define LAI_NDVI_SUFFIX                 "SNDVI"
-#define LAI_MDATE_SUFFIX                "SLAIMONO"
-#define FAPAR_MDATE_SUFFIX              "SFAPARMONO"
-#define FCOVER_MDATE_SUFFIX             "SFCOVERMONO"
-#define LAI_MDATE_ERR_SUFFIX            "MLAIERR"
-#define LAI_REPR_SUFFIX                 "SLAIR"
-#define LAI_FIT_SUFFIX                  "SLAIF"
-#define PHENO_SUFFIX                    "SPHENO"
-#define PHENO_FLAGS_SUFFIX              "MPHENOFLG"
-#define LAI_MONO_DATE_FLAGS_SUFFIX      "MMONODFLG"
-
-#define LAI_IN_DOMAIN_FLAGS_SUFFIX      "MINDOMFLG"
-#define LAI_DOMAIN_FLAGS_SUFFIX         "MLAIDOMFLG"
-#define FAPAR_DOMAIN_FLAGS_SUFFIX       "MFAPARDOMFLG"
-#define FCOVER_DOMAIN_FLAGS_SUFFIX      "MFCOVERDOMFLG"
-
-#define LAI_REPROC_FLAGS_SUFFIX         "MLAIRFLG"
-#define LAI_FITTED_FLAGS_SUFFIX         "MLAIFFLG"
-#define CROP_MASK_IMG_SUFFIX            "CM"
-#define CROP_TYPE_IMG_SUFFIX            "CT"
-#define CROP_TYPE_RAW_IMG_SUFFIX        "RAW"
-#define CROP_MASK_RAW_IMG_SUFFIX        "RAW"
-#define CROP_MASK_FLAGS_SUFFIX          "MCMFLG"
-#define CROP_TYPE_FLAGS_SUFFIX          "MCTFLG"
-
 #define GENERIC_CS_TYPE     "GEOGRAPHIC"
 #define GENERIC_GEO_TABLES  "EPSG"
 
 
 #define MAIN_FOLDER_CATEG "PRD"
 #define LEGACY_FOLDER_CATEG "LY"
-//#define TRUE_COLOR_FOLDER_CATEG "TCI"
 #define QUICK_L0OK_IMG_CATEG "PVI"
 #define METADATA_CATEG "MTD"
-//#define MASK_CATEG "MSK"
 #define PARAMETER_CATEG "IPP"
 #define INSITU_CATEG "ISD"
 #define LUT_CATEG       "LUT"
 #define QUALITY_CATEG "QLT"
-#define NO_DATA_VALUE "-10000"
 
-#define ORIGINATOR_SITE "CSRO"
 
 #define VECTOR_FOLDER_NAME          "VECTOR_DATA"
 #define TILES_FOLDER_NAME           "TILES"
@@ -99,26 +66,8 @@
 #define IMG_DATA_FOLDER_NAME        "IMG_DATA"
 #define QI_DATA_FOLDER_NAME         "QI_DATA"
 
-#define LANDSAT    "LANDSAT"
-#define SENTINEL   "SENTINEL"
-
-#define SEN2AGRI_L2A_PRD_LEVEL  "L2A"
 #define SEN2AGRI_L3A_PRD_LEVEL  "L3A"
-#define SEN2AGRI_L3B_PRD_LEVEL  "L3B"
-#define SEN2AGRI_L3C_PRD_LEVEL  "L3C"
-#define SEN2AGRI_L3D_PRD_LEVEL  "L3D"
-#define SEN2AGRI_L3E_PRD_LEVEL  "L3E"
 #define SEN2AGRI_L4A_PRD_LEVEL  "L4A"
-#define SEN2AGRI_L4B_PRD_LEVEL  "L4B"
-
-#define L2A_PRODUCT             "L2A product"
-#define COMPOSITE_PRODUCT       "Composite"
-#define LAI_MONO_DATE_PRODUCT   "LAI mono-date"
-#define LAI_REPROC_PRODUCT      "LAI reprocessed"
-#define LAI_FITTED_PRODUCT      "LAI reprocessed at end of season (fitted)"
-#define PHENO_NDVI_PRODUCT      "Phenological NDVI Metrics"
-#define CROP_MASK               "Crop mask"
-#define CROP_TYPE               "Crop type"
 
 struct Coord{
     double x;
@@ -134,6 +83,161 @@ struct CompositeBand
     std::string strBandName;
     std::string strSPOT4_5Name;
 };
+
+typedef enum {
+    GENERIC_FILE = 0,
+    GENERIC_RASTER,
+    DISCRETE_VALUES_RASTER,
+    SIMPLE_FLAGS_RASTER,                // simples flags raster
+    SIMPLE_DISCRETE_FLAGS_RASTER,       // simples flags raster
+    QUALITY_FLAGS_RASTER,               // quality flags raster (CM&CT)
+    RGB_RASTER,                         // RGB raster used for a quicklook from it
+} InputRasterTypes;
+
+typedef struct ProcessorParamInputDescriptor
+{
+    otb::Wrapper::ParameterType paramType;
+    std::string key;
+    std::string name;
+    bool mandatory;
+    InputRasterTypes rasterType;
+    bool bNeedsPreview;
+    int expectedBandsNo;
+    bool bAddResolutionToSuffix;
+    std::string outSuffix;
+    bool IsQiParam() const {
+        return (rasterType == SIMPLE_FLAGS_RASTER || rasterType == SIMPLE_DISCRETE_FLAGS_RASTER);
+    }
+
+} ProcessorParamInputDescriptor;
+
+typedef struct ProcessorInputDescriptor {
+    std::string productLevel;
+    std::string processor;
+    std::string name;
+    std::string descr;
+    bool bIsMonoDateProduct;
+
+    bool HasDiscreteValuesRaster() {
+        for (const ProcessorParamInputDescriptor &descr: inputDescriptors) {
+            if (descr.rasterType == DISCRETE_VALUES_RASTER) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasRgbRaster() {
+        for (const ProcessorParamInputDescriptor &descr: inputDescriptors) {
+            if (descr.rasterType == RGB_RASTER) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::vector<ProcessorParamInputDescriptor> inputDescriptors;
+} ProcessorInputDescriptor;
+
+std::vector<ProcessorInputDescriptor> ProcessorDescriptors = {
+    {"", "generic", "A generic product where files are copied as they are", "A generic product that will be simply created by copying  input file and no other operation", false,
+     {
+        {otb::Wrapper::ParameterType_InputFilenameList, "processor.generic.files", "Generic product files", false,
+         GENERIC_FILE, false, 1, false, ""}
+     }
+    },
+    {SEN2AGRI_L3A_PRD_LEVEL, "composite", "Composite product", "Specifies a Composite product", false,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.composite.refls", "Reflectance raster files list for composite separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, false, 4, true, "SRFL"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.composite.weights", "Weights raster files list for composite separated by TILE_{tile_id} delimiter", false,
+         SIMPLE_FLAGS_RASTER, false, 4, true, "MWGT"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.composite.flags", "Flags mask files list for composite separated by TILE_{tile_id} delimiter", false,
+         SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, true, "MFLG"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.composite.dates", "Dates mask files list for composite separated by TILE_{tile_id} delimiter", false,
+         SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, true, "MDAT"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.composite.rgb", "TIFF file to be used to obtain preview for SPOT product separated by TILE_{tile_id} delimiter", false,
+         RGB_RASTER, false, 1, false, ""}
+     }
+    },
+    {"L3B", "vegetation", "Vegetation indices product", "Specifies a Vegetation Status product", true,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.ndvi", "NDVI raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, true, 1, false, "SNDVI"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.ndwi", "NDWI raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, true, 1, false, "SNDWI"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.brightness", "Brightness raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, true, 1, false, "SBRIGHT"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.laimonodate", "LAI Mono-date raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, true, 1, false, "SLAIMONO"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.laimonodateerr", "LAI Mono-date Error raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_FLAGS_RASTER, false, 1, false, "MLAIERR"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.faparmonodate", "FAPAR Mono-date raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, false, 1, false, "SFAPARMONO"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.fcovermonodate", "FCOVER Mono-date raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, false, 1, false, "SFCOVERMONO"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.laistatusflgs", "LAI Mono date flags raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MMONODFLG"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.indomainflgs", "LAI input domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MINDOMFLG"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.laidomainflgs", "LAI output domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MLAIDOMFLG"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.fapardomainflgs", "FAPAR output domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MFAPARDOMFLG"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.vegetation.fcoverdomainflgs", "FCOVER output domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MFCOVERDOMFLG"}
+     }
+    },
+    {"L3C", "laireproc", "N-Day Reprocessed LAI product", "N-Day Reprocessed LAI product", false,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.laireproc.filelaireproc", "File containing the LAI REPR raster files list for vegetation separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, true, 1, false, "SLAIR"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.laireproc.filelaireprocflgs", "File containing the LAI Reprocessing flags raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MLAIRFLG"},
+     }
+    },
+    {"L3D", "laifit", "Fitted LAI product", "Fitted LAI product", false,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.laifit.filelaifit", "File containing the LAI FIT raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, true, 1, false, "SLAIF"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.laifit.filelaifitflgs", "File containing the LAI Fitted flags raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MLAIFFLG"}
+     }
+    },
+    {"L3E", "phenondvi", "Phenological NDVI metrics product", "Specifies a Phenological NDVI metrics product", false,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.phenondvi.metrics", "Phenological NDVI metrics raster files list for vegetation  separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, false, 4, false, "SPHENO"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.phenondvi.flags", "Flags files list for phenological NDVI metrics separated by TILE_{tile_id} delimiter", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MPHENOFLG"}
+     }
+    },
+    {"L4B", "croptype", "Crop type product", "Specifies a CropType product", false,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.croptype.file", "CROP TYPE raster files, separated by TILE_{tile_id} delimiter", false,
+          DISCRETE_VALUES_RASTER, true, 1, false, "CM"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.croptype.rawfile", "CROP TYPE unmasked raster files, separated by TILE_{tile_id} delimiter", false,
+          DISCRETE_VALUES_RASTER, true, 1, false, "RAW"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.croptype.quality", "CROP TYPE quality file", false,
+          QUALITY_FLAGS_RASTER, false, 1, false, ""},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.croptype.flags", "CROP TYPE flags file", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MCMFLG"}
+     }
+    },
+    {SEN2AGRI_L4A_PRD_LEVEL, "cropmask", "Crop mask product", "Specifies a CropMask product", false,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.cropmask.file", "CROP MASK raster file  separated by TILE_{tile_id} delimiter", false,
+          DISCRETE_VALUES_RASTER, true, 1, false, "CT"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.cropmask.rawfile", "CROP MASK raw raster file  separated by TILE_{tile_id} delimiter", false,
+          DISCRETE_VALUES_RASTER, true, 1, false, "RAW"},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.cropmask.quality", "CROP MASK quality file", false,
+          QUALITY_FLAGS_RASTER, false, 1, false, ""},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.cropmask.flags", "CROP MASK flags files", false,
+          SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MCTFLG"}
+     }
+    },
+};
+
 std::vector<CompositeBand> CompositeBandList = {
     {1, "490 nm", "Classical blue", 10, "BLUE", "FALSE_BLUE"},
     {2, "560 nm", "Green", 10, "GREEN", "GREEN"},
@@ -162,6 +266,8 @@ typedef enum{
     FCOVER_DOMAIN_FLAGS,
     FAPAR_MONO_DATE_RASTER,
     FCOVER_MONO_DATE_RASTER,
+    NDWI_MONO_DATE_RASTER,
+    BRIGHTNESS_MONO_DATE_RASTER,
     LAI_REPROC_FLAGS,
     LAI_FITTED_FLAGS,
     LAI_REPR_RASTER,
@@ -181,17 +287,18 @@ struct rasterInfo
 {
     std::string strRasterFileName;
     int nResolution;
-    rasterTypes iRasterType;
+    // rasterTypes iRasterType;
     std::string strNewRasterFileName;
     std::string strTileID;
-    bool bIsQiData;
+    // bool bIsQiData;
     // quality data can be discrete values or float values.
     // if discrete values, we don't want to apply any linear resampling over them
-    bool bQiDataIsDiscrete;
+    // bool bQiDataIsDiscrete;
     std::string rasterTimePeriod;
-    int nRasterExpectedBandsNo;
+    // int nRasterExpectedBandsNo;
     std::string strNewRasterFullPath;
-    bool bNeedsPreview;
+    // bool bNeedsPreview;
+    ProcessorParamInputDescriptor paramDescr;
 };
 
 struct qualityInfo
@@ -254,6 +361,25 @@ private:
         SetDocAuthors("ATA");
         SetDocSeeAlso(" ");
 
+        AddParameter(ParameterType_Choice, "processor", "Processor");
+        SetParameterDescription("processor", "Specifies the product type");
+
+        // processors parameters
+        for (const ProcessorInputDescriptor &procInputDescr: ProcessorDescriptors) {
+            std::string key = "processor." + procInputDescr.processor;
+            AddChoice(key, procInputDescr.name);
+            SetParameterDescription(key, procInputDescr.descr);
+            // add the parameters
+            for (const ProcessorParamInputDescriptor &paramDescr: procInputDescr.inputDescriptors) {
+                AddParameter(paramDescr.paramType, paramDescr.key, paramDescr.name);
+                if (paramDescr.mandatory) {
+                    MandatoryOn(paramDescr.key);
+                } else {
+                    MandatoryOff(paramDescr.key);
+                }
+            }
+        }
+
         AddParameter(ParameterType_String, "destroot", "Destination root directory");
         AddParameter(ParameterType_String, "fileclass", "File class");
         AddParameter(ParameterType_String, "level", "Product level");
@@ -271,127 +397,6 @@ private:
         AddParameter(ParameterType_Int, "cog", "Specifies if the rasters should be translated into Cloud Optimized Geotiff upon product creation");
         MandatoryOff("cog");
         SetDefaultParameterInt("cog", 0);
-
-        AddParameter(ParameterType_Choice, "processor", "Processor");
-        SetParameterDescription("processor", "Specifies the product type");
-
-        AddChoice("processor.composite", "Composite product");
-        SetParameterDescription("processor.composite", "Specifies a Composite product");
-
-        AddChoice("processor.vegetation", "Vegetation Status product");
-        SetParameterDescription("processor.vegetation", "Specifies a Vegetation Status product");
-
-        AddChoice("processor.phenondvi", "Phenological NDVI metrics product");
-        SetParameterDescription("processor.phenondvi", "Specifies a Phenological NDVI metrics product");
-
-        AddChoice("processor.croptype", "Crop type product");
-        SetParameterDescription("processor.croptype", "Specifies a CropType product");
-
-        AddChoice("processor.cropmask", "Crop mask product");
-        SetParameterDescription("processor.cropmask", "Specifies a CropMask product");
-
-        AddChoice("processor.generic", "A generic product where files are copied as they are");
-        SetParameterDescription("processor.generic", "A generic product that will be simply created by copying "
-                                                    "input file and no other operation");
-
-  //composite parameters
-        AddParameter(ParameterType_InputFilenameList, "processor.composite.refls", "Reflectance raster files list for composite separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.composite.refls");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.composite.weights", "Weights raster files list for composite separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.composite.weights");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.composite.flags", "Flags mask files list for composite separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.composite.flags");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.composite.dates", "Dates mask files list for composite separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.composite.dates");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.composite.rgb", "TIFF file to be used to obtain preview for SPOT product separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.composite.rgb");
- //vegetation parameters
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.laindvi", "LAI NDVI raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.laindvi");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.laimonodate", "LAI Mono-date raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.laimonodate");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.laimonodateerr", "LAI Mono-date Error raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.laimonodateerr");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.faparmonodate", "LAI FAPAR Mono-date raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.faparmonodate");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.fcovermonodate", "LAI FCOVER Mono-date raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.fcovermonodate");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.laistatusflgs", "LAI Mono date flags raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.laistatusflgs");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.indomainflgs", "LAI input domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.indomainflgs");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.laidomainflgs", "LAI output domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.laidomainflgs");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.fapardomainflgs", "FAPAR output domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.fapardomainflgs");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.fcoverdomaniflgs", "FCOVER output domain flags raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.fcoverdomaniflgs");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.filelaireproc", "File containing the LAI REPR raster files list for vegetation "
-                                                                                            "separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.filelaireproc");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.filelaireprocflgs", "File containing the LAI Reprocessing flags raster files "
-                                                                                                "list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.filelaireprocflgs");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.filelaifit", "File containing the LAI FIT raster files list for vegetation  "
-                                                                                         "separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.filelaifit");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.vegetation.filelaifitflgs", "File containing the LAI Fitted flags raster files list for "
-                                                                                             "vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.vegetation.filelaifitflgs");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.phenondvi.metrics", "Phenological NDVI metrics raster files list for vegetation  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.phenondvi.metrics");
-        AddParameter(ParameterType_InputFilenameList, "processor.phenondvi.flags", "Flags files list for phenological NDVI metrics separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.phenondvi.flags");
-
-
-//crop type parameters
-        AddParameter(ParameterType_InputFilenameList, "processor.croptype.file", "CROP TYPE raster files, separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.croptype.file");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.croptype.rawfile", "CROP TYPE unmasked raster files, separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.croptype.rawfile");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.croptype.quality", "CROP TYPE quality file");
-        MandatoryOff("processor.croptype.quality");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.croptype.flags", "CROP TYPE flags file");
-        MandatoryOff("processor.croptype.flags");
-
-//crop mask parameters
-        AddParameter(ParameterType_InputFilenameList, "processor.cropmask.file", "CROP MASK raster file  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.cropmask.file");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.cropmask.rawfile", "CROP MASK raw raster file  separated by TILE_{tile_id} delimiter");
-        MandatoryOff("processor.cropmask.rawfile");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.cropmask.quality", "CROP MASK quality file");
-        MandatoryOff("processor.cropmask.quality");
-
-        AddParameter(ParameterType_InputFilenameList, "processor.cropmask.flags", "CROP MASK flags files");
-        MandatoryOff("processor.cropmask.flags");
-
-// Generic product
-        AddParameter(ParameterType_InputFilenameList, "processor.generic.files", "Generic product files");
-        MandatoryOff("processor.generic.files");
 
 // Other parameters
         AddParameter(ParameterType_InputFilenameList, "il", "The xml files");
@@ -446,6 +451,9 @@ private:
       // by default, we expect a "timeperiod" parameter
       m_bDynamicallyTimePeriod = false;
 
+      //get processor
+      m_strProcessor = this->GetParameterString("processor");
+
       //get product level
       m_strProductLevel = this->GetParameterString("level");
 
@@ -473,6 +481,8 @@ private:
 
       // Get ISD file list
       m_ISDList = this->GetParameterStringList("isd");
+
+      m_procInputDescr = GetProcessorInputDescriptor(m_strProcessor, m_strProductLevel);
 
       //read .xml or .HDR files to fill the metadata structures
       // Get the list of input files
@@ -506,151 +516,49 @@ private:
       //created all folders ierarchy
       bool bDirStructBuiltOk = createsAllFolders(strMainFolderFullPath);
 
-      //if is composite read reflectance rasters, weights rasters, flags masks, dates masks
-      if (!m_bVectPrd) {
-          if (m_strProductLevel == SEN2AGRI_L3A_PRD_LEVEL)
-          {
-              std::vector<std::string> rastersList;
-
-               // Get reflectance raster file list
-              rastersList = this->GetParameterStringList("processor.composite.refls");
-              //unpack and add them in global raster list
-              UnpackRastersList(rastersList, COMPOSITE_REFLECTANCE_RASTER, false);
-
-              //get weights rasters list
-              rastersList = this->GetParameterStringList("processor.composite.weights");
-              UnpackRastersList(rastersList, COMPOSITE_WEIGHTS_RASTER, true, false);
-
-              rastersList = this->GetParameterStringList("processor.composite.flags");
-              UnpackRastersList(rastersList, COMPOSITE_FLAGS_MASK, true);
-
-              rastersList = this->GetParameterStringList("processor.composite.dates");
-              UnpackRastersList(rastersList, COMPOSITE_DATES_MASK, true);
-
-              rastersList = this->GetParameterStringList("processor.composite.rgb");
-              std::string strTileID("");
-
-              for (const auto &rasterFileEl : rastersList) {
-                  if(rasterFileEl.compare(0, 5, "TILE_") == 0)
-                  {
-                      //if is TILE separator, read tileID
-                      strTileID = rasterFileEl.substr(5, rasterFileEl.length() - 5);
-                  }
-                  else
-                  {
-                      previewInfo previewInfoEl;
-                      previewInfoEl.strTileID = strTileID;
-                      previewInfoEl.strPreviewFileName = rasterFileEl;
-                      m_previewList.emplace_back(previewInfoEl);
-                  }
-              }
-         }
-
-          // read LAI Mono-date raster files list
-          if (m_strProductLevel == SEN2AGRI_L3B_PRD_LEVEL) {
-              std::vector<std::string> rastersList;
-
-              rastersList = this->GetParameterStringList("processor.vegetation.laindvi");
-              UnpackRastersList(rastersList, LAI_NDVI_RASTER, false);
-              rastersList = this->GetParameterStringList("processor.vegetation.laimonodate");
-              UnpackRastersList(rastersList, LAI_MONO_DATE_RASTER, false);
-
-              rastersList = this->GetParameterStringList("processor.vegetation.faparmonodate");
-              UnpackRastersList(rastersList, FAPAR_MONO_DATE_RASTER, false);
-              rastersList = this->GetParameterStringList("processor.vegetation.fcovermonodate");
-              UnpackRastersList(rastersList, FCOVER_MONO_DATE_RASTER, false);
-
-              rastersList = this->GetParameterStringList("processor.vegetation.laimonodateerr");
-              UnpackRastersList(rastersList, LAI_MONO_DATE_ERR_RASTER, true, false);
-              rastersList = this->GetParameterStringList("processor.vegetation.laistatusflgs");
-              UnpackRastersList(rastersList, LAI_MONO_DATE_STATUS_FLAGS, true);
-
-              rastersList = this->GetParameterStringList("processor.vegetation.indomainflgs");
-              UnpackRastersList(rastersList, LAI_MONO_DATE_IN_DOMAIN_FLAGS, true);
-
-              rastersList = this->GetParameterStringList("processor.vegetation.laidomainflgs");
-              UnpackRastersList(rastersList, LAI_MONO_DATE_DOMAIN_FLAGS, true);
-
-              rastersList = this->GetParameterStringList("processor.vegetation.fapardomainflgs");
-              UnpackRastersList(rastersList, FAPAR_DOMAIN_FLAGS, true);
-
-              rastersList = this->GetParameterStringList("processor.vegetation.fcoverdomaniflgs");
-              UnpackRastersList(rastersList, FCOVER_DOMAIN_FLAGS, true);
-          }
-
-          // read LAIREPR raster files list
-          if (m_strProductLevel == SEN2AGRI_L3C_PRD_LEVEL) {
-              std::vector<std::string> rastersList;
-
-              // LAI Reprocessed raster files list
-              rastersList = this->GetFileListFromFile(this->GetParameterStringList("processor.vegetation.filelaireproc"));
-              UnpackRastersList(rastersList, LAI_REPR_RASTER, false);
-              rastersList = this->GetFileListFromFile(this->GetParameterStringList("processor.vegetation.filelaireprocflgs"));
-              UnpackRastersList(rastersList, LAI_REPROC_FLAGS, true);
-         }
-
-          // read LAIFIT raster files list
-          if (m_strProductLevel == SEN2AGRI_L3D_PRD_LEVEL) {
-              std::vector<std::string> rastersList;
-
-              rastersList = this->GetFileListFromFile(this->GetParameterStringList("processor.vegetation.filelaifit"));
-              UnpackRastersList(rastersList, LAI_FIT_RASTER, false);
-              rastersList = this->GetFileListFromFile(this->GetParameterStringList("processor.vegetation.filelaifitflgs"));
-              UnpackRastersList(rastersList, LAI_FITTED_FLAGS, true);
-         }
-
-          //read Phenological NDVI metrics raster files list
-          if (m_strProductLevel == SEN2AGRI_L3E_PRD_LEVEL) {
-              std::vector<std::string> rastersList;
-              rastersList = this->GetParameterStringList("processor.phenondvi.metrics");
-              UnpackRastersList(rastersList, PHENO_RASTER, false);
-              rastersList = this->GetParameterStringList("processor.phenondvi.flags");
-              UnpackRastersList(rastersList, PHENO_FLAGS, true);
-         }
-
-          //if is CROP MASK, read raster file
-          if (m_strProductLevel == SEN2AGRI_L4A_PRD_LEVEL)
-          {
-
-              std::vector<std::string> filesList;
-              filesList = this->GetParameterStringList("processor.cropmask.file");
-              UnpackRastersList(filesList, CROP_MASK_RASTER, false);
-
-              filesList = this->GetParameterStringList("processor.cropmask.rawfile");
-              UnpackRastersList(filesList, RAW_CROP_MASK_RASTER, false);
-
-              //get quality file list
-              filesList = this->GetParameterStringList("processor.cropmask.quality");
-              UnpackQualityFlagsList(filesList);
-
-              // get the CropMask flags
-              filesList = this->GetParameterStringList("processor.cropmask.flags");
-              UnpackRastersList(filesList, CROP_MASK_FLAGS, true);
-          }
-
-          //if is CROP TYPE, read raster file
-          if (m_strProductLevel == SEN2AGRI_L4B_PRD_LEVEL)
-          {
-              // Get reflectance raster file list
-              std::vector<std::string> filesList;
-              filesList = this->GetParameterStringList("processor.croptype.file");
-              UnpackRastersList(filesList, CROP_TYPE_RASTER, false);
-
-              filesList = this->GetParameterStringList("processor.croptype.rawfile");
-              UnpackRastersList(filesList, CROP_TYPE_RAW_RASTER, false);
-
-              //get quality file list
-              filesList = this->GetParameterStringList("processor.croptype.quality");
-              UnpackQualityFlagsList(filesList);
-
-              // get the CropType flags
-              filesList = this->GetParameterStringList("processor.croptype.flags");
-              UnpackRastersList(filesList, CROP_TYPE_FLAGS, true);
-          }
-      } else {
+      if (m_procInputDescr.processor == "generic") {
           const std::vector<std::string> &vectorFilesList = this->GetParameterStringList("processor.generic.files");
-          TransferGenericVectorFiles(vectorFilesList);
+          TransferGenericProductFiles(vectorFilesList);
+      } else {
+          for (const ProcessorParamInputDescriptor &inputDescr: m_procInputDescr.inputDescriptors) {
+              const std::vector<std::string> &filesList = this->GetParameterStringList(inputDescr.key);
+              switch (inputDescr.rasterType) {
+                case GENERIC_RASTER:
+                case SIMPLE_FLAGS_RASTER:
+                case SIMPLE_DISCRETE_FLAGS_RASTER:
+                  UnpackRastersList(filesList, inputDescr);
+                  break;
+                case RGB_RASTER:
+                    {
+                      std::string strTileID("");
+
+                      for (const auto &rasterFileEl : filesList) {
+                          if(rasterFileEl.compare(0, 5, "TILE_") == 0)
+                          {
+                              //if is TILE separator, read tileID
+                              strTileID = rasterFileEl.substr(5, rasterFileEl.length() - 5);
+                          }
+                          else
+                          {
+                              previewInfo previewInfoEl;
+                              previewInfoEl.strTileID = strTileID;
+                              previewInfoEl.strPreviewFileName = rasterFileEl;
+                              m_previewList.emplace_back(previewInfoEl);
+                          }
+                      }
+                    }
+                    break;
+                case QUALITY_FLAGS_RASTER:
+                    {
+                        UnpackQualityFlagsList(filesList);
+                    }
+                    break;
+                default:
+                    break;
+              }
+          }
       }
+
       if(bDirStructBuiltOk)
       {
           for (tileInfo &tileEl : m_tileIDList) {
@@ -696,6 +604,26 @@ private:
       deleteMainFolderLockFile(lockFileName);
   }
 
+  ProcessorInputDescriptor GetProcessorInputDescriptor(const std::string &processor, const std::string &prdLevel)
+  {
+      for(const ProcessorInputDescriptor &prdDescr: ProcessorDescriptors) {
+          // check first the processor
+          if (processor == prdDescr.processor) {
+              if (processor == "generic") {
+                  // set the product level to the one received
+                  ProcessorInputDescriptor descr = prdDescr;
+                  descr.productLevel = prdLevel;
+                  return descr;
+              }
+              if (prdLevel == prdDescr.productLevel) {
+                  return prdDescr;
+              }
+          }
+      }
+      itkGenericExceptionMacro(<< "Could not find a descriptor for processor " <<
+                                m_strProcessor << " and product level " << m_strProductLevel);
+  }
+
   void CreateAndFillTile(tileInfo &tileInfoEl, const std::string &strMainFolderFullPath)
   {
       bool bResult;
@@ -738,13 +666,14 @@ private:
       return false;
   }
 
-  void UnpackRastersList(std::vector<std::string> &rastersList, rasterTypes rasterType, bool bIsQiData, bool bQiDataIsDiscrete = true)
+  void UnpackRastersList(const std::vector<std::string> &rastersList, const ProcessorParamInputDescriptor &descr)
   {
       std::string strTileID;
       rasterInfo rasterInfoEl;
-      rasterInfoEl.bIsQiData = bIsQiData;
-      rasterInfoEl.bQiDataIsDiscrete = bQiDataIsDiscrete;
-      rasterInfoEl.bNeedsPreview = false;
+//      rasterInfoEl.bIsQiData = bIsQiData;
+//      rasterInfoEl.bQiDataIsDiscrete = bQiDataIsDiscrete;
+//      rasterInfoEl.bNeedsPreview = false;
+      rasterInfoEl.paramDescr = descr;
 
       // get the number of tiles elements in the rasters list (including duplicates)
       //std::string strTileID = UnpackTiles(rastersList, allTilesCnt);
@@ -764,10 +693,10 @@ private:
                 m_tileIDList.emplace_back(tileInfoEl);
               }
           } else  {
-              rasterInfoEl.iRasterType = rasterType;
+              //rasterInfoEl.iRasterType = rasterType;
               rasterInfoEl.strRasterFileName = rasterFileEl;
               rasterInfoEl.strTileID = strTileID;
-              rasterInfoEl.bNeedsPreview = IsRasterNeedsPreview(rasterType);
+              // rasterInfoEl.bNeedsPreview = IsRasterNeedsPreview(rasterType);
               // update the date
               if(bAllRastersHaveDate) {
                   if(LevelHasAcquisitionTime()) {
@@ -784,7 +713,7 @@ private:
       }
   }
 
-  int CountTiles(std::vector<std::string> &filesList) {
+  int CountTiles(const std::vector<std::string> &filesList) {
       int nTotalFoundTiles = 0;
       for (const auto &file : filesList) {
           if(file.compare(0, 5, "TILE_") == 0)
@@ -793,7 +722,7 @@ private:
       return nTotalFoundTiles;
   }
 
-  void UnpackQualityFlagsList(std::vector<std::string> &filesList) {
+  void UnpackQualityFlagsList(const std::vector<std::string> &filesList) {
       qualityInfo qualityInfoEl;
       std::string strTileID;
       std::string strRegion;
@@ -916,34 +845,10 @@ private:
       return subject;
   }
 
-  std::string GetProductType()
-  {
-      if (m_strProductLevel.compare("L2A") == 0)
-         return L2A_PRODUCT;
-      if (m_strProductLevel == SEN2AGRI_L3A_PRD_LEVEL)
-         return COMPOSITE_PRODUCT;
-      if (m_strProductLevel == SEN2AGRI_L3B_PRD_LEVEL)
-         return LAI_MONO_DATE_PRODUCT;
-      if (m_strProductLevel == SEN2AGRI_L3C_PRD_LEVEL)
-         return LAI_REPROC_PRODUCT;
-      if (m_strProductLevel == SEN2AGRI_L3D_PRD_LEVEL)
-         return LAI_FITTED_PRODUCT;
-      if (m_strProductLevel == SEN2AGRI_L3E_PRD_LEVEL)
-         return PHENO_NDVI_PRODUCT;
-      if (m_strProductLevel == SEN2AGRI_L4A_PRD_LEVEL)
-         return CROP_MASK;
-      if (m_strProductLevel == SEN2AGRI_L4B_PRD_LEVEL)
-         return CROP_TYPE;
-      if (m_strProductLevel.size() > 0) {
-          return m_strProductLevel;
-      }
-      return "Unknowkn product";
-  }
-
   void FillBandList()
   {
       Band bandEl;
-      if (m_strProductLevel == SEN2AGRI_L3A_PRD_LEVEL)
+      if (m_procInputDescr.productLevel == SEN2AGRI_L3A_PRD_LEVEL)
               //if is composite product, fill bands
       {
 
@@ -1117,7 +1022,7 @@ private:
               continue;
           }
 
-          if(rasterFileEl.bIsQiData) {
+          if(rasterFileEl.paramDescr.IsQiParam()) {
               if(rasterFileEl.strRasterFileName.find(".tif") > 0 || rasterFileEl.strRasterFileName.find(".TIF") > 0) {
                   auto imageReader = ImageFileReader<FloatVectorImageType>::New();
                   imageReader->SetFileName(rasterFileEl.strRasterFileName);
@@ -1136,7 +1041,7 @@ private:
 
               iResolution = output->GetSpacing()[0];
 
-              if(/*(!bPreview) && */IsPreviewNeeded(rasterFileEl, iResolution))
+              if(IsPreviewNeeded(rasterFileEl))
               {
                   bool bFound = false;
                   for(size_t i = 0; i < m_previewList.size(); i++) {
@@ -1155,7 +1060,7 @@ private:
                   }
               }
 
-              if(rasterFileEl.iRasterType != COMPOSITE_REFLECTANCE_RASTER)
+              // if(rasterFileEl.iRasterType != COMPOSITE_REFLECTANCE_RASTER)   // TODO 20210915 - Check how this can be replaced
               {
                   //bands no = output->GetNumberOfComponentsPerPixel()
                   Band bandEl;
@@ -1238,7 +1143,7 @@ private:
 
 
               geoProductInfoEl.iResolution = iResolution;
-              geoProductInfoEl.rasterType = rasterFileEl.iRasterType;
+              // geoProductInfoEl.rasterType = rasterFileEl.iRasterType;
 
               const auto &extent = GetExtent(output.GetPointer());
 
@@ -1267,7 +1172,7 @@ private:
 
       TileMask tileMask;
       for (const auto &rasterFileEl : m_rasterInfoList) {
-         if((rasterFileEl.strTileID == tileInfoEl.strTileID) && rasterFileEl.bIsQiData)
+         if((rasterFileEl.strTileID == tileInfoEl.strTileID) && rasterFileEl.paramDescr.IsQiParam())
          {
               tileMask.MaskType = "";// ??? TODO
               tileMask.BandId = 0;
@@ -1288,7 +1193,9 @@ private:
       m_productMetadata.GeneralInfo.ProductInfo.ProductURI = "";
       m_productMetadata.GeneralInfo.ProductInfo.ProcessingLevel = m_strProductLevel;
 
-      m_productMetadata.GeneralInfo.ProductInfo.ProductType = GetProductType();
+      m_productMetadata.GeneralInfo.ProductInfo.ProductType = (m_procInputDescr.processor == "generic" ?
+                                                                    (m_strProductLevel.size() > 0 ? m_strProductLevel : m_procInputDescr.name) :
+                                                                     m_procInputDescr.name);
       m_productMetadata.GeneralInfo.ProductInfo.ProcessingBaseline = m_strBaseline;
       m_productMetadata.GeneralInfo.ProductInfo.GenerationTime = currentDateTimeFormattted("%Y-%m-%dT%H:%M:%S");/*"2015-07-04T10:12:29.000413Z";*/
 
@@ -1414,14 +1321,13 @@ private:
       m_productMetadata.GeneralInfo.ProductImageCharacteristics.ImageDisplayOrder.GreenChannel = 0;
       m_productMetadata.GeneralInfo.ProductImageCharacteristics.ImageDisplayOrder.BlueChannel = 0;
 
-      if ((m_strProductLevel == SEN2AGRI_L2A_PRD_LEVEL) ||
-          (m_strProductLevel == SEN2AGRI_L3A_PRD_LEVEL))
+      // TODO: Here should be exported also the channels for the RGB raster
+      if (m_procInputDescr.HasRgbRaster())
       {
           std::cout << "Red, green and blue" << std::endl;
           m_productMetadata.GeneralInfo.ProductImageCharacteristics.ImageDisplayOrder.RedChannel = 3;
           m_productMetadata.GeneralInfo.ProductImageCharacteristics.ImageDisplayOrder.GreenChannel = 2;
           m_productMetadata.GeneralInfo.ProductImageCharacteristics.ImageDisplayOrder.BlueChannel = 1;
-
       }
 
       m_productMetadata.GeneralInfo.ProductImageCharacteristics.QuantificationUnit = "none";
@@ -1442,13 +1348,13 @@ private:
       m_productMetadata.GeometricInfo.ProductFootprint.RatserCSType = "POINT";
       m_productMetadata.GeometricInfo.ProductFootprint.PixelOrigin = 1;
 
-      //???? TODO
       SpecialValues specialValue;
-      specialValue.SpecialValueIndex = NO_DATA_VALUE;
+      specialValue.SpecialValueIndex = std::to_string(NO_DATA_VALUE);
       specialValue.SpecialValueText = "NODATA";
       m_productMetadata.GeneralInfo.ProductImageCharacteristics.SpecialValuesList.push_back(specialValue);
 
-      if (m_strProductLevel == "L4A")
+      // TODO: 20210915 - make this more generic
+      if (m_strProductLevel == SEN2AGRI_L4A_PRD_LEVEL)
       {
           specialValue.SpecialValueIndex = "0";
           specialValue.SpecialValueText = "NO CROP";
@@ -1475,7 +1381,7 @@ private:
       granuleEl.ImageFormat = IMAGE_FORMAT;
       //fill the TIFF files for current tile
       for (const auto &rasterFileEl : m_rasterInfoList) {
-          if((rasterFileEl.strTileID == tileInfoEl.strTileID) && !rasterFileEl.bIsQiData)
+          if((rasterFileEl.strTileID == tileInfoEl.strTileID) && !rasterFileEl.paramDescr.IsQiParam())
           {
             granuleEl.ImageIDList.emplace_back(rasterFileEl.strNewRasterFileName);
 
@@ -1566,111 +1472,17 @@ private:
 
   void ComputeNewNameOfRasterFiles(const tileInfo &tileInfoEl)
   {
-      std::string rasterCateg;
-
-      for (rasterInfo &rasterFileEl : m_rasterInfoList) {
+     for (rasterInfo &rasterFileEl : m_rasterInfoList) {
           if(rasterFileEl.strTileID != tileInfoEl.strTileID) {
               continue;
           }
-          bool bAddResolutionToSuffix = false;
-          int expectedBandsNo = 1;
           std::string suffix = TIF_EXTENSION;
-          switch(rasterFileEl.iRasterType)
-              {
-                case COMPOSITE_REFLECTANCE_RASTER:
-                    rasterCateg = REFLECTANCE_SUFFIX;
-                    bAddResolutionToSuffix = true;
-                    expectedBandsNo = 4;
-                    break;
-                case COMPOSITE_WEIGHTS_RASTER:
-                    rasterCateg = WEIGHTS_SUFFIX;
-                    bAddResolutionToSuffix = true;
-                    expectedBandsNo = 4;
-                    break;
-                case LAI_NDVI_RASTER:
-                    rasterCateg = LAI_NDVI_SUFFIX;
-                  break;
-                case LAI_MONO_DATE_RASTER:
-                    rasterCateg = LAI_MDATE_SUFFIX;
-                    break;
-                case LAI_MONO_DATE_ERR_RASTER:
-                    rasterCateg = LAI_MDATE_ERR_SUFFIX;
-                  break;
-                case FAPAR_MONO_DATE_RASTER:
-                    rasterCateg = FAPAR_MDATE_SUFFIX;
-                    break;
-                case FCOVER_MONO_DATE_RASTER:
-                    rasterCateg = FCOVER_MDATE_SUFFIX;
-                    break;
-                case LAI_REPR_RASTER:
-                    rasterCateg = LAI_REPR_SUFFIX;
-                   break;
-                case LAI_FIT_RASTER:
-                    rasterCateg = LAI_FIT_SUFFIX;
-                   break;
-                case PHENO_RASTER:
-                     rasterCateg = PHENO_SUFFIX;
-                     expectedBandsNo = 4;
-                     break;
-                case CROP_TYPE_RASTER:
-                    rasterCateg = CROP_TYPE_IMG_SUFFIX;
-                    break;
-                case CROP_TYPE_RAW_RASTER:
-                    rasterCateg = CROP_TYPE_RAW_IMG_SUFFIX;
-                    break;
-                case CROP_MASK_RASTER:
-                    rasterCateg = CROP_MASK_IMG_SUFFIX;
-                   break;
-                case RAW_CROP_MASK_RASTER:
-                    rasterCateg = CROP_MASK_RAW_IMG_SUFFIX;
-                    break;
-                case COMPOSITE_DATES_MASK:
-                    rasterCateg = COMPOSITE_DATES_SUFFIX;
-                    bAddResolutionToSuffix = true;
-                    break;
-                case COMPOSITE_FLAGS_MASK:
-                    rasterCateg = COMPOSITE_FLAGS_SUFFIX;
-                    bAddResolutionToSuffix = true;
-                    break;
-                case LAI_MONO_DATE_STATUS_FLAGS:
-                    rasterCateg = LAI_MONO_DATE_FLAGS_SUFFIX;
-                    break;
-
-                case LAI_MONO_DATE_IN_DOMAIN_FLAGS:
-                    rasterCateg = LAI_IN_DOMAIN_FLAGS_SUFFIX;
-                    break;
-                case LAI_MONO_DATE_DOMAIN_FLAGS:
-                    rasterCateg = LAI_DOMAIN_FLAGS_SUFFIX;
-                    break;
-                case FAPAR_DOMAIN_FLAGS:
-                    rasterCateg = FAPAR_DOMAIN_FLAGS_SUFFIX;
-                    break;
-                case FCOVER_DOMAIN_FLAGS:
-                    rasterCateg = FCOVER_DOMAIN_FLAGS_SUFFIX;
-                    break;
-
-                case LAI_REPROC_FLAGS:
-                    rasterCateg = LAI_REPROC_FLAGS_SUFFIX;
-                    break;
-                case LAI_FITTED_FLAGS:
-                    rasterCateg = LAI_FITTED_FLAGS_SUFFIX;
-                    break;
-                case PHENO_FLAGS:
-                    rasterCateg = PHENO_FLAGS_SUFFIX;
-                    break;
-                case CROP_MASK_FLAGS:
-                    rasterCateg = CROP_MASK_FLAGS_SUFFIX;
-                    break;
-                case CROP_TYPE_FLAGS:
-                    rasterCateg = CROP_TYPE_FLAGS_SUFFIX;
-                    break;
-              }
-              if(bAddResolutionToSuffix) {
-                  suffix = "_" + std::to_string(rasterFileEl.nResolution) + "M" + suffix;
-              }
-
-              rasterFileEl.strNewRasterFileName = BuildFileName(rasterCateg, tileInfoEl.strTileID, suffix, rasterFileEl.rasterTimePeriod);
-              rasterFileEl.nRasterExpectedBandsNo = expectedBandsNo;
+          if(rasterFileEl.paramDescr.bAddResolutionToSuffix) {
+              suffix = "_" + std::to_string(rasterFileEl.nResolution) + "M" + suffix;
+          }
+          rasterFileEl.strNewRasterFileName = BuildFileName(rasterFileEl.paramDescr.outSuffix,
+                                                            tileInfoEl.strTileID, suffix,
+                                                            rasterFileEl.rasterTimePeriod);
       }
   }
 
@@ -1682,7 +1494,7 @@ private:
       for (auto &rasterFileEl : m_rasterInfoList) {
           if(tileInfoEl.strTileID == rasterFileEl.strTileID)
           {
-              if(rasterFileEl.bIsQiData) {
+              if(rasterFileEl.paramDescr.IsQiParam()) {
                   strImgDataPath = tileInfoEl.strTilePath + "/" + QI_DATA_FOLDER_NAME;
               } else {
                   strImgDataPath = tileInfoEl.strTilePath + "/" + IMG_DATA_FOLDER_NAME;
@@ -1690,7 +1502,7 @@ private:
               rasterFileEl.strNewRasterFullPath = strImgDataPath + "/" + rasterFileEl.strNewRasterFileName;
 
               // call script for COG/COMPRESS, if needed
-              ExecuteGdalTranslateOps(rasterFileEl.strRasterFileName, (rasterFileEl.bIsQiData && rasterFileEl.bQiDataIsDiscrete));
+              ExecuteGdalTranslateOps(rasterFileEl.strRasterFileName, (rasterFileEl.paramDescr.rasterType == SIMPLE_DISCRETE_FLAGS_RASTER));
 
               CopyFile(rasterFileEl.strNewRasterFullPath, rasterFileEl.strRasterFileName);
           }
@@ -1796,37 +1608,12 @@ private:
   {
 
       std::string strTilePreviewFullPath;
-      int iChannelNo = 1;
+      int iChannelNo = (m_strLutFile.size() > 0) ? 3 : 1;
       std::vector<std::string> strChannelsList;
       // check if we should use the LUT table for LAI
-      bool bUseLut = false;
-      bool bIsRgbImg = false;
-      bool bIsRangeMapFile = true;
-
-      if ((m_strProductLevel == SEN2AGRI_L2A_PRD_LEVEL) ||
-          (m_strProductLevel == SEN2AGRI_L3A_PRD_LEVEL))
-      {
-          iChannelNo = 3;
-          if(m_strLutFile != "") {
-            bUseLut = true;
-            bIsRgbImg = true;
-          }
-      }
-      if(((m_strProductLevel == SEN2AGRI_L3B_PRD_LEVEL) ||
-          (m_strProductLevel == SEN2AGRI_L3C_PRD_LEVEL) ||
-          (m_strProductLevel == SEN2AGRI_L3D_PRD_LEVEL) ||
-          (m_strProductLevel == SEN2AGRI_L4A_PRD_LEVEL) ||
-          (m_strProductLevel == SEN2AGRI_L4B_PRD_LEVEL)) &&
-          (m_strLutFile != ""))
-      {
-            iChannelNo = 3;
-            bUseLut = true;
-            if(m_strProductLevel == SEN2AGRI_L4A_PRD_LEVEL || m_strProductLevel == SEN2AGRI_L4B_PRD_LEVEL) {
-                bIsRangeMapFile = false;
-            }
-      }
-
-      //std::cout << "ChannelNo = " << iChannelNo << std::endl;
+      bool bUseLut = (m_strLutFile.size() > 0);
+      bool bIsRgbImg = m_procInputDescr.HasRgbRaster();
+      bool bIsRangeMapFile = !m_procInputDescr.HasDiscreteValuesRaster();
 
       for(int j = 1; j <= iChannelNo; j++)
       {
@@ -1834,15 +1621,14 @@ private:
       }
 
       for (const auto &tileID : m_tileIDList) {
+          bool bQuicklookGenerated = false;
           for (const auto &previewFileEl : m_previewList) {
-
-              if(tileID.strTileID == previewFileEl.strTileID)
+              if(!bQuicklookGenerated && tileID.strTileID == previewFileEl.strTileID)
               {
                  //build producty preview file name for tile
                  strTilePreviewFullPath = tileID.strTileNameWithoutExt + JPEG_EXTENSION;
                  strTilePreviewFullPath = ReplaceString(strTilePreviewFullPath, METADATA_CATEG, QUICK_L0OK_IMG_CATEG);
 
-                 bool bQuicklookGenerated = false;
                  if(bUseLut) {
                      std::string outL3BRgbPreviewFile = previewFileEl.strPreviewFileName + "_RGB.tif";
                      if(!generateRgbFromLut(previewFileEl.strPreviewFileName, outL3BRgbPreviewFile, m_strLutFile,
@@ -1896,8 +1682,9 @@ private:
 #endif
   }
 
-  void TransferGenericVectorFiles(const std::vector<std::string> &files)
+  void TransferGenericProductFiles(const std::vector<std::string> &files)
   {
+      const std::string &folderName = m_bVectPrd ? VECTOR_FOLDER_NAME : TILES_FOLDER_NAME;
       for(const auto &file: files) {
           boost::filesystem::path filePath(file);
           if (boost::filesystem::is_directory(filePath)) {
@@ -1906,15 +1693,15 @@ private:
                   if (boost::filesystem::is_directory(entry.path())) {
                       const std::string &dirName = GetFileNameFromBoostPath(entry.path().filename());
                       otbAppLogINFO("Copying the content of the folder " << dirName)
-                      CopyDir(entry.path(), m_strDestRoot + "/" + m_strProductDirectoryName + "/" + VECTOR_FOLDER_NAME + "/" + dirName);
+                      CopyDir(entry.path(), m_strDestRoot + "/" + m_strProductDirectoryName + "/" + folderName + "/" + dirName);
                   } else {
                       const std::string &fileName = GetFileNameFromBoostPath(entry.path().filename());
-                      CopyFile(m_strDestRoot + "/" + m_strProductDirectoryName + "/" + VECTOR_FOLDER_NAME + "/" + fileName, entry.path().string());
+                      CopyFile(m_strDestRoot + "/" + m_strProductDirectoryName + "/" + folderName + "/" + fileName, entry.path().string());
                   }
               }
           } else {
               const std::string &fileName = GetFileNameFromBoostPath(filePath.filename());
-              CopyFile(m_strDestRoot + "/" + m_strProductDirectoryName + "/" + VECTOR_FOLDER_NAME + "/" + fileName, file);
+              CopyFile(m_strDestRoot + "/" + m_strProductDirectoryName + "/" + folderName + "/" + fileName, file);
           }
       }
   }
@@ -1993,9 +1780,8 @@ private:
       }
   }
 
-  bool IsPreviewNeeded(const rasterInfo &rasterFileEl, int nRes) {
-        if(!rasterFileEl.bNeedsPreview || rasterFileEl.bIsQiData ||
-           ((rasterFileEl.iRasterType == COMPOSITE_REFLECTANCE_RASTER) && (nRes != 10))) {
+  bool IsPreviewNeeded(const rasterInfo &rasterFileEl) {
+        if(!rasterFileEl.paramDescr.bNeedsPreview || rasterFileEl.paramDescr.IsQiParam()) {
             return false;
         }
         return true;
@@ -2210,7 +1996,7 @@ private:
   }
 
   bool LevelHasAcquisitionTime() {
-      if(m_strProductLevel == "L3B") {
+      if(m_procInputDescr.bIsMonoDateProduct) {
           return true;
       }
       return false;
@@ -2222,11 +2008,11 @@ private:
         bool bValidProduct = true;
         for (rasterInfo &rasterFileEl : m_rasterInfoList) {
             // we check only the rasters and not the qi data
-            if(!rasterFileEl.bIsQiData) {
+            if(!rasterFileEl.paramDescr.IsQiParam()) {
                 std::vector<const char *> args;
                 args.emplace_back(rasterFileEl.strNewRasterFullPath.c_str());
                 args.emplace_back("--number-of-bands");
-                std::string rasterBandsNo = std::to_string(rasterFileEl.nRasterExpectedBandsNo);
+                std::string rasterBandsNo = std::to_string(rasterFileEl.paramDescr.expectedBandsNo);
                 args.emplace_back(rasterBandsNo.c_str());
                 if(!ExecuteExternalProgram("validity_checker.py", args)) {
                     bValidProduct = false;
@@ -2261,6 +2047,7 @@ private:
 
 
 private:
+  std::string m_strProcessor;
   std::string m_strProductLevel;
   std::string m_strTimePeriod;
   std::string m_strLutFile;
@@ -2286,7 +2073,7 @@ private:
     bool m_bDynamicallyTimePeriod;
 
     bool m_bVectPrd;
-
+    ProcessorInputDescriptor m_procInputDescr;
 };
 }
 }

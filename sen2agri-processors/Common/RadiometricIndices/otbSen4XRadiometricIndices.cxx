@@ -79,12 +79,15 @@ public:
   class indiceSpec
   {
   public:
-    indiceSpec(std::string k, std::string i, RadiometricIndexType* ind) : key(k), item(i), indice(ind)
+    indiceSpec(std::string k, std::string i, RadiometricIndexType* ind, bool qRes = true) : key(k), item(i), indice(ind),
+        quantifiableResult(qRes)
     {
     }
     std::string                           key;
     std::string                           item;
     std::unique_ptr<RadiometricIndexType> indice;
+    bool quantifiableResult;                        // indicates that the value is subunitaire and
+                                                    // can be converted to a short int with a quantification value of 1000
   };
 
 
@@ -159,16 +162,16 @@ private:
     m_Map.push_back({"list.ipvi", "Vegetation:IPVI", new otb::Functor::IPVI<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.laindvilog", "Vegetation:LAIFromNDVILog", new otb::Functor::LAIFromNDVILogarithmic<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.lairefl", "Vegetation:LAIFromReflLinear", new otb::Functor::LAIFromReflectancesLinear<InputPixelType, OutputPixelType, MaskPixelType>()});
-//    m_Map.push_back({"list.laindviformo", "Vegetation:LAIFromNDVIFormo", new otb::Functor::LAIFromNDVIFormosat2Functor<InputPixelType, OutputType, MaskPixelType>()});
+//    m_Map.push_back({"list.laindviformo", "Vegetation:LAIFromNDVIFormo", new otb::Functor::LAIFromNDVIFormosat2Functor<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.ndwi", "Water:NDWI", new otb::Functor::NDWI<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.ndwi2", "Water:NDWI2", new otb::Functor::NDWI2<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.mndwi", "Water:MNDWI", new otb::Functor::MNDWI<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.ndti", "Water:NDTI", new otb::Functor::NDTI<InputPixelType, OutputPixelType, MaskPixelType>()});
-//    m_Map.push_back({"list.ri", "Soil:RI", new otb::Functor::RI<InputPixelType, OutputType, MaskPixelType>()});
-//    m_Map.push_back({"list.ci", "Soil:CI", new otb::Functor::CI<InputPixelType, OutputType, MaskPixelType>()});
-//    m_Map.push_back({"list.bi", "Soil:BI", new otb::Functor::BI<InputPixelType, OutputType, MaskPixelType>()});
-//    m_Map.push_back({"list.bi2", "Soil:BI2", new otb::Functor::BI2<InputPixelType, OutputType, MaskPixelType>()});
-//    m_Map.push_back({"list.isu", "BuiltUp:ISU", new otb::Functor::ISU<InputPixelType, OutputType, MaskPixelType>()});
+    m_Map.push_back({"list.ri", "Soil:RI", new otb::Functor::RI<InputPixelType, OutputPixelType, MaskPixelType>()});
+    m_Map.push_back({"list.ci", "Soil:CI", new otb::Functor::CI<InputPixelType, OutputPixelType, MaskPixelType>()});
+    m_Map.push_back({"list.bi", "Soil:BI", new otb::Functor::BI<InputPixelType, OutputPixelType, MaskPixelType>(), true});
+    m_Map.push_back({"list.bi2", "Soil:BI2", new otb::Functor::BI2<InputPixelType, OutputPixelType, MaskPixelType>(), true});
+//    m_Map.push_back({"list.isu", "BuiltUp:ISU", new otb::Functor::ISU<InputPixelType, OutputPixelType, MaskPixelType>()});
 
     ClearChoices("list");
 
@@ -300,15 +303,16 @@ private:
         m_functorOutput = m_unmaskedFilter->GetOutput();
     }
 
-    m_floatToShortFunctor = FloatToShortTransFilterType::New();
-    // quantify the image using the default factor and considering 0 as NO_DATA but
-    // also setting all values less than 0 to 0
-    m_floatToShortFunctor->GetFunctor().Initialize(DEFAULT_QUANTIFICATION_VALUE, NO_DATA_VALUE, true);
-    m_floatToShortFunctor->SetInput(m_functorOutput);
-    m_floatToShortFunctor->GetOutput()->UpdateOutputInformation();
+//    m_floatToShortFunctor = FloatToShortTransFilterType::New();
+//    // quantify the image using the default factor and considering 0 as NO_DATA but
+//    // also setting all values less than 0 to 0
+//    m_floatToShortFunctor->GetFunctor().Initialize(DEFAULT_QUANTIFICATION_VALUE, NO_DATA_VALUE, true);
+//    m_floatToShortFunctor->SetInput(m_functorOutput);
+//    m_floatToShortFunctor->GetOutput()->UpdateOutputInformation();
 
-    SetParameterOutputImagePixelType("out", ImagePixelType_int16);
-    SetParameterOutputImage("out", m_floatToShortFunctor->GetOutput());
+    // SetParameterOutputImagePixelType("out", ImagePixelType_int16);
+    //SetParameterOutputImage("out", m_floatToShortFunctor->GetOutput());
+    SetParameterOutputImage("out", m_functorOutput);
 
 //    // Call register pipeline to allow streaming and garbage collection
 //    RegisterPipeline();

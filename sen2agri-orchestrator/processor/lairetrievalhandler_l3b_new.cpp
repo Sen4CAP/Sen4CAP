@@ -31,6 +31,32 @@ namespace std {
 
 #define CURRENT_PROC_PRDS_FILE_NAME     "current_processing_l3b_new.txt"
 
+
+QMap<QString, LaiRetrievalHandlerL3BNew::SpectralIndexDescr>
+    LaiRetrievalHandlerL3BNew::L3BJobContext::spectralIndicators = {
+     {"ndvi", {"ndvi", "Vegetation", "NDVI"}},
+     {"tndvi", {"tndvi", "Vegetation", "TNDVI"}},
+     {"rdvi", {"rdvi", "Vegetation", "RVI"}},
+     {"savi", {"savi", "Vegetation", "SAVI"}},
+     {"tsavi", {"tsavi", "Vegetation", "TSAVI"}},
+     {"msavi", {"msavi", "Vegetation", "MSAVI"}},
+     {"msavi2", {"msavi2", "Vegetation", "MSAVI2"}},
+     {"gemi", {"gemi", "Vegetation", "GEMI"}},
+     {"ipvi", {"ipvi", "Vegetation", "IPVI"}},
+     {"laindvilog", {"laindvilog", "Vegetation", "LAIFromNDVILog"}},
+     {"lairefl", {"lairefl", "Vegetation", "LAIFromReflLinear"}},
+     {"ndwi", {"ndwi", "Water", "NDWI"}},
+     {"ndwi2", {"ndwi2", "Water", "NDWI2"}},
+     {"mndwi", {"mndwi", "Water", "MNDWI"}},
+     {"ndti", {"ndti", "Water", "NDTI"}},
+     {"redness", {"redness", "Soil", "RI"}},
+     {"colorindex",{"colorindex", "Soil", "CI"}},
+     {"brightness", {"brightness", "Soil", "BI"}},
+     {"brightness2", {"brightness2", "Soil", "BI2"}}
+};
+
+QStringList LaiRetrievalHandlerL3BNew::L3BJobContext::biophysicalIndicatorNames = {"lai", "fapar", "fcover"};
+
 void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jobCtx,
                                                          QList<TaskToSubmit> &outAllTasksList,
                                                     const QList<TileInfos> &tileInfosList) {
@@ -40,28 +66,22 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
     int nbLaiMonoProducts = tileInfosList.size();
     for(int i = 0; i<nbLaiMonoProducts; i++) {
         outAllTasksList.append(TaskToSubmit{"lai-processor-mask-flags", {}});
-        if (jobCtx.bGenNdvi) {
-            outAllTasksList.append(TaskToSubmit{"lai-processor-ndvi-extractor", {}});
+        for (const QString &index: L3BJobContext::spectralIndicators.keys()) {
+            if (jobCtx.mapIndexGenFlags[index]) {
+                outAllTasksList.append(TaskToSubmit{"lai-processor-" + index + "-extractor", {}});
+            }
         }
-        if (jobCtx.bGenLai || jobCtx.bGenFapar || jobCtx.bGenFCover) {
+        if (jobCtx.hasBiophysicalIndex) {
             outAllTasksList.append(TaskToSubmit{"lai-create-angles", {}});
             outAllTasksList.append(TaskToSubmit{"gdal_translate", {}});
             outAllTasksList.append(TaskToSubmit{"gdalbuildvrt", {}});
             outAllTasksList.append(TaskToSubmit{"gdal_translate", {}});
-            if (jobCtx.bGenLai) {
-                outAllTasksList.append(TaskToSubmit{"lai-processor", {}});
-                outAllTasksList.append(TaskToSubmit{"lai-quantify-image", {}});
-                outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
-            }
-            if (jobCtx.bGenFapar) {
-                outAllTasksList.append(TaskToSubmit{"fapar-processor", {}});
-                outAllTasksList.append(TaskToSubmit{"fapar-quantify-image", {}});
-                outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
-            }
-            if (jobCtx.bGenFCover) {
-                outAllTasksList.append(TaskToSubmit{"fcover-processor", {}});
-                outAllTasksList.append(TaskToSubmit{"fcover-quantify-image", {}});
-                outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
+            for (const QString &index: L3BJobContext::biophysicalIndicatorNames) {
+                if (jobCtx.mapIndexGenFlags[index]) {
+                    outAllTasksList.append(TaskToSubmit{index + "-processor", {}});
+                    outAllTasksList.append(TaskToSubmit{index + "-quantify-image", {}});
+                    outAllTasksList.append(TaskToSubmit{index + "gen-domain-flags", {}});
+                }
             }
         }
         if (jobCtx.bGenInDomainFlags) {
@@ -80,14 +100,11 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
     int i;
     QList<std::reference_wrapper<const TaskToSubmit>> productFormatterParentsRefs;
 
-    // we execute in parallel and launch at once all processing chains for each product
-    // for example, if we have genModels, we launch all bv-input-variable-generation for all products
-    // if we do not have genModels, we launch all NDVIRVIExtraction in the same time for all products
     int nCurTaskIdx = initialTasksNo;
 
     // Specifies if the products creation should be chained or not.
     // TODO: This should be taken from the configuration
-    bool bChainProducts = true;
+    bool bChainProducts = jobCtx.parallelizeProducts;
 
     for(i = 0; i<nbLaiMonoProducts; i++) {
         // if we want chaining products and we have a previous product executed
@@ -102,26 +119,21 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
         // lai-processor-ndvi-extraction, lai-processor, fapar-processor, fcover-processor -> lai-processor-mask-flags
         // all these are run in parallel
         int flagsTaskIdx = nCurTaskIdx-1;
-        if (jobCtx.bGenNdvi) {
-            int ndviRviExtrIdx = nCurTaskIdx++;
-            outAllTasksList[ndviRviExtrIdx].parentTasks.append(outAllTasksList[flagsTaskIdx]);
-            // add the ndvi task to the list of the product formatter corresponding to this product
-            productFormatterParentsRefs.append(outAllTasksList[ndviRviExtrIdx]);
+
+        for (const QString &index: L3BJobContext::spectralIndicators.keys()) {
+            if (jobCtx.mapIndexGenFlags[index]) {
+                nCurTaskIdx = CreateSpectralIndicatorTasks(flagsTaskIdx, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
+            }
         }
+
         int nAnglesTaskId = flagsTaskIdx;
-        if (jobCtx.bGenLai || jobCtx.bGenFapar || jobCtx.bGenFCover) {
+        if (jobCtx.hasBiophysicalIndex) {
             nCurTaskIdx = CreateAnglesTasks(flagsTaskIdx, outAllTasksList, nCurTaskIdx, nAnglesTaskId);
 
-            if (jobCtx.bGenLai) {
-                nCurTaskIdx = CreateBiophysicalIndicatorTasks(nAnglesTaskId, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
-            }
-
-            if (jobCtx.bGenFapar) {
-                nCurTaskIdx = CreateBiophysicalIndicatorTasks(nAnglesTaskId, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
-            }
-
-            if (jobCtx.bGenFCover) {
-                nCurTaskIdx = CreateBiophysicalIndicatorTasks(nAnglesTaskId, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
+            for (const QString &index: L3BJobContext::biophysicalIndicatorNames) {
+                if (jobCtx.mapIndexGenFlags[index]) {
+                    nCurTaskIdx = CreateBiophysicalIndicatorTasks(nAnglesTaskId, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
+                }
             }
         }
         if (jobCtx.bGenInDomainFlags) {
@@ -155,6 +167,17 @@ int LaiRetrievalHandlerL3BNew::CreateAnglesTasks(int parentTaskId, QList<TaskToS
     return nCurTaskIdx;
 }
 
+int LaiRetrievalHandlerL3BNew::CreateSpectralIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
+                                     QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
+                                     int nCurTaskIdx) {
+    int spectralIndExtrIdx = nCurTaskIdx++;
+    outAllTasksList[spectralIndExtrIdx].parentTasks.append(outAllTasksList[parentTaskId]);
+    // add the spectral indicator task to the list of the product formatter corresponding to this product
+    productFormatterParentsRefs.append(outAllTasksList[spectralIndExtrIdx]);
+
+    return nCurTaskIdx;
+}
+
 int LaiRetrievalHandlerL3BNew::CreateBiophysicalIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
                                      QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
                                      int nCurTaskIdx)
@@ -175,7 +198,7 @@ int LaiRetrievalHandlerL3BNew::CreateBiophysicalIndicatorTasks(int parentTaskId,
     return nCurTaskIdx;
 }
 
-NewStepList LaiRetrievalHandlerL3BNew::GetStepsForMonodateLai(const L3BJobContext &jobCtx, const QList<TileInfos> &prdTilesInfosList,
+NewStepList LaiRetrievalHandlerL3BNew::GetStepsForNewProduct(const L3BJobContext &jobCtx, const QList<TileInfos> &prdTilesInfosList,
                                                               QList<TaskToSubmit> &allTasksList, int tasksStartIdx)
 {
     NewStepList steps;
@@ -193,24 +216,21 @@ NewStepList LaiRetrievalHandlerL3BNew::GetStepsForMonodateLai(const L3BJobContex
 
         curTaskIdx = GetStepsForStatusFlags(jobCtx, allTasksList, curTaskIdx, tileResultFileInfo, steps,
                                             cleanupTemporaryFilesList);
-        if (jobCtx.bGenNdvi) {
-            curTaskIdx = GetStepsForNdvi(jobCtx, allTasksList, curTaskIdx, tileResultFileInfo,
-                                         steps, cleanupTemporaryFilesList);
+
+        for (const QString &index: L3BJobContext::spectralIndicators.keys()) {
+            if (jobCtx.mapIndexGenFlags[index]) {
+                curTaskIdx = GetStepsForSpectralIndicator(allTasksList, index, curTaskIdx, tileResultFileInfo,
+                                             steps, cleanupTemporaryFilesList);
+            }
         }
-        if (jobCtx.bGenLai || jobCtx.bGenFapar || jobCtx.bGenFCover) {
+        if (jobCtx.hasBiophysicalIndex) {
             curTaskIdx = GetStepsForAnglesCreation(allTasksList, curTaskIdx, tileResultFileInfo, steps,
                                                    cleanupTemporaryFilesList);
-            if (jobCtx.bGenLai) {
-                curTaskIdx = GetStepsForMonoDateBI(jobCtx, allTasksList, "lai", curTaskIdx,
-                                                   tileResultFileInfo, steps, cleanupTemporaryFilesList);
-            }
-            if (jobCtx.bGenFapar) {
-                curTaskIdx = GetStepsForMonoDateBI(jobCtx, allTasksList, "fapar", curTaskIdx,
-                                                   tileResultFileInfo, steps, cleanupTemporaryFilesList);
-            }
-            if (jobCtx.bGenFCover) {
-                curTaskIdx = GetStepsForMonoDateBI(jobCtx, allTasksList, "fcover", curTaskIdx,
-                                                   tileResultFileInfo, steps, cleanupTemporaryFilesList);
+            for (const QString &index: L3BJobContext::biophysicalIndicatorNames) {
+                if (jobCtx.mapIndexGenFlags[index]) {
+                    curTaskIdx = GetStepsForMonoDateBI(jobCtx, allTasksList, index, curTaskIdx,
+                                                       tileResultFileInfo, steps, cleanupTemporaryFilesList);
+                }
             }
         }
         if (jobCtx.bGenInDomainFlags) {
@@ -252,18 +272,17 @@ int LaiRetrievalHandlerL3BNew::GetStepsForStatusFlags(const L3BJobContext &jobCt
     return curTaskIdx;
 }
 
-int LaiRetrievalHandlerL3BNew::GetStepsForNdvi(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
+int LaiRetrievalHandlerL3BNew::GetStepsForSpectralIndicator(QList<TaskToSubmit> &allTasksList, const QString &indexName, int curTaskIdx,
                             TileResultFiles &tileResultFileInfo,  NewStepList &steps, QStringList &cleanupTemporaryFilesList) {
 
-    TaskToSubmit &ndviRviExtractorTask = allTasksList[curTaskIdx++];
-    tileResultFileInfo.ndviFile = ndviRviExtractorTask.GetFilePath("single_ndvi.tif");
-    const QStringList &ndviRviExtractionArgs = GetNdviRviExtractionNewArgs(tileResultFileInfo.tileFile,
-                                                                 tileResultFileInfo.statusFlagsFile,
-                                                                 tileResultFileInfo.ndviFile,
-                                                                 jobCtx.resolutionStr, jobCtx.laiCfgFile);
-    steps.append(CreateTaskStep(ndviRviExtractorTask, "NdviRviExtractionNew", ndviRviExtractionArgs));
+    TaskToSubmit &spectralIndicatorExtractorTask = allTasksList[curTaskIdx++];
+    const QString &indexFile = spectralIndicatorExtractorTask.GetFilePath(indexName + ".tif");
+    tileResultFileInfo.mapIndexFile[indexName]  = indexFile;
+    const QStringList &spectralIndicatorExtractionArgs = GetSpectralIndicatorsExtractionArgs(tileResultFileInfo.tileFile,
+                                                                 indexName, tileResultFileInfo.statusFlagsFile, indexFile);
+    steps.append(CreateTaskStep(spectralIndicatorExtractorTask, indexName.toUpper() + "Extraction", spectralIndicatorExtractionArgs));
     // save the file to be sent to product formatter
-    cleanupTemporaryFilesList.append(tileResultFileInfo.ndviFile);
+    cleanupTemporaryFilesList.append(indexFile);
 
     return curTaskIdx;
 }
@@ -324,14 +343,12 @@ int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(const L3BJobContext &jobCtx
     // save the file to be sent to product formatter
     if (indexName == "fapar") {
         tileResultFileInfo.faparDomainFlagsFile = domainFlagsFileName;
-        tileResultFileInfo.faparFile = quantifiedBIFileName;
     } else if (indexName == "fcover") {
         tileResultFileInfo.fcoverDomainFlagsFile = domainFlagsFileName;
-        tileResultFileInfo.fcoverFile = quantifiedBIFileName;
     } else {
         tileResultFileInfo.laiDomainFlagsFile = domainFlagsFileName;
-        tileResultFileInfo.laiFile = quantifiedBIFileName;
     }
+    tileResultFileInfo.mapIndexFile[indexName] = quantifiedBIFileName;
 
     cleanupTemporaryFilesList.append(BIFileName);
     cleanupTemporaryFilesList.append(correctedBIFileName);
@@ -412,7 +429,7 @@ void LaiRetrievalHandlerL3BNew::HandleProduct(const L3BJobContext &jobCtx,
 
     NewStepList steps;
 
-    steps += GetStepsForMonodateLai(jobCtx, prdTilesInfosList, allTasksList, tasksStartIdx);
+    steps += GetStepsForNewProduct(jobCtx, prdTilesInfosList, allTasksList, tasksStartIdx);
     jobCtx.pCtx->SubmitSteps(steps);
 }
 
@@ -441,10 +458,10 @@ void LaiRetrievalHandlerL3BNew::HandleJobSubmittedImpl(EventProcessingContext &c
 {
     L3BJobContext jobCtx(this, &ctx, evt);
 
-    if (!jobCtx.bGenNdvi && !jobCtx.bGenLai && !jobCtx.bGenFapar && !jobCtx.bGenFCover) {
+    if (!jobCtx.mapIndexGenFlags.values().contains(true)) {
         ctx.MarkJobFailed(evt.jobId);
         throw std::runtime_error(
-            QStringLiteral("No vedgetation index (NDVI, LAI, FAPAR or FCOVER) was configured to be generated").toStdString());
+            QStringLiteral("No vegetation or spectral index was configured to be generated").toStdString());
     }
 
 
@@ -612,14 +629,14 @@ QStringList LaiRetrievalHandlerL3BNew::GetGdalTranslateResampleAnglesArgs(const 
     };
 }
 
-QStringList LaiRetrievalHandlerL3BNew::GetNdviRviExtractionNewArgs(const QString &inputProduct, const QString &msksFlagsFile,
-                                                          const QString &ndviFile, const QString &resolution, const QString &laiBandsCfg) {
-    return { "NdviRviExtractionNew",
+QStringList LaiRetrievalHandlerL3BNew::GetSpectralIndicatorsExtractionArgs(const QString &inputProduct, const QString &indicator,
+                                                                           const QString &msksFlagsFile, const QString &indicatorFile) {
+    return { "Sen4XRadiometricIndices",
            "-xml", inputProduct,
            "-msks", msksFlagsFile,
-           "-ndvi", ndviFile,
-           "-outres", resolution,
-           "-laicfgs", laiBandsCfg
+           "-list", L3BJobContext::spectralIndicators[indicator].type + ":" +
+                L3BJobContext::spectralIndicators[indicator].paramName,
+           "-out", indicatorFile
     };
 }
 
@@ -731,49 +748,27 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
         productFormatterArgs += tileResultFilesList[i].inDomainFlagsFile;
     }
 
-    if (jobCtx.bGenNdvi) {
-        productFormatterArgs += "-processor.vegetation.laindvi";
-        for(int i = 0; i<tileResultFilesList.size(); i++) {
-            productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-            productFormatterArgs += tileResultFilesList[i].ndviFile;
+    for (const QString &index: L3BJobContext::spectralIndicators.keys()) {
+        if (jobCtx.mapIndexGenFlags[index]) {
+            productFormatterArgs += "-processor.vegetation." + index;
+            for(int i = 0; i<tileResultFilesList.size(); i++) {
+                productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+                productFormatterArgs += tileResultFilesList[i].mapIndexFile[index];
+            }
         }
     }
-    if (jobCtx.bGenLai) {
-        productFormatterArgs += "-processor.vegetation.laimonodate";
-        for(int i = 0; i<tileResultFilesList.size(); i++) {
-            productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-            productFormatterArgs += tileResultFilesList[i].laiFile;
-        }
-        productFormatterArgs += "-processor.vegetation.laidomainflgs";
-        for(int i = 0; i<tileResultFilesList.size(); i++) {
-            productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-            productFormatterArgs += tileResultFilesList[i].laiDomainFlagsFile;
-        }
-    }
-
-    if (jobCtx.bGenFapar) {
-        productFormatterArgs += "-processor.vegetation.faparmonodate";
-        for(int i = 0; i<tileResultFilesList.size(); i++) {
-            productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-            productFormatterArgs += tileResultFilesList[i].faparFile;
-        }
-        productFormatterArgs += "-processor.vegetation.fapardomainflgs";
-        for(int i = 0; i<tileResultFilesList.size(); i++) {
-            productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-            productFormatterArgs += tileResultFilesList[i].faparDomainFlagsFile;
-        }
-    }
-
-    if (jobCtx.bGenFCover) {
-        productFormatterArgs += "-processor.vegetation.fcovermonodate";
-        for(int i = 0; i<tileResultFilesList.size(); i++) {
-            productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-            productFormatterArgs += tileResultFilesList[i].fcoverFile;
-        }
-        productFormatterArgs += "-processor.vegetation.fcoverdomaniflgs";
-        for(int i = 0; i<tileResultFilesList.size(); i++) {
-            productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-            productFormatterArgs += tileResultFilesList[i].fcoverDomainFlagsFile;
+    for (const QString &index: L3BJobContext::biophysicalIndicatorNames) {
+        if (jobCtx.mapIndexGenFlags[index]) {
+            productFormatterArgs += "-processor.vegetation." + index + "monodate";
+            for(int i = 0; i<tileResultFilesList.size(); i++) {
+                productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+                productFormatterArgs += tileResultFilesList[i].mapIndexFile[index];
+            }
+            productFormatterArgs += "-processor.vegetation." + index + "domainflgs";
+            for(int i = 0; i<tileResultFilesList.size(); i++) {
+                productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+                productFormatterArgs += tileResultFilesList[i].laiDomainFlagsFile;
+            }
         }
     }
 
