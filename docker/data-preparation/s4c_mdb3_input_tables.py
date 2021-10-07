@@ -1,0 +1,1 @@
+../../scripts/s4c_l4c/s4c_mdb3_input_tables.py

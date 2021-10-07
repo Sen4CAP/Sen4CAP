@@ -7,3 +7,4 @@ COPY s4c_l4b_import_config.py /usr/bin
 COPY s4c_l4c_export_all_practices.py /usr/bin
 COPY s4c_l4c_import_config.py /usr/bin
 COPY s4c_l4c_import_practice.py /usr/bin
+COPY s4c_mdb3_input_tables.py /usr/bin
