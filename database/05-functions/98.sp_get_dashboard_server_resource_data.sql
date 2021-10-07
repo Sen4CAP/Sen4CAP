@@ -11,7 +11,7 @@ DECLARE load_1min_history_json json;
 DECLARE load_5min_history_json json;
 DECLARE load_15min_history_json json;
 
-DECLARE since timestamp;
+DECLARE since timestamp with time zone;
 BEGIN
 
 	CREATE TEMP TABLE current_nodes (

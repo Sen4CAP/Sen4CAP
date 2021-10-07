@@ -12,5 +12,5 @@ CREATE TABLE node_resource_log
   load_avg_15m INT NOT NULL,
   disk_total_bytes BIGINT NOT NULL,
   disk_used_bytes BIGINT NOT NULL,
-  "timestamp" TIMESTAMP WITHOUT TIME ZONE NOT NULL
+  "timestamp" TIMESTAMP WITH TIME ZONE NOT NULL
 );

@@ -1,12 +1,12 @@
 ﻿CREATE OR REPLACE FUNCTION sp_pad_left_json_history_array(
 IN _history json,
-IN _since TIMESTAMP,
+IN _since timestamp with time zone,
 IN _interval varchar
-) 
+)
 RETURNS json AS $$
 DECLARE temp_array json[];
 DECLARE temp_json json;
-DECLARE previous_timestamp timestamp;
+DECLARE previous_timestamp timestamp with time zone;
 BEGIN
 
 	-- Get the array of timestamp - value json pairs
@@ -16,7 +16,7 @@ BEGIN
 	IF temp_array IS NULL OR array_length(temp_array,1) = 0 THEN
 		previous_timestamp := now();
 	ELSE
-		previous_timestamp := TIMESTAMP 'epoch' + (temp_array[1]::json->>0)::bigint / 1000 * INTERVAL '1 second';
+		previous_timestamp := timestamp with time zone 'epoch' + (temp_array[1]::json->>0)::bigint / 1000 * INTERVAL '1 second';
 	END IF;
 
 	-- Add values to the left of the array until the desired "since" timestamp is reached
@@ -26,9 +26,9 @@ BEGIN
 
 		-- If using the new previous timestamp would take the array beyond the since, break
 		IF previous_timestamp < _since THEN
-			EXIT;  
+			EXIT;
 		END IF;
-		
+
 		temp_json := json_build_array(extract(epoch from previous_timestamp)::bigint * 1000, null);
 		temp_array := array_prepend(temp_json, temp_array);
 	END LOOP;
@@ -36,6 +36,6 @@ BEGIN
 	temp_json := array_to_json(temp_array);
 
 	RETURN temp_json;
-	
+
 END;
 $$ LANGUAGE plpgsql;
