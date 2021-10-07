@@ -161,7 +161,7 @@ def import_crop_type(config, conn, pg_path, product_id, path):
 def import_agricultural_practices(config, conn, pg_path, product_id, path):
     path = os.path.join(path, "VECTOR_DATA", "*.csv")
     for file in glob(path):
-        if file.endswith("_ContinousProduct.csv") : 
+        if file.endswith("_ContinousProduct.csv"):
             continue
         practice = os.path.basename(file).split("_")[2]
         practice_id = get_practice(practice)
@@ -272,7 +272,7 @@ def import_agricultural_practices(config, conn, pg_path, product_id, path):
                         c_quality,
                         tl_week,
                         tl_w_start,
-                        tl_w_end                       
+                        tl_w_end
                     from {}
                     """
             ).format(Literal(product_id), Literal(practice_id), Identifier(table_name))
