@@ -8,6 +8,7 @@ from psycopg2.sql import SQL, Identifier, Literal
 import toml
 
 PRODUCT_TYPE_S4C_L4A = 12
+PRODUCT_TYPE_S4C_L4C = 15
 PRODUCT_TYPE_LPIS = 14
 
 
@@ -97,6 +98,19 @@ def main():
             for (table,) in cursor:
                 lpis_tables.add(table)
 
+            logging.info("Retrieving LUT tables")
+            query = """
+                select table_name
+                from information_schema.tables
+                where table_schema = 'public'
+                  and table_name like 'lut_%';
+            """
+            logging.debug(query)
+            cursor.execute(query)
+            lut_tables = set()
+            for (table,) in cursor:
+                lut_tables.add(table)
+
             found_lpis_tables = []
             site_lpis_tables = defaultdict(list)
             for (site_id, short_name) in sites:
@@ -168,14 +182,67 @@ def main():
                 if not lpis_table:
                     continue
 
+                lut_table = "lut" + lpis_table[4:]
+                if lut_table not in lut_tables:
+                    continue
+
                 info = lpis_table_info.get(lpis_table)
                 if not info:
                     continue
                 (srid, extent) = info
 
                 query = SQL(
-                    'select * from product_details_l4a l4a inner join {} lpis using ("NewID") where l4a.product_id = {}'
-                ).format(Identifier(lpis_table), Literal(id))
+                    'select * from {} lpis inner join product_details_l4a l4a using ("NewID") inner join {} lut using ("ori_crop") where l4a.product_id = {}'
+                ).format(Identifier(lpis_table), Identifier(lut_table), Literal(id))
+                sql = query.as_string(conn)
+
+                layer = {
+                    "name": name,
+                    "geometry_field": "wkb_geometry",
+                    "geometry_type": "MULTIPOLYGON",
+                    "srid": srid,
+                    "query": [{"sql": sql}],
+                }
+                tileset = {
+                    "name": name,
+                    "extent": extent,
+                    "layer": [layer],
+                }
+                tilesets.append(tileset)
+
+            logging.info("Retrieving L4C products")
+            query = """
+                select id,
+                       site_id,
+                       name,
+                       created_timestamp
+                from product
+                where product_type_id = %s;
+            """
+            logging.debug(query)
+            cursor.execute(query, (PRODUCT_TYPE_S4C_L4C,))
+            for (id, site_id, name, date) in cursor:
+                # HACK: find the latest LPIS product that's earlier than the L4C
+                lpis_table = None
+                for (table, lpis_date) in reversed(site_lpis_tables[site_id]):
+                    if lpis_date < date:
+                        lpis_table = table
+                        break
+                if not lpis_table:
+                    continue
+
+                lut_table = "lut" + lpis_table[4:]
+                if lut_table not in lut_tables:
+                    continue
+
+                info = lpis_table_info.get(lpis_table)
+                if not info:
+                    continue
+                (srid, extent) = info
+
+                query = SQL(
+                    'select * from {} lpis inner join product_details_l4c l4c using ("NewID") inner join {} lut using ("ori_crop") where l4c.product_id = {}'
+                ).format(Identifier(lpis_table), Identifier(lut_table), Literal(id))
                 sql = query.as_string(conn)
 
                 layer = {
