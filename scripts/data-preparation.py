@@ -6,6 +6,7 @@ import csv
 from collections import defaultdict
 from datetime import date
 import docker
+import json
 import logging
 import multiprocessing.dummy
 import os
@@ -1295,9 +1296,7 @@ and created_timestamp = %s;"""
                 cursor.execute(sql, (self.config.site_id, PRODUCT_TYPE_LPIS, dt))
 
                 sql = SQL(
-                    """
-insert into product(product_type_id, processor_id, site_id, name, full_path, created_timestamp, tiles)
-values(%s, %s, %s, %s, %s, %s, %s);"""
+                    "select sp_insert_product(%s :: smallint, %s :: smallint, null, %s :: smallint, null, %s, %s, %s, null, null, null, %s);"
                 )
                 logging.debug(sql.as_string(conn))
                 cursor.execute(
@@ -1306,10 +1305,10 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
                         PRODUCT_TYPE_LPIS,
                         PROCESSOR_LPIS,
                         self.config.site_id,
-                        name,
                         self.lpis_path,
                         dt,
-                        tiles,
+                        name,
+                        json.dumps(tiles),
                     ),
                 )
                 conn.commit()
