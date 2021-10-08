@@ -105,12 +105,12 @@ def main():
                     year = date.year
                     lpis_table_name = f"decl_{short_name}_{year}"
                     if lpis_table_name in lpis_tables:
-                        found_lpis_tables.append(lpis_table_name)
+                        found_lpis_tables.append((lpis_table_name, name))
                         tables.append((lpis_table_name, date))
                 tables.sort(key=lambda t: t[1])
 
             lpis_table_info = {}
-            for lpis_table in found_lpis_tables:
+            for (lpis_table, lpis_product) in found_lpis_tables:
                 query = SQL(
                     """
                     select Find_SRID('public', %s, 'wkb_geometry') as srid,
@@ -128,21 +128,20 @@ def main():
                 # BBOX(1 2,3 4)
                 bbox = bbox[4 : len(bbox) - 1]
                 (p1, p2) = bbox.split(",")
-                (x1, y1) = p1.split(" ")
-                (x2, y2) = p2.split(" ")
+                ((x1, y1), (x2, y2)) = (p1.split(" "), p2.split(" "))
                 extent = [float(x1), float(y1), float(x2), float(y2)]
 
                 lpis_table_info[lpis_table] = (srid, extent)
 
                 layer = {
-                    "name": lpis_table,
+                    "name": lpis_product,
                     "table_name": lpis_table,
                     "geometry_field": "wkb_geometry",
                     "geometry_type": "MULTIPOLYGON",
                     "srid": srid,
                 }
                 tileset = {
-                    "name": lpis_table,
+                    "name": lpis_product,
                     "extent": extent,
                     "layer": [layer],
                 }
