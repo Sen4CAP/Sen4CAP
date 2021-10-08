@@ -1133,7 +1133,10 @@ and not is_deleted;"""
 
         def work(w):
             (c, cost) = w
-            c.run()
+            try:
+                c.run()
+            except Exception as e:
+                logging.error(e)
             q.put(cost)
 
         res = self.pool.map_async(work, commands)
@@ -1168,7 +1171,10 @@ and not is_deleted;"""
 
         def work(w):
             (c, cost) = w
-            c.run()
+            try:
+                c.run()
+            except Exception as e:
+                logging.error(e)
             q.put(cost)
 
         res = self.pool.map_async(work, commands)
@@ -1232,7 +1238,10 @@ where upd.id = lpis."NewID";"""
 
             def work(w):
                 (c, cost) = w
-                c()
+                try:
+                    c()
+                except Exception as e:
+                    logging.error(e)
                 q.put(cost)
 
             total = len(updates)
