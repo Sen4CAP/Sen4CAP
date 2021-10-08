@@ -31,9 +31,9 @@ BEGIN
         is_archived = FALSE
     WHERE product_type_id = _product_type_id
       AND processor_id = _processor_id
-      AND satellite_id = _satellite_id
+      AND satellite_id is not distinct from _satellite_id
       AND site_id = _site_id
-      AND COALESCE(orbit_id, 0) = COALESCE(_orbit_id, 0)
+      AND orbit_id is not distinct from _orbit_id
       AND "name" = _name
     RETURNING id INTO return_id;
 
@@ -75,12 +75,12 @@ BEGIN
             _downloader_history_id
         )
         RETURNING id INTO return_id;
-        
+
         IF _parent_product_ids IS NOT NULL THEN
             WITH parent_infos AS (
                 SELECT id as parent_product_id, created_timestamp as parent_product_date FROM product WHERE id IN (SELECT value::integer FROM json_array_elements_text(_parent_product_ids))
             )
-            INSERT INTO product_provenance(product_id, parent_product_id, parent_product_date) 
+            INSERT INTO product_provenance(product_id, parent_product_id, parent_product_date)
 						SELECT return_id, parent_product_id, parent_product_date from parent_infos;
         END IF;
 
