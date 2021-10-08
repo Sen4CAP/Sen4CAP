@@ -24,7 +24,6 @@ import sys
 from configparser import ConfigParser
 
 
-GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.3.2"
 OTB_IMAGE_NAME = "sen4cap/processors:2.0.0"
 
 PRODUCT_TYPE_LPIS = 14
@@ -97,9 +96,6 @@ class RasterizeDatasetCommand:
         self.dst_ymax = str(dst_ymax)
 
     def run(self):
-        output_dir = os.path.dirname(self.output)
-        client = docker.from_env()
-        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
         command = []
         command += ["gdal_rasterize", "-q"]
         command += ["-a", self.field]
@@ -111,14 +107,7 @@ class RasterizeDatasetCommand:
         command += ["-co", "COMPRESS=DEFLATE"]
         command += ["-co", "PREDICTOR=2"]
         command += [self.input, self.output]
-        client.containers.run(
-            image=GDAL_IMAGE_NAME,
-            remove=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            command=command,
-        )
-        client.close()
+        run_command(command)
 
 
 class ExportParcelsCsvCommand:
@@ -128,23 +117,13 @@ class ExportParcelsCsvCommand:
         self.source = source
 
     def run(self):
-        output_dir = os.path.dirname(self.destination)
-        client = docker.from_env()
-        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
         command = []
         command += ["ogr2ogr"]
         command += ["-lco", "STRING_QUOTING=IF_NEEDED"]
         command += ["-sql", self.sql]
         command += [self.destination]
         command += [self.source]
-        client.containers.run(
-            image=GDAL_IMAGE_NAME,
-            remove=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            command=command,
-        )
-        client.close()
+        run_command(command)
 
 
 class ExportParcelsGpkgCommand:
@@ -155,9 +134,6 @@ class ExportParcelsGpkgCommand:
         self.source = source
 
     def run(self):
-        output_dir = os.path.dirname(self.destination)
-        client = docker.from_env()
-        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
         command = []
         command += ["ogr2ogr"]
         command += ["-a_srs", self.srs]
@@ -165,14 +141,7 @@ class ExportParcelsGpkgCommand:
         command += ["-sql", self.sql]
         command += [self.destination]
         command += [self.source]
-        client.containers.run(
-            image=GDAL_IMAGE_NAME,
-            remove=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            command=command,
-        )
-        client.close()
+        run_command(command)
 
 
 class ExportParcelsShpCommand:
@@ -182,23 +151,13 @@ class ExportParcelsShpCommand:
         self.source = source
 
     def run(self):
-        output_dir = os.path.dirname(self.destination)
-        client = docker.from_env()
-        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
         command = []
         command += ["ogr2ogr"]
         command += ["-overwrite"]
         command += ["-sql", self.sql]
         command += [self.destination]
         command += [self.source]
-        client.containers.run(
-            image=GDAL_IMAGE_NAME,
-            remove=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            command=command,
-        )
-        client.close()
+        run_command(command)
 
 
 class ComputeClassCountsCommand:
@@ -586,8 +545,6 @@ class DataPreparation:
     def prepare_lut(self, lut_path):
         with self.get_connection() as conn:
             print("Importing LUT")
-            client = docker.from_env()
-            volumes = {lut_path: {"bind": lut_path, "mode": "ro"}}
             command = []
             command += ["ogr2ogr"]
             command += [
@@ -598,14 +555,7 @@ class DataPreparation:
                 "AUTODETECT_TYPE=YES",
             ]
             command += [self.get_ogr_connection_string(), lut_path]
-            client.containers.run(
-                image=GDAL_IMAGE_NAME,
-                remove=True,
-                user=f"{os.getuid()}:{os.getgid()}",
-                volumes=volumes,
-                command=command,
-            )
-            client.close()
+            run_command(command)
 
             print("Preparing LUT")
             with conn.cursor() as cursor:
@@ -671,9 +621,6 @@ add constraint {} unique(ori_crop);"""
         crop_code_col = crop_code_col.lower()
 
         print("Importing LPIS")
-        input_dir = os.path.dirname(lpis)
-        client = docker.from_env()
-        volumes = {input_dir: {"bind": input_dir, "mode": "ro"}}
         command = []
         command += ["ogr2ogr"]
         command += [
@@ -688,14 +635,7 @@ add constraint {} unique(ori_crop);"""
             "-overwrite",
         ]
         command += [self.get_ogr_connection_string(), lpis_adj]
-        client.containers.run(
-            image=GDAL_IMAGE_NAME,
-            remove=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            command=command,
-        )
-        client.close()
+        run_command(command)
 
         print("Preparing LPIS")
         with self.get_connection() as conn:
