@@ -27,7 +27,7 @@ class Config(object):
         if self.host == "127.0.0.1" or self.host == "::1" or self.host == "localhost":
             self.host = "172.17.0.1"
 
-        self.site_short_name = args.site_short_name
+        self.site_id = args.site_id
         self.year = args.year
         if args.country:
             self.country = args.country
@@ -112,21 +112,6 @@ def validateUploadedFileStruct(input_file):
             break
 
     return ret
-
-
-def getSiteId(conn, siteShortName):
-    site_id = -1
-    with conn.cursor() as cursor:
-        query = SQL(""" select id from site where short_name = {} """)
-        query = query.format(Literal(siteShortName))
-        print(query.as_string(conn))
-
-        cursor.execute(query)
-        for row in cursor:
-            site_id = row[0]
-        conn.commit()
-    return site_id
-
 
 def getSiteConfigKey(conn, key, site_id):
     value = ""
@@ -294,9 +279,9 @@ def main():
     )
     parser.add_argument(
         "-s",
-        "--site-short-name",
+        "--site-id",
         required=True,
-        help="Site short name for which the file was uploaded",
+        help="Site id for which the file was uploaded",
     )
     parser.add_argument("-y", "--year", required=True, type=int, help="The year")
     parser.add_argument("-t", "--country", help="The country short name")
@@ -329,10 +314,9 @@ def main():
         user=config.user,
         password=config.password,
     ) as conn:
-        site_id = getSiteId(conn, config.site_short_name)
         if not args.country:
-            config.country = getCountry(conn, site_id)
-        import_agricultural_practices(config, conn, pg_path, args.input_file, site_id)
+            config.country = getCountry(conn, config.site_id)
+        import_agricultural_practices(config, conn, pg_path, args.input_file, config.site_id)
 
 
 if __name__ == "__main__":

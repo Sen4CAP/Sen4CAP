@@ -28,7 +28,7 @@ class Config(object):
         if self.host == "127.0.0.1" or self.host == "::1" or self.host == "localhost":
             self.host = "172.17.0.1"
 
-        self.site_short_name = args.site_short_name
+        self.site_id = args.site_id
         self.year = args.year
         if args.mowing_start_date:
             self.mowing_start_date = args.mowing_start_date
@@ -41,24 +41,23 @@ def run_command(args, env=None):
     subprocess.call(args, env=env)
 
 
-def getSiteId(conn, siteShortName):
-    site_id = -1
+def getSiteShortName(conn, site_id):
+    site_short_name = ""
     with conn.cursor() as cursor:
         query = SQL(
             """
-            select id from site
-            where short_name = {}
+            select short_name from site
+            where id = {}
             """
         )
-        query = query.format(Literal(siteShortName))
+        query = query.format(Literal(site_id))
         print(query.as_string(conn))
 
         cursor.execute(query)
         for row in cursor:
-            site_id = row[0]
+            site_short_name = row[0]
         conn.commit()
-    return site_id
-
+    return site_short_name
 
 def setConfigValue(conn, site_id, key, value):
     with conn.cursor() as cursor:
@@ -161,10 +160,10 @@ def getSiteConfigKey(conn, key, site_id):
     return value
 
 
-def copyConfigFile(config, conn, site_id, config_file):
+def copyConfigFile(config, conn, site_short_name, config_file):
     # target file example. S4C_L4B_Config_2019.cfg
     targetFileName = "S4C_L4B_Config_" + str(config.year) + ".cfg"
-    cfgDir = getSiteConfigKey(conn, "processor.s4c_l4b.cfg_dir", site_id)
+    cfgDir = getSiteConfigKey(conn, "processor.s4c_l4b.cfg_dir", config.site_id)
     if cfgDir == "":
         print(
             "The processor.s4c_l4b.cfg_dir key is not configured in the database. Creating it ..."
@@ -177,7 +176,7 @@ def copyConfigFile(config, conn, site_id, config_file):
         )
         cfgDir = "/mnt/archive/grassland_mowing/{site}/{year}/config/"
 
-    cfgDir = cfgDir.replace("{site}", config.site_short_name)
+    cfgDir = cfgDir.replace("{site}", site_short_name)
     cfgDir = cfgDir.replace("{year}", str(config.year))
     if not os.path.exists(cfgDir):
         os.makedirs(cfgDir)
@@ -185,7 +184,7 @@ def copyConfigFile(config, conn, site_id, config_file):
     print("Copying the L4B config file from {} to {}".format(config_file, destFilePath))
     copyfile(config_file, destFilePath)
 
-    cfgYear = getSiteConfigKey(conn, "processor.s4c_l4b.year", site_id)
+    cfgYear = getSiteConfigKey(conn, "processor.s4c_l4b.year", config.site_id)
     if cfgYear == "":
         # add the general key
         print(
@@ -193,7 +192,7 @@ def copyConfigFile(config, conn, site_id, config_file):
         )
         setConfigValue(conn, None, "processor.s4c_l4b.year", "")
     # set also the value specific for the site
-    setConfigValue(conn, site_id, "processor.s4c_l4b.year", config.year)
+    setConfigValue(conn, config.site_id, "processor.s4c_l4b.year", config.year)
 
 
 def main():
@@ -208,9 +207,9 @@ def main():
     )
     parser.add_argument(
         "-s",
-        "--site-short-name",
+        "--site-id",
         required=True,
-        help="Site short name for which the file was uploaded",
+        help="Site id for which the file was uploaded",
     )
     parser.add_argument("-y", "--year", type=int, required=True, help="The year")
     parser.add_argument(
@@ -229,11 +228,11 @@ def main():
         user=config.user,
         password=config.password,
     ) as conn:
-        site_id = getSiteId(conn, config.site_short_name)
-        copyConfigFile(config, conn, site_id, args.input_file)
+        site_short_name = getSiteShortName(conn, config.site_id)
+        copyConfigFile(config, conn, site_short_name, args.input_file)
         if hasattr(config, "mowing_start_date") and config.mowing_start_date:
             setConfigValue(
-                conn, site_id, "processor.s4c_l4b.start_date", config.mowing_start_date
+                conn, config.site_id, "processor.s4c_l4b.start_date", config.mowing_start_date
             )
 
 
