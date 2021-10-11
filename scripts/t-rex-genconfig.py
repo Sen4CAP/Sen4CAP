@@ -267,11 +267,11 @@ def main():
 
     config = Config(args)
 
-    with config.get_connection() as conn:
-        with conn.cursor() as cursor:
-            if args.stub:
-                tilesets = []
-            else:
+    if args.stub:
+        tilesets = []
+    else:
+        with config.get_connection() as conn:
+            with conn.cursor() as cursor:
                 tilesets = get_tilesets(conn, cursor)
 
     t_rex = {
