@@ -274,6 +274,23 @@ function create_and_config_slurm_qos()
 #-----------------------------------------------------------#
 function config_docker()
 {
+    docker pull osgeo/gdal:ubuntu-full-3.2.0
+    docker pull sen4x/fmask_extractor:0.1
+    docker pull sen4x/fmask:4.2
+
+    docker pull sen4cap/processors:3.0.0
+    docker pull sen4cap/data-preparation:0.1
+    docker pull sen4cap/grassland_mowing:3.0.0
+    docker pull sen4x/l2a-processors:0.1
+    docker pull sen4x/sen2cor:2.9.0-ubuntu-20.04
+    docker pull sen4x/maja:3.2.2-centos-7
+    docker pull sen4x/l2a-l8-alignment:0.1
+    docker pull sen4x/l2a-dem:0.1
+
+    mkdir /var/lib/t-rex
+    chown ${SYS_ACC_NAME}: /var/lib/t-rex
+    docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/sen2agri.conf:/etc/sen2agri/sen2agri.conf sen4cap/data-preparation:0.1 t-rex-genconfig.py --stub /var/lib/t-rex/t-rex.toml
+
     cd docker
     docker-compose up -d
 
@@ -293,18 +310,6 @@ function config_docker()
         RETRIES=$((RETRIES-1))
         sleep 1
     done
-
-    docker pull osgeo/gdal:ubuntu-full-3.2.0
-    docker pull sen4x/fmask_extractor:0.1
-    docker pull sen4x/fmask:4.2
-
-    docker pull sen4cap/processors:3.0.0
-    docker pull sen4cap/grassland_mowing:3.0.0
-    docker pull sen4x/l2a-processors:0.1
-    docker pull sen4x/sen2cor:2.9.0-ubuntu-20.04
-    docker pull sen4x/maja:3.2.2-centos-7
-    docker pull sen4x/l2a-l8-alignment:0.1
-    docker pull sen4x/l2a-dem:0.1
 
     cd ..
 }
@@ -419,7 +424,7 @@ function install_and_config_webserver()
 function install_downloaders_demmacs()
 {
    mkdir /var/log/sen2agri
-   chown sen2agri-service: /var/log/sen2agri
+   chown ${SYS_ACC_NAME}: /var/log/sen2agri
 
    ##install prerequisites for Downloaders
    yum -y install wget python-lxml bzip2 python-beautifulsoup4 python-dateutil java-1.8.0-openjdk

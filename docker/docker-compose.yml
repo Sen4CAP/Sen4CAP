@@ -10,3 +10,11 @@ services:
             - /var/lib/postgresql/data:/var/lib/postgresql/data
             - /var/run/postgresql:/var/run/postgresql
         restart: unless-stopped
+    t-rex:
+        image: sourcepole/t-rex
+        command: ["serve", "-c", "/var/lib/t-rex/t-rex.toml"]
+        ports:
+            - "6767:6767"
+        volumes:
+            - /var/lib/t-rex:/var/lib/t-rex
+        restart: unless-stopped
