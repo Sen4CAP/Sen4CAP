@@ -2,6 +2,8 @@
 import argparse
 from collections import defaultdict
 from configparser import ConfigParser
+import docker
+import docker.errors
 import logging
 import psycopg2
 from psycopg2.sql import SQL, Identifier, Literal
@@ -247,6 +249,9 @@ def main():
         default="/etc/sen2agri/sen2agri.conf",
         help="configuration file location",
     )
+    parser.add_argument(
+        "--restart-container", help="Docker container to restart after updating"
+    )
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true")
     parser.add_argument(
         "--stub", help="create a configuration stub", action="store_true"
@@ -288,6 +293,14 @@ def main():
 
     with open(args.output, "wt") as f:
         toml.dump(t_rex, f)
+
+    if args.restart_container:
+        client = docker.from_env()
+        try:
+            container = client.containers.get(args.restart_container)
+        except docker.errors.NotFound:
+            container = client.containers.get(args.restart_container.replace("_", "-"))
+        container.restart()
 
 
 if __name__ == "__main__":
