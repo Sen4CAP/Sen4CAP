@@ -276,21 +276,26 @@ function migrate_postgres_to_docker() {
 }
 
 function setup_containers() {
-    cd docker
-    docker-compose up -d
-    cd ..
-
     docker pull osgeo/gdal:ubuntu-full-3.2.0
     docker pull sen4x/fmask_extractor:0.1
     docker pull sen4x/fmask:4.2
 
     docker pull sen4cap/processors:2.0.0
+    docker pull sen4cap/data-preparation:0.1
     docker pull sen4cap/grassland_mowing:2.0.0
     docker pull sen4x/l2a-processors:0.1
     docker pull sen4x/sen2cor:2.9.0-ubuntu-20.04
     docker pull sen4x/maja:3.2.2-centos-7
     docker pull sen4x/l2a-l8-alignment:0.1
     docker pull sen4x/l2a-dem:0.1
+
+    mkdir -p /var/lib/t-rex
+    chown ${SYS_ACC_NAME}: /var/lib/t-rex
+    docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/sen2agri.conf:/etc/sen2agri/sen2agri.conf sen4cap/data-preparation:0.1 t-rex-genconfig.py --stub /var/lib/t-rex/t-rex.toml
+
+    cd docker
+    docker-compose up -d
+    cd ..
 }
 
 function migrate_to_docker() {
@@ -448,7 +453,7 @@ else
         mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
         chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
         docker build -t sen4cap/snap:8.0 -f ./docker/snap8/Dockerfile ./docker/snap8/
-    #else 
+    #else
     #    echo "No need to install SNAP container, it already exists ..."
     #fi
 fi

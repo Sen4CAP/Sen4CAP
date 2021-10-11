@@ -287,7 +287,7 @@ function config_docker()
     docker pull sen4x/l2a-l8-alignment:0.1
     docker pull sen4x/l2a-dem:0.1
 
-    mkdir /var/lib/t-rex
+    mkdir -p /var/lib/t-rex
     chown ${SYS_ACC_NAME}: /var/lib/t-rex
     docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/sen2agri.conf:/etc/sen2agri/sen2agri.conf sen4cap/data-preparation:0.1 t-rex-genconfig.py --stub /var/lib/t-rex/t-rex.toml
 
