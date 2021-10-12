@@ -289,7 +289,7 @@ function config_docker()
 
     mkdir -p /var/lib/t-rex
     chown ${SYS_ACC_NAME}: /var/lib/t-rex
-    docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/sen2agri.conf:/etc/sen2agri/sen2agri.conf sen4cap/data-preparation:0.1 t-rex-genconfig.py --stub /var/lib/t-rex/t-rex.toml
+    docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/sen2agri.conf:/etc/sen2agri/sen2agri.conf -v /var/lib/t-rex:/var/lib/t-rex sen4cap/data-preparation:0.1 t-rex-genconfig.py --stub /var/lib/t-rex/t-rex.toml
 
     cd docker
     docker-compose up -d
