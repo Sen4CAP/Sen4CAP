@@ -239,6 +239,7 @@ def get_tilesets(conn, cursor):
             "layer": [layer],
         }
         tilesets.append(tileset)
+    return tilesets
 
 
 def main():
