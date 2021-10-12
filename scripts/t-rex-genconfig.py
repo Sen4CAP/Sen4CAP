@@ -113,7 +113,7 @@ def get_tilesets(conn, cursor):
             from {};
             """
         ).format(Identifier(lpis_table))
-        logging.debug(query)
+        logging.debug(query.as_string(conn))
         cursor.execute(query, (lpis_table,))
         row = cursor.fetchone()
         if not row:
