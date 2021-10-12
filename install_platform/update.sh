@@ -51,21 +51,35 @@ function install_sen2agri_services()
         if [ -d "${TARGET_SERVICES_DIR}/bin" ] && [ -d "${TARGET_SERVICES_DIR}/config" ] ; then
 
             add_plgs_bkp=lib_add_plgs_bkp_$( date "+%Y_%m_%d_%H_%M_%S" )
-            #check if lib directory exist and is not empty
+            datasources_plugins_dir=""
+            if [ -d "${TARGET_SERVICES_DIR}/datasources" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/datasources)" ] ; then
+                datasources_plugins_dir="${TARGET_SERVICES_DIR}/datasources"
+            else 
             if [ -d "${TARGET_SERVICES_DIR}/lib" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/lib)" ] ; then
+                    datasources_plugins_dir="${TARGET_SERVICES_DIR}/lib"
+                fi
+            fi
+            #check if lib or datasources directory directory exist and is not empty
+            if [ ! -z "${datasources_plugins_dir}" ] ; then
                 mkdir ${TARGET_SERVICES_DIR}/$add_plgs_bkp
-                for filepath in ${TARGET_SERVICES_DIR}/lib/tao-datasources-*.jar
+                for filepath in ${datasources_plugins_dir}/tao-datasources-*.jar
                 do
                     filename=$(basename $filepath)
                     #make a backup for tao-datasource*.jar, others that scihub and usgs
                     if [[ $filename != tao-datasources-scihub* ]] && [[ $filename != tao-datasources-usgs* ]]; then
-                        cp ${TARGET_SERVICES_DIR}/lib/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/
+                        cp ${datasources_plugins_dir}/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/  
                     fi
                 done;
             fi
             if [ -f ../sen2agri-services/${SERVICES_ARCHIVE} ]; then
                 echo "Updating ${TARGET_SERVICES_DIR}/lib folder ..."
-                mkdir -p ${TARGET_SERVICES_DIR}/lib && rm -f ${TARGET_SERVICES_DIR}/lib/*.jar && unzip -o ${zipArchive} 'lib/*' -d ${TARGET_SERVICES_DIR}
+                mkdir -p ${TARGET_SERVICES_DIR}/lib 
+                mkdir -p ${TARGET_SERVICES_DIR}/datasources 
+                rm -f ${TARGET_SERVICES_DIR}/lib/*.jar 
+                rm -f ${TARGET_SERVICES_DIR}/datasources/*.jar 
+                unzip -o ${zipArchive} 'lib/*' -d ${TARGET_SERVICES_DIR}
+                unzip -o ${zipArchive} 'datasources/*' -d ${TARGET_SERVICES_DIR}
+                
                 # Check if directory lib_add_plgs_bkp_<timestamp> exist and is not empty
                 if [ -d "${TARGET_SERVICES_DIR}/${add_plgs_bkp}" ] ; then
                     if [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/${add_plgs_bkp})" ]; then
@@ -73,10 +87,10 @@ function install_sen2agri_services()
                         do
                             filename=$(basename $filepath| grep -oP '.*(?=-)')
                             if [ -f ../sen2agri-services/datasource-additional-plugins/$filename*.jar ];then
-                                cp ../sen2agri-services/datasource-additional-plugins/$filename*.jar ${TARGET_SERVICES_DIR}/lib/
+                                cp ../sen2agri-services/datasource-additional-plugins/$filename*.jar ${TARGET_SERVICES_DIR}/datasources/
                             else
                                 echo "IT WAS USED THE VERSION FOUND IN LIB FOLDER OF " $filename " BUT MAY NOT BE COMPATIBLE WITH CURRENT VERSION OF SEN2AGRI-SERVICES  "
-                                cp ${TARGET_SERVICES_DIR}/$add_plgs_bkp/$filename*.jar ${TARGET_SERVICES_DIR}/lib/
+                                cp ${TARGET_SERVICES_DIR}/$add_plgs_bkp/$filename*.jar ${TARGET_SERVICES_DIR}/datasources/
                             fi
                         done;
                     fi
@@ -93,6 +107,16 @@ function install_sen2agri_services()
                 if [ -f ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ] ; then
                     mv ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ${TARGET_SERVICES_DIR}/config/services.properties
                 fi
+                
+                # Add new lines for 3.0 if missing
+                if grep -q "endpoints.not.authenticated" ${TARGET_SERVICES_DIR}/config/services.properties
+                then
+                    echo "File services.properties correspond to version 3.0 or later. Nothing to do here..."
+                else
+                    echo "Updating 3.0 site infos ..."
+                    sed -i '/^plugins.use.docker =.*/i site.location=static\r\nsite.prefix = \/ui\r\nendpoints.not.authenticated=\/;\/login;\/products\/download\r\n\r\n' ${TARGET_SERVICES_DIR}/config/services.properties
+                fi
+                
                 if [ -f ${TARGET_SERVICES_DIR}/config/application.properties ] ; then
                     cp -f ${TARGET_SERVICES_DIR}/config/application.properties ${TARGET_SERVICES_DIR}/config/application.properties.bkp
                 fi
@@ -155,26 +179,26 @@ function enableSciHubDwnDS()
 #    sudo -u postgres psql sen2agri -c "update datasource set fetch_mode = (select fetch_mode from datasource where satellite_id = 1 and name = 'Amazon Web Services') where satellite_id = 1 and name = 'Scientific Data Hub';"
 }
 
-function updateWebConfigParams()
-{
-    # Set the port 8082 for the dashboard services URL
-    sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8080\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
-    sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8081\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
-
-    REST_SERVER_PORT=$(sed -n 's/^server.port =//p' ${TARGET_SERVICES_DIR}/config/services.properties | sed -e 's/\r//g')
-    # Strip leading space.
-    REST_SERVER_PORT="${REST_SERVER_PORT## }"
-    # Strip trailing space.
-    REST_SERVER_PORT="${REST_SERVER_PORT%% }"
-     if [[ !  -z  $REST_SERVER_PORT  ]] ; then
-        sed -i -e "s|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:8080|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:$REST_SERVER_PORT|g" /var/www/html/ConfigParams.php
-     fi
-
-    if [[ ! -z $DB_NAME ]] ; then
-        sed -i -e "s|static \$DEFAULT_DB_NAME = \x27sen2agri|static \$DEFAULT_DB_NAME = \x27${DB_NAME}|g" /var/www/html/ConfigParams.php
-    fi
-
-}
+# function updateWebConfigParams()
+# {
+#     # Set the port 8082 for the dashboard services URL
+#     sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8080\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
+#     sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8081\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
+# 
+#     REST_SERVER_PORT=$(sed -n 's/^server.port =//p' ${TARGET_SERVICES_DIR}/config/services.properties | sed -e 's/\r//g')
+#     # Strip leading space.
+#     REST_SERVER_PORT="${REST_SERVER_PORT## }"
+#     # Strip trailing space.
+#     REST_SERVER_PORT="${REST_SERVER_PORT%% }"
+#      if [[ !  -z  $REST_SERVER_PORT  ]] ; then
+#         sed -i -e "s|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:8080|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:$REST_SERVER_PORT|g" /var/www/html/ConfigParams.php
+#      fi
+# 
+#     if [[ ! -z $DB_NAME ]] ; then
+#         sed -i -e "s|static \$DEFAULT_DB_NAME = \x27sen2agri|static \$DEFAULT_DB_NAME = \x27${DB_NAME}|g" /var/www/html/ConfigParams.php
+#     fi
+# 
+# }
 
 function resetDownloadFailedProducts()
 {
@@ -280,9 +304,9 @@ function setup_containers() {
     docker pull sen4x/fmask_extractor:0.1
     docker pull sen4x/fmask:4.2
 
-    docker pull sen4cap/processors:2.0.0
+    docker pull sen4cap/processors:3.0.0
     docker pull sen4cap/data-preparation:0.1
-    docker pull sen4cap/grassland_mowing:2.0.0
+    docker pull sen4cap/grassland_mowing:3.0.0
     docker pull sen4x/l2a-processors:0.1
     docker pull sen4x/sen2cor:2.9.0-ubuntu-20.04
     docker pull sen4x/maja:3.2.2-centos-7
@@ -373,7 +397,15 @@ function update_maja_gipp() {
     fi
 }
 
+# TODO: This should be removed when implemented in the services or in processors
+function copy_additional_scripts() {
+    cp -fR ./s4c_l4c_export_all_practices.py /usr/bin
+}
+
 systemctl stop sen2agri-scheduler sen2agri-executor sen2agri-orchestrator sen2agri-http-listener sen2agri-sentinel-downloader sen2agri-landsat-downloader sen2agri-demmaccs sen2agri-sentinel-downloader.timer sen2agri-landsat-downloader.timer sen2agri-demmaccs.timer sen2agri-monitor-agent sen2agri-services
+
+# TODO: This should be removed when implemented in the services or in processors
+copy_additional_scripts
 
 saveOldDownloadCredentials
 migrate_to_docker
@@ -381,6 +413,7 @@ migrate_to_docker
 yum -y install python-dateutil libcurl-devel openssl-devel libxml2-devel php-pgsql
 yum -y install ../rpm_binaries/*.rpm
 rm -rf /usr/local/bin/gdal_edit.py
+yum -y remove sen2agri-website
 
 DB_NAME=$(get_install_config_property "DB_NAME")
 if [ -z "$DB_NAME" ]; then
@@ -434,7 +467,7 @@ if [ -d ../reference_data/ ]; then
 fi
 
 # Update the port in /var/www/html/ConfigParams.php as version 1.8 had 8080 instead of 8081
-updateWebConfigParams
+# updateWebConfigParams
 
 if [ "$DB_NAME" == "sen2agri" ] ; then
     updateDownloadCredentials

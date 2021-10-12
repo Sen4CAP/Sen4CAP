@@ -92,3 +92,5 @@ INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
 (26, 'l2a_msk','L2A product with validity mask', true);
+
+

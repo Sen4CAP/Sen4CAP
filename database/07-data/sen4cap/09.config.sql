@@ -76,11 +76,11 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.p
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.gdal_translate', NULL, '/usr/local/bin/gdal_translate', '2018-08-30 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.image-classifier', NULL, '/usr/bin/otbcli_ImageClassifier', '2015-08-12 17:09:20.418973+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.image-compression', NULL, '/usr/bin/otbcli_Convert', '2016-02-22 22:39:08.386406+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4b_cfg_import', NULL, '/usr/bin/s4c_l4b_import_config.py', '2019-10-22 22:39:08.407059+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_cfg_import', NULL, '/usr/bin/s4c_l4c_import_config.py', '2019-10-22 22:39:08.407059+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4b_cfg_import', NULL, 's4c_l4b_import_config.py', '2019-10-22 22:39:08.407059+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_cfg_import', NULL, 's4c_l4c_import_config.py', '2019-10-22 22:39:08.407059+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_practices_export', NULL, '/usr/bin/s4c_l4c_export_all_practices.py', '2019-10-22 22:39:08.407059+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_practices_import', NULL, '/usr/bin/s4c_l4c_import_practice.py', '2019-10-22 22:39:08.407059+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.lpis_import', NULL, '/usr/bin/data-preparation.py', '2019-10-22 22:39:08.407059+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_practices_import', NULL, 's4c_l4c_import_practice.py', '2019-10-22 22:39:08.407059+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.lpis_import', NULL, 'data-preparation.py', '2019-10-22 22:39:08.407059+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.mdb-csv-to-ipc-export', NULL, 'csv_to_ipc.py', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.ogr2ogr',  NULL, '/usr/local/bin/ogr2ogr', '2019-10-18 22:39:08.407059+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-crop-type', NULL, 'crop-type-wrapper.py', '2019-02-22 22:39:08.407059+02');
@@ -89,6 +89,9 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.p
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-l4a-extract-parcels', NULL, 'extract-parcels.py', '2021-01-15 22:39:08.407059+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.mdb3-input-tables-extract', NULL, 's4c_mdb3_input_tables.py', '2021-01-15 22:39:08.407059+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.mdb3-extract-markers', NULL, 'extract_mdb3_markers.py', '2021-01-15 22:39:08.407059+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.lpis_list_columns', NULL, 'read_shp_cols.py', '2021-01-15 22:39:08.407059+02');
+
+
 
 -- -----------------------------------------------------------
 -- Downloader specific keys

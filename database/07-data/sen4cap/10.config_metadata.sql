@@ -87,6 +87,7 @@ INSERT INTO config_metadata VALUES ('executor.module.path.ogr2ogr', 'ogr2ogr fil
 INSERT INTO config_metadata VALUES ('executor.module.path.s4c-grassland-extract-products', 'Script for extracting S4C L4B input products', 'file', true, 8, FALSE, 'Script for extracting S4C L4B input products', NULL);
 INSERT INTO config_metadata VALUES ('executor.module.path.s4c-grassland-gen-input-shp', 'Script for generating S4C L4B input shapefile', 'file', true, 8, FALSE, 'Script for generating S4C L4B input shapefile', NULL);
 INSERT INTO config_metadata VALUES ('executor.module.path.s4c-l4a-extract-parcels', 'Script for extracting S4C L4A input parcels', 'file', true, 8, FALSE, 'Script for extracting S4C L4A input parcels', NULL);
+INSERT INTO config_metadata VALUES ('executor.module.path.lpis_list_columns', 'Script for extracting the column names from a shapefile', 'string', true, 8, FALSE, 'Script for extracting the column names from a shapefile', NULL);
 
 -- -----------------------------------------------------------
 -- Downloader Specific Keys
@@ -304,6 +305,8 @@ INSERT INTO config_metadata VALUES ('processor.s4c_l4b.cfg_upload_dir', 'Site up
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_product_types', 'Input product types', 'string', FALSE, 19, FALSE, 'Input product types', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s1_py_script', 'Script for S1 detection', 'string', FALSE, 19, FALSE, 'Script for S1 detection', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s2_py_script', 'Script for S2 detection', 'string', FALSE, 19, FALSE, 'Script for S1 detection', NULL);
+INSERT INTO config_metadata VALUES ('processor.s4c_l4b.year', 'Current L4B processing year for site', 'int', FALSE, 19, FALSE, 'Current L4B processing year for site', NULL);
+
 -- TODO: See if these 2 are used, if not, they should be removed
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.sub_steps', 'Substeps', 'string', FALSE, 19, FALSE, 'Substeps', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.working_dir', 'Working directory', 'string', FALSE, 19, FALSE, 'Working directory', NULL);
@@ -337,6 +340,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tsa_min_acqs_no', 'TSA mi
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_dir', 'TSA input tables directory', 'string', FALSE, 20, FALSE, 'TSA input tables directory', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_upload_root_dir', 'Input tables upload root directory', 'string', FALSE, 20, FALSE, 'Input tables upload root directory', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.use_prev_prd', 'Use previous TSA', 'int', FALSE, 20, FALSE, 'Use previous TSA', NULL);
+INSERT INTO config_metadata VALUES ('processor.s4c_l4c.year', 'Current L4C processing year for site', 'int', FALSE, 20, FALSE, 'Current L4C processing year for site', NULL);
 
 -- -----------------------------------------------------------
 -- S4C_MDB1 Specific Keys
@@ -367,7 +371,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab8a_enabled', 'Reflec
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab11_enabled', 'Reflectance band B11 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B11 markers extraction enabled', NULL); 
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab12_enabled', 'Reflectance band B12 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B12 markers extraction enabled', NULL); 
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_enabled', 'MDB3 markers extraction enabled', 'bool', true, 26, FALSE, 'MDB3 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'bool', true, 26, FALSE, 'MDB3 input tables location', NULL); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'string', true, 26, FALSE, 'MDB3 input tables location', NULL); 
 
 -- -----------------------------------------------------------
 -- Fmask Specific Keys
@@ -388,5 +392,5 @@ INSERT INTO config_metadata VALUES ('processor.fmask.optical.retry-interval', 'R
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.l8', 'Threshold for L8', 'int', false, 31, FALSE, 'Threshold for L8', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.s2', 'Threshold for S2', 'int', false, 31, FALSE, 'Threshold for S2', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold', 'Global threshold', 'int', false, 31, FALSE, 'Global threshold', NULL);
-INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'bool', false, 31, FALSE, 'Working directory', NULL);
+INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'string', false, 31, FALSE, 'Working directory', NULL);
 

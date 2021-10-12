@@ -38,4 +38,8 @@ INSERT INTO processor
 VALUES
 (13, 'S2A L3D LAI Fitted Reprocessing','s2a_l3d', 'S2A L3d &mdash; LAI Fitted Reprocessing');
 
+INSERT INTO processor 
+(id, name, short_name, label) 
+VALUES 
+(21, 'T-Rex Updater', 't_rex_updater', 'T-Rex Updater');
 

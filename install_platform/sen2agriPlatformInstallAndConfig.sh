@@ -48,7 +48,7 @@ MYSQL_CMD=${MYSQL_DB_CREATION}${MYSQL_DB_ACCESS_GRANT}
 #----------------SEN2AGRI POSTGRESQL DATABASE NAME-----------------------------------------#
 : ${SEN2AGRI_DATABASE_NAME:="sen2agri"}
 #------------------------------------------------------------------------------------------#
-declare -r -i -g L1C_PROCESSOR_MACCS=1
+declare -r -i -g L1C_PROCESSOR_SEN2COR=1
 declare -r -i -g L1C_PROCESSOR_MAJA=2
 #------------------------------------------------------------------------------------------#
 function get_install_config_property
@@ -397,29 +397,29 @@ function populate_from_scripts()
     fi
 }
 #-----------------------------------------------------------#
-function install_and_config_webserver()
-{
-   #install additional packages
-   yum -y install php-pgsql
-
-   #install apache
-   yum -y install httpd
-
-   #install php
-   yum -y install php php-mysql
-
-   sed -i -e 's/; max_input_vars.*/max_input_vars = 10000/' /etc/php.ini
-   sed -i -e 's/upload_max_filesize.*/upload_max_filesize = 40M/' /etc/php.ini
-
-   #start service apache
-   systemctl start httpd.service
-
-   #enable service apache
-   systemctl enable httpd.service
-
-   ##install Sen2Agri Website
-   yum -y install ../rpm_binaries/sen2agri-website-*.centos7.x86_64.rpm
-}
+# function install_and_config_webserver()
+# {
+#    #install additional packages
+#    yum -y install php-pgsql
+# 
+#    #install apache
+#    yum -y install httpd
+# 
+#    #install php
+#    yum -y install php php-mysql
+# 
+#    sed -i -e 's/; max_input_vars.*/max_input_vars = 10000/' /etc/php.ini
+#    sed -i -e 's/upload_max_filesize.*/upload_max_filesize = 40M/' /etc/php.ini
+# 
+#    #start service apache
+#    systemctl start httpd.service
+# 
+#    #enable service apache
+#    systemctl enable httpd.service
+# 
+#    ##install Sen2Agri Website
+#    yum -y install ../rpm_binaries/sen2agri-website-*.centos7.x86_64.rpm
+# }
 #-----------------------------------------------------------#
 function install_downloaders_demmacs()
 {
@@ -492,12 +492,12 @@ function maccs_or_maja()
 {
 #    while [[ $answer != '1' ]] && [[ $answer != '2' ]]
 #    do
-#	read -n1 -p "What L1C processor should be used? (1 for MACCS / 2 for MAJA): " -r answer
+#	read -n1 -p "What L1C processor should be used? (1 for Sen2Cor / 2 for MAJA): " -r answer
 #	printf "\n"
 #	case $answer in
 #	    1)
-#		echo "MACCS will be used as L1C processor"
-#		l1c_processor=$L1C_PROCESSOR_MACCS
+#		echo "Sen2Cor will be used as L1C processor"
+#		l1c_processor=$L1C_PROCESSOR_SEN2COR
 # 		;;
 #	    2)
 #		echo "MAJA will be used as L1C processor"
@@ -510,9 +510,9 @@ function maccs_or_maja()
 #    done
     l1c_processor=$L1C_PROCESSOR_MAJA
     case $l1c_processor in
-    $L1C_PROCESSOR_MACCS)
-	l1c_processor_name="MACCS"
-	l1c_processor_bin="maccs"
+    $L1C_PROCESSOR_SEN2COR)
+	l1c_processor_name="Sen2Cor"
+	l1c_processor_bin="sen2cor"
 	l1c_processor_path="/opt/maccs/core"
 	l1c_processor_gipp_destination="/mnt/archive/gipp"
 	l1c_processor_gipp_source="../gipp"
@@ -667,7 +667,7 @@ function install_l1c_processor()
     echo "$l1c_processor_name not found, trying to install it"
 
     found_kit=1
-    if [ $l1c_processor -eq $L1C_PROCESSOR_MACCS ]; then
+    if [ $l1c_processor -eq $L1C_PROCESSOR_SEN2COR ]; then
 	cots_installer=$(find ../maccs/cots -name install-maccs-cots.sh 2>&-)
 	if [ $? -ne 0 ] || [ -z "$cots_installer" ]; then
 	    echo "Unable to find MACCS COTS installer"
@@ -690,7 +690,7 @@ function install_l1c_processor()
     fi
 
     if [ $found_kit -eq 1 ]; then
-	if [ $l1c_processor -eq $L1C_PROCESSOR_MACCS ]; then
+	if [ $l1c_processor -eq $L1C_PROCESSOR_SEN2COR ]; then
             yum -y install redhat-lsb-core
 
 	    echo "Installing MACCS COTS"
@@ -827,6 +827,11 @@ function disable_firewall()
     firewall-cmd --reload
 }
 
+# TODO: This should be removed when implemented in the services or in processors
+function copy_additional_scripts() {
+    cp -fR ./s4c_l4c_export_all_practices.py /usr/bin
+}
+
 ###########################################################
 ##### MAIN                                              ###
 ###########################################################
@@ -835,6 +840,9 @@ if [ $EUID -ne 0 ]; then
     echo "This setup script must be run as root. Exiting now."
     exit 1
 fi
+
+# TODO: This should be removed when implemented in the services or in processors
+copy_additional_scripts
 
 #use MACCS or MAJA?
 maccs_or_maja
@@ -887,8 +895,8 @@ install_and_config_postgresql
 #-----------------------------------------------------------#
 ####  WEBSERVER                 INSTALL   & CONFIG      #####
 #-----------------------------------------------------------#
-install_and_config_webserver
-updateWebConfigParams
+# install_and_config_webserver
+# updateWebConfigParams
 
 #-----------------------------------------------------------#
 ####  DOWNLOADERS AND DEMMACS  INSTALL                  #####

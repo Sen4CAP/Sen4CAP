@@ -42,6 +42,21 @@ begin
                     CONSTRAINT check_unique_by CHECK ((((unique_by)::text = 'season'::text) OR ((unique_by)::text = 'year'::text)))
                 );
             
+                CREATE TABLE IF NOT EXISTS auxdata_file (
+                    id smallserial NOT NULL,
+                    auxdata_descriptor_id smallint NOT NULL,
+                    file_order smallint NOT NULL,
+                    name character varying,
+                    label character varying NOT NULL,
+                    extensions character varying[],
+                    required boolean DEFAULT false,
+                    CONSTRAINT auxdata_file_pkey PRIMARY KEY (id),
+                    CONSTRAINT u_auxdata_descriptor_file UNIQUE (auxdata_descriptor_id, file_order),
+                    CONSTRAINT fk_auxdata_descriptor_file FOREIGN KEY (auxdata_descriptor_id)
+                        REFERENCES auxdata_descriptor (id) MATCH SIMPLE
+                        ON UPDATE NO ACTION ON DELETE NO ACTION    
+                );            
+
                 CREATE TABLE IF NOT EXISTS auxdata_operation (
                     id smallserial NOT NULL,
                     auxdata_file_id smallint NOT NULL,
@@ -59,21 +74,6 @@ begin
                         ON UPDATE NO ACTION ON DELETE NO ACTION,
                     CONSTRAINT fk_auxdata_operation_processor FOREIGN KEY (processor_id)
                         REFERENCES processor (id) MATCH SIMPLE
-                        ON UPDATE NO ACTION ON DELETE NO ACTION    
-                );
-            
-                CREATE TABLE IF NOT EXISTS auxdata_file (
-                    id smallserial NOT NULL,
-                    auxdata_descriptor_id smallint NOT NULL,
-                    file_order smallint NOT NULL,
-                    name character varying,
-                    label character varying NOT NULL,
-                    extensions character varying[],
-                    required boolean DEFAULT false,
-                    CONSTRAINT auxdata_file_pkey PRIMARY KEY (id),
-                    CONSTRAINT u_auxdata_descriptor_file UNIQUE (auxdata_descriptor_id, file_order),
-                    CONSTRAINT fk_auxdata_descriptor_file FOREIGN KEY (auxdata_descriptor_id)
-                        REFERENCES auxdata_descriptor (id) MATCH SIMPLE
                         ON UPDATE NO ACTION ON DELETE NO ACTION    
                 );
             
@@ -102,7 +102,7 @@ begin
                 );
 
                 -- Functions
-                DROP FUNCTION sp_pad_left_json_history_array(json, timestamp, varchar);
+                DROP FUNCTION IF EXISTS sp_pad_left_json_history_array(json, timestamp, varchar);
                 CREATE OR REPLACE FUNCTION sp_pad_left_json_history_array(
                 IN _history json,
                 IN _since timestamp with time zone,
@@ -313,7 +313,7 @@ begin
                     $$ LANGUAGE plpgsql;
 
                 --
-                DROP FUNCTION sp_pad_right_json_history_array(json, timestamp, varchar);
+                DROP FUNCTION IF EXISTS sp_pad_right_json_history_array(json, timestamp, varchar);
                 CREATE OR REPLACE FUNCTION sp_pad_right_json_history_array(
                 IN _history json,
                 IN _since timestamp with time zone,
@@ -634,79 +634,47 @@ begin
                 INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (6, 'l4c_nfc_info', 'L4C NFC practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_nfc_info', label = 'L4C NFC practices infos', unique_by = 'year';
                 INSERT INTO auxdata_descriptor (id, name, label, unique_by) VALUES (7, 'l4c_na_info', 'L4C NA practices infos', 'year') ON conflict(id) DO UPDATE SET name = 'l4c_na_info', label = 'L4C NA practices infos', unique_by = 'year';
                 
-
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (1,1,'Upload', null, null,8, null) ON conflict DO nothing ;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (1,2,'Extract','string[]','{executor.module.path.lpis_list_columns}', 8, null) ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (1,3,'Import', null,'{executor.module.path.lpis_import}', 8,
-                            '{"parameters": [
-                                { "name": "parcelColumns","label": "Parcel Columns","type": "[Ljava.lang.String;","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": 2,"value": null},
-                                {"name": "holdingColumns","label": "Holding Columns","type": "[Ljava.lang.String;","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": 2,"value": null},
-                                {"name": "cropCodeColumn","label": "Crop Code Column","type": "java.lang.String","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": 2,"value": null},
-                                {"name": "year","label": "Year","type": "java.lang.Integer","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
-                             }') ON conflict DO nothing;
-                
-                -- L4B config parameters
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (2,1,'Upload', null, null,10 , null) ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (2,2,'Import', null,'{executor.module.path.l4b_cfg_import}',10,
-                            '{"parameters": [
-                                {"name": "mowingStartDate","label": "Mowing Start Date","type": "java.util.Date","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null},
-                                {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
-                             }') ON conflict DO nothing;
-
-                -- L4C config parameters
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (3,1,'Upload', null, null,11 , null) ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (3,2,'Import', null,'{executor.module.path.l4c_cfg_import}',11,
-                            '{"parameters": [
-                                {"name": "practices","label": "Practices","type": "[Ljava.lang.String;","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null},
-                                {"name": "country","label": "Country","type": "[Ljava.lang.String;","required": true,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}, 
-                                {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
-                             }') ON conflict DO nothing;
-                             
-                -- L4C practices parameters
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (4,1,'Upload', null, null,11 , null) ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (4,2,'Import', null,'{executor.module.path.l4c_practices_import}',11,
-                            '{"parameters": [
-                                {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
-                             }') ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (5,1,'Upload', null, null,11 , null) ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (5,2,'Import', null,'{executor.module.path.l4c_practices_import}',11,
-                            '{"parameters": [
-                                {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
-                             }') ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (6,1,'Upload', null, null,11 , null) ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (6,2,'Import', null,'{executor.module.path.l4c_practices_import}',11,
-                            '{"parameters": [
-                                {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
-                             }') ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (7,1,'Upload', null, null,11 , null) ON conflict DO nothing;
-                INSERT INTO auxdata_operation (auxdata_descriptor_id,operation_order,name,output_type,handler_path,processor_id,parameters) VALUES (7,2,'Import', null,'{executor.module.path.l4c_practices_import}',11,
-                            '{"parameters": [
-                                {"name": "year","label": "Year","type": "java.lang.Integer","required": false,"defaultValue": null,"valueSet": null,"valueSetRef": null,"value": null}]
-                             }') ON conflict DO nothing;
-                
-                
                 -- Files descriptors
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 1, null, 'LPIS','{zip}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 1 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 2, null, 'LUT','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 1 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                
-                -- L4B 
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 1, null, 'L4B Cfg','{cfg}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 2 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
+
+                -- Declarations
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (1, 1, 1, 'LPIS', '{zip}', true) on conflict DO NOTHING;
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (2, 1, 2, 'LUT', '{csv}', false) on conflict DO NOTHING;
+
+                -- L4B config 
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (3, 2, 1, 'L4B Cfg', '{cfg}', true) on conflict(id) DO UPDATE SET extensions = '{cfg}';
 
                 -- L4C config 
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 1, null, 'L4C Cfg','{cfg}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 3 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (4, 3, 1, 'L4C Cfg','{cfg}', false) on conflict DO NOTHING;
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (5, 4, 1, 'Practice file','{csv}', false) on conflict DO NOTHING;
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (6, 5, 1, 'Practice file','{csv}', false) on conflict DO NOTHING;
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (7, 6, 1, 'Practice file','{csv}', false) on conflict DO NOTHING;
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (8, 7, 1, 'Practice file', '{csv}', false) on conflict DO NOTHING;
+                
 
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 4 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 5 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 1, null, 'Practice file','{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 6 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
-                INSERT INTO auxdata_file (auxdata_operation_id,file_order,name,label,extensions,required) 		
-                            (SELECT id, 1, null, 'Practice file', '{csv}', true FROM auxdata_operation WHERE auxdata_descriptor_id = 7 ORDER BY id ASC LIMIT 1) ON conflict DO nothing;
+            -- Declarations operations
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async)
+                        VALUES (1, 1, 1, 'Upload', '{executor.module.path.lpis_list_columns}', 8, '{"parameters": [{"name": "file", "command": "-p", "type": "java.io.File", "required": true, "refFileId": 1}]}', '{"columns":"string[]"}', false) on conflict DO NOTHING;
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) VALUES (2, 1, 2, 'Import', '{executor.module.path.lpis_import}', 8, '{"parameters": [{"name": "lpisFile", "command": "--lpis", "type": "java.io.File", "required": true, "refFileId": 1},{"name": "lutFile", "command": "--lut", "type": "java.io.File", "required": false, "refFileId": 2}, {"name": "parcelColumns","command": "--parcel-id-cols","label": "Parcel Columns","type": "[Ljava.lang.String;","valueSet":["$columns"],"required": true}, {"name": "holdingColumns","command": "--holding-id-cols","label": "Holding Columns","type": "[Ljava.lang.String;","valueSet":["$columns"],"required": true}, {"name": "cropCodeColumn","command": "--crop-code-col","label": "Crop Code Column","type": "java.lang.String","valueSet":["$columns"],"required": true}, {"name": "mode","command":"--mode","label": "Import Mode","type": "java.lang.String","valueSet":["update","replace","incremental"],"defaultValue":"update","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name": "lpisRootPath","label": null,"type": "java.lang.String","value":"{processor.lpis.path}", "required": true}]}', null, true) on conflict(id) DO UPDATE SET parameters = '{"parameters": [{"name": "lpisFile", "command": "--lpis", "type": "java.io.File", "required": true, "refFileId": 1},{"name": "lutFile", "command": "--lut", "type": "java.io.File", "required": false, "refFileId": 2}, {"name": "parcelColumns","command": "--parcel-id-cols","label": "Parcel Columns","type": "[Ljava.lang.String;","valueSet":["$columns"],"required": true}, {"name": "holdingColumns","command": "--holding-id-cols","label": "Holding Columns","type": "[Ljava.lang.String;","valueSet":["$columns"],"required": true}, {"name": "cropCodeColumn","command": "--crop-code-col","label": "Crop Code Column","type": "java.lang.String","valueSet":["$columns"],"required": true}, {"name": "mode","command":"--mode","label": "Import Mode","type": "java.lang.String","valueSet":["update","replace","incremental"],"defaultValue":"update","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name": "lpisRootPath","label": null,"type": "java.lang.String","value":"{processor.lpis.path}", "required": true}]}';
+
+            -- L4B Config operations
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async)
+            VALUES (3, 3, 1, 'Import', '{executor.module.path.l4b_cfg_import}', 10, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 3},{"name": "mowingStartDate","label": "Mowing Start Date","type": "java.util.Date", "command":"--mowing-start-date","required": false},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "l4bCfgRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4b.cfg_dir}", "required": true}]}', null, true) on conflict(id) DO UPDATE SET parameters = '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 3},{"name": "mowingStartDate","label": "Mowing Start Date","type": "java.util.Date", "command":"--mowing-start-date","required": false},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "l4bCfgRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4b.cfg_dir}", "required": true}]}', async = true, name ='Import';
+
+            -- L4C config operations
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (4, 4, 1, 'Import', '{executor.module.path.l4c_cfg_import}', 11, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 4},{"name": "practices","label": "Practices","type": "java.lang.String", "command":"--practices","required": true},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "country","label": "Country","type": "java.lang.String", "command":"--country","required": true}, {"name": "l4cCfgRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', null, true) on conflict(id) DO UPDATE SET parameters = '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 4},{"name": "practices","label": "Practices","type": "java.lang.String", "command":"--practices","required": true},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "country","label": "Country","type": "java.lang.String", "command":"--country","required": true}, {"name": "l4cCfgRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', async = true, name ='Import';
+
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (5, 5, 1, 'Import', '{executor.module.path.l4c_practices_import}', 11, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 5},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"CC"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', null, true) on conflict(id) DO UPDATE SET parameters = '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 5},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"CC"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', async = true, name ='Import';
+
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (6, 6, 1, 'Import', '{executor.module.path.l4c_practices_import}', 11, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 6},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"FL"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', null, true) on conflict(id) DO UPDATE SET parameters = '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 6},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"FL"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', async = true, name ='Import';
+                
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (7, 7, 1, 'Import', '{executor.module.path.l4c_practices_import}', 11, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 7},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"NFC"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', null, true) on conflict(id) DO UPDATE SET parameters = '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 7},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"NFC"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', async = true, name ='Import';
+
+            INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (8, 8, 1, 'Import', '{executor.module.path.l4c_practices_import}', 11, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 8},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"NA"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', null, true) on conflict(id) DO UPDATE SET parameters = '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 8},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"NA"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', async = true, name ='Import';
 
             $str$;
             raise notice '%', _statement;
@@ -1353,9 +1321,8 @@ begin
                 insert into config(key, site_id, value, last_updated) VALUES ('processor.l2a.dem_image', NULL, 'sen4x/l2a-dem:0.1', '2021-04-19 16:30:00.0') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4x/l2a-dem:0.1';
 
                 INSERT INTO config_metadata VALUES('processor.l2a.processors_image','L2a processors image name','string',false,2, FALSE, 'L2a processors image name', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES('processor.l2a.maja_image','MAJA image name','string',false,2, FALSE, 'MAJA image name', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES('processor.l2a.sen2cor_image','Sen2Cor image name','string',false,2, FALSE, 'Sen2Cor image name', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES('processor.l2a.maja4_image','MAJA 4 image name','string',false,2, FALSE, 'MAJA 4 image name', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES('processor.l2a.maja3_image','MAJA 3 image name','string',false,2, FALSE, 'MAJA 3 image name', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES('processor.l2a.gdal_image','GDAL image name','string',false,2, FALSE, 'GDAL image name', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES('processor.l2a.l8_align_image','L8 align image name','string',false,2, FALSE, 'L8 align image name', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES('processor.l2a.dem_image','DEM image name','string',false,2, FALSE, 'DEM image name', NULL) on conflict DO nothing;
@@ -1365,6 +1332,16 @@ begin
 
             -- FMask Upgrades
             _statement := $str$
+                INSERT INTO config_category VALUES (8, 'Executor', 8, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
+                INSERT INTO config_category VALUES (12, 'Dashboard', 9, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
+                INSERT INTO config_category VALUES (13, 'Monitoring Agent', 10, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
+                INSERT INTO config_category VALUES (14, 'Resources', 11, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
+                INSERT INTO config_category VALUES (17, 'Site', 14, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
+                INSERT INTO config_category VALUES (19, 'S4C L4B Grassland Mowing', 15, true) ON conflict(id) DO UPDATE SET name = 'S4C L4B Grassland Mowing';
+                INSERT INTO config_category VALUES (20, 'S4C L4C Agricultural Practices', 16, true) ON conflict(id) DO UPDATE SET name = 'S4C L4C Agricultural Practices';
+                INSERT INTO config_category VALUES (22, 'S4C L4A Crop Type', 22, true) ON conflict(id) DO UPDATE SET name = 'S4C L4A Crop Type';
+                INSERT INTO config_category VALUES (23, 'S1 L2 Pre-processor', 23, true) on conflict DO nothing;
+                INSERT INTO config_category VALUES (26, 'S4C Markers Database 1', 26, true)  ON conflict(id) DO UPDATE SET name = 'S4C Markers Database 1';
                 INSERT INTO config_category VALUES (27, 'Validity Flags', 17, true) on conflict DO nothing;
                 INSERT INTO config_category VALUES (31, 'FMask', 18, true) on conflict DO nothing;
 
@@ -1402,7 +1379,7 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.l8', 'Threshold for L8', 'int', false, 31, FALSE, 'Threshold for L8', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.s2', 'Threshold for S2', 'int', false, 31, FALSE, 'Threshold for S2', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold', 'Global threshold', 'int', false, 31, FALSE, 'Global threshold', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'bool', false, 31, FALSE, 'Working directory', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'string', false, 31, FALSE, 'Working directory', NULL) ON conflict(key) DO UPDATE SET type = 'string';
                 
             $str$;
             raise notice '%', _statement;
@@ -2099,17 +2076,33 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.mdb3_enabled', NULL, 'false', '2021-10-01 17:31:06.01191+02') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.mdb3_input_tables', NULL, '/mnt/archive/marker_database_files/mdb1/{site}/{year}/input_tables.csv', '2021-05-16 17:31:06.01191+02') on conflict DO nothing;
 
-                -- delete keys needed for the 
+                -- delete keys needed
+                DELETE from config WHERE key = 'extract.histogram';
+                
                 DELETE from config WHERE key = 'executor.module.path.extract-l4c-markers';
                 DELETE from config WHERE key = 'general.orchestrator.mdb-csv-to-ipc-export.use_docker';
                 DELETE from config WHERE key = 'executor.module.path.extract-l4c-markers';
                 DELETE from config WHERE key = 'general.orchestrator.extract-l4c-markers.use_docker';
+                
+                DELETE from config where key = 'processor.s4c_mdb1.input_ndvi';
+                DELETE from config where key = 'processor.s4c_l4b.input_ndvi';
+                DELETE from config where key = 'processor.s4c_l4c.input_ndvi';
+                DELETE from config where key = 'processor.s4c_l4b.gen_shp_py_script';
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.input_l3b', NULL, 'N/A', '2019-02-19 11:09:43.978921+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.input_l3b', NULL, 'N/A', '2019-02-19 11:09:43.978921+02') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_l3b', NULL, 'N/A', '2019-02-19 11:09:43.978921+02') on conflict DO nothing;
                 
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
             _statement := $str$
+                INSERT INTO config_metadata VALUES ('mail.message.batch.limit', 'Batch limit of mail message', 'int', false, 1, FALSE, 'Batch limit of mail message', NULL) on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('executor.processor.s4c_l4b.keep_job_folders', 'Keep S4C L4B temporary product files for the orchestrator jobs', 'int', false, 8, FALSE, 'Keep S4C L4B temporary product files for the orchestrator jobs', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.processor.s4c_l4c.keep_job_folders', 'Keep S4C L4C temporary product files for the orchestrator jobs', 'int', false, 8, FALSE, 'Keep S4C L4C temporary product files for the orchestrator jobs', NULL) on conflict DO nothing;
+            
                 INSERT INTO config_metadata VALUES ('downloader.l8.query.days.back', 'Number of back days for L8 download', 'int', false, 15, FALSE, 'Number of back days for L8 download', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('downloader.s1.query.days.back', 'Number of back days for S1 download', 'int', false, 15, FALSE, 'Number of back days for S1 download', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('downloader.s2.query.days.back', 'Number of back days for S2 download', 'int', false, 15, FALSE, 'Number of back days for S2 download', NULL) on conflict DO nothing;
@@ -2147,6 +2140,7 @@ begin
                 DELETE from config_metadata where key = 'processor.s4c_mdb1.input_ndvi';
                 DELETE from config_metadata where key = 'processor.s4c_l4b.input_ndvi';
                 DELETE from config_metadata where key = 'processor.s4c_l4c.input_ndvi';
+               
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
@@ -2156,12 +2150,14 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_product_types', 'Input product types', 'string', FALSE, 19, FALSE, 'Input product types', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s1_py_script', 'Script for S1 detection', 'string', FALSE, 19, FALSE, 'Script for S1 detection', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s2_py_script', 'Script for S2 detection', 'string', FALSE, 19, FALSE, 'Script for S1 detection', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.default_config_path', 'The default configuration files for all L4B processors', 'file', FALSE, 19, FALSE, 'The default configuration files for all L4B processors', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.year', 'Current L4B processing year for site', 'int', FALSE, 19, FALSE, 'Current L4B processing year for site', NULL) on conflict DO nothing;
 
                 -- TODO: See if these 2 are used, if not, they should be removed
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.sub_steps', 'Substeps', 'string', FALSE, 19, FALSE, 'Substeps', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.working_dir', 'Working directory', 'string', FALSE, 19, FALSE, 'Working directory', NULL) on conflict DO nothing;
 
-
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.default_config_path', 'The default configuration files for all L4C processors', 'file', FALSE, 20, FALSE, 'The default configuration files for all L4C processors', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_dir', 'Config files directory', 'string', FALSE, 20, FALSE, 'Config files directory', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_upload_dir', 'Site upload files directory', 'string', FALSE, 20, FALSE, 'Site upload files directory', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.country', 'Site country', 'string', FALSE, 20, FALSE, 'Site country', NULL) on conflict DO nothing;
@@ -2176,6 +2172,7 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_dir', 'TSA input tables directory', 'string', FALSE, 20, FALSE, 'TSA input tables directory', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_upload_root_dir', 'Input tables upload root directory', 'string', FALSE, 20, FALSE, 'Input tables upload root directory', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.use_prev_prd', 'Use previous TSA', 'int', FALSE, 20, FALSE, 'Use previous TSA', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.year', 'Current L4C processing year for site', 'int', FALSE, 20, FALSE, 'Current L4C processing year for site', NULL) on conflict DO nothing;
                 
                 INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.keep_job_folders', 'Keep MDB1 temporary product files for the orchestrator jobs', 'string', true, 8, FALSE, 'Keep MDB1 temporary product files for the orchestrator jobs', NULL)  on conflict DO nothing;
                 
@@ -2194,6 +2191,9 @@ begin
 
                 INSERT INTO config_metadata VALUES ('general.scratch-path.l2a_msk', 'Path for Masked L2A temporary files', 'string', false, 27, FALSE, 'Path for Masked L2A temporary files', NULL) on conflict DO nothing;
                 
+                INSERT INTO config_metadata VALUES ('site.path', 'Site path', 'file', false, 17, FALSE, 'Site path', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('site.url', 'Site url', 'string', false, 17, FALSE, 'Site url', NULL) on conflict DO nothing;
+
                 INSERT INTO config_metadata VALUES ('gdal.apps.path', 'Gdal applications path', 'string', false, 1, FALSE, 'Gdal applications path', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('gdal.installer', 'Gdal installer', 'string', false, 1, FALSE, 'Gdal installer', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('general.parcels_product.parcels_csv_file_name_pattern', 'Parcels product csv file name pattern', 'string', false, 1, FALSE, 'Parcels product csv file name pattern', NULL) on conflict DO nothing;
@@ -2202,7 +2202,7 @@ begin
                 INSERT INTO config_metadata VALUES ('general.parcels_product.parcel_id_col_name', 'Parcels parcels id columns name', 'string', false, 1, FALSE, 'Parcels parcels id columns name', NULL) on conflict DO nothing;
 
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_enabled', 'MDB3 markers extraction enabled', 'bool', true, 26, FALSE, 'MDB3 markers extraction enabled', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'bool', true, 26, FALSE, 'MDB3 input tables location', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'string', true, 26, FALSE, 'MDB3 input tables location', NULL) ON conflict(key) DO UPDATE SET type = 'string', values = null;
 
                 INSERT INTO config_metadata VALUES ('processor.lpis.path', 'The path to the pre-processed LPIS products', 'string', false, 21, FALSE, 'The path to the pre-processed LPIS products', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.lpis.lut_upload_path', 'Site LUT upload path', 'string', false, 21, FALSE, 'Site LUT upload path', NULL) on conflict DO nothing;
@@ -2210,8 +2210,20 @@ begin
                 
                 INSERT INTO config_metadata VALUES ('disk.monitor.interval', 'Disk Monitor interval', 'int', false, 13, FALSE, 'Disk Monitor interval', NULL) on conflict DO nothing;
                 
-                INSERT INTO config_metadata VALUES ('downloader.query.timeout', 'Download query timeout', 'int', false, 15, FALSE, 'Download query timeout', NULL)
+                INSERT INTO config_metadata VALUES ('downloader.query.timeout', 'Download query timeout', 'int', false, 15, FALSE, 'Download query timeout', NULL) on conflict DO nothing;
                 
+                INSERT INTO config_metadata VALUES ('processor.l2s1.enabled', 'S1 pre-processing enabled', 'bool', false, 23, FALSE, 'S1 pre-processing enabled', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.parallelism', 'Tiles to classify in parallel', 'int', false, 23, FALSE, 'Tiles to classify in parallel', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.path', 'The path where the S1 L2 products will be created', 'string', false, 23, FALSE, 'The path where the S1 L2 products will be created', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.temporal.offset', 'S1 pre-processor offset', 'int', false, 23, FALSE, 'S1 pre-processor offset', NULL)  on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.work.dir', 'The path where to create the temporary S1 L2A files', 'string', false, 23, FALSE, 'The path where to create the temporary S1 L2A files', NULL) on conflict DO nothing;
+
+                INSERT INTO config_metadata VALUES ('processor.l2s1.compute.amplitude', 'Compute amplitude', 'bool', false, 23, FALSE, 'Compute amplitude', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.compute.coherence', 'Compute coherence', 'bool', false, 23, FALSE, 'Compute coherence', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.gpt.parallelism', 'GPT parallelism', 'int', false, 23, FALSE, 'GPT parallelism', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.gpt.tile.cache.size', 'GPT tile cache size', 'int', false, 23, FALSE, 'GPT tile cache size', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.join.amplitude.steps', 'Join amplitude steps', 'bool', false, 23, FALSE, 'Join amplitude steps', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.l2s1.join.coherence.steps', 'Join coherence steps', 'bool', false, 23, FALSE, 'Join coherence steps', NULL) on conflict DO nothing;
                 
                 INSERT INTO config_metadata VALUES ('dem.name', 'DEM name', 'string', false, 23, FALSE, 'DEM name', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('primary.sensor', 'Primary sensor', 'string', false, 23, FALSE, 'Primary sensor', NULL) on conflict DO nothing;
@@ -2239,8 +2251,36 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.l2s1.min.memory', 'Minimum memory to run step', 'string', false, 23, FALSE, 'Minimum memory to run step', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.l2s1.min.disk', 'Minimum disk to run step', 'string', false, 23, FALSE, 'Minimum disk to run step', NULL) on conflict DO nothing;
                 
+                INSERT INTO config_metadata VALUES ('downloader.timeout', 'Timeout between download retries ', 'int', false, 15, FALSE, 'Timeout between download retries ', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('downloader.skip.existing', 'If enabled, products downloaded for another site will be duplicated, in database only, for the current site', 'bool', false, 15, FALSE, 'Use products already downloaded on another site', NULL) on conflict DO nothing;
                         
+                -- Force using it from docker otherwith it will use the script existing in /usr/bin 
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.lpis_import', NULL, 'data-preparation.py', '2019-10-22 22:39:08.407059+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'data-preparation.py';
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.lpis_list_columns', NULL, 'read_shp_cols.py', '2021-01-15 22:39:08.407059+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'read_shp_cols.py';
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4b_cfg_import', NULL, 's4c_l4b_import_config.py', '2019-10-22 22:39:08.407059+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 's4c_l4b_import_config.py';
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_cfg_import', NULL, 's4c_l4c_import_config.py', '2019-10-22 22:39:08.407059+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 's4c_l4c_import_config.py';
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_practices_export', NULL, '/usr/bin/s4c_l4c_export_all_practices.py', '2019-10-22 22:39:08.407059+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '/usr/bin/s4c_l4c_export_all_practices.py';
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.l4c_practices_import', NULL, 's4c_l4c_import_practice.py', '2019-10-22 22:39:08.407059+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 's4c_l4c_import_practice.py';
+                
+                INSERT INTO config_metadata VALUES ('executor.module.path.lpis_list_columns', 'Script for extracting the column names from a shapefile', 'string', true, 8, FALSE, 'Script for extracting the column names from a shapefile', NULL) on conflict DO nothing;
+                        
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+            
+            _statement := $str$
+                
+                INSERT INTO processor (id, name, short_name, label) VALUES (21, 'T-Rex Updater', 't_rex_updater', 'T-Rex Updater') ON conflict DO NOTHING;
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.trex-updater', NULL, 't-rex-genconfig.py', '2021-10-11 22:39:08.407059+02') on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.module.path.trex-updater', 'Script for T-Rex file generation', 'string', true, 8, FALSE, 'Script for T-Rex file generation', NULL);
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.docker_image', NULL, 'sen4cap/data-preparation:0.1', '2021-02-19 14:43:00.720811+00');
+
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.trex.t-rex-container', NULL, 'docker_t-rex_1', '2021-10-11 11:09:43.978921+02') on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.trex.t-rex-container', 'T-Rex container name', 'string', false, 15, FALSE, 'T-Rex container name', NULL) on conflict DO nothing;
+                
             $str$;
             raise notice '%', _statement;
             execute _statement;
