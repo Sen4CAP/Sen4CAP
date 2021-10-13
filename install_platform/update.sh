@@ -54,7 +54,7 @@ function install_sen2agri_services()
             datasources_plugins_dir=""
             if [ -d "${TARGET_SERVICES_DIR}/datasources" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/datasources)" ] ; then
                 datasources_plugins_dir="${TARGET_SERVICES_DIR}/datasources"
-            else 
+            else
             if [ -d "${TARGET_SERVICES_DIR}/lib" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/lib)" ] ; then
                     datasources_plugins_dir="${TARGET_SERVICES_DIR}/lib"
                 fi
@@ -67,19 +67,19 @@ function install_sen2agri_services()
                     filename=$(basename $filepath)
                     #make a backup for tao-datasource*.jar, others that scihub and usgs
                     if [[ $filename != tao-datasources-scihub* ]] && [[ $filename != tao-datasources-usgs* ]]; then
-                        cp ${datasources_plugins_dir}/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/  
+                        cp ${datasources_plugins_dir}/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/
                     fi
                 done;
             fi
             if [ -f ../sen2agri-services/${SERVICES_ARCHIVE} ]; then
                 echo "Updating ${TARGET_SERVICES_DIR}/lib folder ..."
-                mkdir -p ${TARGET_SERVICES_DIR}/lib 
-                mkdir -p ${TARGET_SERVICES_DIR}/datasources 
-                rm -f ${TARGET_SERVICES_DIR}/lib/*.jar 
-                rm -f ${TARGET_SERVICES_DIR}/datasources/*.jar 
+                mkdir -p ${TARGET_SERVICES_DIR}/lib
+                mkdir -p ${TARGET_SERVICES_DIR}/datasources
+                rm -f ${TARGET_SERVICES_DIR}/lib/*.jar
+                rm -f ${TARGET_SERVICES_DIR}/datasources/*.jar
                 unzip -o ${zipArchive} 'lib/*' -d ${TARGET_SERVICES_DIR}
                 unzip -o ${zipArchive} 'datasources/*' -d ${TARGET_SERVICES_DIR}
-                
+
                 # Check if directory lib_add_plgs_bkp_<timestamp> exist and is not empty
                 if [ -d "${TARGET_SERVICES_DIR}/${add_plgs_bkp}" ] ; then
                     if [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/${add_plgs_bkp})" ]; then
@@ -107,7 +107,7 @@ function install_sen2agri_services()
                 if [ -f ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ] ; then
                     mv ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ${TARGET_SERVICES_DIR}/config/services.properties
                 fi
-                
+
                 # Add new lines for 3.0 if missing
                 if grep -q "endpoints.not.authenticated" ${TARGET_SERVICES_DIR}/config/services.properties
                 then
@@ -116,7 +116,7 @@ function install_sen2agri_services()
                     echo "Updating 3.0 site infos ..."
                     sed -i '/^plugins.use.docker =.*/i site.location=static\r\nsite.prefix = \/ui\r\nendpoints.not.authenticated=\/;\/login;\/products\/download\r\n\r\n' ${TARGET_SERVICES_DIR}/config/services.properties
                 fi
-                
+
                 if [ -f ${TARGET_SERVICES_DIR}/config/application.properties ] ; then
                     cp -f ${TARGET_SERVICES_DIR}/config/application.properties ${TARGET_SERVICES_DIR}/config/application.properties.bkp
                 fi
@@ -184,7 +184,7 @@ function enableSciHubDwnDS()
 #     # Set the port 8082 for the dashboard services URL
 #     sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8080\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
 #     sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8081\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
-# 
+#
 #     REST_SERVER_PORT=$(sed -n 's/^server.port =//p' ${TARGET_SERVICES_DIR}/config/services.properties | sed -e 's/\r//g')
 #     # Strip leading space.
 #     REST_SERVER_PORT="${REST_SERVER_PORT## }"
@@ -193,11 +193,11 @@ function enableSciHubDwnDS()
 #      if [[ !  -z  $REST_SERVER_PORT  ]] ; then
 #         sed -i -e "s|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:8080|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:$REST_SERVER_PORT|g" /var/www/html/ConfigParams.php
 #      fi
-# 
+#
 #     if [[ ! -z $DB_NAME ]] ; then
 #         sed -i -e "s|static \$DEFAULT_DB_NAME = \x27sen2agri|static \$DEFAULT_DB_NAME = \x27${DB_NAME}|g" /var/www/html/ConfigParams.php
 #     fi
-# 
+#
 # }
 
 function resetDownloadFailedProducts()
@@ -315,10 +315,13 @@ function setup_containers() {
 
     mkdir -p /var/lib/t-rex
     chown ${SYS_ACC_NAME}: /var/lib/t-rex
-    docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/sen2agri.conf:/etc/sen2agri/sen2agri.conf -v /var/lib/t-rex:/var/lib/t-rex sen4cap/data-preparation:0.1 t-rex-genconfig.py --stub /var/lib/t-rex/t-rex.toml
+
+    # the database should already be running since `migrate_postgres_to_docker`
+    docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/sen2agri.conf:/etc/sen2agri/sen2agri.conf -v /var/lib/t-rex:/var/lib/t-rex sen4cap/data-preparation:0.1 t-rex-genconfig.py /var/lib/t-rex/t-rex.toml
 
     cd docker
     docker-compose up -d
+
     cd ..
 }
 
