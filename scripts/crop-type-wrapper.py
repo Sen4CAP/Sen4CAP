@@ -180,9 +180,10 @@ def main():
         command += ["--season-start", args.season_start]
         command += ["--season-end", args.season_end]
         if args.tiles:
-            command += ["--tiles", args.tiles]
+            command += ["--tiles"] + args.tiles
         if args.products:
-            command += ["--tiles", args.products]
+            command += ["--products"] + args.products
+        command += ["--"]
         command += [parcels, lut, tile_footprints, optical_products, radar_products, lpis_path]
 
         run_command(command)
