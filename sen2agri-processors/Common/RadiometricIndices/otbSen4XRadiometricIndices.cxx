@@ -117,6 +117,17 @@ private:
     AddParameter(ParameterType_OutputImage, "out", "Output Image");
     SetParameterDescription("out", "Radiometric indices output image");
 
+    AddParameter(ParameterType_Int, "scaling", "Enable scaling of the output if supported");
+    SetParameterDescription("scaling", "Enable scaling of the output if supported");
+    MandatoryOff("scaling");
+    SetDefaultParameterInt("scaling", 1);
+
+    AddParameter(ParameterType_Int, "quantif", "Scaling value if scaling enabled");
+    SetParameterDescription("quantif", "Scaling value if scaling enabled");
+    MandatoryOff("quantif");
+    SetDefaultParameterInt("quantif", DEFAULT_QUANTIFICATION_VALUE);
+
+
     AddParameter(ParameterType_ListView, "list", "Available Radiometric Indices");
     SetParameterDescription("list",
                             "List of available radiometric indices with their relevant channels in brackets:\n\n"
@@ -151,6 +162,7 @@ private:
 
     m_Map.clear();
 
+    // TODO: Check what indicators can be quantifiable as short
     m_Map.push_back({"list.ndvi", "Vegetation:NDVI", new otb::Functor::NDVI<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.tndvi", "Vegetation:TNDVI", new otb::Functor::TNDVI<InputPixelType, OutputPixelType, MaskPixelType>()});
     m_Map.push_back({"list.rdvi", "Vegetation:RVI", new otb::Functor::RVI<InputPixelType, OutputPixelType, MaskPixelType>()});
@@ -238,6 +250,9 @@ private:
           itkExceptionMacro("No input metadata XML set...; please set the input image");
       }
 
+   m_bScalingEnabled = (GetParameterInt("scaling") != 0);
+   m_quantifValue = GetParameterInt("quantif");
+
     // Derive required bands from selected indices
     auto requiredBands = GetRequiredBands();
 
@@ -267,13 +282,15 @@ private:
     }
 
     // Find selected indices
-    for (unsigned int idx = 0; idx < GetSelectedItems("list").size(); ++idx)
+    const std::vector<int> &selectedItems = GetSelectedItems("list");
+    for (unsigned int idx = 0; idx < selectedItems.size(); ++idx)
     {
       // Retrieve the indice instance
-      m_indices.push_back(m_Map[GetSelectedItems("list")[idx]].indice.get());
+      m_indices.push_back(m_Map[selectedItems[idx]].indice.get());
 
       // And set bands using the band map
       m_indices.back()->SetBandsIndices(bandIndicesMap);
+      // TODO: This should come from the input L2A product
       m_indices.back()->SetNoDataValue(NO_DATA_VALUE);
     }
 
@@ -303,17 +320,19 @@ private:
         m_functorOutput = m_unmaskedFilter->GetOutput();
     }
 
-//    m_floatToShortFunctor = FloatToShortTransFilterType::New();
-//    // quantify the image using the default factor and considering 0 as NO_DATA but
-//    // also setting all values less than 0 to 0
-//    m_floatToShortFunctor->GetFunctor().Initialize(DEFAULT_QUANTIFICATION_VALUE, NO_DATA_VALUE, true);
-//    m_floatToShortFunctor->SetInput(m_functorOutput);
-//    m_floatToShortFunctor->GetOutput()->UpdateOutputInformation();
+    if (m_bScalingEnabled && selectedItems.size() == 1 && m_Map[selectedItems[0]].quantifiableResult) {
+        m_floatToShortFunctor = FloatToShortTransFilterType::New();
+        // quantify the image using the default factor and considering 0 as NO_DATA but
+        // also setting all values less than 0 to 0
+        m_floatToShortFunctor->GetFunctor().Initialize(m_quantifValue, NO_DATA_VALUE, true);
+        m_floatToShortFunctor->SetInput(m_functorOutput);
+        m_floatToShortFunctor->GetOutput()->UpdateOutputInformation();
 
-    // SetParameterOutputImagePixelType("out", ImagePixelType_int16);
-    //SetParameterOutputImage("out", m_floatToShortFunctor->GetOutput());
-    SetParameterOutputImage("out", m_functorOutput);
-
+        SetParameterOutputImagePixelType("out", ImagePixelType_int16);
+        SetParameterOutputImage("out", m_floatToShortFunctor->GetOutput());
+    } else {
+        SetParameterOutputImage("out", m_functorOutput);
+    }
 //    // Call register pipeline to allow streaming and garbage collection
 //    RegisterPipeline();
   }
@@ -327,6 +346,8 @@ private:
   MaskedFilterType::Pointer m_maskedFilter;
   UnmaskedFilterType::Pointer m_unmaskedFilter;
   OutputType::Pointer m_functorOutput;
+  bool m_bScalingEnabled;
+  int m_quantifValue;
 
   FloatToShortTransFilterType::Pointer  m_floatToShortFunctor;
 };
