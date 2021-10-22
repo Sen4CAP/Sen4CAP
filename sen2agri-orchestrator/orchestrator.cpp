@@ -21,6 +21,7 @@
 #include "processor/masked_l2a_handler.hpp"
 #include "processor/s4s_permanent_crop_handler.hpp"
 #include "processor/s4s_yieldhandler.hpp"
+#include "processor/trex_handler.hpp"
 #include "json_conversions.hpp"
 #include "schedulingcontext.h"
 #include "logger.hpp"
@@ -60,6 +61,8 @@ std::map<int, std::unique_ptr<ProcessorHandler>> & GetHandlersMap(PersistenceMan
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4CMarkersDB1Handler>());
         } else if(procDescr.shortName == "l2a_msk") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<MaskedL2AHandler>());
+        } else if(procDescr.shortName == "t_rex_updater") {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<TRexHandler>());
         } else if(procDescr.shortName == "s4s_yield_feat") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4SYieldHandler>());
         } else {

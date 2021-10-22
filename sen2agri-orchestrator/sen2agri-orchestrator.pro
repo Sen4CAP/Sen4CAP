@@ -69,7 +69,8 @@ SOURCES += main.cpp \
     processor/s4s_permanent_crop_handler.cpp \
     processor/products/productdetails.cpp \
     productdetailsbuilder.cpp \
-    processor/s4s_yieldhandler.cpp
+    processor/s4s_yieldhandler.cpp \
+    processor/trex_handler.cpp
 
 HEADERS += \
     pch.hpp \
@@ -118,7 +119,8 @@ HEADERS += \
     processor/s4s_permanent_crop_handler.hpp \
     processor/products/productdetails.h \
     productdetailsbuilder.h \
-    processor/s4s_yieldhandler.hpp
+    processor/s4s_yieldhandler.hpp \
+    processor/trex_handler.hpp
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \
