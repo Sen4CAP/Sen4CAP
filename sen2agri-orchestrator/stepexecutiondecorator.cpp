@@ -1,6 +1,7 @@
 #include "stepexecutiondecorator.h"
 #include "settings.hpp"
 #include "configuration.hpp"
+#include "logger.hpp"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -92,7 +93,8 @@ StepExecutionDecorator::UpdateCommandForDocker(const QString &taskName, const QS
     // add the docker command parameters
     // docker run --rm -u 1003:1003 -v /mnt/archive:/mnt/archive -v /mnt/scratch:/mnt/scratch sen4cap/processors:2.0.0 crop-type-wrapper.py
     QStringList dockerStepList = {"docker", "run", "--rm", "-u",
-                                  QString::number(getuid()) + ":" + QString::number(getgid()) };
+                                  QString::number(getuid()) + ":" + QString::number(getgid()),
+                                 "--group-add", QString::number(QFileInfo("/var/run/docker.sock").groupId())};
     // add also the additional mounts
     for (const QString &mount: dockerMounts) {
         dockerStepList.append("-v");
@@ -150,6 +152,8 @@ QStringList StepExecutionDecorator::EnsureUniqueDockerMounts(const QString &addi
                 if (!retList.contains(newMount)) {
                     retList.append(newMount);
                 }
+            } else {
+                Logger::error(QStringLiteral("Mount %1 does not have 2 parts separated by column. Ignoring it ... ").arg(mount));
             }
         }
     }
@@ -162,22 +166,19 @@ QStringList StepExecutionDecorator::GetDockerMounts(const QString &procName, con
     QString val = GetParamValue(m_orchestratorConfig,  key, "");
     if (val != "") {
         mounts = val;
+        mounts += ",";
     }
     key = ORCHESTRATOR_CFG_KEYS_ROOT + procName + "." + DOCKER_ADD_MOUNTS_STEP_CFG_KEY;
     val = GetParamValue(m_orchestratorConfig, key, "");
     if (val != "") {
-        if (mounts.size() > 0) {
-            mounts += ",";
-        }
         mounts += val;
+        mounts += ",";
     }
     key = QString(ORCHESTRATOR_CFG_KEYS_ROOT) + DOCKER_ADD_MOUNTS_STEP_CFG_KEY;
     val = GetParamValue(m_orchestratorConfig, key, "");
     if (val != "") {
-        if (mounts.size() > 0) {
-            mounts += ",";
-        }
         mounts += val;
+        mounts += ",";
     }
 
     // Add also fixed docker mounts (scratch path, /mnt/archive, archiver path etc.)

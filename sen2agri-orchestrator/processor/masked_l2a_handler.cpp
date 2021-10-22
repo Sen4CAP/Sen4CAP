@@ -173,7 +173,7 @@ ProcessorJobDefinitionParams MaskedL2AHandler::GetProcessingDefinitionImpl(Sched
         return params;
     }
 
-    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(FMASK_L2A_CFG_PREFIX),
+    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(MASKED_L2A_CFG_PREFIX),
                                                                            siteId, requestOverrideCfgValues);
     std::map<QString, QString> configParams;
     for (const auto &p : mapCfg) {
@@ -192,13 +192,19 @@ ProcessorJobDefinitionParams MaskedL2AHandler::GetProcessingDefinitionImpl(Sched
 void MaskedL2AHandler::HandleProductAvailableImpl(EventProcessingContext &ctx,
                                 const ProductAvailableEvent &event)
 {
+    QJsonObject parameters;
+
     // Get the product description from the database
     const ProductList &prds = ctx.GetProducts({event.productId});
     const Product &prd = prds.back();
-    QJsonObject parameters;
-
     if (prd.productTypeId != ProductType::L2AProductTypeId &&
             prd.productTypeId != ProductType::FMaskProductTypeId) {
+        return;
+    }
+
+    auto cfgParams = ctx.GetConfigurationParameters(MASKED_L2A_CFG_PREFIX, prd.siteId);
+    bool processorEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "enabled", MASKED_L2A_CFG_PREFIX);
+    if (!processorEnabled) {
         return;
     }
 
@@ -207,7 +213,7 @@ void MaskedL2AHandler::HandleProductAvailableImpl(EventProcessingContext &ctx,
     if (prd.productTypeId == ProductType::L2AProductTypeId) {
         // check if we have the FMask enabled for this site, otherwise, just send the job
         auto fmaskCfgParams = ctx.GetConfigurationParameters("processor.fmask.enabled", prd.siteId);
-        bool fmaskEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, fmaskCfgParams, "processor.fmask.enabled", "");
+        bool fmaskEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, fmaskCfgParams, "enabled", "processor.fmask.enabled.");
         if (!fmaskEnabled) {
             checkPair = false;
         }

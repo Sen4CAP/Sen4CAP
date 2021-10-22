@@ -4,7 +4,7 @@
 #include "processorhandler.hpp"
 #include "s4c_utils.hpp"
 
-#define FMASK_L2A_CFG_PREFIX "processor.l2a_msk."
+#define MASKED_L2A_CFG_PREFIX "processor.l2a_msk."
 
 class MaskedL2AHandler : public ProcessorHandler
 {
