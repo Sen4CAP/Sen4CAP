@@ -109,12 +109,12 @@ def get_tilesets(conn, cursor):
         query = SQL(
             """
             select Find_SRID('public', %s, 'wkb_geometry') as srid,
-                    ST_Extent(wkb_geometry)
+                   Box2D(ST_Transform(ST_SetSRID(ST_Extent(wkb_geometry), Find_SRID('public', %s, 'wkb_geometry')), 4326))
             from {};
             """
         ).format(Identifier(lpis_table))
         logging.debug(query.as_string(conn))
-        cursor.execute(query, (lpis_table,))
+        cursor.execute(query, (lpis_table, lpis_table))
         row = cursor.fetchone()
         if not row:
             continue
