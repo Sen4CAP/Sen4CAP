@@ -711,6 +711,7 @@ private:
                 MetadataHelper<float, uint8_t>::SingleBandMasksImageType::Pointer maskImg = m_metadataHelpers.at(m_metadataHelpers.size()-1)->GetMasksImage(ALL, false, imgRes);
                 maskValidValue = IMG_FLG_LAND;
                 maskImg->UpdateOutputInformation();
+                bOk = true;
                 return maskImg;
             }
         } else if (prdType == "L3B") {
