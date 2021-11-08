@@ -1049,8 +1049,9 @@ with transformed as (
 )
 select "NewID", ST_Buffer(ST_Transform(wkb_geometry, epsg_code), {})
 from {}, transformed
-where ST_Intersects(wkb_geometry, transformed.geom)
-and not is_deleted;"""
+where "GeomValid"
+  and not is_deleted
+  and ST_Intersects(wkb_geometry, transformed.geom);"""
                     )
                     sql = sql.format(
                         Literal(self.lpis_table),
@@ -1334,7 +1335,8 @@ and created_timestamp = %s;"""
 select *
 from {}
 inner join {} using (ori_crop)
-where not is_deleted"""
+where "GeomValid"
+  and not is_deleted;"""
                 ).format(Identifier(self.lpis_table), Identifier(self.lut_table))
                 sql = sql.as_string(conn)
 
@@ -1371,7 +1373,7 @@ where not is_deleted"""
                             f.write(wkt)
 
                         sql = SQL(
-                            'select "NewID", ST_Buffer(ST_Transform(wkb_geometry, {}), -{}) from {} where not is_deleted'
+                            'select "NewID", ST_Buffer(ST_Transform(wkb_geometry, {}), -{}) from {} where "GeomValid" and not is_deleted'
                         )
                         sql = sql.format(
                             Literal(epsg_code),
@@ -1433,7 +1435,8 @@ select tile_id, (
     select count(*)
     from {} lpis
     where not lpis.is_deleted
-        and ST_Intersects(lpis.wkb_geometry, tiles.geom)
+     and "GeomValid"
+     and ST_Intersects(lpis.wkb_geometry, tiles.geom)
 ) as count
 from tiles;"""
                 ).format(Identifier(self.lpis_table))
@@ -1461,18 +1464,18 @@ with tile as (
 select "NewID"
 from {} lpis, tile
 where "GeomValid"
-and not is_deleted
-and exists (
-    select 1
-    from {} t
-    where t."NewID" != lpis."NewID"
-    and t."GeomValid"
-    and not t.is_deleted
-    and ST_Intersects(t.wkb_geometry, tile.geom)
-    and ST_Intersects(t.wkb_geometry, lpis.wkb_geometry)
-    having sum(ST_Area(ST_Intersection(t.wkb_geometry, lpis.wkb_geometry))) / nullif(lpis."Area_meters", 0) > 0.1
-)
-and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
+  and not is_deleted
+  and exists (
+      select 1
+      from {} t
+      where t."NewID" != lpis."NewID"
+      and t."GeomValid"
+      and not t.is_deleted
+      and ST_Intersects(t.wkb_geometry, tile.geom)
+      and ST_Intersects(t.wkb_geometry, lpis.wkb_geometry)
+      having sum(ST_Area(ST_Intersection(t.wkb_geometry, lpis.wkb_geometry))) / nullif(lpis."Area_meters", 0) > 0.1
+  )
+  and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
                 )
                 query = query.format(
                     Identifier(self.lpis_table), Identifier(self.lpis_table)
@@ -1498,8 +1501,9 @@ from (
     select "NewID",
             count(*) over(partition by wkb_geometry) as count
     from {}, tile
-    where ST_Intersects(wkb_geometry, tile.geom)
-        and not is_deleted
+    where "GeomValid"
+      and ST_Intersects(wkb_geometry, tile.geom)
+      and not is_deleted
 ) t where count > 1;"""
                 )
                 query = query.format(Identifier(self.lpis_table))
