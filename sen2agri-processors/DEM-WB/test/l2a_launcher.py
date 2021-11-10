@@ -2150,22 +2150,19 @@ class Sen2Cor(L2aProcessor):
 
         #check the valid pixels percetage
         if l2a_ok and self.get_quality_indicators():
-            if self.l2a.valid_pixels_percentage is not None:
-                if self.l2a.valid_pixels_percentage < MIN_VALID_PIXELS_THRESHOLD:
-                    rejection_reason = "The valid pixels percentage is {} which is less that the threshold of {}%".format(
-                        self.l2a.valid_pixels_percentage,
-                        MIN_VALID_PIXELS_THRESHOLD
-                    )
-                    self.update_rejection_reason(rejection_reason)
-                    self.l2a_log.error(rejection_reason, print_msg = True)
-                else:
-                    self.l2a_log.info("The valid pixels percetage is {} which is higher that the threshold of {}%".format(
-                            self.l2a.valid_pixels_percentage, 
-                            MIN_VALID_PIXELS_THRESHOLD 
-                        )
-                    )
-                    quality_ok = True
+            if self.l2a.valid_pixels_percentage < MIN_VALID_PIXELS_THRESHOLD:
+                rejection_reason = "The valid pixels percentage is {} which is less that the threshold of {}%".format(
+                    self.l2a.valid_pixels_percentage,
+                    MIN_VALID_PIXELS_THRESHOLD
+                )
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(rejection_reason, print_msg = True)
             else:
+                self.l2a_log.info("The valid pixels percetage is {} which is higher that the threshold of {}%".format(
+                        self.l2a.valid_pixels_percentage, 
+                        MIN_VALID_PIXELS_THRESHOLD 
+                    )
+                )
                 quality_ok = True
         msg = "L2A quality - {}".format(
             "OK" if quality_ok else "NOK"
