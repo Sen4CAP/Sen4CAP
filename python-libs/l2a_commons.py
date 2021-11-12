@@ -73,7 +73,7 @@ class LogHandler(object):
         self.name = name
         self.emitter_id = emitter_id
         self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s", datefmt = '%Y.%m.%d-%H:%M:%S')
-        self.handler = logging.FileHandler(self.path, "a")        
+        self.handler = logging.FileHandler(self.path, mode = "a")        
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger(self.name)
         if self.level == 'debug':

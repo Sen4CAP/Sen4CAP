@@ -22,44 +22,23 @@ import argparse
 import glob
 import re
 import os
-from lxml import etree
-import hashlib
 import signal
 import pipes
 import datetime
 import time
-from l2a_commons import create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers
+from l2a_commons import create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers, get_docker_gid
 from l2a_commons import run_command, LogHandler, NO_ID
 
-# default values
-default_dem_path = "/mnt/archive/srtm"
-docker_dem_path = "/sen2cor/2.9/dem/srtm/"
-# default_lc_snow_cond_path = "/mnt/archive/reference_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
-docker_lc_snow_cond_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
-# default_lc_lccs_map_path = "/mnt/archive/reference_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
-docker_lc_lccs_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
-# default_lc_wb_map_path = "/mnt/archive/reference_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
-docker_lc_wb_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
-docker_output_path = "/sen2cor/2.9/out"
-docker_wrk_path = "/sen2cor/2.9/wrk"
-docker_L2A_path = "/sen2cor/2.9/gipp/L2A_GIPP.xml"
-docker_L2A_SC_path = "/sen2cor/2.9/gipp/L2A_CAL_SC_GIPP.xml"
-docker_L2A_AC_path = "/sen2cor/2.9/gipp/L2A_CAL_AC_GIPP.xml"
-docker_L2A_PB_path = "/sen2cor/2.9/gipp/L2A_PB_GIPP.xml"
-docker_tile_path = "/sen2cor/2.9/tile"
-docker_datastrip_path = "/sen2cor/2.9/datastrip"
-docker_img_database_path = "/sen2cor/2.9/img_database"
-docker_res_database_path = "/sen2cor/2.9/res_database"
-docker_sen2cor_exec_path = "/usr/local/bin/L2A_Process"
-docker_if_path = "/tmp/if/"  # input files path
-docker_of_path = "/tmp/of/"  # output files path
 SEN2COR_LOG_FILE_NAME = "sen2cor.log"
+SEN2COR_2_5_5_HOME = "/sen2cor/2.5"
+SEN2COR_2_8_HOME = "/sen2cor/2.8"
+SEN2COR_2_9_HOME = "/sen2cor/2.9"
+SEN2COR_2_10_HOME = "/sen2cor/2.10"
 
 
 def CheckInput():
     global default_wrk_dir_path
     global docker_input_path
-    global default_dem_path
     global l2a_log
 
     # input_dir checks
@@ -121,7 +100,7 @@ def CheckInput():
     if args.working_dir:
         if os.path.isdir(args.working_dir) is False:
             l2a_log.error(
-                "Invalid working directory {}.".format(args.working_dir)
+                "INVALID working directory {}.".format(args.working_dir)
             )
             return False
     else:
@@ -269,7 +248,7 @@ def CheckInput():
         return False
 
     if args.local_run is False:
-        if args.docker_image_sen2cor is None:
+        if docker_image_sen2cor is None:
             l2a_log.error(
                 "Sen2cor docker image must be provided."
             )
@@ -283,9 +262,7 @@ def CheckInput():
 
         # --dem_path checks
         if args.dem_path:
-            if os.path.isdir(args.dem_path):
-                default_dem_path = args.dem_path
-            else:
+            if not os.path.isdir(args.dem_path):
                 l2a_log.error(
                     "Invalid dem_path {}.".format(args.dem_path)
                 )
@@ -390,7 +367,9 @@ def CopyOutput(L2A_product_name):
     # after validation of the output product, copy it to the destination directory
     source_product = os.path.join(wrk_dir, L2A_product_name)
     destination_product = os.path.join(args.output_dir, L2A_product_name)
-    return copy_directory(source_product, destination_product)
+    copy_ok = copy_directory(source_product, destination_product)
+    l2a_log.debug("Copyed {} to {} with success {}".format(source_product, destination_product, copy_ok))
+    return copy_ok
 
 
 def RunSen2Cor():
@@ -470,19 +449,29 @@ def RunSen2Cor():
             cmd.append(args.res_database_dir[0])
     else:
         # docker run
+        docker_gid = get_docker_gid()
+        if not docker_gid:
+            msg = "Can NOT determine docker group id"
+            l2a_log.error(msg, print_msg = True)
+            return False
+
+
         cmd.append("docker")
         cmd.append("run")
         cmd.append("--rm")
         cmd.append("-u")
         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
+        cmd.append("--group-add")
+        cmd.append("{}".format(docker_gid))
         cmd.append("-v")
         cmd.append("/etc/localtime:/etc/localtime")
         cmd.append("-v")
         cmd.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
         cmd.append("-v")
         cmd.append("{}:{}".format(args.output_dir, args.output_dir))
-        cmd.append("-v")
-        cmd.append("{}:{}".format(os.path.abspath(default_dem_path), docker_dem_path))
+        if args.dem_path:
+            cmd.append("-v")
+            cmd.append("{}:{}".format(os.path.abspath(args.dem_path), docker_dem_path))
         if args.lc_snow_cond_path:
             cmd.append("-v")
             cmd.append(
@@ -550,7 +539,7 @@ def RunSen2Cor():
             )
         cmd.append("--name")
         cmd.append(container_name)
-        cmd.append(args.docker_image_sen2cor)
+        cmd.append(docker_image_sen2cor)
 
         # actual sen2cor commands
         cmd.append(docker_sen2cor_exec_path)
@@ -649,12 +638,12 @@ def TranslateToTif(L2A_product_name):
 
     # translate jp2 images to tif images
     jp2_files = []
-    img_dir_jp2_pattern = "GRANULE/L2A*/IMG_DATA/R*m/*.jp2"
+    img_dir_jp2_pattern = "**/IMG_DATA/R*m/*.jp2"
     img_dir_jp2_path = os.path.join(wrk_dir, L2A_product_name, img_dir_jp2_pattern)
-    jp2_files.extend(glob.glob(img_dir_jp2_path))
-    qi_dir_jp2_pattern = "GRANULE/L2A*/QI_DATA/*.jp2"
+    jp2_files.extend(glob.glob(img_dir_jp2_path, recursive = True))
+    qi_dir_jp2_pattern = "**/QI_DATA/*.jp2"
     qi_dir_jp2_path = os.path.join(wrk_dir, L2A_product_name, qi_dir_jp2_pattern)
-    jp2_files.extend(glob.glob(qi_dir_jp2_path))
+    jp2_files.extend(glob.glob(qi_dir_jp2_path, recursive = True))
 
     if len(jp2_files) != 0:
         for jp2 in jp2_files:
@@ -706,107 +695,7 @@ def TranslateToTif(L2A_product_name):
         )
         return False
 
-   # change manifest.safe file extensions from jp2 to tif
-    manifest_pattern = "manifest.safe"
-    manifest_file_path = os.path.join(wrk_dir, L2A_product_name, manifest_pattern)
-    manifest_files = glob.glob(manifest_file_path)
-    if (len(manifest_files) == 1) and (os.path.isfile(manifest_files[0])):
-        manifest_file_path = manifest_files[0]
-        l2a_folder_name = manifest_file_path.split("/")[-2]
-        try:
-            tree = etree.parse(manifest_file_path)
-            dataobjects = tree.find("dataObjectSection")
-            for dataobject in dataobjects:
-                file_location_href = dataobject[0][0].attrib["href"]
-                if ("_PVI" in file_location_href) or ("_TCI_" in file_location_href):
-                    # PVI and _TCI_ files are converted to jpg format not to tif
-                    continue
-                if file_location_href[-3:] == "jp2":
-                    aux = file_location_href[:-3] + "tif"
-                    dataobject[0][0].attrib["href"] = aux
-                    tif_location_path = os.path.join(wrk_dir, l2a_folder_name, aux)
-                    if os.path.isfile(tif_location_path):
-                        # update MD5 signature
-                        dataobject[0][1].text = hashlib.md5(
-                            tif_location_path.encode('utf-8')
-                        ).hexdigest()
-                        # update size
-                        dataobject[0].attrib["size"] = str(
-                            os.path.getsize(tif_location_path)
-                        )
-                    else:
-                        l2a_log.error(
-                            "Can NOT find the translated tif file in the location specified by manifest.safe {}".format(
-                                tif_location_path
-                            )
-                        )
-                        return False
-        except Exception as e:
-            l2a_log.error(
-                "Can NOT parse manifest.safe due to {}".format(e)
-            )
-            return False
 
-        # write changes to file
-        try:
-            f = open(manifest_file_path, "wb")
-            f.write(etree.tostring(tree))
-            f.close()
-        except:
-            l2a_log.error(
-                "Can NOT write the updates to manifest.safe"
-            )
-            return False
-    else:
-        l2a_log.error(
-            "Can NOT find the manifest.safe file"
-        )
-        return False
-
-    # chnage MTD_TL.xml file extenstions from jp2 to tif
-    mtd_tl_pattern = "GRANULE/L2A*/MTD_TL.xml"
-    mtd_tl_path = os.path.join(wrk_dir, L2A_product_name, mtd_tl_pattern)
-    mtd_tl_files = glob.glob(mtd_tl_path)
-    if len(mtd_tl_files) == 1:
-        mtd_tl = mtd_tl_files[0]
-    else:
-        l2a_log.error(
-            "Can NOT identify the correct MTD_TL.xml"
-        )
-        return False
-    try:
-        tree = etree.parse(mtd_tl)
-        ns = "{https://psd-14.sentinel2.eo.esa.int/PSD/S2_PDI_Level-2A_Tile_Metadata.xsd}"
-        quality_indicators_info = tree.find(ns + "Quality_Indicators_Info")
-        pixel_level_qi = quality_indicators_info.find("Pixel_Level_QI")
-        for mask in pixel_level_qi:
-            if mask.text[-3:] == "jp2":
-                aux = mask.text[:-3] + "tif"
-                mask.text = aux
-        pvi_filename = quality_indicators_info.find("PVI_FILENAME")
-        l2a_log.info(
-            "Updated the MTD_TL.xml with tif extensions."
-        )
-    except:
-        l2a_log.error(
-            "Can NOT parse MTD_TL.xml."
-        )
-        return False
-
-    # write changes to MTD_TL.xml
-    try:
-        f = open(mtd_tl, "wb")
-        f.write(etree.tostring(tree))
-        f.close()
-    except:
-        l2a_log.error(
-            "Can NOT write the updates to MTD_TL.xml"
-        )
-        return False
-
-    l2a_log.info(
-        "Successful translation from jp2 to tif/cog format."
-    )
     return True
 
 # function used to convert PVI and TCI files from jp2 format to jpg format
@@ -821,12 +710,12 @@ def ConvertPreviews(L2A_product_name):
         wrk_dir = default_wrk_dir_path
 
     jp2_files = []
-    tci_jp2_pattern = "GRANULE/L2A*/IMG_DATA/R*m/*_TCI_*.jp2"
+    tci_jp2_pattern = "**/IMG_DATA/R*m/*_TCI_*.jp2"
     tci_jp2_path = os.path.join(wrk_dir, L2A_product_name, tci_jp2_pattern)
-    jp2_files.extend(glob.glob(tci_jp2_path))
-    pvi_jp2_pattern = "GRANULE/L2A*/QI_DATA/*_PVI.jp2"
+    jp2_files.extend(glob.glob(tci_jp2_path, recursive = True))
+    pvi_jp2_pattern = "**/QI_DATA/*_PVI.jp2"
     pvi_jp2_path = os.path.join(wrk_dir, L2A_product_name, pvi_jp2_pattern)
-    jp2_files.extend(glob.glob(pvi_jp2_path))
+    jp2_files.extend(glob.glob(pvi_jp2_path, recursive = True))
 
     if len(jp2_files) != 0:
         for jp2 in jp2_files:
@@ -873,7 +762,6 @@ def ConvertPreviews(L2A_product_name):
 
     return True
 
-
 def InitLog():
     global l2a_log
 
@@ -906,7 +794,6 @@ def Cleanup():
             "Can NOT remove directory {}.".format(wrk_dir)
         )
 
-
 # execution of the script
 def RunScript():
     global running_containers
@@ -915,33 +802,23 @@ def RunScript():
     try:
         run_script_ok = True
 
-        # initialisation operations
-        if InitLog():
-            l2a_log.info("Succesful initialisation of Sen2Cor script.", print_msg = True)
+        #Check L1C and parameters
+        if CheckInput():
+            l2a_log.info("Input - OK.", print_msg = True)
         else:
             l2a_log.error(
-                "Unsuccesful initialisation of Sen2Cor script.",
+                "Input - NOK.",
                 print_msg = True
             )
             run_script_ok = False
 
-        if run_script_ok:
-            if CheckInput():
-                l2a_log.info("VALID input.", print_msg = True)
-            else:
-                l2a_log.error(
-                    "INVALID input.",
-                    print_msg = True
-                )
-                run_script_ok = False
-
         # run Sen2Cor processor
         if run_script_ok:
             if RunSen2Cor():
-                l2a_log.info("Succesful execution of Sen2Cor.", print_msg = True)
+                l2a_log.info("Execution of Sen2Cor - OK.", print_msg = True)
             else:
                 l2a_log.error(
-                    "Unsuccesful execution of Sen2Cor.",
+                    "Execution of Sen2Cor - NOK.",
                     print_msg = True
                 )
                 run_script_ok = False
@@ -950,10 +827,10 @@ def RunScript():
         if run_script_ok:
             output_ok, L2A_product_name = CheckOutput()
             if output_ok and L2A_product_name is not None:
-                l2a_log.info("VALID output of Sen2Cor processor.", print_msg = True)
+                l2a_log.info("Output of Sen2Cor processor - OK.", print_msg = True)
             else:
                 l2a_log.error(
-                    "INVALID output of Sen2Cor processor.",
+                    "Output of Sen2Cor processor - NOK.",
                     print_msg = True
                 )
                 run_script_ok = False
@@ -962,12 +839,12 @@ def RunScript():
         if run_script_ok:
             if ConvertPreviews(L2A_product_name):
                 l2a_log.info(
-                    "Succesful conversion of preview images (TCI, PVI) to JPEG format.",
+                    "Conversion of preview images (TCI, PVI) to JPEG format - OK.",
                     print_msg = True
                 )
             else:
                 l2a_log.error(
-                    "Unsuccesful conversion of preview images (TCI, PVI) to jpeg format.",
+                    "Conversion of preview images (TCI, PVI) to jpeg format - NOK.",
                     print_msg = True
                 )
                 run_script_ok = False
@@ -982,15 +859,15 @@ def RunScript():
             if translate_ok:
                 if args.tif:
                     l2a_log.info(
-                        "Succesful TIFF translation."
+                        "TIFF translation - OK."
                     )
                 if args.cog:
                     l2a_log.info(
-                        "Succesful COG translation."
+                        "COG translation - OK."
                     )
             else:
                 l2a_log.error(
-                    "Unsuccesful Tiff/COG translation.",
+                    "Tiff/COG translation - NOK.",
                     print_msg = True
                 )
                 run_script_ok = False
@@ -998,12 +875,12 @@ def RunScript():
         if run_script_ok:
             if CopyOutput(L2A_product_name):
                 l2a_log.info(
-                    "NOMIMAL copying of the product from working directory to output directory.",
+                    "Copying of the product from working directory to output directory - OK.",
                     print_msg = True
                 )
             else:
                 l2a_log.error(
-                    "NON-NOMIMAL copying of the product from working directory to output directory.",
+                    "Copying of the product from working directory to output directory - NOK.",
                     print_msg = True
                 )
                 run_script_ok = False
@@ -1075,15 +952,21 @@ parser.add_argument(
 )
 # docker related flags
 parser.add_argument(
-    "-si",
-    "--docker-image-sen2cor",
+    "-si205",
+    "--docker_image_sen2cor_N205",
     required=False,
-    help="Name of the sen2cor docker image (only available when -lr is False).",
+    help="Name of the sen2cor docker image for L1C with processing baseline starting from N205 (only available when -lr is False).",
+)
+parser.add_argument(
+    "-si400",
+    "--docker_image_sen2cor_N400",
+    required=True,
+    help="Name of the sen2cor docker image for L1C with processing baseline starting from N400 (only available when -lr is False).",
 )
 parser.add_argument(
     "-gi",
-    "--docker-image-gdal",
-    required=False,
+    "--docker_image_gdal",
+    required=True,
     help="Name of the gdal docker image (only available when -lr is False).",
 )
 parser.add_argument(
@@ -1220,21 +1103,67 @@ parser.add_argument(
 parser.add_argument(
     "--res_database_dir", required=False, nargs=1, help="Tile folder, process_tile."
 )
-parser.add_argument('-l', '--log-level', default = 'info',
+parser.add_argument('-l', '--log_level', default = 'info',
                     choices = ['debug' , 'info', 'warning' , 'error', 'critical'], 
                     help = 'Minimum logging level')
 
 args = parser.parse_args()
 
 
+# initialisation operations
+if InitLog():
+    l2a_log.info("Initialisation of Sen2Cor log - OK.", print_msg = True)
+else:
+    print("Initialisation of Sen2Cor log - NOK")
+    os._exit(1)
+
+#determine the l1c processing baseline
+try:
+    l1c_name = os.path.basename(args.input_dir)
+    l1c_processing_baseline = l1c_name.split("_")[3]
+    l1c_baseline_number = int(l1c_processing_baseline[1:])
+    l2a_log.debug("Determining L1C processing baseline - OK: {}".format(l1c_processing_baseline))
+except:
+    l2a_log.error("Determining L1C processing baseline - NOK: {}.".format(l1c_processing_baseline))
+    l2a_log.close()
+    os._exit(1)
+
+#determine the sen2cor docker image and sen2cor home directory to be used based on the processing baseline
+if l1c_baseline_number >= 400:
+    docker_image_sen2cor = args.docker_image_sen2cor_N400
+    sen2cor_home = SEN2COR_2_10_HOME
+else:
+    docker_image_sen2cor = args.docker_image_sen2cor_N205
+    sen2cor_home = SEN2COR_2_9_HOME
+l2a_log.debug("Using dir {} as sen2cor home".format(sen2cor_home))
+
+docker_dem_path = os.path.join(sen2cor_home, "dem/srtm/")
+docker_output_path = os.path.join(sen2cor_home, "out")
+docker_wrk_path = os.path.join(sen2cor_home, "wrk")
+docker_L2A_path = os.path.join(sen2cor_home, "gipp/L2A_GIPP.xml")
+docker_L2A_SC_path = os.path.join(sen2cor_home, "gipp/L2A_CAL_SC_GIPP.xml")
+docker_L2A_AC_path = os.path.join(sen2cor_home, "gipp/L2A_CAL_AC_GIPP.xml")
+docker_L2A_PB_path = os.path.join(sen2cor_home, "gipp/L2A_PB_GIPP.xml")
+docker_tile_path = os.path.join(sen2cor_home, "tile")
+docker_datastrip_path = os.path.join(sen2cor_home, "datastrip")
+docker_img_database_path = os.path.join(sen2cor_home, "img_database")
+docker_res_database_path = os.path.join(sen2cor_home, "res_database")
+docker_lc_snow_cond_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
+docker_lc_lccs_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
+docker_lc_wb_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
+docker_sen2cor_exec_path = "/usr/local/bin/L2A_Process"
+docker_if_path = "/tmp/if/"  # input files path
+docker_of_path = "/tmp/of/"  # output files path
+
 
 running_containers = set()
-
 nominal_run = RunScript()
 if nominal_run == True:
-    l2a_log.info("End Sen2Cor script with success.", print_msg = True)
+    l2a_log.info("End Sen2Cor script with success - OK.", print_msg = True)
+    l2a_log.close()
     os._exit(0)
 else:
-    l2a_log.error("End Sen2Cor script with errors.", print_msg = True)
+    l2a_log.error("End Sen2Cor script with success - NOK.", print_msg = True)
+    l2a_log.close()
     os._exit(1)
-l2a_log.close()
+    

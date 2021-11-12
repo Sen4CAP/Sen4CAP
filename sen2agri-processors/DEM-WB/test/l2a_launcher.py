@@ -570,7 +570,7 @@ class L2aMaster(object):
                     break
 
         except Exception as e:
-            self.launcher_log.info("Exception encountered: {}.".format(e), trace = True)
+            self.launcher_log.info("Exception encountered: {}.".format(e), print_msg = True, trace = True)
         finally:
             self.stop_workers()
 
@@ -640,7 +640,7 @@ class L2aWorker(threading.Thread):
                     self.worker_q.task_done()
         except Exception as e:
             self.launcher_log.error(
-                "Exception {} encountered".format(
+                "Exception encountered on worker {}: {}".format(
                     self.worker_id, e
                 ),
                 print_msg = True,
@@ -701,6 +701,7 @@ class L2aWorker(threading.Thread):
             maja_context = MajaContext(site_context, self.worker_id)
             maja = Maja(maja_context, tile, self.master_q, self.launcher_log)
             lin, l2a = maja.run()
+            maja.l2a_log.close()
             del maja
             return lin, l2a
         else:
@@ -709,12 +710,14 @@ class L2aWorker(threading.Thread):
                 sen2cor_context = Sen2CorContext(site_context, self.worker_id)
                 sen2cor = Sen2Cor(sen2cor_context, tile, self.master_q, self.launcher_log)
                 lin, l2a = sen2cor.run()
+                sen2cor.l2a_log.close()
                 del sen2cor
                 return lin, l2a
             elif site_context.implementation == "maja":
                 maja_context = MajaContext(site_context, self.worker_id)
                 maja = Maja(maja_context, tile, self.master_q, self.launcher_log)
                 lin, l2a = maja.run()
+                maja.l2a_log.close()
                 del maja
                 return lin, l2a
             else:
@@ -779,14 +782,14 @@ class Tile(object):
             return False, rejection_reason
 
         if (self.previous_l2a_path is not None) and not(os.path.exists(self.previous_l2a_path)):
-            rejection_reason = "Aborting processing for product {} because the previous l2a path does not exist".format(
-                self.downloader_history_id
+            rejection_reason = "Aborting processing for product {} because the previous L2A path does not exist: {}".format(
+                self.downloader_history_id,
+                self.previous_l2a_path
             )
             log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
         return True, None
-
 
 
 class L1CL8Product(object):
@@ -1053,20 +1056,29 @@ class L2aProcessor(object):
         try:
             remove_dir(self.l2a.destination_path)
             if self.l2a.destination_path.endswith("/"):
-                dst = os.path.dirname(self.l2a.destination_path[:-1])
+                destination_dir = os.path.dirname(self.l2a.destination_path[:-1])
             else:
-                dst = os.path.dirname(self.l2a.destination_path)
-            if create_recursive_dirs(dst):
+                destination_dir = os.path.dirname(self.l2a.destination_path)
+            if create_recursive_dirs(destination_dir):
                 shutil.move(self.l2a.output_path, self.l2a.destination_path)
-                self.launcher_log.info("L2A product moved from output path {} to destination product path {}.".format(self.l2a.output_path, self.l2a.destination_path))
+                if os.path.exists(self.l2a.destination_path):
+                    self.launcher_log.info("L2A product moved from output path {} to destination product path {}.".format(self.l2a.output_path, self.l2a.destination_path))
+                    return True
+                else:
+                    msg = "Destination path does not exists: {}".format(self.l2a.destination_path)
+                    self.update_rejection_reason(msg)
+                    self.launcher_log.error(msg, print_msg = True)
+                    return False
             else:
-                rejection_reason = "Can NOT create destination path {}".format(self.l2a.destination_path)
+                rejection_reason = "Can NOT create destination dir {}".format(self.l2a.destination_path)
                 self.update_rejection_reason(rejection_reason)
                 self.launcher_log.error(rejection_reason, print_msg = True)
+                return False
         except Exception as e:
             rejection_reason = "Can NOT copy from output path {} to destination product path {} due to: {}".format(self.l2a.output_path, self.l2a.destination_path, e)
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason, print_msg = True, trace = True)
+            return False
 
 class Maja(L2aProcessor):
     def __init__(self, processor_context, input_context, master_q, launcher_log):
@@ -1150,12 +1162,12 @@ class Maja(L2aProcessor):
 
             if not cloud_coverage_acq:
                 self.l2a_log.warning(
-                    "Can NOT extract cloud coverage from {}".format(maja_report_file_path),
+                    "Can NOT extract cloud coverage from: {}".format(maja_report_file_path),
                 )
 
             if not snow_coverage_acq:
                 self.l2a_log.warning(
-                    "Can NOT extract snow ice coverage from {}".format(
+                    "Can NOT extract snow ice coverage from: {}".format(
                         maja_report_file_path
                     ),
                 )
@@ -1168,6 +1180,13 @@ class Maja(L2aProcessor):
                         res = re.findall(r"Cloud Rate on the Product : (\d*[.]?\d+)",line)
                         if len(res) == 1:
                             self.l2a.cloud_coverage_assessment = float(res[0])
+                        else:
+                            self.l2a_log.warning("Can NOT extract cloud coverage from: {}".format(
+                                    maja_log_path
+                                )
+                            )
+            else:
+                self.l2a_log.error("Can NOT find MAJA log: {}",format(maja_log_path))
 
 
     def check_report_file(self):
@@ -1646,8 +1665,7 @@ class Maja(L2aProcessor):
             self.l2a_log.error(rejection_reason, print_msg = True)
             return False
 
-    def manage_prods_status(
-        self, preprocess_succesful, process_succesful, l2a_ok):
+    def set_lin_status(self, processing_ok):
         #if the following the messages are encountered within the rejection reasons the l2a product should not be processed again
         maja_text_to_stop_retrying = [
             "The number of cloudy pixel is too high",
@@ -1657,15 +1675,8 @@ class Maja(L2aProcessor):
             "PersistentStreamingConditionalStatisticsImageFilter::Synthetize.No pixel is valid. Return null statistics",
         ]
 
-        self.l2a_log.close()
-        del self.l2a_log
-        if (
-            (preprocess_succesful == True)
-            and (process_succesful == True)
-            and (l2a_ok == True)
-        ):
+        if processing_ok:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-            self.move_to_destination()
         else:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
             for text in maja_text_to_stop_retrying:
@@ -1680,44 +1691,63 @@ class Maja(L2aProcessor):
                 )
                 self.lin.should_retry = False
 
-
     def run(self):
-        preprocess_succesful = False
-        process_succesful = False
-        postprocess_succesful = False
+        preprocess_ok = False
+        process_ok = False
         l2a_ok = False
+        footprint_ok = False
+        mosaic_ok = False
+        move_ok = False
 
         # pre-processing
         if self.check_lin() and self.l2a_setup():
-            preprocess_succesful = True
-        msg = "Successful pre-processing = {}".format(
-            preprocess_succesful
+            preprocess_ok = True
+        msg = "Pre-processing - {}".format(
+            "OK" if preprocess_ok else "NOK"
         )
         self.l2a_log.info(msg, print_msg = True)
 
-        # processing
-        if preprocess_succesful:
-            process_succesful = self.run_script()
-        msg = "Successful processing = {}".format(
-            process_succesful
+        # Run MAJA script from l2a processors 
+        if preprocess_ok and self.run_script():
+            process_ok = True 
+        msg = "MAJA processing - {}".format(
+            "OK" if process_ok else "NOK"
         )
         self.l2a_log.info(msg, print_msg = True)
 
-        # processing checks
-        l2a_ok = self.check_l2a(process_succesful)
-        msg = "Valid L2a product = {}".format(
-            l2a_ok
+        #Check L2A generated by MAJA 
+        l2a_ok = self.check_l2a(process_ok)
+        msg = "L2A product - {}".format(
+            "OK" if l2a_ok else "NOK"
         )
         self.l2a_log.info(msg, print_msg = True)
 
-        #post-processing
-        if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
-            msg = "Footprint computed: {}".format(
-                self.l2a.footprint
-            )
-            self.l2a_log.info(msg, print_msg = True)
+        #Compute footprint
+        if l2a_ok and self.create_mosaic():
+            footprint_ok = True
+        msg = "Footprint computed: {}".format(
+            "OK" if footprint_ok else "NOK"
+        )
+        self.l2a_log.info(msg, print_msg = True)
 
-        self.manage_prods_status(preprocess_succesful, process_succesful, l2a_ok)
+        #Create mosaic
+        if footprint_ok and self.create_mosaic():
+            mosaic_ok = True
+        msg = "Mosaic created: {}".format(
+            "OK" if mosaic_ok else "NOK"
+        )
+        self.l2a_log.info(msg, print_msg = True)
+
+        #Moving product to destination
+        if mosaic_ok and self.move_to_destination():
+            move_ok = True
+        msg = "L2A moved to destination- {}".format(
+            "OK" if move_ok else "NOK"
+        )  
+
+        #Set input product processing status
+        self.set_lin_status(move_ok)
+
         return self.lin, self.l2a
 
 
@@ -1760,39 +1790,45 @@ class Sen2Cor(L2aProcessor):
 
     def get_quality_indicators(self):
         # extract snow coverage and cloud coverage information
-        mtd_name = "MTD_MSIL2A.xml"
-        mtd_path = os.path.join(self.l2a.product_path, mtd_name)
-        if os.path.isfile(mtd_path):
+        l2a_mtd_name = "MTD_MSIL2A.xml"
+        l2a_mtd_path = os.path.join(self.l2a.product_path, l2a_mtd_name)
+        if os.path.isfile(l2a_mtd_path):
             try:
-                tree = etree.parse(mtd_path)
+                tree = etree.parse(l2a_mtd_path)
                 ns = "{https://psd-14.sentinel2.eo.esa.int/PSD/User_Product_Level-2A.xsd}"
                 quality_indicators_info = tree.find(ns + "Quality_Indicators_Info")
                 cloud_coverage_assessment = float(
                     quality_indicators_info.findtext("Cloud_Coverage_Assessment")
                 )
                 self.l2a.cloud_coverage_assessment = cloud_coverage_assessment
+                self.l2a_log.debug("Cloud pixels: {}%".format(cloud_coverage_assessment))
                 image_content_qi = quality_indicators_info.find("Image_Content_QI")
                 nodata_pixel_percentage = float(
                     image_content_qi.findtext("NODATA_PIXEL_PERCENTAGE")
                 )
+                self.l2a_log.debug("Nodata pixels: {}%".format(nodata_pixel_percentage))
                 saturated_defective_pixel_percentage = float(
                     image_content_qi.findtext("SATURATED_DEFECTIVE_PIXEL_PERCENTAGE")
                 )
-                dark_features_percentage = float(
+                self.l2a_log.debug("Saturated defective pixels: {}%".format(saturated_defective_pixel_percentage))
+                dark_features_percentage = float (
                     image_content_qi.findtext("DARK_FEATURES_PERCENTAGE")
                 )
+                self.l2a_log.debug("Dark features pixels: {}%".format(dark_features_percentage))
                 cloud_shadow_percentage = float(
                     image_content_qi.findtext("CLOUD_SHADOW_PERCENTAGE")
                 )
+                self.l2a_log.debug("Cloud shadows pixels: {}%".format(cloud_shadow_percentage))
                 snow_ice_percentage = float(
                     image_content_qi.findtext("SNOW_ICE_PERCENTAGE")
                 )
+                self.l2a_log.debug("Snow ice pixels: {}%".format(snow_ice_percentage))
                 self.l2a.snow_ice_percentage = snow_ice_percentage
                 self.l2a.valid_pixels_percentage = (
-                    (100 - nodata_pixel_percentage)
+                    (100.0 - nodata_pixel_percentage)
                     / 100.0
                     * (
-                        100
+                        100.0
                         - cloud_coverage_assessment
                         - saturated_defective_pixel_percentage
                         - dark_features_percentage
@@ -1800,17 +1836,27 @@ class Sen2Cor(L2aProcessor):
                         - snow_ice_percentage
                     )
                 )
+                return True
+
             except:
+                msg = "Can NOT compute valid pixels percetange from: {}".format(
+                        l2a_mtd_path
+                )
+                self.update_rejection_reason(msg)
                 self.l2a_log.error(
-                    "Can NOT parse {} for quality indicators extraction.".format(
-                        mtd_path
-                    ),
+                    msg,
+                    print_msg = True,
                     trace = True
                 )
+                return False
         else:
+            msg = "Can NOT find MTD_MSIL2A.xml file in location: {}".format(l2a_mtd_path)
+            self.update_rejection_reason(msg) 
             self.l2a_log.error(
-                "Can NOT find MTD_MSIL2A.xml file in location.".format(mtd_path),
+                msg,
+                print_msg = True
             )
+            return False
 
     def get_rejection_reason(self):
         log_path = os.path.join(
@@ -1870,17 +1916,24 @@ class Sen2Cor(L2aProcessor):
             return False
 
     def check_l2a(self):
-        l2a_product_name_pattern = "S2[A|B|C|D]_MSIL2A_*_T{}_*.SAFE".format(
+        l2a_name_pattern = "S2[A|B|C|D]_MSIL2A_*_T{}_*.SAFE".format(
             self.lin.tile_id
         )
-        l2a_product_path = os.path.join(self.l2a.output_path, l2a_product_name_pattern)
-        l2a_products = glob.glob(l2a_product_path)
-        if len(l2a_products) == 1:
+        l2a_search_pattern = os.path.join(self.l2a.output_path, l2a_name_pattern)
+        l2a_products = glob.glob(l2a_search_pattern)
+        nbr_l2a_products = len(l2a_products)
+        self.l2a_log.debug(
+            "L2A products found by searching for {}: {}".format(
+                l2a_search_pattern, 
+                "None" if nbr_l2a_products == 0 else " ".join(l2a_products)
+            )
+        )
+
+        if nbr_l2a_products == 1:
             if l2a_products[0].endswith("/"):
                 l2a_product_name = os.path.basename(l2a_products[0][:-1])
             else:
                 l2a_product_name = os.path.basename(l2a_products[0])
-
             satellite_id, acquisition_date = self.get_l2a_info(l2a_product_name)
             if self.lin.satellite_id != satellite_id:
                 rejection_reason ="L2A and input product have different satellite ids: {} vs {} .".format(
@@ -1890,7 +1943,10 @@ class Sen2Cor(L2aProcessor):
                 self.l2a_log.error(rejection_reason, print_msg = True)
                 return False
         else:
-            rejection_reason = "No product or multiple L2A products are present in the output directory."
+            if nbr_l2a_products == 0:
+                rejection_reason = "No L2A products are present in the output directory."
+            else:
+               rejection_reason = "Multiple L2A products are present in the output directory." 
             self.update_rejection_reason(rejection_reason)
             self.l2a_log.error(rejection_reason, print_msg = True)
             return False
@@ -2024,15 +2080,18 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--tif")
         if self.context.compressTiffs:
             script_command.append("--compressTiffs")
-        script_command.append("--docker-image-sen2cor")
+        script_command.append("--docker_image_sen2cor_N205")
         script_command.append(self.context.sen2cor_image)
-        script_command.append("--docker-image-gdal")
+        script_command.append("--docker_image_sen2cor_N400")
+        script_command.append(self.context.sen2cor_image)
+        script_command.append("--docker_image_gdal")
         script_command.append(self.context.gdal_image)
-        script_command.append("--log-level")
+        script_command.append("--log_level")
         script_command.append(self.l2a_log.level)
         #tmp only for testing purposes
-        #script_command.append("--resolution")
-        #script_command.append(str(60))
+        if args.log_level == "debug":
+            script_command.append("--resolution")
+            script_command.append(str(60))
         #tmp
 
         l2a_processors_log_name = "l2a_{}.log".format(self.l2a.product_id)
@@ -2069,72 +2128,97 @@ class Sen2Cor(L2aProcessor):
             )
             return False
 
-    def manage_prods_status(
-        self, preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
-    ):
-
-        self.l2a_log.close()
-        del self.l2a_log
-        if (
-            (preprocess_succesful == True)
-            and (process_succesful == True)
-            and (l2a_ok == True)
-            and (postprocess_succesful)
-        ):
-            self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
-            self.get_quality_indicators()
-            if self.l2a.valid_pixels_percentage is not None:
-                if self.l2a.valid_pixels_percentage < MIN_VALID_PIXELS_THRESHOLD:
-                    self.lin.should_retry = False
-                    rejection_reason = "The valid pixels percentage is {} which is less that the threshold of {}%".format(
-                        self.l2a.valid_pixels_percentage, MIN_VALID_PIXELS_THRESHOLD
-                    )
-                    self.update_rejection_reason(rejection_reason)
-                    self.l2a_log.error(rejection_reason, print_msg = True)
-                    if self.l2a_log.level == 'debug':
-                        remove_dir(self.l2a.product_path)
-                else:
-                    self.move_to_destination()
+    def set_lin_status(self, processing_ok, quality_ok):
+        if processing_ok:
+           self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE
         else:
-            self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
+            self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE 
+            if quality_ok:
+                self.lin.should_retry = True
+            else:
+                self.lin.should_retry = False 
+        
 
     def run(self):
-        preprocess_succesful = False
-        process_succesful = False
-        postprocess_succesful = False
+        preprocess_ok = False
+        process_ok = False
         l2a_ok = False
+        footprint_ok = False
+        mosaic_ok = False
+        quality_ok = False
+        move_ok = False
 
+        #Perform lin checks and l2a setup
         if self.check_lin() and self.l2a_setup():
-            preprocess_succesful = True
-        msg = "Successful pre-processing = {}".format(
-            preprocess_succesful
+            preprocess_ok = True
+        msg = "Pre-processing - {}".format(
+            "OK" if preprocess_ok else "NOK"
         )
         self.l2a_log.info(msg, print_msg = True)
 
-        if preprocess_succesful and self.run_script():
-            process_succesful = True
-        msg = "Successful Sen2Cor processing = {}".format(
-            process_succesful
+        #Run Sen2Cor L2a processors container
+        if preprocess_ok and self.run_script():
+            process_ok = True
+        msg = "Sen2Cor processing - {}".format(
+            "OK" if process_ok else "NOK"
         )
         self.l2a_log.info(msg, print_msg = True)
 
-        if process_succesful and self.check_l2a():
+        #check if the l2a product was processed by sen2cor script
+        if process_ok and self.check_l2a():
             l2a_ok = True
-        msg = "Valid L2a product = {}".format(
-            l2a_ok
+        msg = "L2A check - {}".format(
+            "OK" if l2a_ok else "NOK"
         )
         self.l2a_log.info(msg, print_msg = True)
 
-        if l2a_ok and self.get_l2a_footprint() and self.create_mosaic():
-            postprocess_succesful = True
-        msg = "Successful post-processing = {}".format(
-            postprocess_succesful
+        #check the valid pixels percetage
+        if l2a_ok and self.get_quality_indicators():
+            if self.l2a.valid_pixels_percentage < MIN_VALID_PIXELS_THRESHOLD:
+                rejection_reason = "The valid pixels percentage is {} which is less that the threshold of {}%".format(
+                    self.l2a.valid_pixels_percentage,
+                    MIN_VALID_PIXELS_THRESHOLD
+                )
+                self.update_rejection_reason(rejection_reason)
+                self.l2a_log.error(rejection_reason, print_msg = True)
+            else:
+                self.l2a_log.info("The valid pixels percetage is {} which is higher that the threshold of {}%".format(
+                        self.l2a.valid_pixels_percentage, 
+                        MIN_VALID_PIXELS_THRESHOLD 
+                    )
+                )
+                quality_ok = True
+        msg = "L2A quality - {}".format(
+            "OK" if quality_ok else "NOK"
+        )
+        self.l2a_log.info(msg, print_msg = True)
+
+        #compute footprint
+        if quality_ok and self.get_l2a_footprint():
+            footprint_ok = True
+        msg = "Footprint determined - {}".format(
+            "OK" if footprint_ok else "NOK"
+        )
+        self.l2a_log.info(msg, print_msg = True)
+
+        #compute mosaic
+        if footprint_ok and self.create_mosaic():
+            mosaic_ok = True
+        msg = "Mosaic created - {}".format(
+            "OK" if mosaic_ok else "NOK"
+        )
+        self.l2a_log.info(msg, print_msg = True)
+ 
+        #move l2a to destination path
+        if mosaic_ok and self.move_to_destination():
+            move_ok = True
+        msg = "L2A moved to destination - {}".format(
+            "OK" if move_ok else "NOK"
         )
         self.l2a_log.info(msg, print_msg = True)
         
-        self.manage_prods_status(
-            preprocess_succesful, process_succesful, l2a_ok, postprocess_succesful
-        )
+        self.set_lin_status(move_ok, quality_ok)
+
         return self.lin, self.l2a
 
 def db_clear_pending_tiles(db_config, node_id, log):
