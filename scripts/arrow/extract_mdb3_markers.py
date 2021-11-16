@@ -103,6 +103,32 @@ def csv_to_ipc_export(csv_merged_file, out_file) :
 def ipc_to_csv_export(ipc_file, csv_file) :
     command = [IPC_TO_CSV_SCRIPT, ipc_file, csv_file ]
     run_command(command)
+    
+def normalize_prev_mdb3_csv(in_file, out_file_path) :
+    with open(in_file) as f:
+        reader = csv.reader(f, delimiter=',')
+        with open(out_file_path,"w") as result:
+            wtr= csv.writer( result )
+            i = 0;
+            header_idxs = []
+            new_id_col_idx = -1
+            for row in reader:
+                if i == 0 : 
+                    wtr.writerow(row)
+                else :
+                    new_row = []
+                    for item in row : 
+                        try:
+                            fval = float(item)
+                            translated_val = int(fval)
+                        except ValueError:
+                            if item == "NULL" : 
+                                item = -1
+                            translated_val = item
+                        new_row.append(translated_val)
+                    wtr.writerow(new_row)
+                i = i + 1
+    return out_file_path    
 
 def main():
     parser = argparse.ArgumentParser(description="Create a new markers DB ipc file from a list of L4C products.")
@@ -139,6 +165,14 @@ def main():
             prev_mdb3_csv_file = args.prev_mdb3_file
         else:
             print("Provided previous mdb3 file extension not supported : {}".format(args.prev_mdb3_file))
+            
+        if not prev_mdb3_csv_file is None: 
+            prev_mdb3_file_name = os.path.basename(prev_mdb3_csv_file)
+            fileNameNoExt = os.path.splitext(prev_mdb3_file_name)[0]
+            prev_mdb3_norm_csv_file_name = fileNameNoExt + "_NORM.csv"
+            prev_mdb3_norm_csv_file = os.path.join(args.working_dir, prev_mdb3_norm_csv_file_name)
+            normalize_prev_mdb3_csv(prev_mdb3_csv_file, prev_mdb3_norm_csv_file)
+            prev_mdb3_csv_file = prev_mdb3_norm_csv_file
             
     input_file_name = os.path.basename(args.input)
     fileNameNoExt = os.path.splitext(input_file_name)[0]
