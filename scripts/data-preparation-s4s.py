@@ -624,7 +624,7 @@ from {}
                 parcels_table_staging_id = Identifier(self.parcels_table_staging)
                 parcel_attributes_table_id = Identifier(self.parcel_attributes_table)
 
-                print("Fixing types")
+                print("Fixing up types")
                 query = SQL(
                     """
 alter table {}
@@ -666,6 +666,7 @@ parcel_id int not null,
 geom_valid boolean not null,
 duplicate boolean,
 overlap boolean not null,
+associated boolean not null,
 area_meters real not null,
 shape_index real,
 multipart boolean not null,
@@ -709,8 +710,6 @@ with polygons_srid as (
          from polygons_extent,
               polygons_srid
      )
-insert
-into site_municipalities
 select municipality.municipality_code,
        ST_Transform(municipality.geom, srid) as geom
 from municipality,
@@ -744,6 +743,7 @@ insert into {} (
     geom_valid,
     duplicate,
     overlap,
+    associated,
     area_meters,
     shape_index,
     multipart,
@@ -754,6 +754,7 @@ insert into {} (
 select
     parcel_id,
     coalesce(ST_IsValid(wkb_geometry), false),
+    false,
     false,
     false,
     {},
@@ -874,12 +875,35 @@ where new.ogc_fid = t.ogc_fid;"""
 
                 conn.commit()
 
+                print("Checking for associated crops")
+                sql = SQL(
+                    """
+with associated as (
+    select parcel_id
+    from {}
+    group by parcel_id
+    having count(*) > 1
+)
+update {} attributes
+set associated = true
+from associated
+where attributes.parcel_id = associated.parcel_id;
+"""
+                )
+                sql = sql.format(
+                    statistical_data_staging_id,
+                    Identifier(self.parcel_attributes_table),
+                )
+                logging.debug(sql.as_string(conn))
+                cursor.execute(sql)
+                conn.commit()
+
                 drop_table_columns(
                     conn, "public", self.statistical_data_table_staging, ["ogc_fid"]
                 )
                 conn.commit()
 
-                print("Removing old parcels")
+                print("Removing old data")
                 query = SQL("drop table if exists {};").format(statistical_data_id)
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
@@ -1186,6 +1210,7 @@ select parcels.parcel_id,
        parcel_attributes.geom_valid,
        parcel_attributes.duplicate,
        parcel_attributes.overlap,
+       parcel_attributes.associated,
        parcel_attributes.area_meters,
        parcel_attributes.shape_index,
        parcel_attributes.multipart,
@@ -1201,7 +1226,6 @@ select parcels.parcel_id,
        statistical_data.crop_density,
        statistical_data.crop_quality,
        statistical_data.irrigated,
-       statistical_data.associated,
        crop_list_n3.code_n3,
        crop_list_n2.code_n2,
        crop_list_n2.code_n1
