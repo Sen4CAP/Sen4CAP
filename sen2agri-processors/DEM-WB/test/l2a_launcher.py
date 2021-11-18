@@ -1685,7 +1685,7 @@ class Maja(L2aProcessor):
                     break
 
             if self.l2a.cloud_coverage_assessment > MAX_CLOUD_COVERAGE:
-                self.update_rejection_reason("Cloud coverage {} is above the maximum value".format(
+                self.update_rejection_reason("Cloud coverage {} is above the maximum threshold of: {}".format(
                     self.l2a.cloud_coverage_assessment,
                     MAX_CLOUD_COVERAGE)
                 )

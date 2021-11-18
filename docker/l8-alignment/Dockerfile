@@ -1,4 +1,4 @@
-FROM osgeo/gdal:ubuntu-full-3.3.1
+FROM osgeo/gdal:ubuntu-full-3.4.0
 
 LABEL maintainer="lnicola@c-s.ro" \
     description="L8 alignment script for MAJA"
