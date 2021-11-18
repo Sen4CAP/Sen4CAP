@@ -5,7 +5,9 @@
 #include <QDBusMetaType>
 #include <QDBusPendingCall>
 #include <QDBusPendingReply>
+#include <QDate>
 #include <QDateTime>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -19,6 +21,5 @@
 #include <memory>
 #include <optional.hpp>
 #include <stdio.h>
-#include <syslog.h>
 #include <type_traits>
 #include <utility>

@@ -1,10 +1,7 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
-#include <QDBusAbstractAdaptor>
 #include <QDBusConnection>
-#include <QDBusConnectionInterface>
-#include <QDBusContext>
 #include <QDBusError>
 #include <QDBusMessage>
 #include <QDebug>
@@ -12,7 +9,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QObject>
 #include <QProcessEnvironment>
 #include <QRunnable>
 #include <QSettings>
@@ -21,9 +17,7 @@
 #include <QSqlQuery>
 #include <QString>
 #include <QThread>
-#include <QThreadPool>
 #include <QtSql>
-#include <functional>
 #include <grp.h>
 #include <limits.h>
 #include <make_unique.hpp>

@@ -3,4 +3,5 @@
 #include <QObject>
 #include <QString>
 #include <QTest>
+#include <iostream>
 #include <memory>

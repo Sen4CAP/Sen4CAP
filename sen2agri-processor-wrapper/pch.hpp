@@ -1,12 +1,17 @@
 #include <QCoreApplication>
+#include <QDataStream>
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QHostAddress>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QList>
 #include <QMutex>
 #include <QObject>
 #include <QProcess>
 #include <QString>
+#include <QTcpSocket>
 #include <QThread>
 #include <QTimer>
 #include <QUdpSocket>
