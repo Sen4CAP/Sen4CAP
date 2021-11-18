@@ -134,12 +134,12 @@ class TileGroup(object):
     def __key(self):
         return (
             self.prefix,
-            self.period_type,
-            self.period,
             self.orbit_type != ORBIT_TYPE_NONE,
             self.orbit_type,
             self.polarization,
             self.type,
+            self.period_type,
+            self.period,
         )
 
 
