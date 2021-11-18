@@ -283,7 +283,7 @@ def main():
     for col in simple_features_columns:
         all_columns.append("XX_" + col + "_DEV")
 
-    with open(sar_features, "wb") as out_file:
+    with open(sar_features, "wt") as out_file:
         writer = csv.writer(out_file, quoting=csv.QUOTE_MINIMAL)
         writer.writerow(all_columns)
 
@@ -293,7 +293,7 @@ def main():
     for col in temporal_features_columns:
         all_columns.append("XX_" + col + "_DEV")
 
-    with open(sar_temporal, "wb") as out_file:
+    with open(sar_temporal, "wt") as out_file:
         writer = csv.writer(out_file, quoting=csv.QUOTE_MINIMAL)
         writer.writerow(all_columns)
 
