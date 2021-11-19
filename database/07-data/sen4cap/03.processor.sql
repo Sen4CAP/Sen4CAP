@@ -42,3 +42,8 @@ INSERT INTO processor
 (id, name, short_name, label)
 VALUES
 (15, 'Validity flags','l2a_msk', 'Validity flags');
+
+INSERT INTO processor 
+(id, name, short_name, label) 
+VALUES 
+(21, 'T-Rex Updater', 't_rex_updater', 'T-Rex Updater');

@@ -241,7 +241,8 @@ INSERT INTO config_metadata VALUES ('processor.l3b.sched_wait_proc_inputs', 'L3B
 -- -----------------------------------------------------------
 -- L2A Masked Specific Keys
 -- -----------------------------------------------------------
-INSERT INTO config_metadata VALUES ('general.scratch-path.l2a_msk', 'Path for Masked L2A temporary files', 'string', false, 27, FALSE, 'Path for Masked L2A temporary files', NULL) ;
+INSERT INTO config_metadata VALUES ('general.scratch-path.l2a_msk', 'Path for Masked L2A temporary files', 'string', false, 27, FALSE, 'Path for Masked L2A temporary files', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2a_msk.enabled', 'Enable or disable the validity flags', 'bool', false, 27, FALSE, 'Enable or disable the validity flags', NULL);
 
 -- -----------------------------------------------------------
 -- S2A_L3C Specific Keys
@@ -294,9 +295,9 @@ INSERT INTO config_metadata VALUES ('executor.processor.s4c_l4b.slurm_qos', 'Slu
 INSERT INTO config_metadata VALUES ('general.scratch-path.s4c_l4b', 'Path for S4C L4B temporary files', 'string', false, 1, FALSE, 'Path for S4C L4B temporary files', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.default_config_path', 'The default configuration files for all L4B processors', 'file', FALSE, 19, FALSE, 'The default configuration files for all L4B processors', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.end_date', 'End date for the mowing detection', 'string', FALSE, 19, TRUE, 'End date for the mowing detection', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_amp', 'The list of AMP products', 'select', FALSE, 19, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10}');
-INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_cohe', 'The list of COHE products', 'select', FALSE, 19, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11}');
-INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_amp', 'The list of AMP products', 'select', FALSE, 19, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_cohe', 'The list of COHE products', 'select', FALSE, 19, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}');
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.s1_s2_startdate_diff', 'Offset in days between S1 and S2 start dates', 'string', TRUE, 19, TRUE, 'Offset in days between S1 and S2 start dates', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.start_date', 'Start date for the mowing detection', 'string', FALSE, 19, TRUE, 'Start date for the mowing detection', NULL);
 
@@ -319,13 +320,13 @@ INSERT INTO config_metadata VALUES ('executor.processor.s4c_l4c.keep_job_folders
 INSERT INTO config_metadata VALUES ('executor.processor.s4c_l4c.slurm_qos', 'Slurm QOS for S4C L4C processor', 'string', true, 8, FALSE, 'Slurm QOS for S4C L4C processor', NULL);
 INSERT INTO config_metadata VALUES ('general.scratch-path.s4c_l4c', 'Path for S4C L4C temporary files', 'string', false, 1, FALSE, 'Path for S4C L4C temporary files', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.default_config_path', 'The default configuration files for all L4C processors', 'file', FALSE, 20, FALSE, 'The default configuration files for all L4C processors', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_amp', 'The list of AMP products', 'select', FALSE, 20, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10}');
-INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_cohe', 'The list of COHE products', 'select', FALSE, 20, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11}');
-INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_amp', 'The list of AMP products', 'select', FALSE, 20, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_cohe', 'The list of COHE products', 'select', FALSE, 20, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}');
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.markers_add_no_data_rows', 'Add in markers parcel rows containg only NA/NA1/NR', 'bool', true, 20, true, 'Add in markers parcel rows containg only NA/NA1/NR', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.prds_per_group', 'Data extraction number of products per group', 'int', FALSE, 20, FALSE, 'Data extraction number of products per group', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.sched_prds_hist_file', 'File where the list of the scheduled L4Cs is kept', 'string', true, 20, FALSE, 'File where the list of the scheduled L4Cs is kept', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable or disable tillage monitoring', 'int', false, 20, true, 'Enable or disable tillage monitoring', FALSE, 'Enable or disable tillage monitoring', NULL);
+INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable tillage monitoring', 'int', false, 20, true, 'Enable tillage monitoring', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_dir', 'Config files directory', 'string', FALSE, 20, FALSE, 'Config files directory', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_upload_dir', 'Site upload files directory', 'string', FALSE, 20, FALSE, 'Site upload files directory', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.country', 'Site country', 'string', FALSE, 20, FALSE, 'Site country', NULL);
@@ -335,7 +336,6 @@ INSERT INTO config_metadata VALUES ('processor.s4c_l4c.filter_ids_path', 'Filter
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.nrt_data_extr_enabled', 'NRT data extration enabled', 'int', FALSE, 20, FALSE, 'NRT data extration enabled', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.practices', 'Configured practices list', 'string', FALSE, 20, FALSE, 'Configured practices list', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.sub_steps', 'Substeps', 'string', FALSE, 20, FALSE, 'Substeps', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable tillage monitoring', 'int', FALSE, 20, FALSE, 'Enable tillage monitoring', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tsa_min_acqs_no', 'TSA min number of acquisitions', 'int', FALSE, 20, FALSE, 'TSA min number of acquisitions', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_dir', 'TSA input tables directory', 'string', FALSE, 20, FALSE, 'TSA input tables directory', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_upload_root_dir', 'Input tables upload root directory', 'string', FALSE, 20, FALSE, 'Input tables upload root directory', NULL);
@@ -353,9 +353,9 @@ INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.cohe_enabled', 'COHE mar
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.data_extr_dir', 'Location for the MDB1 data extration files', 'string', true, 26, FALSE, 'Location for the MDB1 data extration files', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fapar_enabled', 'FAPAR markers extraction enabled', 'bool', true, 26, FALSE, 'FAPAR markers extraction enabled', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fcover_enabled', 'FCOVER markers extraction enabled', 'bool', true, 26, FALSE, 'FCOVER markers extraction enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_amp', 'The list of AMP products', 'select', FALSE, 26, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10}');
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_cohe', 'The list of COHE products', 'select', FALSE, 26, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11}');
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}');
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_amp', 'The list of AMP products', 'select', FALSE, 26, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}');
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_cohe', 'The list of COHE products', 'select', FALSE, 26, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}');
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}');
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.lai_enabled', 'LAI markers extraction enabled', 'bool', true, 26, FALSE, 'LAI markers extraction enabled', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.ndvi_enabled', 'NDVI markers extraction enabled', 'bool', true, 26, FALSE, 'NDVI markers extraction enabled', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_vvvh_enabled', 'AMP VV/VH markers extraction enabled', 'bool', true, 26, FALSE, 'AMP VV/VH markers extraction enabled', NULL);
@@ -394,3 +394,13 @@ INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.s2', 'Thr
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold', 'Global threshold', 'int', false, 31, FALSE, 'Global threshold', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'string', false, 31, FALSE, 'Working directory', NULL);
 
+-- -----------------------------------------------------------
+-- T-Rex Specific Keys
+-- -----------------------------------------------------------
+INSERT INTO config_metadata VALUES ('executor.module.path.trex-updater', 'T-Rex script', 'string', false, 32, FALSE, 'T-Rex script', NULL);
+INSERT INTO config_metadata VALUES ('executor.processor.trex.slurm_qos', 'Slurm QOS for TRex', 'string', true, 8, FALSE, 'Slurm QOS for TRex', NULL);
+INSERT INTO config_metadata VALUES ('general.orchestrator.trex-updater.use_docker', 'T-Rex use docker', 'int', false, 32, FALSE, 'T-Rex use docker', NULL);
+INSERT INTO config_metadata VALUES ('general.orchestrator.trex-updater.docker_image', 'T-Rex docker image', 'string', false, 32, FALSE, 'T-Rex docker image', NULL);
+INSERT INTO config_metadata VALUES ('general.orchestrator.trex-updater.docker_add_mounts', 'T-Rex container additional mounts', 'string', false, 32, FALSE, 'T-Rex container additional mounts', NULL);
+INSERT INTO config_metadata VALUES ('processor.trex.t-rex-container', 'T-Rex container name', 'string', false, 32, FALSE, 'T-Rex container name', NULL);
+INSERT INTO config_metadata VALUES ('processor.trex.t-rex-output-file', 'T-Rex output file', 'string', false, 32, FALSE, 'T-Rex output file', NULL);

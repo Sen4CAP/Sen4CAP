@@ -34,19 +34,20 @@ VALUES
 (13, 's4c_l4b','Sen4CAP L4B Grassland Mowing product', false);
 
 INSERT INTO product_type
-(id, name, description)
+(id, name, description, is_raster)
 VALUES
-(14, 'lpis', 'LPIS product');
+(14, 'lpis', 'LPIS product', false);
 
 INSERT INTO product_type
 (id, name, description, is_raster)
 VALUES
 (15, 's4c_l4c','Sen4CAP L4C Agricultural Practices product', false);
 
-INSERT INTO product_type
-(id, name, description)
-VALUES
-(16, 's4c_l3c','Sen4CAP L3C LAI Reprocessed product');
+-- TODO: Not yet implemented
+-- INSERT INTO product_type
+-- (id, name, description)
+-- VALUES
+-- (16, 's4c_l3c','Sen4CAP L3C LAI Reprocessed product');
 
 INSERT INTO product_type
 (id, name, description, is_raster)

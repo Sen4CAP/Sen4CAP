@@ -16,4 +16,5 @@ INSERT INTO config_category VALUES (23, 'S1 L2 Pre-processor', 23, true);
 INSERT INTO config_category VALUES (26, 'S4C Markers Database 1', 26, true);
 INSERT INTO config_category VALUES (27, 'Validity Flags', 17, true);
 INSERT INTO config_category VALUES (31, 'FMask', 18, true);
+INSERT INTO config_category VALUES (32, 'T-Rex Updater', 32, false);
 

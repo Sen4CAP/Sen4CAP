@@ -5,7 +5,7 @@ HAS_S2AGRI_SERVICES=false
 
 : ${GPT_CONFIG_FILE:="./config/gpt.vmoptions"}
 : ${SYS_ACC_NAME:="sen2agri-service"}
-: ${SLURM_QOS_LIST:="qosMaccs,qosComposite,qosCropMask,qosCropType,qosPheno,qosLai,qoss4cmdb1,qoss4cl4a,qoss4cl4b,qoss4cl4c"}
+: ${SLURM_QOS_LIST:="qosMaccs,qosComposite,qosCropMask,qosCropType,qosPheno,qosLai,qoss4cmdb1,qoss4cl4a,qoss4cl4b,qoss4cl4c,qosfmask,qosvaliditymsk,qostrex"}
 
 
 function get_install_config_property
@@ -58,28 +58,20 @@ function install_sen2agri_services()
             if [ -d "${TARGET_SERVICES_DIR}/lib" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/lib)" ] ; then
                     datasources_plugins_dir="${TARGET_SERVICES_DIR}/lib"
                 fi
-            fi
-            #check if lib or datasources directory directory exist and is not empty
-            if [ ! -z "${datasources_plugins_dir}" ] ; then
-                mkdir ${TARGET_SERVICES_DIR}/$add_plgs_bkp
+            fi            
+            #check if lib directory exist and is not empty
+            if [ -d "${datasources_plugins_dir}" ] && [ ! -z "$(ls -A ${datasources_plugins_dir})" ] ; then
+                mkdir -p ${TARGET_SERVICES_DIR}/$add_plgs_bkp
                 for filepath in ${datasources_plugins_dir}/tao-datasources-*.jar
                 do
                     filename=$(basename $filepath)
-                    #make a backup for tao-datasource*.jar, others that scihub and usgs
-                    if [[ $filename != tao-datasources-scihub* ]] && [[ $filename != tao-datasources-usgs* ]]; then
-                        cp ${datasources_plugins_dir}/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/
-                    fi
+                    #make a backup for tao-datasource*.jar
+                    cp ${datasources_plugins_dir}/$filename ${TARGET_SERVICES_DIR}/$add_plgs_bkp/
                 done;
             fi
             if [ -f ../sen2agri-services/${SERVICES_ARCHIVE} ]; then
-                echo "Updating ${TARGET_SERVICES_DIR}/lib folder ..."
-                mkdir -p ${TARGET_SERVICES_DIR}/lib
-                mkdir -p ${TARGET_SERVICES_DIR}/datasources
-                rm -f ${TARGET_SERVICES_DIR}/lib/*.jar
-                rm -f ${TARGET_SERVICES_DIR}/datasources/*.jar
-                unzip -o ${zipArchive} 'lib/*' -d ${TARGET_SERVICES_DIR}
-                unzip -o ${zipArchive} 'datasources/*' -d ${TARGET_SERVICES_DIR}
-
+                echo "Updating ${TARGET_SERVICES_DIR}/datasources folder ..."
+                mkdir -p ${TARGET_SERVICES_DIR}/datasources && rm -f ${TARGET_SERVICES_DIR}/datasources/*.jar && unzip -o ${zipArchive} 'datasources/*' -d ${TARGET_SERVICES_DIR}
                 # Check if directory lib_add_plgs_bkp_<timestamp> exist and is not empty
                 if [ -d "${TARGET_SERVICES_DIR}/${add_plgs_bkp}" ] ; then
                     if [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/${add_plgs_bkp})" ]; then
@@ -87,15 +79,23 @@ function install_sen2agri_services()
                         do
                             filename=$(basename $filepath| grep -oP '.*(?=-)')
                             if [ -f ../sen2agri-services/datasource-additional-plugins/$filename*.jar ];then
-                                cp ../sen2agri-services/datasource-additional-plugins/$filename*.jar ${TARGET_SERVICES_DIR}/datasources/
+                                echo "Copying file ../sen2agri-services/datasource-additional-plugins/$filename*.jar to ${TARGET_SERVICES_DIR}/datasource/ folder ..."
+                                cp -fr ../sen2agri-services/datasource-additional-plugins/$filename*.jar ${TARGET_SERVICES_DIR}/datasources/
                             else
                                 echo "IT WAS USED THE VERSION FOUND IN LIB FOLDER OF " $filename " BUT MAY NOT BE COMPATIBLE WITH CURRENT VERSION OF SEN2AGRI-SERVICES  "
-                                cp ${TARGET_SERVICES_DIR}/$add_plgs_bkp/$filename*.jar ${TARGET_SERVICES_DIR}/datasources/
+                                cp -fr ${TARGET_SERVICES_DIR}/$add_plgs_bkp/$filename*.jar ${TARGET_SERVICES_DIR}/datasources/
                             fi
                         done;
                     fi
-                    rm -rf ${TARGET_SERVICES_DIR}/$add_plgs_bkp
+                    if [ -d ${TARGET_SERVICES_DIR}/$add_plgs_bkp ]; then 
+                        echo "Removing directory ${TARGET_SERVICES_DIR}/$add_plgs_bkp"
+                        rm -rf ${TARGET_SERVICES_DIR}/$add_plgs_bkp
+                    fi
                 fi
+
+                echo "Updating ${TARGET_SERVICES_DIR}/lib folder ..."
+                mkdir -p ${TARGET_SERVICES_DIR}/lib && rm -f ${TARGET_SERVICES_DIR}/lib/*.jar && unzip -o ${zipArchive} 'lib/*' -d ${TARGET_SERVICES_DIR}
+
                 echo "Updating ${TARGET_SERVICES_DIR}/modules folder ..."
                 mkdir -p ${TARGET_SERVICES_DIR}/modules && rm -f ${TARGET_SERVICES_DIR}/modules/*.jar && unzip -o ${zipArchive} 'modules/*' -d ${TARGET_SERVICES_DIR}
 
@@ -107,16 +107,32 @@ function install_sen2agri_services()
                 if [ -f ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ] ; then
                     mv ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ${TARGET_SERVICES_DIR}/config/services.properties
                 fi
-
+                
+                
+                if grep -q "'../modules/\*:../lib/\*:../services/\*:../plugins/\*'" ${TARGET_SERVICES_DIR}/bin/start.sh
+                then
+                    echo "start.sh corresponds does not have datasources directory included. Added datasources to classpath ..."
+                    sed -i "s/plugins\/\\*/plugins\/\\*\:\.\.\/datasources\/\\*/g" ${TARGET_SERVICES_DIR}/bin/start.sh
+                else
+                    if grep -q "../datasources/\*" ${TARGET_SERVICES_DIR}/bin/start.sh
+                    then
+                        echo "start.sh already have datasources directory added in classpath. Nothing to do ..."
+                    else
+                        echo "Cannot identify the classpath line in services start.sh ... "
+                    fi
+                fi
+                
                 # Add new lines for 3.0 if missing
                 if grep -q "endpoints.not.authenticated" ${TARGET_SERVICES_DIR}/config/services.properties
                 then
-                    echo "File services.properties correspond to version 3.0 or later. Nothing to do here..."
+                    echo "File services.properties correspond to version 3.0 or later. Updating the endpoints.not.authenticated list ..."
+                    sed -i 's/endpoints.not.authenticated=.*/endpoints.not.authenticated=\/;\/login;\/products\/download;\/users\/pwd\/request;\/users\/pwd\/reset/g' ${TARGET_SERVICES_DIR}/config/services.properties
+
                 else
                     echo "Updating 3.0 site infos ..."
-                    sed -i '/^plugins.use.docker =.*/i site.location=static\r\nsite.prefix = \/ui\r\nendpoints.not.authenticated=\/;\/login;\/products\/download\r\n\r\n' ${TARGET_SERVICES_DIR}/config/services.properties
+                    sed -i '/^plugins.use.docker =.*/i site.location=static\r\nvector.tile.service.url = http:\/\/localhost:6767\r\nsite.prefix = \/ui\r\nendpoints.not.authenticated=\/;\/login;\/products\/download;\/users\/pwd\/request;\/users\/pwd\/reset\r\n\r\n' ${TARGET_SERVICES_DIR}/config/services.properties
                 fi
-
+                
                 if [ -f ${TARGET_SERVICES_DIR}/config/application.properties ] ; then
                     cp -f ${TARGET_SERVICES_DIR}/config/application.properties ${TARGET_SERVICES_DIR}/config/application.properties.bkp
                 fi
@@ -132,6 +148,14 @@ function install_sen2agri_services()
     fi
     # it might happen that some files to be packaged with the wrong read rights
     chmod -R a+r ${TARGET_SERVICES_DIR}
+    
+    # cleanup the /home/sen2agri-service/.snap and /home/sen2agri-service/.sen2agri-services in case the gdal version changed
+    if [ -d /home/sen2agri-service/.snap ] ; then
+        rm -fr /home/sen2agri-service/.snap
+    fi
+    if [ -d /home/sen2agri-service/.sen2agri-services ] ; then
+        rm -fr /home/sen2agri-service/.sen2agri-services
+    fi
 }
 
 SCIHUB_USER=""
@@ -341,34 +365,10 @@ function create_and_config_slurm_qos()
    for qosName in "${ADDR[@]}"; do
         if [ -z $(sacctmgr list qos --parsable | grep -i ${qosName}) ] ; then
             #add qos to slurm
-            SLURM_ADD_QOS=$(expect -c "
-             set timeout 5
-             spawn sacctmgr add qos  \"${qosName}\"
-             expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-             send \"y\r\"
-             expect eof
-            ")
-            echo "$SLURM_ADD_QOS"
-
             #set qos number of jobs able to run at any given time
-            SLURM_JOBS_PER_QOS=$(expect -c "
-             set timeout 5
-             spawn sacctmgr modify qos "${qosName}" set GrpJobs=1
-             expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-             send \"y\r\"
-             expect eof
-            ")
-            echo "$SLURM_JOBS_PER_QOS"
-
             #add already created qos to user , and another qos if that qos already exists
-            SLURM_ADD_QOS_TO_ACC=$(expect -c "
-             set timeout 5
-             spawn sacctmgr modify user "${SYS_ACC_NAME}" set qos+="${qosName}"
-             expect \"Would you like to commit changes? (You have 30 seconds to decide)\"
-             send \"y\r\"
-             expect eof
-            ")
-            echo "$SLURM_ADD_QOS_TO_ACC"
+            sacctmgr -i add qos "${qosName}" set GrpJobs=1
+            sacctmgr -i modify user "${SYS_ACC_NAME}" set qos+="${qosName}"
         fi
    done
 
@@ -397,6 +397,27 @@ function update_maja_gipp() {
         fi
     else
         echo "WARNING: Key processor.l2a.maja.gipp-path not found in config table for database ${DB_NAME}. UserConfiguration not updated ..."
+    fi
+}
+
+function install_snap() {
+    # Install and config SNAP
+    # check if docker image already exists
+    # TODO: "docker image inspect sen4cap/snap" might be also used instead images -q
+    if [[ "$(docker images -q sen4cap/snap:8.0 2> /dev/null)" == "" ]]; then
+        TARGET_SNAP_TMP_DIR="/mnt/archive/temp/$(date +%Y%m%d%H%M%S)/"
+        echo "Using directory ${TARGET_SNAP_TMP_DIR} for SNAP image build working dir ..."
+        mkdir -p ${TARGET_SNAP_TMP_DIR} && \
+        cp -fR ./docker/snap8 ${TARGET_SNAP_TMP_DIR} && \
+        wget -P ${TARGET_SNAP_TMP_DIR}/snap8/ http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
+        chmod +x ${TARGET_SNAP_TMP_DIR}/snap8/esa-snap_sentinel_unix_8_0.sh && \
+        docker build -t sen4cap/snap:8.0 -f ${TARGET_SNAP_TMP_DIR}/snap8/Dockerfile ${TARGET_SNAP_TMP_DIR}/snap8/
+        if [ -d ${TARGET_SNAP_TMP_DIR} ] ; then
+            echo "Removing ${TARGET_SNAP_TMP_DIR} ..."
+            rm -fR ${TARGET_SNAP_TMP_DIR}
+        fi
+    else
+        echo "No need to install SNAP container, it already exists ..."
     fi
 }
 
@@ -481,17 +502,7 @@ if [ "$DB_NAME" == "sen2agri" ] ; then
     # Reset the download failed products
     resetDownloadFailedProducts
 else
-    # Install and config SNAP
-    # check if docker image already exists
-    # TODO: "docker image inspect sen4cap/snap" might be also used instead images -q
-    #if [[ "$(docker images -q sen4cap/snap 2> /dev/null)" == "" ]]; then
-        wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
-        mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
-        chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
-        docker build -t sen4cap/snap:8.0 -f ./docker/snap8/Dockerfile ./docker/snap8/
-    #else
-    #    echo "No need to install SNAP container, it already exists ..."
-    #fi
+    install_snap
 fi
 
 if [ ! -d /var/log/sen2agri ]; then

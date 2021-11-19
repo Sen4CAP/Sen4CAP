@@ -39,7 +39,7 @@
 : ${SLURM_MACHINE_NOCPUS:=$(cat /proc/cpuinfo | grep processor | wc -l)}
 : ${SLURM_CONFIG:="slurm.conf"}
 : ${SLURM_CONFIG_DB:="slurmdbd.conf"}
-: ${SLURM_QOS_LIST:="qosMaccs,qosComposite,qosCropMask,qosCropType,qosPheno,qosLai,qoss4cmdb1,qoss4cl4a,qoss4cl4b,qoss4cl4c"}
+: ${SLURM_QOS_LIST:="qosMaccs,qosComposite,qosCropMask,qosCropType,qosPheno,qosLai,qoss4cmdb1,qoss4cl4a,qoss4cl4b,qoss4cl4c,qosfmask,qosvaliditymsk,qostrex"}
 #----------------SLURM MYSQL DATABASE CREATION---------------------------------------------#
 MYSQL_DB_CREATION="create database slurm_acct_db;create user slurm@localhost;
 set password for slurm@localhost = password('sen2agri');"
@@ -126,6 +126,8 @@ function create_slurm_data_base()
    ")
 
    echo "$DB_MYSQL"
+   echo "Sleeping 5 seconds waitinig for MariaDB..."
+   sleep 5
 }
 #-----------------------------------------------------------#
 function config_and_start_slurm_service()
@@ -151,6 +153,9 @@ function config_and_start_slurm_service()
 
    ##enable slurmdbd (slurmdbd)  to start at boot
    systemctl enable slurmdbd
+
+   echo "Sleeping 5 seconds waitinig for slurmdbd..."
+   sleep 5
 
    ##get status of slurmdbd service
    echo "SLURM DB SERVICE: $(systemctl status slurmdbd | grep "Active")"
@@ -341,13 +346,13 @@ function install_and_config_postgresql()
    # the tables, data and other stuff is created (see down, privileges.sql
    cat "$(find ./ -name "database")/00-database"/sen2agri.sql | psql -U postgres
 
-    if ! [[ "${SEN2AGRI_DATABASE_NAME}" == "sen2agri" ]] ; then
-        sed -i -re "s|'demmaccs.maccs-launcher',([^,]+),\s+'[^']+'|'demmaccs.maccs-launcher',\1, '${l1c_processor_location}'|" $(find ./ -name "database")/07-data/${SEN2AGRI_DATABASE_NAME}/09.config.sql
-        sed -i -re "s|'demmaccs.gips-path',([^,]+),\s+'[^']+'|'demmaccs.gips-path',\1, '${l1c_processor_gipp_destination}'|" $(find ./ -name "database")/07-data/${SEN2AGRI_DATABASE_NAME}/09.config.sql
-    else
-        sed -i -re "s|'demmaccs.maccs-launcher',([^,]+),\s+'[^']+'|'demmaccs.maccs-launcher',\1, '${l1c_processor_location}'|" $(find ./ -name "database")/07-data/09.config.sql
-        sed -i -re "s|'demmaccs.gips-path',([^,]+),\s+'[^']+'|'demmaccs.gips-path',\1, '${l1c_processor_gipp_destination}'|" $(find ./ -name "database")/07-data/09.config.sql
-    fi
+    # if ! [[ "${SEN2AGRI_DATABASE_NAME}" == "sen2agri" ]] ; then
+    #     sed -i -re "s|'demmaccs.maccs-launcher',([^,]+),\s+'[^']+'|'demmaccs.maccs-launcher',\1, '${l1c_processor_location}'|" $(find ./ -name "database")/07-data/${SEN2AGRI_DATABASE_NAME}/09.config.sql
+    #     sed -i -re "s|'demmaccs.gips-path',([^,]+),\s+'[^']+'|'demmaccs.gips-path',\1, '${l1c_processor_gipp_destination}'|" $(find ./ -name "database")/07-data/${SEN2AGRI_DATABASE_NAME}/09.config.sql
+    # else
+    #     sed -i -re "s|'demmaccs.maccs-launcher',([^,]+),\s+'[^']+'|'demmaccs.maccs-launcher',\1, '${l1c_processor_location}'|" $(find ./ -name "database")/07-data/09.config.sql
+    #     sed -i -re "s|'demmaccs.gips-path',([^,]+),\s+'[^']+'|'demmaccs.gips-path',\1, '${l1c_processor_gipp_destination}'|" $(find ./ -name "database")/07-data/09.config.sql
+    # fi
 
    #run scripts populating database
    populate_from_scripts "$(find ./ -name "database")/01-extensions"
@@ -479,11 +484,21 @@ function install_RPMs()
 function install_additional_packages()
 {
     if ! [[ "${SEN2AGRI_DATABASE_NAME}" == "sen2agri" ]] ; then
-        # Install and config SNAP
-        wget http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
-        mv -f esa-snap_sentinel_unix_8_0.sh ./docker/snap8/ && \
-        chmod +x ./docker/snap8/esa-snap_sentinel_unix_8_0.sh && \
-        docker build -t sen4cap/snap:8.0 -f ./docker/snap8/Dockerfile ./docker/snap8/
+        if [[ "$(docker images -q sen4cap/snap:8.0 2> /dev/null)" == "" ]]; then
+            TARGET_SNAP_TMP_DIR="/mnt/archive/temp/$(date +%Y%m%d%H%M%S)/"
+            echo "Using directory ${TARGET_SNAP_TMP_DIR} for SNAP image build working dir ..."
+            mkdir -p ${TARGET_SNAP_TMP_DIR} && \
+            cp -fR ./docker/snap8 ${TARGET_SNAP_TMP_DIR} && \
+            wget -P ${TARGET_SNAP_TMP_DIR}/snap8/ http://step.esa.int/downloads/8.0/installers/esa-snap_sentinel_unix_8_0.sh && \
+            chmod +x ${TARGET_SNAP_TMP_DIR}/snap8/esa-snap_sentinel_unix_8_0.sh && \
+            docker build -t sen4cap/snap:8.0 -f ${TARGET_SNAP_TMP_DIR}/snap8/Dockerfile ${TARGET_SNAP_TMP_DIR}/snap8/
+            if [ -d ${TARGET_SNAP_TMP_DIR} ] ; then
+                echo "Removing ${TARGET_SNAP_TMP_DIR} ..."
+                rm -fR ${TARGET_SNAP_TMP_DIR}
+            fi
+        else
+            echo "No need to install SNAP container, it already exists ..."
+        fi
     fi
 }
 
@@ -513,14 +528,14 @@ function maccs_or_maja()
     $L1C_PROCESSOR_SEN2COR)
 	l1c_processor_name="Sen2Cor"
 	l1c_processor_bin="sen2cor"
-	l1c_processor_path="/opt/maccs/core"
-	l1c_processor_gipp_destination="/mnt/archive/gipp"
-	l1c_processor_gipp_source="../gipp"
+	# l1c_processor_path="/opt/maccs/core"
+	l1c_processor_gipp_destination="/mnt/archive/gipp/sen2cor"
+	l1c_processor_gipp_source="../gipp_sen2cor"
 	;;
     $L1C_PROCESSOR_MAJA)
 	l1c_processor_name="MAJA"
 	l1c_processor_bin="maja"
-	l1c_processor_path="/opt/maja"
+	# l1c_processor_path="/opt/maja"
 	l1c_processor_gipp_destination="/mnt/archive/gipp/maja"
 	l1c_processor_gipp_source="../gipp_maja"
 	;;
@@ -618,144 +633,146 @@ function check_paths()
     fi
 }
 
-function find_l1c_processor()
-{
-    IFS=$'\n'
-    ret=$?
-    unset IFS
-    echo "ret = $ret"
-    l1c_processor_bin_find_out=($(find $l1c_processor_path -name $l1c_processor_bin -type f -executable 2>&-))
-    echo "l1c_processor_bin_find_out = $l1c_processor_bin_find_out"
-    if [ $ret -eq 0 ] && [ -n "$l1c_processor_bin_find_out" ]; then
-        if [ ${#l1c_processor_bin_find_out[@]} -eq 1 ]; then
-            l1c_processor_location=${l1c_processor_bin_find_out[0]}
-	    echo "${l1c_processor_name} found at ${l1c_processor_location}"
-            return 0
-        else
-	    echo "Multiple ${l1c_processor_name} executables found under ${l1c_processor_path}:"
-            printf '%s\n' "${l1c_processor_bin_find_out[@]}"
-            return 2
-        fi
-    else
-        echo "Unable to find ${l1c_processor_name} under ${l1c_processor_path}"
-        return 1
-    fi
-}
+# TODO : This should be removed, now the L1C processor is in a docker
+# function find_l1c_processor()
+# {
+#     IFS=$'\n'
+#     ret=$?
+#     unset IFS
+#     echo "ret = $ret"
+#     l1c_processor_bin_find_out=($(find $l1c_processor_path -name $l1c_processor_bin -type f -executable 2>&-))
+#     echo "l1c_processor_bin_find_out = $l1c_processor_bin_find_out"
+#     if [ $ret -eq 0 ] && [ -n "$l1c_processor_bin_find_out" ]; then
+#         if [ ${#l1c_processor_bin_find_out[@]} -eq 1 ]; then
+#             l1c_processor_location=${l1c_processor_bin_find_out[0]}
+# 	    echo "${l1c_processor_name} found at ${l1c_processor_location}"
+#             return 0
+#         else
+# 	    echo "Multiple ${l1c_processor_name} executables found under ${l1c_processor_path}:"
+#             printf '%s\n' "${l1c_processor_bin_find_out[@]}"
+#             return 2
+#         fi
+#     else
+#         echo "Unable to find ${l1c_processor_name} under ${l1c_processor_path}"
+#         return 1
+#     fi
+# }
 
-function install_l1c_processor()
-{
-    yum -y install libxslt gd
+# TODO : This should be removed, now the L1C processor is in a docker
+# function install_l1c_processor()
+# {
+#     yum -y install libxslt gd
+# 
+#     echo "Looking for $l1c_processor_name ..."
+#     l1c_processor_location=$(type -P $l1c_processor_bin)
+#     if [ $? -eq 0 ]; then
+#         echo "$l1c_processor_name found in PATH at $l1c_processor_location"
+#         status=0
+#     else
+#         status=1
+#     fi
+# 
+#     if [ $status -eq 0 ]; then
+#         return 0
+#     fi
+# 
+#     find_l1c_processor
+#     if [ $? -eq 0 ]; then
+#         return 0
+#     fi
+# 
+#     echo "$l1c_processor_name not found, trying to install it"
+# 
+#     found_kit=1
+#     if [ $l1c_processor -eq $L1C_PROCESSOR_SEN2COR ]; then
+# 	cots_installer=$(find ../maccs/cots -name install-maccs-cots.sh 2>&-)
+# 	if [ $? -ne 0 ] || [ -z "$cots_installer" ]; then
+# 	    echo "Unable to find MACCS COTS installer"
+# 	    found_kit=0
+# 	fi
+# 	if [ $found_kit -eq 1 ]; then
+# 	    core_installer=$(find ../maccs/core -name "install-maccs-*.sh" 2>&-)
+# 	    if [ $? -ne 0 ] || [ -z "$core_installer" ]; then
+# 		echo "Unable to find MACCS installer"
+# 		found_kit=0
+# 	    fi
+# 	fi
+#     fi
+#     if [ $l1c_processor -eq $L1C_PROCESSOR_MAJA ]; then
+# 	core_installer=$(find ../maja -name "MAJA*.run" 2>&-)
+# 	if [ $? -ne 0 ] || [ -z "$core_installer" ]; then
+# 	    echo "Unable to find MAJA installer"
+# 	    found_kit=0
+# 	fi
+#     fi
+# 
+#     if [ $found_kit -eq 1 ]; then
+# 	if [ $l1c_processor -eq $L1C_PROCESSOR_SEN2COR ]; then
+#             yum -y install redhat-lsb-core
+# 
+# 	    echo "Installing MACCS COTS"
+# 	    sh $cots_installer || {
+# 		echo "Failed, exiting now"
+# 		exit 1
+# 	    }
+# 	    echo "Installing MACCS"
+# 	    sh $core_installer || {
+# 		echo "Failed, exiting now"
+# 		exit 1
+# 	    }
+# 	fi
+# 	if [ $l1c_processor -eq $L1C_PROCESSOR_MAJA ]; then
+# 	    echo "Installing MAJA"
+# 	    sh $core_installer || {
+# 		echo "Failed, exiting now"
+# 		exit 1
+# 	    }
+# 	    echo "chmoding"
+# 	    chmod -R a+rx $l1c_processor_path
+# 	fi
+# 	echo "find_l1c_processor"
+#         find_l1c_processor
+#         if [ $? -eq 0 ]; then
+#             return 0
+#         fi
+# 
+#         echo "Cannot find installed $l1c_processor_name. Did you install it under a different path?"
+#     fi
+# 
+#     echo "If $l1c_processor_name is already installed, please enter the path to the '$l1c_processor_bin' executable (e.g. /opt/maccs/core/4.7/bin/maccs for MACCS or /otp/maja/bin/maja for MAJA)"
+#     while :; do
+#         read -ep "Path to $l1c_processor_bin executable: "
+#         if [ $? -ne 0 ]; then
+#             echo "Cancelled, exiting"
+#             exit 1
+#         fi
+# 
+#         if [[ -x "$REPLY" ]]; then
+#             l1c_processor_location=$REPLY
+#             echo "$l1c_processor_name path seems fine, continuing"
+#             return 0
+#         fi
+# 
+#         echo "$REPLY does not seem to point to an executable, please try again or exit with CTRL-C"
+#     done
+# }
 
-    echo "Looking for $l1c_processor_name ..."
-    l1c_processor_location=$(type -P $l1c_processor_bin)
-    if [ $? -eq 0 ]; then
-        echo "$l1c_processor_name found in PATH at $l1c_processor_location"
-        status=0
-    else
-        status=1
-    fi
-
-    if [ $status -eq 0 ]; then
-        return 0
-    fi
-
-    find_l1c_processor
-    if [ $? -eq 0 ]; then
-        return 0
-    fi
-
-    echo "$l1c_processor_name not found, trying to install it"
-
-    found_kit=1
-    if [ $l1c_processor -eq $L1C_PROCESSOR_SEN2COR ]; then
-	cots_installer=$(find ../maccs/cots -name install-maccs-cots.sh 2>&-)
-	if [ $? -ne 0 ] || [ -z "$cots_installer" ]; then
-	    echo "Unable to find MACCS COTS installer"
-	    found_kit=0
-	fi
-	if [ $found_kit -eq 1 ]; then
-	    core_installer=$(find ../maccs/core -name "install-maccs-*.sh" 2>&-)
-	    if [ $? -ne 0 ] || [ -z "$core_installer" ]; then
-		echo "Unable to find MACCS installer"
-		found_kit=0
-	    fi
-	fi
-    fi
-    if [ $l1c_processor -eq $L1C_PROCESSOR_MAJA ]; then
-	core_installer=$(find ../maja -name "MAJA*.run" 2>&-)
-	if [ $? -ne 0 ] || [ -z "$core_installer" ]; then
-	    echo "Unable to find MAJA installer"
-	    found_kit=0
-	fi
-    fi
-
-    if [ $found_kit -eq 1 ]; then
-	if [ $l1c_processor -eq $L1C_PROCESSOR_SEN2COR ]; then
-            yum -y install redhat-lsb-core
-
-	    echo "Installing MACCS COTS"
-	    sh $cots_installer || {
-		echo "Failed, exiting now"
-		exit 1
-	    }
-	    echo "Installing MACCS"
-	    sh $core_installer || {
-		echo "Failed, exiting now"
-		exit 1
-	    }
-	fi
-	if [ $l1c_processor -eq $L1C_PROCESSOR_MAJA ]; then
-	    echo "Installing MAJA"
-	    sh $core_installer || {
-		echo "Failed, exiting now"
-		exit 1
-	    }
-	    echo "chmoding"
-	    chmod -R a+rx $l1c_processor_path
-	fi
-	echo "find_l1c_processor"
-        find_l1c_processor
-        if [ $? -eq 0 ]; then
-            return 0
-        fi
-
-        echo "Cannot find installed $l1c_processor_name. Did you install it under a different path?"
-    fi
-
-    echo "If $l1c_processor_name is already installed, please enter the path to the '$l1c_processor_bin' executable (e.g. /opt/maccs/core/4.7/bin/maccs for MACCS or /otp/maja/bin/maja for MAJA)"
-    while :; do
-        read -ep "Path to $l1c_processor_bin executable: "
-        if [ $? -ne 0 ]; then
-            echo "Cancelled, exiting"
-            exit 1
-        fi
-
-        if [[ -x "$REPLY" ]]; then
-            l1c_processor_location=$REPLY
-            echo "$l1c_processor_name path seems fine, continuing"
-            return 0
-        fi
-
-        echo "$REPLY does not seem to point to an executable, please try again or exit with CTRL-C"
-    done
-}
-
-function updateWebConfigParams()
-{
-    REST_SERVER_PORT=$(sed -n 's/^server.port =//p' /usr/share/sen2agri/sen2agri-services/config/services.properties | sed -e 's/\r//g')
-    # Strip leading space.
-    REST_SERVER_PORT="${REST_SERVER_PORT## }"
-    # Strip trailing space.
-    REST_SERVER_PORT="${REST_SERVER_PORT%% }"
-     if [[ !  -z  $REST_SERVER_PORT  ]] ; then
-        sed -i -e "s|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:8080|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:$REST_SERVER_PORT|g" /var/www/html/ConfigParams.php
-     fi
-
-    DB_NAME=$(get_install_config_property "DB_NAME")
-    if [[ ! -z $DB_NAME ]] ; then
-        sed -i -e "s|static \$DEFAULT_DB_NAME = \x27sen2agri|static \$DEFAULT_DB_NAME = \x27${DB_NAME}|g" /var/www/html/ConfigParams.php
-    fi
-}
+# function updateWebConfigParams()
+# {
+#     REST_SERVER_PORT=$(sed -n 's/^server.port =//p' /usr/share/sen2agri/sen2agri-services/config/services.properties | sed -e 's/\r//g')
+#     # Strip leading space.
+#     REST_SERVER_PORT="${REST_SERVER_PORT## }"
+#     # Strip trailing space.
+#     REST_SERVER_PORT="${REST_SERVER_PORT%% }"
+#      if [[ !  -z  $REST_SERVER_PORT  ]] ; then
+#         sed -i -e "s|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:8080|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:$REST_SERVER_PORT|g" /var/www/html/ConfigParams.php
+#      fi
+# 
+#     DB_NAME=$(get_install_config_property "DB_NAME")
+#     if [[ ! -z $DB_NAME ]] ; then
+#         sed -i -e "s|static \$DEFAULT_DB_NAME = \x27sen2agri|static \$DEFAULT_DB_NAME = \x27${DB_NAME}|g" /var/www/html/ConfigParams.php
+#     fi
+# }
 
 # Update /etc/sen2agri/sen2agri.conf with the right database
 function updateSen2AgriProcessorsParams()
@@ -867,7 +884,8 @@ systemctl restart docker
 
 install_sen2agri_services
 
-install_l1c_processor
+# TODO : This should be removed, now the L1C processor is in a docker
+# install_l1c_processor
 
 #-----------------------------------------------------------#
 ####  OTB, SEN2AGRI, SLURM INSTALL  & CONFIG     ######

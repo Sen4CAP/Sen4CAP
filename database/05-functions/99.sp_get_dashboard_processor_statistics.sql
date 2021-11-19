@@ -90,7 +90,7 @@ BEGIN
 		FROM config_params;
 
 		-- Update the return json with the computed data
-		return_string := return_string || '"' || current_processor.name || '_statistics" :' || json_build_object('resources', temp_json, 'output', temp_json2, 'configuration', temp_json3);
+		return_string := return_string || '"' || current_processor.name || '_statistics" :' || json_build_object('resources', temp_json, 'output', coalesce(temp_json2, '[]'), 'configuration', coalesce(temp_json3, '[]'));
 		
 	END LOOP;
 

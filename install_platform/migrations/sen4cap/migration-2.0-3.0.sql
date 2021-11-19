@@ -6,7 +6,7 @@ begin
     raise notice 'running migrations';
 
     if exists (select * from information_schema.tables where table_schema = 'public' and table_name = 'meta') then
-        if exists (select * from meta where version in ('2.0', '3.0')) then
+        if exists (select * from meta where version in ('2.0', '3.0', '3.0.0')) then
 
 -- ---------------------------- TODO --------------------------------------
     -- For existing sites from 2.0 we should run something like the following after filling  the auxdata tables:
@@ -33,6 +33,13 @@ begin
                 ALTER TABLE node_resource_log ALTER COLUMN timestamp SET DATA TYPE timestamp with time zone;
                 
                 -- New Tables
+                CREATE TABLE IF NOT EXISTS product_provenance(
+                    product_id int NOT NULL,
+                    parent_product_id int NOT NULL,
+                    parent_product_date timestamp with time zone NOT NULL,
+                    CONSTRAINT product_provenance_pkey PRIMARY KEY (product_id, parent_product_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS auxdata_descriptor (
                     id smallint NOT NULL,
                     name character varying NOT NULL,
@@ -145,6 +152,110 @@ begin
                 END;
                 $$ LANGUAGE plpgsql;
                 
+                -- 
+                CREATE OR REPLACE FUNCTION sp_get_dashboard_processor_statistics()
+                  RETURNS json AS
+                $BODY$
+                DECLARE current_processor RECORD;
+                DECLARE temp_json json;
+                DECLARE temp_json2 json;
+                DECLARE temp_json3 json;
+                DECLARE temp_array json[];
+                DECLARE temp_array2 json[];
+                DECLARE return_string text;
+                BEGIN
+
+                    CREATE TEMP TABLE processors (
+                        id smallint,
+                        name character varying
+                        ) ON COMMIT DROP;
+
+                    -- Get the list of processors to return the resources for
+                    INSERT INTO processors (id, name)
+                    SELECT id, short_name
+                    FROM processor ORDER BY name;
+
+                    return_string := '{';
+
+                    -- Go through the processors and compute their data
+                    FOR current_processor IN SELECT * FROM processors ORDER BY name LOOP
+
+                        IF return_string != '{' THEN
+                            return_string := return_string || ',';
+                        END IF;
+
+                        -- First compute the resource averages
+                        WITH job_resources AS(
+                        SELECT 
+                        max(entry_timestamp) AS last_run,
+                        sum(duration_ms) AS total_duration,
+                        sum(user_cpu_ms) AS total_user_cpu,
+                        sum(system_cpu_ms) AS total_system_cpu,
+                        sum(max_rss_kb) AS total_max_rss,
+                        sum(max_vm_size_kb) AS total_max_vm_size,
+                        sum(disk_read_b) AS total_disk_read,
+                        sum(disk_write_b) AS total_disk_write
+                        FROM step_resource_log 
+                        INNER JOIN task ON step_resource_log.task_id = task.id
+                        INNER JOIN job ON task.job_id = job.id AND job.processor_id = current_processor.id
+                        GROUP BY job.id)
+                        SELECT '[' ||
+                        '["Last Run On","' || to_char(max(last_run), 'YYYY-MM-DD HH:MI:SS') || '"],' ||
+                        '["Average Duration","' || to_char(avg(total_duration) / 1000 * INTERVAL '1 second', 'HH24:MI:SS.MS') || '"],' ||
+                        '["Average User CPU","' || to_char(avg(total_user_cpu) / 1000 * INTERVAL '1 second', 'HH24:MI:SS.MS') || '"],' ||
+                        '["Average System CPU","' || to_char(avg(total_system_cpu) / 1000 * INTERVAL '1 second', 'HH24:MI:SS.MS') || '"],' ||
+                        '["Average Max RSS","' || round(avg(total_max_rss)::numeric / 1024::numeric, 2)::varchar || ' MB' || '"],' ||
+                        '["Average Max VM","' || round(avg(total_max_vm_size)::numeric / 1024::numeric, 2)::varchar || ' MB' || '"],' ||
+                        '["Average Disk Read","' || round(avg(total_disk_read)::numeric / 1048576::numeric, 2)::varchar || ' MB' || '"],' ||
+                        '["Average Disk Write","' || round(avg(total_disk_write)::numeric / 1048576::numeric, 2)::varchar || ' MB' || '"]' ||
+                        ']' INTO temp_json
+                        FROM job_resources;
+
+                        temp_json := coalesce(temp_json, '[["Last Run On","never"],["Average Duration","00:00:00.000"],["Average User CPU","00:00:00.000"],["Average System CPU","00:00:00.000"],["Average Max RSS","0.00 MB"],["Average Max VM","0.00 MB"],["Average Disk Read","0.00 MB"],["Average Disk Write","0.00 MB"]]');
+
+                        -- Next compute the output statistics
+                        temp_array := array[]::json[];
+                        SELECT json_build_array('Number of Products', count(*)) INTO temp_json2 FROM product WHERE processor_id = current_processor.id;
+                        temp_array := array_append(temp_array, temp_json2);
+
+                        WITH step_statistics AS(
+                        SELECT 
+                        count(*) AS no_of_tiles, 
+                        sum(duration_ms)/count(*) AS average_duration_per_tile
+                        FROM step_resource_log 
+                        INNER JOIN task ON step_resource_log.task_id = task.id
+                        INNER JOIN job ON task.job_id = job.id AND job.processor_id = current_processor.id
+                        GROUP BY job.id)
+                        SELECT array[json_build_array('Average Tiles per Product', coalesce(round(avg(no_of_tiles),2), 0)), json_build_array('Average Duration per Tile', coalesce(to_char(avg(average_duration_per_tile) / 1000 * INTERVAL '1 second', 'HH24:MI:SS.MS'), '00:00:00.000'))]
+                        INTO temp_array2
+                        FROM step_statistics;
+
+                        temp_array := array_cat(temp_array, temp_array2);
+                        temp_json2 := array_to_json(temp_array);
+
+                        -- Last get the configuration parameters
+                        WITH config_params AS (
+                        SELECT json_build_array(
+                        substring(key from length('processor.' || current_processor.name || '.')+1) || CASE coalesce(config.site_id,0) WHEN 0 THEN '' ELSE '(' || site.short_name || ')' END,
+                        value) AS param
+                        FROM config
+                        LEFT OUTER JOIN site ON config.site_id = site.id
+                        WHERE config.key ILIKE 'processor.' || current_processor.name || '.%')
+                        SELECT array_to_json(array_agg(config_params.param)) INTO temp_json3
+                        FROM config_params;
+
+                        -- Update the return json with the computed data
+                        return_string := return_string || '"' || current_processor.name || '_statistics" :' || json_build_object('resources', temp_json, 'output', coalesce(temp_json2, '[]'), 'configuration', coalesce(temp_json3, '[]'));
+                        
+                    END LOOP;
+
+                    return_string := return_string || '}';
+                    RETURN return_string::json;
+
+                END;
+                $BODY$
+                  LANGUAGE plpgsql;
+
                 -- 
                 CREATE OR REPLACE FUNCTION sp_get_dashboard_server_resource_data()
                     RETURNS json AS $$
@@ -576,7 +687,7 @@ begin
                             WHERE EXISTS (SELECT * FROM season 
                                           WHERE season.site_id = P.site_id AND P.created_timestamp BETWEEN season.start_date AND season.end_date
                                             AND ($3 IS NULL OR season.id = $3))
-                                AND P.site_id = $1
+                                AND ($1 IS NULL OR P.site_id = $1)
                                 AND ($2 IS NULL OR P.product_type_id = ANY($2))
                                 AND ($4 IS NULL OR P.satellite_id = ANY($4))
                                 AND ($5 IS NULL OR P.created_timestamp >= to_timestamp(cast($5 as TEXT),'YYYY-MM-DD HH24:MI:SS'))
@@ -645,10 +756,10 @@ begin
 
                 -- L4C config 
                 INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (4, 3, 1, 'L4C Cfg','{cfg}', false) on conflict DO NOTHING;
-                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (5, 4, 1, 'Practice file','{csv}', false) on conflict DO NOTHING;
-                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (6, 5, 1, 'Practice file','{csv}', false) on conflict DO NOTHING;
-                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (7, 6, 1, 'Practice file','{csv}', false) on conflict DO NOTHING;
-                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (8, 7, 1, 'Practice file', '{csv}', false) on conflict DO NOTHING;
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (5, 4, 1, 'CC Practice file','{csv}', false) on conflict(id) DO UPDATE SET label = 'CC Practice file';
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (6, 5, 1, 'FL Practice file','{csv}', false) on conflict(id) DO UPDATE SET label = 'FL Practice file';
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (7, 6, 1, 'NFC Practice file','{csv}', false) on conflict(id) DO UPDATE SET label = 'NFC Practice file';
+                INSERT INTO auxdata_file (id, auxdata_descriptor_id, file_order, label, extensions, required) VALUES (8, 7, 1, 'NA Practice file', '{csv}', false) on conflict(id) DO UPDATE SET label = 'NA Practice file';
                 
 
             -- Declarations operations
@@ -681,6 +792,22 @@ begin
             execute _statement;
 
             _statement := $str$
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (1, 'l2a','L2A Atmospheric correction', true) on conflict(id) DO UPDATE SET name = 'l2a', description = 'L2A Atmospheric correction', is_raster = 'true';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (3, 'l3b','L3B product', true) on conflict(id) DO UPDATE SET name = 'l3b', description = 'L3B product', is_raster = 'true';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (7, 'l1c','L1C product', true) on conflict(id) DO UPDATE SET name = 'l1c', description = 'L1C product', is_raster = 'true';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (10, 's1_l2a_amp','Sentinel 1 L2 Amplitude product', true) on conflict(id) DO UPDATE SET name = 's1_l2a_amp', description = 'Sentinel 1 L2 Amplitude product', is_raster = 'true';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (11, 's1_l2a_cohe','Sentinel 1 L2 Coherence product', true) on conflict(id) DO UPDATE SET name = 's1_l2a_cohe', description = 'Sentinel 1 L2 Coherence product', is_raster = 'true';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (12, 's4c_l4a','Sen4CAP L4A Crop type product', false) on conflict(id) DO UPDATE SET name = 's4c_l4a', description = 'Sen4CAP L4A Crop type product', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (13, 's4c_l4b','Sen4CAP L4B Grassland Mowing product', false) on conflict(id) DO UPDATE SET name = 's4c_l4b', description = 'Sen4CAP L4B Grassland Mowing product', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (14, 'lpis', 'LPIS product', false) on conflict(id) DO UPDATE SET name = 'lpis', description = 'LPIS product', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (15, 's4c_l4c','Sen4CAP L4C Agricultural Practices product', false) on conflict(id) DO UPDATE SET name = 's4c_l4c', description = 'Sen4CAP L4C Agricultural Practices product', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (17, 's4c_mdb1','Sen4CAP Marker Database Basic StdDev/Mean', false) on conflict(id) DO UPDATE SET name = 's4c_mdb1', description = 'Sen4CAP Marker Database Basic StdDev/Mean', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (18, 's4c_mdb2','Sen4CAP Marker Database AMP VV/VH Ratio', false) on conflict(id) DO UPDATE SET name = 's4c_mdb2', description = 'Sen4CAP Marker Database AMP VV/VH Ratio', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (19, 's4c_mdb3','Sen4CAP Marker Database L4C M1-M5', false) on conflict(id) DO UPDATE SET name = 's4c_mdb3', description = 'Sen4CAP Marker Database L4C M1-M5', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (20, 's4c_mdb_l4a_opt_main','Sen4CAP L4A Optical Main Features', false) on conflict(id) DO UPDATE SET name = 's4c_mdb_l4a_opt_main', description = 'Sen4CAP L4A Optical Main Features', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (21, 's4c_mdb_l4a_opt_re','Sen4CAP L4A Optical Red-Edge Features', false) on conflict(id) DO UPDATE SET name = 's4c_mdb_l4a_opt_re', description = 'Sen4CAP L4A Optical Red-Edge Features', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (22, 's4c_mdb_l4a_sar_main','Sen4CAP L4A SAR Main Features', false) on conflict(id) DO UPDATE SET name = 's4c_mdb_l4a_sar_main', description = 'Sen4CAP L4A SAR Main Features', is_raster = 'false';
+                INSERT INTO product_type (id, name, description, is_raster) VALUES (23, 's4c_mdb_l4a_sar_temp','Sen4CAP L4A SAR Temporal Features', false) on conflict(id) DO UPDATE SET name = 's4c_mdb_l4a_sar_temp', description = 'Sen4CAP L4A SAR Temporal Features', is_raster = 'false';
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -726,7 +853,7 @@ begin
                 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-grassland-extract-products', NULL, '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/s4c-l4b-extract-products.py', '2021-01-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/s4c-l4b-extract-products.py';
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-extract-products.use_docker', NULL, '0', '2021-01-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '0';
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.docker_image', NULL, 'sen4cap/grassland_mowing', '2021-02-19 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4cap/grassland_mowing';
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.docker_image', NULL, 'sen4cap/grassland_mowing:3.0.0', '2021-02-19 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4cap/grassland_mowing:3.0.0';
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4c-grassland-mowing.use_docker', NULL, '1', '2021-01-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '1';
                 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.s4c-grassland-gen-input-shp',  NULL, '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/generate_grassland_mowing_input_shp.py', '2019-10-18 22:39:08.407059+02')on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = '/usr/share/sen2agri/S4C_L4B_GrasslandMowing/Bin/generate_grassland_mowing_input_shp.py';
@@ -1329,9 +1456,6 @@ begin
             $str$;
             raise notice '%', _statement;
             execute _statement;
-
-            -- FMask Upgrades
-            _statement := $str$
                 INSERT INTO config_category VALUES (8, 'Executor', 8, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
                 INSERT INTO config_category VALUES (12, 'Dashboard', 9, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
                 INSERT INTO config_category VALUES (13, 'Monitoring Agent', 10, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
@@ -1342,44 +1466,63 @@ begin
                 INSERT INTO config_category VALUES (22, 'S4C L4A Crop Type', 22, true) ON conflict(id) DO UPDATE SET name = 'S4C L4A Crop Type';
                 INSERT INTO config_category VALUES (23, 'S1 L2 Pre-processor', 23, true) on conflict DO nothing;
                 INSERT INTO config_category VALUES (26, 'S4C Markers Database 1', 26, true)  ON conflict(id) DO UPDATE SET name = 'S4C Markers Database 1';
-                INSERT INTO config_category VALUES (27, 'Validity Flags', 17, true) on conflict DO nothing;
-                INSERT INTO config_category VALUES (31, 'FMask', 18, true) on conflict DO nothing;
+            _statement := $str$
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+            
+            -- FMask Upgrades
+            _statement := $str$
+            
+                -- TODO - Not installed in version 3.0. To be inserted in a future version
 
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'sen4x/fmask_extractor:0.1', '2021-03-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4x/fmask_extractor:0.1';
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.image', NULL, 'sen4x/fmask:4.2', '2021-03-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4x/fmask:4.2';
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.cog-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.compress-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud-shadow', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.snow', NULL, '0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.enabled', NULL, '0', '2021-02-10 15:58:31.878939+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.max-retries', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.num-workers', NULL, '2', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.output-path', NULL, '/mnt/archive/fmask_def/{site}/fmask/', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.retry-interval', NULL, '1 minute', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold', NULL, '20', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold.l8', NULL, '17.5', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold.s2', NULL, '20', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.working-dir', NULL, '/mnt/archive/fmask_tmp/', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                DELETE FROM config_category WHERE id = 31;
+                DELETE FROM product_type WHERE id = 25;
+                DELETE FROM processor WHERE id = 15;
                 
-                INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 31, FALSE, 'Controls whether to run Fmask on optical products', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.extractor_image', 'FMask extractor docker image name', 'string', false, 31, FALSE, 'FMask extractor docker image name', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.gdal_image', 'gdal docker image for FMask', 'string', false, 31, FALSE, 'gdal docker image for FMask', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.image', 'FMask docker image', 'string', false, 31, FALSE, 'FMask docker image', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.cog-tiffs', 'Output rasters as COG', 'bool', false, 31, FALSE, 'Output rasters as COG', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.compress-tiffs', 'Compress output rasters', 'bool', false, 31, FALSE, 'Compress output rasters', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.cloud-shadow', 'Cloud shaddow dilation percent', 'int', false, 31, FALSE, 'Cloud shaddow dilation percent', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.cloud', 'Cloud dilation percent', 'int', false, 31, FALSE, 'Cloud dilation percent', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.snow', 'Snow dilation percent', 'int', false, 31, FALSE, 'Snow dilation percent', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.max-retries', 'Maximum number of retries for a product', 'int', false, 31, FALSE, 'Maximum number of retries for a product', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.num-workers', 'Number of workers', 'int', false, 31, FALSE, 'Number of workers', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.output-path', 'Output path', 'string', false, 31, FALSE, 'Output path', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.retry-interval', 'Retry interval', 'int', false, 31, FALSE, 'Retry interval', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.l8', 'Threshold for L8', 'int', false, 31, FALSE, 'Threshold for L8', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.s2', 'Threshold for S2', 'int', false, 31, FALSE, 'Threshold for S2', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold', 'Global threshold', 'int', false, 31, FALSE, 'Global threshold', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'string', false, 31, FALSE, 'Working directory', NULL) ON conflict(key) DO UPDATE SET type = 'string';
+                DELETE FROM config WHERE key IN ('processor.fmask.extractor_image','processor.fmask.gdal_image','processor.fmask.image', 'processor.fmask.optical.cog-tiffs', 'processor.fmask.optical.compress-tiffs', 'processor.fmask.optical.dilation.cloud', 'processor.fmask.optical.dilation.cloud-shadow', 'processor.fmask.optical.dilation.snow', 'processor.fmask.enabled', 'processor.fmask.optical.max-retries', 'processor.fmask.optical.num-workers', 'processor.fmask.optical.output-path', 'processor.fmask.optical.retry-interval', 'processor.fmask.optical.threshold', 'processor.fmask.optical.threshold.l8', 'processor.fmask.optical.threshold.s2', 'processor.fmask.working-dir');    
+            
+                DELETE FROM config_metadata WHERE key IN ('processor.fmask.extractor_image','processor.fmask.gdal_image','processor.fmask.image', 'processor.fmask.optical.cog-tiffs', 'processor.fmask.optical.compress-tiffs', 'processor.fmask.optical.dilation.cloud', 'processor.fmask.optical.dilation.cloud-shadow', 'processor.fmask.optical.dilation.snow', 'processor.fmask.enabled', 'processor.fmask.optical.max-retries', 'processor.fmask.optical.num-workers', 'processor.fmask.optical.output-path', 'processor.fmask.optical.retry-interval', 'processor.fmask.optical.threshold', 'processor.fmask.optical.threshold.l8', 'processor.fmask.optical.threshold.s2', 'processor.fmask.working-dir');
+
+                -- INSERT INTO product_type (id, name, description, is_raster) VALUES (25, 'fmask','Fmask mask product', true) on conflict DO nothing;
+
+                -- INSERT INTO config_category VALUES (31, 'FMask', 18, true) on conflict DO nothing;
+                
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'sen4x/fmask_extractor:0.1', '2021-03-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4x/fmask_extractor:0.1';
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.2.0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.image', NULL, 'sen4x/fmask:4.2', '2021-03-18 14:43:00.720811+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4x/fmask:4.2';
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.cog-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.compress-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.cloud-shadow', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.dilation.snow', NULL, '0', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.enabled', NULL, '0', '2021-02-10 15:58:31.878939+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.max-retries', NULL, '3', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.num-workers', NULL, '2', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.output-path', NULL, '/mnt/archive/fmask_def/{site}/fmask/', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.retry-interval', NULL, '1 minute', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold', NULL, '20', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold.l8', NULL, '17.5', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.threshold.s2', NULL, '20', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.working-dir', NULL, '/mnt/archive/fmask_tmp/', '2021-03-18 14:43:00.720811+00') on conflict DO nothing;
+                -- 
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 31, FALSE, 'Controls whether to run Fmask on optical products', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.extractor_image', 'FMask extractor docker image name', 'string', false, 31, FALSE, 'FMask extractor docker image name', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.gdal_image', 'gdal docker image for FMask', 'string', false, 31, FALSE, 'gdal docker image for FMask', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.image', 'FMask docker image', 'string', false, 31, FALSE, 'FMask docker image', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.cog-tiffs', 'Output rasters as COG', 'bool', false, 31, FALSE, 'Output rasters as COG', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.compress-tiffs', 'Compress output rasters', 'bool', false, 31, FALSE, 'Compress output rasters', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.cloud-shadow', 'Cloud shaddow dilation percent', 'int', false, 31, FALSE, 'Cloud shaddow dilation percent', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.cloud', 'Cloud dilation percent', 'int', false, 31, FALSE, 'Cloud dilation percent', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.snow', 'Snow dilation percent', 'int', false, 31, FALSE, 'Snow dilation percent', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.max-retries', 'Maximum number of retries for a product', 'int', false, 31, FALSE, 'Maximum number of retries for a product', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.num-workers', 'Number of workers', 'int', false, 31, FALSE, 'Number of workers', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.output-path', 'Output path', 'string', false, 31, FALSE, 'Output path', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.retry-interval', 'Retry interval', 'int', false, 31, FALSE, 'Retry interval', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.l8', 'Threshold for L8', 'int', false, 31, FALSE, 'Threshold for L8', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.s2', 'Threshold for S2', 'int', false, 31, FALSE, 'Threshold for S2', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold', 'Global threshold', 'int', false, 31, FALSE, 'Global threshold', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.fmask.working-dir', 'Working directory', 'string', false, 31, FALSE, 'Working directory', NULL) ON conflict(key) DO UPDATE SET type = 'string';
                 
             $str$;
             raise notice '%', _statement;
@@ -1992,12 +2135,352 @@ begin
             execute _statement;
 
             _statement := $str$
+                -- FUNCTION: reports.sp_get_s1_statistics(smallint)
+                DROP FUNCTION IF EXISTS reports.sp_get_s1_statistics(smallint);
+
+                CREATE OR REPLACE FUNCTION reports.sp_get_s1_statistics(
+                    site_id smallint)
+                    RETURNS TABLE(site smallint, downloader_history_id integer, orbit_id integer, acquisition_date date, acquisition character varying, acquisition_status character varying, intersection_date date, intersected_product character varying, intersected_status smallint, intersection double precision, polarisation character varying, l2_product character varying, l2_coverage double precision, status_reason character varying) 
+                    LANGUAGE 'plpgsql'
+                    COST 100
+                    STABLE PARALLEL UNSAFE
+                    ROWS 1000
+
+                AS $BODY$
+                BEGIN
+                    RETURN QUERY
+                    WITH d AS (select dh.*,ds.status_description from public.downloader_history dh join public.downloader_status ds on ds.id = dh.status_id)
+                --procesarile
+                select 	$1 as site,
+                    d.id,
+                    d.orbit_id as orbit, 
+                    to_date(substr(split_part(d.product_name, '_', 6), 1, 8),'YYYYMMDD') as acquisition_date, 
+                    d.product_name as acquisition,
+                    d.status_description as acquisition_status,
+                    to_date(substr(split_part(di.product_name, '_', 6), 1, 8),'YYYYMMDD') as intersection_date,
+                    di.product_name as intersected_product,
+                    cast(i.status_id as smallint) as intersected_status,
+                    st_area(st_intersection(di.footprint, d.footprint)) / st_area(d.footprint) * 100 as intersection,
+                    split_part(p.name, '_', 6)::character varying as polarisation,
+                    p.name as l2_product,
+                    st_area(st_intersection(d.footprint, p.geog))/st_area(d.footprint) * 100 as l2_coverage,
+                    d.status_reason
+                    from d
+                    join public.l1_tile_history i
+                         on d.id=i.downloader_history_id
+                    join public.downloader_history di 
+                         on di.product_name =i.tile_id
+                    join public.product p on p.downloader_history_id = d.id
+                    WHERE NOT EXISTS(SELECT sr.* FROM reports.s1_report sr 
+                                         WHERE sr.downloader_history_id = d.id  
+                                              AND sr.intersected_product = di.product_name 
+                                              AND sr.site_id = di.site_id
+                                              AND sr.l2_product = p.name)
+                        and d.site_id = $1 
+                        AND d.satellite_id = 3 
+                        and di.id is not null
+                        and p.name like concat('%', substr(split_part(di.product_name, '_', 6), 1, 15),'%')
+                        
+                union
+                select 	$1 as site,
+                    d.id,
+                    d.orbit_id as orbit,
+                    to_date(substr(split_part(d.product_name, '_', 6), 1, 8),'YYYYMMDD') as acquisition_date, 
+                    d.product_name as acquisition,
+                    d.status_description as acquisition_status,
+                    to_date(substr(split_part(i.product_name, '_', 6), 1, 8),'YYYYMMDD') as intersection_date,
+                    i.product_name as intersected_product,
+                    i.status_id as intersected_status,
+                    case when i.footprint is null then null else st_area(st_intersection(i.footprint, d.footprint)) / st_area(d.footprint) * 100 end as intersection,
+                    null as polarisation,
+                    null as l2_product,
+                    null as l2_coverage,
+                    null as status_reason
+                    from  d
+                        left outer join public.downloader_history i 
+                            ON i.site_id = d.site_id 
+                                AND i.orbit_id = d.orbit_id 
+                                AND i.satellite_id = d.satellite_id 
+                                and st_intersects(d.footprint, i.footprint) 
+                                AND DATE_PART('day', d.product_date - i.product_date) BETWEEN 5 AND 7 
+                                AND st_area(st_intersection(i.footprint, d.footprint)) / st_area(d.footprint) > 0.05
+                    where NOT EXISTS(SELECT sr.* FROM reports.s1_report sr WHERE sr.downloader_history_id = d.id) 
+                        AND d.site_id = $1 
+                        AND d.satellite_id = 3 
+                        --and d.status_id != 5
+                        AND d.status_id NOT IN (5,6,7,8) -- produse care nu au intrari in l1_tile_history
+                --5	"processed"
+                --6	"processing_failed"
+                --7	"processing"
+                --8	"processing_cld_failed"
+
+                union
+
+                    --produse cu status_id=5(processed) in tabela downloader_history, 
+                    --care au intersectii in tabela l1_tile_history cu status_id=3(done), 
+                    --dar care nu se regasesc in tabela product. 
+                    --fals procesate
+                select 	$1 as site,
+                    d.id,
+                    d.orbit_id as orbit,
+                    to_date(substr(split_part(d.product_name, '_', 6), 1, 8),'YYYYMMDD') as acquisition_date, 
+                    d.product_name as acquisition,
+                    d.status_description as acquisition_status,
+                    to_date(substr(split_part(di.product_name, '_', 6), 1, 8),'YYYYMMDD') as intersection_date,
+                    di.product_name as intersected_product,
+                    cast(i.status_id as smallint) as intersected_status,
+                    case when di.footprint is null then null else st_area(st_intersection(di.footprint, d.footprint)) / st_area(d.footprint) * 100 end as intersection,
+                    null as polarisation,
+                    null as l2_product,
+                    null as l2_coverage,
+                    null as status_reason
+                    from  d
+                         join public.l1_tile_history i -- au intersectii
+                            on d.id=i.downloader_history_id
+                         join public.downloader_history di 
+                            on di.product_name =i.tile_id
+                        left outer join product p
+                            on d.id=p.downloader_history_id 
+                    where NOT EXISTS(SELECT sr.* FROM reports.s1_report sr 
+                                     WHERE sr.downloader_history_id = d.id)
+                        and d.site_id =$1
+                        AND d.satellite_id = 3 
+                        and d.status_id = 5 --au status_id=5(processed)
+                        and p.id is null-- nu se gasesc in tabela product
+                        
+                union
+
+                    --produse cu status_id=5(processed) in tabela downloader_history
+                    --dar care nu au intersectii in tabela l1_tile_history 
+                    --fals procesate
+                select 	$1 as site,
+                    d.id,
+                    d.orbit_id as orbit,
+                    to_date(substr(split_part(d.product_name, '_', 6), 1, 8),'YYYYMMDD') as acquisition_date, 
+                    d.product_name as acquisition,
+                    d.status_description as acquisition_status,
+                    null as intersection_date,
+                    null as intersected_product,
+                    null as intersected_status,
+                    null as intersection,
+                    null as polarisation,
+                    null as l2_product,
+                    null as l2_coverage,
+                    null as status_reason
+                    from  d
+                         left outer join public.l1_tile_history i
+                            on d.id=i.downloader_history_id
+                    where NOT EXISTS(SELECT sr.* FROM reports.s1_report sr 
+                                     WHERE sr.downloader_history_id = d.id)
+                        and d.site_id =$1
+                        AND d.satellite_id = 3 
+                        and d.status_id = 5 --au status_id=5(processed)
+                        and i.downloader_history_id is null; --dar nu au intersectii
+                END
+                $BODY$;
+
+                ALTER FUNCTION reports.sp_get_s1_statistics(smallint)
+                    OWNER TO postgres;            
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+            
+            _statement := $str$            
+                -- FUNCTION: reports.sp_reports_s1_statistics(smallint, integer, date, date)
+                
+                DROP FUNCTION IF EXISTS reports.sp_reports_s1_statistics(smallint, integer, date, date);
+                CREATE OR REPLACE FUNCTION reports.sp_reports_s1_statistics(
+                    siteid smallint DEFAULT NULL::smallint,
+                    orbitid integer DEFAULT NULL::integer,
+                    fromdate date DEFAULT NULL::date,
+                    todate date DEFAULT NULL::date)
+                    RETURNS TABLE(calendar_date date, acquisitions integer, failed_to_download integer, pairs integer, processed integer, not_yet_processed integer, falsely_processed integer, no_intersections integer, errors integer, partially_processed integer) 
+                    LANGUAGE 'plpgsql'
+                    COST 100
+                    STABLE PARALLEL UNSAFE
+                    ROWS 1000
+
+                AS $BODY$
+                DECLARE startDate date;
+                DECLARE endDate date;
+                DECLARE temporalOffset smallint;
+                DECLARE minIntersection decimal;
+                                BEGIN
+                                    IF $3 IS NULL THEN
+                                        SELECT MIN(acquisition_date) INTO startDate FROM reports.s1_report;
+                                    ELSE
+                                        SELECT fromDate INTO startDate;
+                                    END IF;
+                                    IF $4 IS NULL THEN
+                                        SELECT MAX(acquisition_date) INTO endDate FROM reports.s1_report;
+                                    ELSE
+                                        SELECT toDate INTO endDate;
+                                    END IF;
+                                    
+                                    SELECT cast(value as  smallint) INTO temporalOffset FROM config where key='processor.l2s1.temporal.offset';
+                                    
+                                    SELECT cast(value as  decimal) INTO minIntersection FROM config where key='processor.l2s1.min.intersection';
+                                
+                                    RETURN QUERY
+                                    WITH 	calendar AS 
+                                            (SELECT date_trunc('day', dd)::date AS cdate 
+                                                FROM generate_series(startDate::timestamp, endDate::timestamp, '1 day'::interval) dd),
+                                       ac AS 
+                                            (SELECT acquisition_date, COUNT(DISTINCT downloader_history_id) AS acquisitions 
+                                                FROM reports.s1_report 
+                                                WHERE ($1 IS NULL OR site_id = $1) AND ($2 IS NULL OR orbit_id = $2) AND acquisition_date BETWEEN startDate AND endDate
+                                                GROUP BY acquisition_date 
+                                                ORDER BY acquisition_date),
+                                        p AS
+                                            (  SELECT to_date(substr(split_part(i.product_name, '_', 6), 1, 8),'YYYYMMDD') as acquisition_date,COUNT(*) AS pairs
+                                                    FROM public.downloader_history dh
+                                                        JOIN public.downloader_history i
+                                                            ON dh.site_id = i.site_id 
+                                                                AND dh.satellite_id = i.satellite_id 
+                                                                AND dh.orbit_id = i.orbit_id
+                                                                and  dh.satellite_id=3 
+                                                                AND ($1 IS NULL OR dh.site_id = $1) AND ($2 IS NULL OR dh.orbit_id = $2) 
+                                                    WHERE ST_INTERSECTS(dh.footprint, i.footprint)
+                                                        AND DATE_PART('day', i.product_date - dh.product_date) BETWEEN (temporalOffset -1) AND (temporalOffset + 1)
+                                                        AND st_area(st_intersection(dh.footprint, i.footprint)) / st_area(dh.footprint) > minIntersection
+                                                        AND to_date(substr(split_part(i.product_name, '_', 6), 1, 8),'YYYYMMDD') BETWEEN startDate AND endDate
+                                                GROUP BY to_date(substr(split_part(i.product_name, '_', 6), 1, 8),'YYYYMMDD')
+                                                ORDER BY to_date(substr(split_part(i.product_name, '_', 6), 1, 8),'YYYYMMDD')
+                                            ),
+                                        --produse procesate: au status processed si toate procesarile pereche au status done
+                                         productsWithStatusProcessed as(select downloader_history_id,count(distinct intersected_product) as nrIntersections 
+                                                                            from reports.s1_report 
+                                                                            WHERE status_description = 'processed' AND intersected_product IS not NULL 
+                                                                                AND EXISTS ( SELECT downloader_history_id from product where product.downloader_history_id=reports.s1_report.downloader_history_id)
+                                                                                AND ($1 IS NULL OR site_id = $1) AND ($2 IS NULL OR orbit_id = $2) AND acquisition_date BETWEEN startDate AND endDate
+                                                                            group by downloader_history_id),
+                                         productsWithStatusProcessed_IntersectionsWithStatusDone as
+                                            (SELECT downloader_history_id FROM  productsWithStatusProcessed 
+                                                    where productsWithStatusProcessed.nrIntersections = (select count(*) from l1_tile_history 
+                                                                            where downloader_history_id=productsWithStatusProcessed.downloader_history_id
+                                                                            and status_id=3)),
+                                         proc AS 
+                                             (SELECT acquisition_date, COUNT(distinct reports.s1_report.downloader_history_id) AS cnt 
+                                                FROM reports.s1_report join  productsWithStatusProcessed_IntersectionsWithStatusDone
+                                                    on reports.s1_report.downloader_history_id=productsWithStatusProcessed_IntersectionsWithStatusDone.downloader_history_id
+                                                GROUP BY acquisition_date 
+                                                ORDER BY acquisition_date   
+                                             ),
+                                         --produse partial procesate= produse ptr care exista procesari failed sau processing	
+                                         productsWithStatusProcessed_FailledOrProcessing as
+                                            (SELECT downloader_history_id FROM  productsWithStatusProcessed 
+                                                    where exists (select * from l1_tile_history 
+                                                                            where downloader_history_id=productsWithStatusProcessed.downloader_history_id
+                                                                            and status_id in (1,2))
+                                            ),
+                                         partially_proc AS 
+                                             (SELECT acquisition_date, COUNT(distinct reports.s1_report.downloader_history_id) AS cnt 
+                                                FROM reports.s1_report join productsWithStatusProcessed_FailledOrProcessing
+                                                    on reports.s1_report.downloader_history_id=productsWithStatusProcessed_FailledOrProcessing.downloader_history_id
+                                                GROUP BY acquisition_date 
+                                                ORDER BY acquisition_date   
+                                             ),
+                                             
+                                        ndld AS 
+                                            (SELECT acquisition_date, count(downloader_history_id) AS cnt 
+                                                FROM reports.s1_report 
+                                                WHERE status_description IN ('failed','aborted') AND intersected_product IS NULL AND
+                                                    ($1 IS NULL OR site_id = $1) AND ($2 IS NULL OR orbit_id = $2) AND acquisition_date BETWEEN startDate AND endDate
+                                                GROUP BY acquisition_date 
+                                                ORDER BY acquisition_date),
+                                             
+                                        dld AS
+                                            (SELECT r.acquisition_date, COUNT(r.downloader_history_id) AS cnt
+                                                FROM reports.s1_report r
+                                                WHERE r.status_description IN ('downloaded', 'processing') AND r.intersected_product IS NOT NULL AND
+                                                    ($1 IS NULL OR r.site_id = $1) AND ($2 IS NULL OR r.orbit_id = $2) AND r.acquisition_date BETWEEN startDate AND endDate
+                                                     AND NOT EXISTS (SELECT s.downloader_history_id FROM reports.s1_report s
+                                                                    WHERE s.downloader_history_id = r.downloader_history_id AND r.l2_product LIKE '%COHE%')
+                                                GROUP BY acquisition_date
+                                                ORDER BY acquisition_date),
+                                             
+                                        fproc AS 
+                                            (SELECT acquisition_date, COUNT(distinct downloader_history_id) AS cnt 
+                                                FROM reports.s1_report 
+                                                WHERE status_description = 'processed'
+                                                    AND (intersected_product IS NULL OR NOT EXISTS( SELECT downloader_history_id from product where product.downloader_history_id=reports.s1_report.downloader_history_id))
+                                                    AND ($1 IS NULL OR site_id = $1) AND ($2 IS NULL OR orbit_id = $2) AND acquisition_date BETWEEN startDate AND endDate
+                                                GROUP BY acquisition_date 
+                                                ORDER BY acquisition_date),
+                                         downh AS
+                                            (  SELECT to_date(substr(split_part(dh.product_name, '_', 6), 1, 8),'YYYYMMDD') as acquisition_date,*
+                                                    FROM public.downloader_history dh
+                                                        where ($1 IS NULL OR dh.site_id = $1) AND ($2 IS NULL OR dh.orbit_id = $2)	AND dh.satellite_id=3 
+                                            ),		
+                                        ni AS
+                                            (  SELECT acquisition_date,COUNT(*) AS cnt
+                                                    FROM downh dh
+                                                        LEFT OUTER JOIN public.downloader_history i
+                                                            ON dh.site_id = i.site_id 
+                                                                AND dh.satellite_id = i.satellite_id 
+                                                                AND dh.orbit_id = i.orbit_id
+                                                                AND ST_INTERSECTS(dh.footprint, i.footprint)
+                                                                AND DATE_PART('day', i.product_date - dh.product_date) BETWEEN (temporalOffset - 1) AND (temporalOffset + 1)
+                                                                AND st_area(st_intersection(dh.footprint, i.footprint)) / st_area(dh.footprint) > minIntersection
+                                                                AND acquisition_date BETWEEN startDate AND endDate
+                                                    where i.id is NULL
+                                                GROUP BY acquisition_date
+                                                ORDER BY acquisition_date
+                                            ),	
+                                             
+                                        --errors: produse cu status processing_failed si cu toate procesarile pereche failed
+                                         productsWithStatusFailed as(select downloader_history_id,count(distinct intersected_product) as nrIntersections 
+                                                                         from reports.s1_report 
+                                                                         where status_description='processing_failed'
+                                                                             AND ($1 IS NULL OR site_id = $1) AND ($2 IS NULL OR orbit_id = $2) AND acquisition_date BETWEEN startDate AND endDate
+                                                                         group by downloader_history_id),
+                                        productsWithStatusFailed_IntersectionsWithStatusFailed AS (select * 
+                                            from productsWithStatusFailed 
+                                                    where productsWithStatusFailed.nrIntersections = (select count(*) from l1_tile_history 
+                                                                            where downloader_history_id=productsWithStatusFailed.downloader_history_id
+                                                                            and status_id=2)),							 
+                                        e AS 
+                                            (SELECT acquisition_date, COUNT(distinct reports.s1_report.downloader_history_id) AS cnt 
+                                                FROM reports.s1_report join  productsWithStatusFailed_IntersectionsWithStatusFailed
+                                                    on reports.s1_report.downloader_history_id=productsWithStatusFailed_IntersectionsWithStatusFailed.downloader_history_id
+                                                GROUP BY acquisition_date 
+                                                ORDER BY acquisition_date)
+                                    SELECT 	c.cdate, 
+                                        COALESCE(ac.acquisitions, 0)::integer,
+                                        COALESCE(ndld.cnt, 0)::integer,
+                                        COALESCE(p.pairs, 0)::integer, 
+                                        COALESCE(proc.cnt, 0)::integer, 
+                                        COALESCE(dld.cnt, 0)::integer,
+                                        COALESCE(fproc.cnt, 0)::integer,
+                                        COALESCE(ni.cnt, 0)::integer,
+                                        COALESCE(e.cnt, 0)::integer,
+                                        COALESCE(partially_proc.cnt, 0)::integer
+                                    FROM calendar c
+                                        LEFT JOIN ac ON ac.acquisition_date = c.cdate
+                                        LEFT JOIN ndld ON ndld.acquisition_date = c.cdate
+                                        LEFT JOIN p ON p.acquisition_date = c.cdate
+                                        LEFT JOIN proc ON proc.acquisition_date = c.cdate
+                                        LEFT JOIN dld ON dld.acquisition_date = c.cdate
+                                        LEFT JOIN fproc ON fproc.acquisition_date = c.cdate
+                                        LEFT JOIN ni ON ni.acquisition_date = c.cdate
+                                        LEFT JOIN e ON e.acquisition_date = c.cdate
+                                        LEFT JOIN partially_proc ON partially_proc.acquisition_date = c.cdate;
+                                END
+                $BODY$;
+
+                ALTER FUNCTION reports.sp_reports_s1_statistics(smallint, integer, date, date)
+                    OWNER TO admin;            
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+            
+            _statement := $str$
                 DELETE FROM config WHERE key = 'processor.s4c_l4c.ndvi_data_extr_dir';
                 DELETE FROM config WHERE key = 'processor.s4c_l4c.amp_data_extr_dir';
                 DELETE FROM config WHERE key = 'processor.s4c_l4c.cohe_data_extr_dir';
-                DELETE FROM config WHERE key = 'processor.s4c_l4c.filter_ids_path';
                 DELETE FROM config WHERE key = 'processor.s4c_l4b.gen_input_shp_path';
             
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.filter_ids_path', NULL, '/mnt/archive/agric_practices_files/{site}/{year}/ts_input_tables/FilterIds/Sen4CAP_L4C_FilterIds.csv', '2019-10-18 15:27:41.861613+02') on conflict do nothing;
             
                 INSERT INTO config_metadata VALUES ('processor.l2a.s2.implementation', 'L2A processor to use for Sentinel-2 products (`maja` or `sen2cor`)', 'string', false, 2, false, 'L2A processor to use for Sentinel-2 products (`maja` or `sen2cor`)', '{ "allowed_values": [{ "value": "maja", "display": "MAJA" }, { "value": "sen2cor", "display": "Sen2Cor" }] }') ON conflict(key) DO UPDATE SET label = 'L2A processor to use for Sentinel-2 products (`maja` or `sen2cor`)', values = '{ "allowed_values": [{ "value": "maja", "display": "MAJA" }, { "value": "sen2cor", "display": "Sen2Cor" }] }';
                 
@@ -2058,7 +2541,42 @@ begin
             execute _statement;
 
             _statement := $str$
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l2a_msk', NULL, '/mnt/archive/orchestrator_temp/l2a_msk/{job_id}/{task_id}-{module}', '2021-05-18 17:54:17.288095+03') on conflict DO nothing;
+                UPDATE product_type SET is_raster = false WHERE name = 'lpis';
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                DELETE FROM product_type WHERE name = 's4c_l3c';
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+
+            _statement := $str$
+                DELETE FROM config WHERE key = 'general.scratch-path.l2a_msk';
+                DELETE FROM config WHERE key = 'processor.l2a_msk.enabled';
+                DELETE FROM config_metadata WHERE key = 'general.scratch-path.l2a_msk';
+                DELETE FROM config_metadata WHERE key = 'processor.l2a_msk.enabled';
+                DELETE FROM config_category WHERE id = 27;
+                DELETE FROM processor WHERE short_name = 'l2a_msk';
+                DELETE FROM product_type WHERE name = 'l2a_msk';
+                
+                -- TODO - Not installed in version 3.0. To be inserted in a future version
+                -- INSERT INTO processor (id, name, short_name, label) VALUES (15, 'Validity flags','l2a_msk', 'Validity flags') on conflict DO nothing;
+                -- INSERT INTO product_type (id, name, description, is_raster) VALUES (26, 'l2a_msk','L2A product with validity mask', true) on conflict DO nothing;
+                -- INSERT INTO config_category VALUES (27, 'Validity Flags', 17, true) on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path.l2a_msk', NULL, '/mnt/archive/orchestrator_temp/l2a_msk/{job_id}/{task_id}-{module}', '2021-05-18 17:54:17.288095+03') on conflict DO nothing;
+                -- INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2a_msk.enabled', NULL, 'true', '2021-05-18 17:54:17.288095+03') on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('general.scratch-path.l2a_msk', 'Path for Masked L2A temporary files', 'string', false, 27, FALSE, 'Path for Masked L2A temporary files', NULL) on conflict DO nothing;
+                -- INSERT INTO config_metadata VALUES ('processor.l2a_msk.enabled', 'Enable or disable the validity flags', 'bool', false, 27, FALSE, 'Enable or disable the validity flags', NULL) on conflict DO nothing;
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+            
+            _statement := $str$
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.docker_image', NULL, 'sen4cap/processors:3.0.0', '2021-01-14 12:11:21.800537+00') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'sen4cap/processors:3.0.0';
+                
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.parcels_product.parcel_id_col_name', NULL, 'NewID', '2019-10-11 16:15:00.0+02') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.parcels_product.parcels_csv_file_name_pattern', NULL, 'decl_.*_\d{4}.csv', '2019-10-11 16:15:00.0+02') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.parcels_product.parcels_optical_file_name_pattern', NULL, '.*_buf_5m.shp', '2019-10-11 16:15:00.0+02') on conflict DO nothing;
@@ -2092,6 +2610,10 @@ begin
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.input_l3b', NULL, 'N/A', '2019-02-19 11:09:43.978921+02') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4b.input_l3b', NULL, 'N/A', '2019-02-19 11:09:43.978921+02') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.input_l3b', NULL, 'N/A', '2019-02-19 11:09:43.978921+02') on conflict DO nothing;
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_l4c.nrt_data_extr_enabled', NULL, 'false', '2020-12-16 17:31:06.01191+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'false';
+                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.mdb-csv-to-ipc-export', NULL, 'csv_to_ipc.py', '2020-12-16 17:31:06.01191+02') on conflict (key, COALESCE(site_id, -1)) DO UPDATE SET value = 'csv_to_ipc.py';
                 
             $str$;
             raise notice '%', _statement;
@@ -2141,9 +2663,17 @@ begin
                 DELETE from config_metadata where key = 'processor.s4c_l4b.input_ndvi';
                 DELETE from config_metadata where key = 'processor.s4c_l4c.input_ndvi';
                
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3}') on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
+                
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_amp', 'The list of AMP products', 'select', FALSE, 19, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}'; 
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_amp', 'The list of AMP products', 'select', FALSE, 20, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}';
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_amp', 'The list of AMP products', 'select', FALSE, 26, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}';
+                
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_cohe', 'The list of COHE products', 'select', FALSE, 19, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_cohe', 'The list of COHE products', 'select', FALSE, 20, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}';
+                INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_cohe', 'The list of COHE products', 'select', FALSE, 26, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}';
 
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.cfg_dir', 'Config files directory', 'string', FALSE, 19, FALSE, 'Config files directory', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.cfg_upload_dir', 'Site upload files directory', 'string', FALSE, 19, FALSE, 'Site upload files directory', NULL) on conflict DO nothing;
@@ -2167,7 +2697,7 @@ begin
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.nrt_data_extr_enabled', 'NRT data extration enabled', 'int', FALSE, 20, FALSE, 'NRT data extration enabled', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.practices', 'Configured practices list', 'string', FALSE, 20, FALSE, 'Configured practices list', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.sub_steps', 'Substeps', 'string', FALSE, 20, FALSE, 'Substeps', NULL) on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable tillage monitoring', 'int', FALSE, 20, FALSE, 'Enable tillage monitoring', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable tillage monitoring', 'int', FALSE, 20, TRUE, 'Enable tillage monitoring', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tsa_min_acqs_no', 'TSA min number of acquisitions', 'int', FALSE, 20, FALSE, 'TSA min number of acquisitions', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_dir', 'TSA input tables directory', 'string', FALSE, 20, FALSE, 'TSA input tables directory', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.ts_input_tables_upload_root_dir', 'Input tables upload root directory', 'string', FALSE, 20, FALSE, 'Input tables upload root directory', NULL) on conflict DO nothing;
@@ -2189,8 +2719,6 @@ begin
                 INSERT INTO config_metadata VALUES ('general.orchestrator.s4c-grassland-mowing.use_docker', 'S4C L4B use docker', 'int', false, 1, FALSE, 'S4C L4B use docker', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('general.orchestrator.s4c-l4a-extract-parcels.use_docker', 'S4C L4A extract parcels use docker', 'int', false, 1, FALSE, 'S4C L4A extract parcels use docker', NULL) on conflict DO nothing;
 
-                INSERT INTO config_metadata VALUES ('general.scratch-path.l2a_msk', 'Path for Masked L2A temporary files', 'string', false, 27, FALSE, 'Path for Masked L2A temporary files', NULL) on conflict DO nothing;
-                
                 INSERT INTO config_metadata VALUES ('site.path', 'Site path', 'file', false, 17, FALSE, 'Site path', NULL) on conflict DO nothing;
                 INSERT INTO config_metadata VALUES ('site.url', 'Site url', 'string', false, 17, FALSE, 'Site url', NULL) on conflict DO nothing;
 
@@ -2269,23 +2797,47 @@ begin
             execute _statement;
             
             _statement := $str$
+                INSERT INTO config_category VALUES (32, 'T-Rex Updater', 32, false) ON conflict DO NOTHING;
                 
                 INSERT INTO processor (id, name, short_name, label) VALUES (21, 'T-Rex Updater', 't_rex_updater', 'T-Rex Updater') ON conflict DO NOTHING;
                 
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.trex-updater', NULL, 't-rex-genconfig.py', '2021-10-11 22:39:08.407059+02') on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('executor.module.path.trex-updater', 'Script for T-Rex file generation', 'string', true, 8, FALSE, 'Script for T-Rex file generation', NULL);
-                
-                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.docker_image', NULL, 'sen4cap/data-preparation:0.1', '2021-02-19 14:43:00.720811+00');
-
-                
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.trex.slurm_qos', NULL, 'qostrex', '2021-10-11 17:44:38.29255+03') on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.use_docker', NULL, '1', '2021-02-19 14:43:00.720811+00') on conflict DO nothing; 
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.docker_image', NULL, 'sen4cap/data-preparation:0.1', '2021-02-19 14:43:00.720811+00') on conflict DO nothing; 
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.docker_add_mounts', NULL, '/var/run/docker.sock:/var/run/docker.sock,/var/lib/t-rex:/var/lib/t-rex', '2021-02-19 14:43:00.720811+00') on conflict DO nothing;
                 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.trex.t-rex-container', NULL, 'docker_t-rex_1', '2021-10-11 11:09:43.978921+02') on conflict DO nothing;
-                INSERT INTO config_metadata VALUES ('processor.trex.t-rex-container', 'T-Rex container name', 'string', false, 15, FALSE, 'T-Rex container name', NULL) on conflict DO nothing;
+                INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.trex.t-rex-output-file', NULL, '/var/lib/t-rex/t-rex.toml', '2021-10-11 11:09:43.978921+02') on conflict DO nothing;
+                
+                INSERT INTO config_metadata VALUES ('executor.module.path.trex-updater', 'T-Rex script', 'string', false, 32, FALSE, 'T-Rex script', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('executor.processor.trex.slurm_qos', 'Slurm QOS for TRex', 'string', true, 8, FALSE, 'Slurm QOS for TRex', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.trex-updater.use_docker', 'T-Rex use docker', 'int', false, 32, FALSE, 'T-Rex use docker', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.trex-updater.docker_image', 'T-Rex docker image', 'string', false, 32, FALSE, 'T-Rex docker image', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('general.orchestrator.trex-updater.docker_add_mounts', 'T-Rex container additional mounts', 'string', false, 32, FALSE, 'T-Rex container additional mounts', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.trex.t-rex-container', 'T-Rex container name', 'string', false, 32, FALSE, 'T-Rex container name', NULL) on conflict DO nothing;
+                INSERT INTO config_metadata VALUES ('processor.trex.t-rex-output-file', 'T-Rex output file', 'string', false, 32, FALSE, 'T-Rex output file', NULL) on conflict DO nothing;
                 
             $str$;
             raise notice '%', _statement;
             execute _statement;
 
-           _statement := 'update meta set version = ''3.0'';';
+            -- Update site_auxdata for existing sites
+            _statement := $str$
+                WITH seasons AS (
+                        SELECT 
+                            season.id AS season_id,
+                            season.site_id AS site_id,
+                            DATE_PART('year', season.start_date)::integer as season_year
+                        FROM season)
+                INSERT INTO site_auxdata (site_id, auxdata_descriptor_id, year, season_id, auxdata_file_id, file_name, status_id, parameters, output)
+                    SELECT f.site_id, f.auxdata_descriptor_id, f.year, f.season_id, f.auxdata_file_id, f.file_name, 3, f.parameters, null -- initially the status is 3=NeedsInput
+                        FROM seasons s, lateral sp_get_auxdata_descriptor_instances(s.site_id, s.season_id::smallint, s.season_year::integer) f ;   
+            $str$;
+            raise notice '%', _statement;
+            execute _statement;
+        
+        
+           _statement := 'update meta set version = ''3.0.0'';';
             raise notice '%', _statement;
             execute _statement;
         end if;

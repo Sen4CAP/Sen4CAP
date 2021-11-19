@@ -27,7 +27,7 @@ BEGIN
 			WHERE EXISTS (SELECT * FROM season 
 						  WHERE season.site_id = P.site_id AND P.created_timestamp BETWEEN season.start_date AND season.end_date
 						  	AND ($3 IS NULL OR season.id = $3))
-				AND P.site_id = $1
+				AND ($1 IS NULL OR P.site_id = $1)
 				AND ($2 IS NULL OR P.product_type_id = ANY($2))
 				AND ($4 IS NULL OR P.satellite_id = ANY($4))
 				AND ($5 IS NULL OR P.created_timestamp >= to_timestamp(cast($5 as TEXT),'YYYY-MM-DD HH24:MI:SS'))

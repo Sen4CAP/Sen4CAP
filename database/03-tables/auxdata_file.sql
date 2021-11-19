@@ -7,8 +7,5 @@ CREATE TABLE IF NOT EXISTS auxdata_file (
     extensions character varying[],
     required boolean DEFAULT false,
     CONSTRAINT auxdata_file_pkey PRIMARY KEY (id),
-    CONSTRAINT u_auxdata_descriptor_file UNIQUE (auxdata_descriptor_id, file_order),
-    CONSTRAINT fk_auxdata_descriptor_file FOREIGN KEY (auxdata_descriptor_id)
-        REFERENCES auxdata_descriptor (id) MATCH SIMPLE
-        ON UPDATE NO ACTION ON DELETE NO ACTION    
+    CONSTRAINT u_auxdata_descriptor_file UNIQUE (auxdata_descriptor_id, file_order)
 );
