@@ -6,7 +6,7 @@
     _repeat_type smallint,
     _repeat_after_days smallint,
     _repeat_on_month_day smallint,
-    _first_run_time character varying,
+    _first_run_time timestamptz,
     _retry_seconds  integer,
     _priority smallint,
     _processor_params json)
@@ -51,10 +51,10 @@ BEGIN
 	VALUES (
 		_return_id,
 		_first_run_time,
-		'0',
-		'0',
-		'0',
-		'0'
+		null,
+		null,
+		null,
+		null
 	);
 
 	RETURN _return_id;

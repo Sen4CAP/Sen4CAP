@@ -15,7 +15,7 @@
 
   priority smallint,
 
-  first_run_time character varying,
+  first_run_time timestamptz not null,
 
   CONSTRAINT scheduled_task_pkey PRIMARY KEY (id)
 );
@@ -25,13 +25,13 @@ CREATE TABLE scheduled_task_status
   id smallserial NOT NULL,
   task_id smallint NOT NULL,
 
-  next_schedule character varying,
+  next_schedule timestamptz not null,
 
-  last_scheduled_run character varying,
-  last_run_timestamp character varying,
-  last_retry_timestamp character varying,
+  last_scheduled_run timestamptz,
+  last_run_timestamp timestamptz,
+  last_retry_timestamp timestamptz,
 
-  estimated_next_run_time character varying,
+  estimated_next_run_time timestamptz,
 
   CONSTRAINT scheduled_task_status_pkey PRIMARY KEY (id)
 );

@@ -46,7 +46,7 @@ begin
                     2::smallint,
                     0::smallint,
                     31::smallint,
-                    cast((select date_trunc('month', _start_date) + interval '1 month' - interval '1 day') as character varying),
+                    (select date_trunc('month', _start_date) + interval '1 month' - interval '1 day'),
                     60,
                     1 :: smallint,
                     '{}' :: json);
@@ -61,7 +61,7 @@ begin
                     1::smallint,
                     1::smallint,
                     0::smallint,
-                    cast((_start_date + 1) as character varying),
+                    _start_date + 1,
                     60,
                     1 :: smallint,
                     '{"general_params":{"product_type":"L3B"}}' :: json);
@@ -76,7 +76,7 @@ begin
                     2::smallint,
                     0::smallint,
                     31::smallint,
-                    cast(_mid_date as character varying),
+                    _mid_date,
                     60,
                     1 :: smallint,
                     '{}' :: json);
@@ -91,12 +91,12 @@ begin
                     2::smallint,
                     0::smallint,
                     31::smallint,
-                    cast(_mid_date as character varying),
+                    _mid_date,
                     60,
                     1 :: smallint,
                     '{}' :: json);
     end if;
-    
+
   	if _processor_id is null or _processor_name = 's4c_l4a' then
         perform sp_insert_scheduled_task(
                     _site_name || '_' || _season_name || '_S4C_L4A' :: character varying,
@@ -106,7 +106,7 @@ begin
                     2::smallint,
                     0::smallint,
                     31::smallint,
-                    cast(_mid_date as character varying),
+                    _mid_date,
                     60,
                     1 :: smallint,
                     '{}' :: json);
@@ -121,7 +121,7 @@ begin
                     2::smallint,
                     0::smallint,
                     31::smallint,
-                    cast((_start_date + 31) as character varying),
+                    _start_date + 31,
                     60,
                     1 :: smallint,
                     '{}' :: json);
@@ -136,7 +136,7 @@ begin
                     1::smallint,
                     7::smallint,
                     0::smallint,
-                    cast((_start_date + 7) as character varying),
+                    _start_date + 7,
                     60,
                     1 :: smallint,
                     '{}' :: json);
@@ -151,7 +151,7 @@ begin
                     1::smallint,
                     1::smallint,
                     0::smallint,
-                    cast((_start_date + 1) as character varying),
+                    _start_date + 1,
                     60,
                     1 :: smallint,
                     '{}' :: json);

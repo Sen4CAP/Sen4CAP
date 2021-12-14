@@ -12,14 +12,13 @@ void TaskPlanner::computeNextRunTime(std::vector<ScheduledTask>& tasks)
         // TODO: consider other repeat types
         // TODO2: add constant values
         // if the task was executed on its previous cycle
-        QDateTime zeroDate; zeroDate.setTime_t(0);
-        if ( task.taskStatus.nextScheduledRunTime <= zeroDate )
+        if ( task.taskStatus.nextScheduledRunTime.isNull() )
         {
             task.taskStatus.nextScheduledRunTime = task.firstScheduledRunTime;
-            task.taskStatus.estimatedRunTime.setTime_t(0);
-            task.taskStatus.lastRetryTime.setTime_t(0);
-            task.taskStatus.lastSuccesfullScheduledRun.setTime_t(0);
-            task.taskStatus.lastSuccesfullTimestamp.setTime_t(0);
+            task.taskStatus.estimatedRunTime = QDateTime();
+            task.taskStatus.lastRetryTime = QDateTime();
+            task.taskStatus.lastSuccesfullScheduledRun = QDateTime();
+            task.taskStatus.lastSuccesfullTimestamp = QDateTime();
         }
 
         // runonce task
@@ -37,7 +36,7 @@ void TaskPlanner::computeNextRunTime(std::vector<ScheduledTask>& tasks)
         {
             task.taskStatus.nextScheduledRunTime = task.taskStatus.nextScheduledRunTime.addDays(task.repeatAfterDays);
             // reset the estimated time
-            task.taskStatus.estimatedRunTime.setTime_t(0);
+            task.taskStatus.estimatedRunTime = QDateTime();
         }
         // On date task
         if ( task.repeatType == REPEATTYPE_ONDATE &&
@@ -64,7 +63,7 @@ void TaskPlanner::computeNextRunTime(std::vector<ScheduledTask>& tasks)
                         monthDayToUse);
             task.taskStatus.nextScheduledRunTime.setDate(dn1);
             // reset the estimated time
-            task.taskStatus.estimatedRunTime.setTime_t(0);
+            task.taskStatus.estimatedRunTime = QDateTime();
         }
     }
 }

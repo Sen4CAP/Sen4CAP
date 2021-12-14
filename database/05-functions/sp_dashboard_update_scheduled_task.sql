@@ -3,11 +3,11 @@
     _repeat_type smallint,
     _repeat_after_days smallint,
     _repeat_on_month_day smallint,
-    _first_run_time character varying,
+    _first_run_time timestamptz,
     _processor_params json)
   RETURNS void AS
 $BODY$
-BEGIN 
+BEGIN
 
 UPDATE scheduled_task
 SET	processor_params = _processor_params,
@@ -19,10 +19,10 @@ WHERE id = _schedule_id;
 
 UPDATE scheduled_task_status
 SET next_schedule =_first_run_time,
-	last_scheduled_run = '0',
-	last_run_timestamp = '0',
-	last_retry_timestamp = '0',
-	estimated_next_run_time = '0'
+	last_scheduled_run = null,
+	last_run_timestamp = null,
+	last_retry_timestamp = null,
+	estimated_next_run_time = null
 WHERE task_id = _schedule_id;
 
 END;

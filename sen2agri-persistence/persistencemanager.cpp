@@ -24,6 +24,7 @@ static QString getTilesJson(const TileIdList &tilesList);
 
 template<typename T>
 static QString getJsonFromList(const QList<T> &list);
+static QJsonValue getDateTimeJson(const QDateTime &dateTime);
 
 static void bindStepExecutionStatistics(QSqlQuery &query, const ExecutionStatistics &statistics);
 
@@ -1929,15 +1930,11 @@ std::vector<ScheduledTask> PersistenceManagerDBProvider::GetScheduledTasks()
             ScheduledTaskStatus ss;
             ss.id = query.value(statusIdCol).toInt();
             ss.taskId = query.value(taskIdCol).toInt();
-            ss.nextScheduledRunTime = QDateTime::fromString(query.value(nextScheduleCol).toString(),
-                                               Qt::ISODate);
-            ss.lastSuccesfullScheduledRun = QDateTime::fromString(query.value(lastScheduledRunCol).toString(),
-                                                     Qt::ISODate);
-            ss.lastSuccesfullTimestamp = QDateTime::fromString(query.value(lastRunTimestampCol).toString(),
-                                                  Qt::ISODate);
-            ss.lastRetryTime = QDateTime::fromString(query.value(lastRetryTimestampCol).toString(), Qt::ISODate);
-            ss.estimatedRunTime = QDateTime::fromString(query.value(estimatedNextRunTimeCol).toString(),
-                                           Qt::ISODate);
+            ss.nextScheduledRunTime = query.value(nextScheduleCol).toDateTime();
+            ss.lastSuccesfullScheduledRun = query.value(lastScheduledRunCol).toDateTime();
+            ss.lastSuccesfullTimestamp = query.value(lastRunTimestampCol).toDateTime();
+            ss.lastRetryTime = query.value(lastRetryTimestampCol).toDateTime();
+            ss.estimatedRunTime = query.value(estimatedNextRunTimeCol).toDateTime();
 
             taskList.emplace_back(
                 query.value(taskIdCol).toInt(),
@@ -1949,7 +1946,7 @@ std::vector<ScheduledTask> PersistenceManagerDBProvider::GetScheduledTasks()
                 query.value(repeatTypeCol).toInt(),
                 query.value(repeatAfterDaysCol).toInt(),
                 query.value(repeatOnMonthDayCol).toInt(),
-                QDateTime::fromString(query.value(firstRunTimeCol).toString(), Qt::ISODate),
+                query.value(firstRunTimeCol).toDateTime(),
                 query.value(retrySecondsCol).toInt(),
                 query.value(priorityCol).toInt(),
                 ss);
@@ -2063,13 +2060,11 @@ static QString getScheduledTasksStatusesJson(const std::vector<ScheduledTaskStat
     for (const auto &s : statuses) {
         QJsonObject node;
         node[QStringLiteral("id")] = s.id;
-        node[QStringLiteral("next_schedule")] = s.nextScheduledRunTime.toString(Qt::ISODate);
-        node[QStringLiteral("last_scheduled_run")] =
-            s.lastSuccesfullScheduledRun.toString(Qt::ISODate);
-        node[QStringLiteral("last_run_timestamp")] =
-            s.lastSuccesfullTimestamp.toString(Qt::ISODate);
-        node[QStringLiteral("last_retry_timestamp")] = s.lastRetryTime.toString(Qt::ISODate);
-        node[QStringLiteral("estimated_next_run_time")] = s.estimatedRunTime.toString(Qt::ISODate);
+        node[QStringLiteral("next_schedule")] = getDateTimeJson(s.nextScheduledRunTime);
+        node[QStringLiteral("last_scheduled_run")] = getDateTimeJson(s.lastSuccesfullScheduledRun);
+        node[QStringLiteral("last_run_timestamp")] = getDateTimeJson(s.lastSuccesfullTimestamp);
+        node[QStringLiteral("last_retry_timestamp")] = getDateTimeJson(s.lastRetryTime);
+        node[QStringLiteral("estimated_next_run_time")] = getDateTimeJson(s.estimatedRunTime);
 
         array.append(std::move(node));
     }
@@ -2088,11 +2083,19 @@ static QString getScheduledTaskJson(const ScheduledTask &task)
     node[QStringLiteral("repeat_type")] = task.repeatType;
     node[QStringLiteral("repeat_after_days")] = task.repeatAfterDays;
     node[QStringLiteral("repeat_on_month_day")] = task.repeatOnMonthDay;
-    node[QStringLiteral("first_run_time")] = task.firstScheduledRunTime.toString(Qt::ISODate);
+    node[QStringLiteral("first_run_time")] = getDateTimeJson(task.firstScheduledRunTime);
     node[QStringLiteral("retry_seconds")] = task.retryPeriod;
     node[QStringLiteral("priority")] = task.taskPriority;
 
     return jsonToString(node);
+}
+
+static QJsonValue getDateTimeJson(const QDateTime &dateTime) {
+    if (dateTime.isNull()) {
+        return QJsonValue();
+    } else {
+        return QJsonValue(dateTime.toString(Qt::ISODate));
+    }
 }
 
 static QString getExecutionStatusListJson(const ExecutionStatusList &statusList)

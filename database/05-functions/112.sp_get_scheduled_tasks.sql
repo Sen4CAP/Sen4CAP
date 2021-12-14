@@ -15,15 +15,14 @@ RETURNS TABLE (
 
     priority scheduled_task.priority%TYPE,
 
-    first_run_time scheduled_task.first_run_time%TYPE,
+    first_run_time timestamptz,
 
     status_id scheduled_task_status.id%TYPE,
-    next_schedule scheduled_task_status.next_schedule%TYPE,
-    last_scheduled_run scheduled_task_status.last_scheduled_run%TYPE,
-    last_run_timestamp scheduled_task_status.last_run_timestamp%TYPE,
-    last_retry_timestamp scheduled_task_status.last_retry_timestamp%TYPE,
-    estimated_next_run_time scheduled_task_status.estimated_next_run_time%TYPE
-
+    next_schedule timestamptz,
+    last_scheduled_run timestamptz,
+    last_run_timestamp timestamptz,
+    last_retry_timestamp timestamptz,
+    estimated_next_run_time timestamptz
 )
 AS $$
 BEGIN
