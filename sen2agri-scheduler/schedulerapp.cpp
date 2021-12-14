@@ -114,7 +114,7 @@ void SchedulerApp::RunOnce()
         qDebug() << "Updating ready list to database ... Done!";
         Logger::info("Updating ready list to database ... Done!");
     }
-    catch (std::exception e)
+    catch (const std::exception &e)
     {
         Logger::error(QStringLiteral("Exception caught during planning tasks: %1").arg(e.what()));
         qCritical() << "Exception caught during planning tasks : " << e.what();
