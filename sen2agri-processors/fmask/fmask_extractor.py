@@ -129,12 +129,20 @@ def fmask_launcher(fmask_context):
         else:
             container_name = "fmask_{}".format(guid)
 
+        user_groups = os.getgroups()
+        if not user_groups:
+            msg = "No additiional user groups were found"
+            fmask_log.warning("msg", print_msg=True)
+
         #docker run
         cmd_array.append("docker")
         cmd_array.append("run")
         cmd_array.append("--rm")
         cmd_array.append("-u")
         cmd_array.append("{}:{}".format(os.getuid(), os.getgid()))
+        for group in user_groups:
+            cmd_array.append("--group-add")
+            cmd_array.append("{}".format(group))
         cmd_array.append("-v")
         cmd_array.append("/etc/localtime:/etc/localtime")
         cmd_array.append("-v")
