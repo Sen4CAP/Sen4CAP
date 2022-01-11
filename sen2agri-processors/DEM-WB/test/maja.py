@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen2Agri-Processors
    Language:     Python
-   Copyright:    2015-2021, CS Romania, office@c-s.ro
+   Copyright:    2015-2022, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -393,13 +393,20 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     else:
         container_name = "maja_{}".format(guid)
 
-    cmd_array = []
+    user_groups = os.getgroups()
+    if not user_groups:
+        l2a_log.warning("No additional user groups were found")
+
     #docker run cmds
+    cmd_array = []
     cmd_array.append("docker")
     cmd_array.append("run")
     cmd_array.append("--rm")
     cmd_array.append("-u")
     cmd_array.append("{}:{}".format(os.getuid(), os.getgid()))
+    for group in user_groups:
+        cmd_array.append("--group-add")
+        cmd_array.append("{}".format(group))
     cmd_array.append("-v")
     cmd_array.append("/etc/localtime:/etc/localtime")
     cmd_array.append("-v")
@@ -766,13 +773,20 @@ if sat_id == LANDSAT8_SATELLITE_ID:
     else:
         container_name = "l8align_{}".format(guid)
 
-    cmd_array = []
+    user_groups = os.getgroups()
+    if not user_groups:
+        l2a_log.warning("No additional user groups were found")
+
     #docker run 
+    cmd_array = []
     cmd_array.append("docker")
     cmd_array.append("run")
     cmd_array.append("--rm")
     cmd_array.append("-u")
     cmd_array.append("{}:{}".format(os.getuid(), os.getgid()))
+    for group in user_groups:
+        cmd_array.append("--group-add")
+        cmd_array.append("{}".format(group))
     cmd_array.append("-v")
     cmd_array.append("/etc/localtime:/etc/localtime")
     cmd_array.append("-v")
@@ -838,13 +852,21 @@ if args.product_id:
 else:
     container_name = "dem_{}".format(guid)
 
-dem_command = []
+
+user_groups = os.getgroups()
+if not user_groups:
+    l2a_log.warning("No additional user groups were found")
+
 #docker run
+dem_command = []
 dem_command.append("docker")
 dem_command.append("run")
 dem_command.append("--rm")
 dem_command.append("-u")
 dem_command.append("{}:{}".format(os.getuid(), os.getgid()))
+for group in user_groups:
+    dem_command.append("--group-add")
+    dem_command.append("{}".format(group))
 dem_command.append("-v")
 dem_command.append("/etc/localtime:/etc/localtime")
 dem_command.append("-v")

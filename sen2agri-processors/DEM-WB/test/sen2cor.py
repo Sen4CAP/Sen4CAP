@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen2Agri-Processors
    Language:     Python
-   Copyright:    2015-2021, CS Romania, office@c-s.ro
+   Copyright:    2015-2022, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -26,7 +26,7 @@ import signal
 import pipes
 import datetime
 import time
-from l2a_commons import create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers, get_docker_gid
+from l2a_commons import create_recursive_dirs, copy_directory, remove_dir, translate, get_guid, stop_containers
 from l2a_commons import run_command, LogHandler, NO_ID
 
 SEN2COR_LOG_FILE_NAME = "sen2cor.log"
@@ -60,7 +60,7 @@ def CheckInput():
             "Invalid L1C input file name {}.".format(L1C_file_name),
         )
         return False
-    docker_input_path = os.path.join("/sen2cor/2.9/input", L1C_file_name)
+    docker_input_path = os.path.join(sen2cor_home,"/input", L1C_file_name)
 
     # --output_dir cheks
     if os.path.isdir(args.output_dir) is False:
@@ -248,7 +248,7 @@ def CheckInput():
         return False
 
     if args.local_run is False:
-        if docker_image_sen2cor is None:
+        if args.docker_image_sen2cor is None:
             l2a_log.error(
                 "Sen2cor docker image must be provided."
             )
@@ -449,24 +449,25 @@ def RunSen2Cor():
             cmd.append(args.res_database_dir[0])
     else:
         # docker run
-        docker_gid = get_docker_gid()
-        if not docker_gid:
-            msg = "Can NOT determine docker group id"
-            l2a_log.error(msg, print_msg = True)
-            return False
-
+        user_groups = os.getgroups()
+        if not user_groups:
+            msg = "No additional user groups were found."
+            l2a_log.warning(msg, print_msg = True)
 
         cmd.append("docker")
         cmd.append("run")
         cmd.append("--rm")
         cmd.append("-u")
         cmd.append("{}:{}".format(os.getuid(), os.getgid()))
-        cmd.append("--group-add")
-        cmd.append("{}".format(docker_gid))
+        for group in user_groups:
+            cmd.append("--group-add")
+            cmd.append("{}".format(group))
         cmd.append("-v")
         cmd.append("/etc/localtime:/etc/localtime")
         cmd.append("-v")
         cmd.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
+        cmd.append("-v")
+        cmd.append("/etc/passwd:/etc/passwd")
         cmd.append("-v")
         cmd.append("{}:{}".format(args.output_dir, args.output_dir))
         if args.dem_path:
@@ -479,6 +480,14 @@ def RunSen2Cor():
                     os.path.abspath(args.lc_snow_cond_path), docker_lc_snow_cond_path
                 )
             )
+        if args.lc_snow_cond_monthly_path:
+            cmd.append("-v")
+            cmd.append(
+                "{}:{}".format(
+                    os.path.abspath(args.lc_snow_cond_monthly_path), docker_lc_snow_cond_monthly_path
+                )
+            )
+
         if args.lc_lccs_map_path:
             cmd.append("-v")
             cmd.append(
@@ -539,7 +548,7 @@ def RunSen2Cor():
             )
         cmd.append("--name")
         cmd.append(container_name)
-        cmd.append(docker_image_sen2cor)
+        cmd.append(args.docker_image_sen2cor)
 
         # actual sen2cor commands
         cmd.append(docker_sen2cor_exec_path)
@@ -952,16 +961,10 @@ parser.add_argument(
 )
 # docker related flags
 parser.add_argument(
-    "-si205",
-    "--docker_image_sen2cor_N205",
-    required=False,
-    help="Name of the sen2cor docker image for L1C with processing baseline starting from N205 (only available when -lr is False).",
-)
-parser.add_argument(
-    "-si400",
-    "--docker_image_sen2cor_N400",
+    "-si",
+    "--docker_image_sen2cor",
     required=True,
-    help="Name of the sen2cor docker image for L1C with processing baseline starting from N400 (only available when -lr is False).",
+    help="Name of the sen2cor docker image for L1C with processing (only available when -lr is False).",
 )
 parser.add_argument(
     "-gi",
@@ -1000,7 +1003,13 @@ parser.add_argument(
     required=False,
     help="Directory path to ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0 (only available when -lr is False).",
 )
-# sen2cor processor execution flags
+
+parser.add_argument(
+    "-lmsnow",
+    "--lc_snow_cond_monthly_path",
+    required=False,
+    help="Directory path to ESACCI-LC-L4-Snow-Cond-500m-MONTHLY-2000-2012-v2.44 (only available when -lr is False).",
+)                                                                                                                  # sen2cor processor execution flags
 parser.add_argument(
     "--resolution",
     required=False,
@@ -1122,19 +1131,62 @@ try:
     l1c_name = os.path.basename(args.input_dir)
     l1c_processing_baseline = l1c_name.split("_")[3]
     l1c_baseline_number = int(l1c_processing_baseline[1:])
-    l2a_log.debug("Determining L1C processing baseline - OK: {}".format(l1c_processing_baseline))
+    l2a_log.info("Determining L1C processing baseline - OK: {}".format(l1c_processing_baseline))
 except:
     l2a_log.error("Determining L1C processing baseline - NOK: {}.".format(l1c_processing_baseline))
     l2a_log.close()
     os._exit(1)
 
-#determine the sen2cor docker image and sen2cor home directory to be used based on the processing baseline
-if l1c_baseline_number >= 400:
-    docker_image_sen2cor = args.docker_image_sen2cor_N400
-    sen2cor_home = SEN2COR_2_10_HOME
+#determine sen2cor version from the image name
+sen2cor_version = re.match(r'sen4x/sen2cor:(\d)\.(\d{1,2})\.(\d{1,2})-*', args.docker_image_sen2cor)
+if sen2cor_version:
+    sen2cor_major_nb = int(sen2cor_version.group(1))
+    sen2cor_medium_nb = int(sen2cor_version.group(2))
+    sen2cor_minor_nb = int(sen2cor_version.group(3))
+    sen2cor_long_name = ""
+    if len(sen2cor_version.group(1)) == 1:
+        sen2cor_long_name += "0"
+        sen2cor_long_name += sen2cor_version.group(1)
+    else:
+       sen2cor_long_name += sen2cor_version.group(1)
+    sen2cor_long_name += "."
+    if len(sen2cor_version.group(2)) == 1:
+        sen2cor_long_name += "0"
+        sen2cor_long_name += sen2cor_version.group(2)
+    else:
+       sen2cor_long_name += sen2cor_version.group(2)
+    sen2cor_long_name += "."
+    if len(sen2cor_version.group(3)) == 1:
+        sen2cor_long_name += "0"
+        sen2cor_long_name += sen2cor_version.group(3)
+    else:
+        sen2cor_long_name += sen2cor_version.group(3)
 else:
-    docker_image_sen2cor = args.docker_image_sen2cor_N205
-    sen2cor_home = SEN2COR_2_9_HOME
+    l2a_log.error("Sen2cor image naming schema - NOK.", print_msg=True)
+    os._exit(1)
+
+#verify if the baseline of the L1C product is supported
+if l1c_baseline_number < 205:
+    l2a_log.error("L1C products with baseline <205 are not supported", print_msg=True)
+    os._exit(1)
+if (l1c_baseline_number >= 400):
+    if (sen2cor_major_nb < 2) or ((sen2cor_major_nb == 2) and (sen2cor_medium_nb < 10)):       
+        l2a_log.error("L1C products with baseline >= 400 can only be processed with sen2cor versions equal or higher than 2.10", print_msg=True)
+    os._exit(1)
+
+#match sen2cor version with home folder
+sen2cor_home = None
+if (sen2cor_major_nb == 2):
+    if sen2cor_medium_nb == 10:
+        sen2cor_home = SEN2COR_2_10_HOME
+    elif sen2cor_medium_nb == 9:
+        sen2cor_home = SEN2COR_2_9_HOME
+    elif sen2cor_medium_nb == 8:
+        sen2cor_home = SEN2COR_2_8_HOME
+
+if not sen2cor_home:
+    l2a_log.error("The sen2cor image provided is not supported", print_msg=True)
+    os_exit(1)
 l2a_log.debug("Using dir {} as sen2cor home".format(sen2cor_home))
 
 docker_dem_path = os.path.join(sen2cor_home, "dem/srtm/")
@@ -1148,9 +1200,10 @@ docker_tile_path = os.path.join(sen2cor_home, "tile")
 docker_datastrip_path = os.path.join(sen2cor_home, "datastrip")
 docker_img_database_path = os.path.join(sen2cor_home, "img_database")
 docker_res_database_path = os.path.join(sen2cor_home, "res_database")
-docker_lc_snow_cond_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
-docker_lc_lccs_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
-docker_lc_wb_map_path = "/opt/Sen2Cor-02.09.00-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
+docker_lc_snow_cond_monthly_path = "/opt/Sen2Cor-" + sen2cor_long_name + "-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-Snow-Cond-500m-MONTHLY-2000-2012-v2.4"
+docker_lc_snow_cond_path = "/opt/Sen2Cor-" + sen2cor_long_name + "-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
+docker_lc_lccs_map_path = "/opt/Sen2Cor-" + sen2cor_long_name +  "-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif"
+docker_lc_wb_map_path = "/opt/Sen2Cor-" + sen2cor_long_name + "-Linux64/lib/python2.7/site-packages/sen2cor/aux_data/ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif"
 docker_sen2cor_exec_path = "/usr/local/bin/L2A_Process"
 docker_if_path = "/tmp/if/"  # input files path
 docker_of_path = "/tmp/of/"  # output files path

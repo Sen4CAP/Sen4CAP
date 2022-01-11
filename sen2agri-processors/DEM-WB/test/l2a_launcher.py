@@ -5,7 +5,7 @@ _____________________________________________________________________________
 
    Program:      Sen4Cap-Processors
    Language:     Python
-   Copyright:    2015-2021, CS Romania, office@c-s.ro
+   Copyright:    2015-2022, CS Romania, office@c-s.ro
    See COPYRIGHT file for details.
 
    Unless required by applicable law or agreed to in writing, software
@@ -37,7 +37,7 @@ from bs4 import BeautifulSoup as Soup
 from osgeo import ogr
 from l2a_commons import LogHandler, MASTER_ID 
 from l2a_commons import remove_dir, create_recursive_dirs, get_footprint, remove_dir_content, run_command, read_1st
-from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers, get_docker_gid
+from l2a_commons import ArchiveHandler, get_node_id, get_guid, stop_containers
 from l2a_commons import UNKNOWN_SATELLITE_ID, SENTINEL2_SATELLITE_ID, LANDSAT8_SATELLITE_ID
 from l2a_commons import SEN2COR_PROCESSOR_OUTPUT_FORMAT, MACCS_PROCESSOR_OUTPUT_FORMAT, THEIA_MUSCATE_OUTPUT_FORMAT
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
@@ -1265,7 +1265,7 @@ class Maja(L2aProcessor):
                         self.l2a_log.error(rejection_reason, print_msg = True)
                         break
         except IOError as e:
-            rejection_reason = "Could not read maja log at {}".format(tile_log_filepath)
+            rejection_reason = "Can NOT extract failure reason from  maja log at {}".format(tile_log_filepath)
             self.update_rejection_reason(rejection_reason)
             self.l2a_log.error(rejection_reason, print_msg = True, trace = True)
 
@@ -1531,15 +1531,14 @@ class Maja(L2aProcessor):
 
         guid = get_guid(8)
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
-        docker_gid = get_docker_gid()
-        if not docker_gid:
-            msg = "Can NOT determine docker group id"
-            self.launcher_log.error(msg, print_msg = True)
-            self.update_rejection_reason(msg)
-            return False
 
-        script_command = []
+        user_groups = os.getgroups()
+        if not user_groups:
+            msg = "No additional user groups were found"
+            self.launcher_log.warning(msg, print_msg = True)
+
         #docker run
+        script_command = []
         script_command.append("docker")
         script_command.append("run")
         script_command.append("-v")
@@ -1547,8 +1546,9 @@ class Maja(L2aProcessor):
         script_command.append("--rm")
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
-        script_command.append("--group-add")
-        script_command.append("{}".format(docker_gid))
+        for group in user_groups:
+            script_command.append("--group-add")
+            script_command.append("{}".format(group))
         script_command.append("-v")
         script_command.append("/etc/localtime:/etc/localtime")
         script_command.append("-v")
@@ -1960,6 +1960,11 @@ class Sen2Cor(L2aProcessor):
 
     def run_script(self):
         gipp_l2a_path = os.path.join(self.context.gips_path, "L2A_GIPP.xml")
+
+
+        lc_snow_cond_monthly_path = os.path.join(
+            self.context.gips_path, "ESACCI-LC-L4-Snow-Cond-500m-MONTHLY-2000-2012-v2.4"
+        )
         lc_snow_cond_path = os.path.join(
             self.context.gips_path, "ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0"
         )
@@ -1978,15 +1983,14 @@ class Sen2Cor(L2aProcessor):
 
         guid = get_guid(8)
         container_name = "l2a_processors_{}_{}".format(self.lin.product_id, guid)
-        docker_gid = get_docker_gid()
-        if not docker_gid:
-            msg = "Can NOT determine docker group id"
-            self.launcher_log.error(msg, print_msg = True)
-            self.update_rejection_reason(msg)
-            return False
 
-        script_command = []
+        user_groups = os.getgroups()
+        if not user_groups:
+            msg = "No additional user groups were found"
+            self.launcher_log.warning(msg, print_msg = True)
+
         #docker run
+        script_command = []
         script_command.append("docker")
         script_command.append("run")
         script_command.append("-v")
@@ -1994,8 +1998,9 @@ class Sen2Cor(L2aProcessor):
         script_command.append("--rm")
         script_command.append("-u")
         script_command.append("{}:{}".format(os.getuid(), os.getgid()))
-        script_command.append("--group-add")
-        script_command.append("{}".format(docker_gid))
+        for group in user_groups:
+            script_command.append("--group-add")
+            script_command.append("{}".format(group))
         script_command.append("-v")
         script_command.append("/etc/localtime:/etc/localtime")
         script_command.append("-v")
@@ -2004,8 +2009,12 @@ class Sen2Cor(L2aProcessor):
         script_command.append("{}:{}".format(self.context.dem_path, self.context.dem_path))
         script_command.append("-v")
         script_command.append("{}:{}".format(gipp_l2a_path, gipp_l2a_path))
-        script_command.append("-v")
-        script_command.append("{}:{}".format(lc_snow_cond_path, lc_snow_cond_path))
+        if os.path.isdir(lc_snow_cond_monthly_path):
+            script_command.append("-v")
+            script_command.append("{}:{}".format(lc_snow_cond_monthly_path, lc_snow_cond_monthly_path))
+        if os.path.isdir(lc_snow_cond_path):
+            script_command.append("-v")
+            script_command.append("{}:{}".format(lc_snow_cond_path, lc_snow_cond_path))
         script_command.append("-v")
         script_command.append("{}:{}".format(lc_lccs_map_path, lc_lccs_map_path))
         script_command.append("-v")
@@ -2035,13 +2044,21 @@ class Sen2Cor(L2aProcessor):
                     gipp_l2a_path
                 )
             )
-
+        if os.path.isdir(lc_snow_cond_monthly_path):
+            script_command.append("--lc_snow_cond_monthly_path")
+            script_command.append(lc_snow_cond_monthly_path)
+        else:
+            self.l2a_log.warning(
+                "Can NOT find ESACCI-LC-L4-Snow-Cond-500m-MONTHLY-2000-2012-v2.4 at {}, only required for versions starting from 2.10.01".format(
+                    lc_snow_cond_monthly_path
+                )
+            )
         if os.path.isdir(lc_snow_cond_path):
             script_command.append("--lc_snow_cond_path")
             script_command.append(lc_snow_cond_path)
         else:
-            self.l2a_log.error(
-                "Can NOT find ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0 at {}, proceeding with default GIPP".format(
+            self.l2a_log.warning(
+                "Can NOT find ESACCI-LC-L4-Snow-Cond-500m-P13Y7D-2000-2012-v2.0 at {}, only required for versions up to 2.9.0".format(
                     lc_snow_cond_path
                 )
             )
@@ -2050,8 +2067,8 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--lc_lccs_map_path")
             script_command.append(lc_lccs_map_path)
         else:
-            self.l2a_log.error(
-                "Can NOT find ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif at {}, proceeding with default GIPP".format(
+            self.l2a_log.warning(
+                "Can NOT find ESACCI-LC-L4-LCCS-Map-300m-P1Y-2015-v2.0.7.tif at {}".format(
                     lc_lccs_map_path
                 )
             )
@@ -2060,8 +2077,8 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--lc_wb_map_path")
             script_command.append(lc_wb_map_path)
         else:
-            self.l2a_log.error(
-                "Can NOT find ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif at {}, proceeding with default GIPP".format(
+            self.l2a_log.warning(
+                "Can NOT find ESACCI-LC-L4-WB-Map-150m-P13Y-2000-v4.0.tif at {}".format(
                     lc_wb_map_path
                 )
             )
@@ -2080,9 +2097,7 @@ class Sen2Cor(L2aProcessor):
             script_command.append("--tif")
         if self.context.compressTiffs:
             script_command.append("--compressTiffs")
-        script_command.append("--docker_image_sen2cor_N205")
-        script_command.append(self.context.sen2cor_image)
-        script_command.append("--docker_image_sen2cor_N400")
+        script_command.append("--docker_image_sen2cor")
         script_command.append(self.context.sen2cor_image)
         script_command.append("--docker_image_gdal")
         script_command.append(self.context.gdal_image)
