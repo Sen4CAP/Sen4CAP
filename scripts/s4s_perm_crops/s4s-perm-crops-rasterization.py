@@ -30,7 +30,13 @@ def do_rasterize (image, vect, field, output, in_val, correction_val):
     i = 0
     print("Correcting features with {} = {} (setting field to {})".format(field, in_val, correction_val))
     for feature in layer :
-        if feature.GetFieldAsInteger(field) == 0:
+        fieldVal = feature.GetFieldAsInteger(field)
+        if fieldVal > 2:
+            print("fieldVal with value {} set to 0 ... ".format(fieldVal))
+            fieldVal = 0
+        else :
+            print("fieldVal kept with value {} ... ".format(fieldVal))
+        if fieldVal == 0:
             feature.SetField(field, correction_val)
             layer.SetFeature(feature)
 

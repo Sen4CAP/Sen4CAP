@@ -31,8 +31,8 @@ def run_command(args, env=None):
 def broceliande (image, output, sample, mounts, docker_image):
 
     ref = gdal.Open(image, gdal.GA_ReadOnly)
-    nombre_bande_par_image = int(ref.RasterCount)
-    nombre_ndvi =int(nombre_bande_par_image / 2)
+    nbr_band_per_image = int(ref.RasterCount)
+    nombre_ndvi =int(nbr_band_per_image / 2)
 
     # cmd = "docker run --rm --name SEN4STAT_Broceliande --cpuset-cpus=\"0-39\" --memory=\"100G\"" + " "
     cmd = "docker run --rm --name SEN4STAT_Broceliande "
@@ -44,15 +44,15 @@ def broceliande (image, output, sample, mounts, docker_image):
     cmd += "-g " + sample + " "
     cmd += "--timeFlag "
 
-    for i,j in zip(range(0,nombre_bande_par_image,2), range(1,nombre_bande_par_image,2)):
+    for i,j in zip(range(0,nbr_band_per_image,2), range(1,nbr_band_per_image,2)):
         cmd += " --ndviBands %s,%s"%(i,j)
 
-    nombre_total_bande = (nombre_bande_par_image + int(nombre_ndvi))
+    nombre_total_bande = (nbr_band_per_image + int(nombre_ndvi))
 
-    for k in range(nombre_bande_par_image,nombre_total_bande,1):
+    for k in range(nbr_band_per_image,nombre_total_bande,1):
         cmd += " -b %s -f AP -t Max -a area --thresholds 400,1000,10000,30000"%(k)
 
-    cmd += " --autoThreadFlag -c {}-{} --bgRate \"100%\" --bgTagRate \"100%\" --showChannel --tagValue 1,2,3 --bgValue 100".format(str(nombre_bande_par_image), str(nombre_total_bande-1))
+    cmd += " --autoThreadFlag -c {}-{} --bgRate \"100%\" --bgTagRate \"100%\" --showChannel --tagValue 1,2,3 --bgValue 100".format(str(nbr_band_per_image), str(nombre_total_bande-1))
 
     # print ("Executing command: {}".format(cmd))
     run_command(cmd)
