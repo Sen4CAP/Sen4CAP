@@ -22,7 +22,7 @@ begin
             
                 -- Modified existing tables
                 ALTER TABLE processor ADD COLUMN IF NOT EXISTS required BOOLEAN NOT NULL DEFAULT false;
-                UPDATE processor SET required = true WHERE id IN (1, 7, 8); -- l2a, l2-s1, lpis. Others (MDB1)?
+                UPDATE processor SET required = true WHERE id IN (1, 7, 8, 21); -- l2a, l2-s1, lpis. Others (MDB1)?
 
                 ALTER TABLE satellite ADD COLUMN IF NOT EXISTS required BOOLEAN NOT NULL DEFAULT false;
                 UPDATE satellite SET required = true WHERE id IN (1, 3); -- S2, S1

@@ -158,72 +158,6 @@ function install_sen2agri_services()
     fi
 }
 
-SCIHUB_USER=""
-SCIHUB_PASS=""
-USGS_USER=""
-USGS_PASS=""
-function saveOldDownloadCredentials()
-{
-    if [ -f /usr/share/sen2agri/sen2agri-downloaders/apihub.txt ]; then
-        apihubLine=($(head -n 1 /usr/share/sen2agri/sen2agri-downloaders/apihub.txt))
-        SCIHUB_USER=${apihubLine[0]}
-        SCIHUB_PASS=${apihubLine[1]}
-    fi
-    if [ -f /usr/share/sen2agri/sen2agri-downloaders/usgs.txt ]; then
-        usgsLine=($(head -n 1 /usr/share/sen2agri/sen2agri-downloaders/usgs.txt))
-        USGS_USER=${usgsLine[0]}
-        USGS_PASS=${usgsLine[1]}
-    fi
-}
-
-function updateDownloadCredentials()
-{
-    if [ "$HAS_S2AGRI_SERVICES" = false ] ; then
-        sed -i '/SciHubDataSource.username=/c\SciHubDataSource.username='"$SCIHUB_USER" ${TARGET_SERVICES_DIR}/config/services.properties
-        sed -i '/SciHubDataSource.password=/c\SciHubDataSource.password='"$SCIHUB_PASS" ${TARGET_SERVICES_DIR}/config/services.properties
-        sed -i '/USGSDataSource.username=/c\USGSDataSource.username='"$USGS_USER" ${TARGET_SERVICES_DIR}/config/services.properties
-        sed -i '/USGSDataSource.password=/c\USGSDataSource.password='"$USGS_PASS" ${TARGET_SERVICES_DIR}/config/services.properties
-    fi
-}
-
-function enableSciHubDwnDS()
-{
-    echo "Disabling Amazon datasource ..."
-    sed -i '/SciHubDataSource.Sentinel2.scope=1/c\SciHubDataSource.Sentinel2.scope=3' ${TARGET_SERVICES_DIR}/config/services.properties
-    sed -i '/AWSDataSource.Sentinel2.enabled=true/c\AWSDataSource.Sentinel2.enabled=false' ${TARGET_SERVICES_DIR}/config/services.properties
-
-    sed -i 's/AWSDataSource.Sentinel2.local_archive_path=/SciHubDataSource.Sentinel2.local_archive_path=/g' ${TARGET_SERVICES_DIR}/config/services.properties
-    sed -i 's/AWSDataSource.Sentinel2.fetch_mode=/SciHubDataSource.Sentinel2.fetch_mode=/g' ${TARGET_SERVICES_DIR}/config/services.properties
-
-    psql -U postgres $DB_NAME -c "update datasource set scope = 3 where satellite_id = 1 and name = 'Scientific Data Hub';"
-    psql -U postgres $DB_NAME -c "update datasource set enabled = 'false' where satellite_id = 1 and name = 'Amazon Web Services';"
-    echo "Disabling Amazon datasource ... Done!"
-
-#    sudo -u postgres psql sen2agri -c "update datasource set local_root = (select local_root from datasource where satellite_id = 1 and name = 'Amazon Web Services') where satellite_id = 1 and name = 'Scientific Data Hub';"
-#    sudo -u postgres psql sen2agri -c "update datasource set fetch_mode = (select fetch_mode from datasource where satellite_id = 1 and name = 'Amazon Web Services') where satellite_id = 1 and name = 'Scientific Data Hub';"
-}
-
-# function updateWebConfigParams()
-# {
-#     # Set the port 8082 for the dashboard services URL
-#     sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8080\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
-#     sed -i -e "s|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8081\/dashboard|static \$DEFAULT_SERVICES_URL = \x27http:\/\/localhost:8082\/dashboard|g" /var/www/html/ConfigParams.php
-#
-#     REST_SERVER_PORT=$(sed -n 's/^server.port =//p' ${TARGET_SERVICES_DIR}/config/services.properties | sed -e 's/\r//g')
-#     # Strip leading space.
-#     REST_SERVER_PORT="${REST_SERVER_PORT## }"
-#     # Strip trailing space.
-#     REST_SERVER_PORT="${REST_SERVER_PORT%% }"
-#      if [[ !  -z  $REST_SERVER_PORT  ]] ; then
-#         sed -i -e "s|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:8080|static \$DEFAULT_REST_SERVICES_URL = \x27http:\/\/localhost:$REST_SERVER_PORT|g" /var/www/html/ConfigParams.php
-#      fi
-#
-#     if [[ ! -z $DB_NAME ]] ; then
-#         sed -i -e "s|static \$DEFAULT_DB_NAME = \x27sen2agri|static \$DEFAULT_DB_NAME = \x27${DB_NAME}|g" /var/www/html/ConfigParams.php
-#     fi
-#
-# }
-
 function resetDownloadFailedProducts()
 {
     echo "Resetting failed downloaded products from downloader_history ..."
@@ -426,12 +360,11 @@ function copy_additional_scripts() {
     cp -fR ./s4c_l4c_export_all_practices.py /usr/bin
 }
 
-systemctl stop sen2agri-scheduler sen2agri-executor sen2agri-orchestrator sen2agri-http-listener sen2agri-sentinel-downloader sen2agri-landsat-downloader sen2agri-demmaccs sen2agri-sentinel-downloader.timer sen2agri-landsat-downloader.timer sen2agri-demmaccs.timer sen2agri-monitor-agent sen2agri-services
+systemctl stop sen2agri-scheduler sen2agri-executor sen2agri-orchestrator sen2agri-http-listener sen2agri-demmaccs sen2agri-demmaccs.timer sen2agri-monitor-agent sen2agri-services
 
 # TODO: This should be removed when implemented in the services or in processors
 copy_additional_scripts
 
-saveOldDownloadCredentials
 migrate_to_docker
 
 yum -y install python-dateutil libcurl-devel openssl-devel libxml2-devel php-pgsql
@@ -455,6 +388,7 @@ TARGET_SERVICES_DIR="/usr/share/sen2agri/sen2agri-services"
 
 install_sen2agri_services
 
+# Update the QOS list if any new qos was added meanwhile
 create_and_config_slurm_qos
 
 ldconfig
@@ -490,15 +424,7 @@ if [ -d ../reference_data/ ]; then
     cp -rf ../reference_data/* /mnt/archive/reference_data
 fi
 
-# Update the port in /var/www/html/ConfigParams.php as version 1.8 had 8080 instead of 8081
-# updateWebConfigParams
-
 if [ "$DB_NAME" == "sen2agri" ] ; then
-    updateDownloadCredentials
-
-    # Enable SciHub as the download datasource
-    enableSciHubDwnDS
-
     # Reset the download failed products
     resetDownloadFailedProducts
 else
