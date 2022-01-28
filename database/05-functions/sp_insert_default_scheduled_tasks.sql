@@ -6,20 +6,17 @@ create or replace function sp_insert_default_scheduled_tasks(
 $$
 declare
     _site_id site.id%type;
-    declare _site_short_name site.short_name%type;
-    declare _season_name season.name%type;
+    declare _prefix text;
     declare _season_start_date season.start_date%type;
     declare _season_mid_date season.start_date%type;
 begin
     select site.id,
-           site.short_name,
-           season.name,
+           site.short_name || '_' || season.name,
            season.start_date,
            season.mid_date
     into
         _site_id,
-        _site_short_name,
-        _season_name,
+        _prefix,
         _season_start_date,
         _season_mid_date
     from season
@@ -43,7 +40,7 @@ begin
             priority,
             processor_params
         )
-    from sp_evaluate_default_scheduled_tasks(_site_short_name, _season_name, _season_start_date, _season_mid_date)
+    from sp_evaluate_default_scheduled_tasks(_prefix, _season_start_date, _season_mid_date)
     where _processor_id is null
        or processor_id = _processor_id;
 end;

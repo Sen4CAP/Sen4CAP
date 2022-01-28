@@ -1,8 +1,8 @@
 create or replace function sp_evaluate_default_scheduled_tasks(
-    _site_short_name text,
-    _season_name text,
+    _prefix text,
     _start_date date,
-    _mid_date date)
+    _mid_date date
+)
     returns table
             (
                 name text,
@@ -19,7 +19,7 @@ as
 $$
 begin
     return query
-        select _site_short_name || '_' || _season_name || '_' || suffix,
+        select _prefix || '_' || suffix,
                default_scheduled_tasks.processor_id,
                default_scheduled_tasks.repeat_type,
                default_scheduled_tasks.repeat_after_days,
