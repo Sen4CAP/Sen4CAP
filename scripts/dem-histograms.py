@@ -1,9 +1,9 @@
 #!/usr/bin/env python
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import psycopg2
 import pipes
 import subprocess
-import multiprocessing.dummy
 from osgeo import ogr
 
 
@@ -18,13 +18,13 @@ class Command(object):
         cmd_line = " ".join(map(pipes.quote, args))
         logging.debug(cmd_line)
         if self.stdout:
-            stdout = open(self.stdout, "w")
-            subprocess.call(args, env=self.env, stdout=stdout)
+            with open(self.stdout, "w") as stdout:
+                subprocess.call(args, env=self.env, stdout=stdout)
         else:
             subprocess.call(args, env=self.env)
 
 
-conn = psycopg2.connect(dbname="postgres")
+conn = psycopg2.connect(dbname="postgis")
 
 vrt_cmds = []
 json_cmds = []
@@ -43,7 +43,7 @@ with conn.cursor() as cursor:
         json = tile_id + ".json"
         args = ["gdalwarp"]
         args += ["-r", "average"]
-        args += ["-srcnodata", "0", "-dstnodata", "0"]
+        args += ["-srcnodata", "-32768", "-dstnodata", "-32768"]
         args += ["-t_srs", "EPSG:" + str(epsg_code)]
         args += ["-overwrite", "-te"]
         args += [int(ll[0]), int(ll[1])]
@@ -52,10 +52,10 @@ with conn.cursor() as cursor:
         cmd = Command(args, None, None)
         vrt_cmds.append(cmd)
 
-        args = ["gdalinfo", "-json", "-hist", vrt]
+        args = ["gdalinfo", "-stats", "-json", vrt]
         cmd = Command(args, None, json)
         json_cmds.append(cmd)
 
-pool = multiprocessing.dummy.Pool()
-pool.map(lambda c: c.run(), vrt_cmds)
-pool.map(lambda c: c.run(), json_cmds)
+with ThreadPoolExecutor(max_workers = 64) as executor:
+    executor.map(lambda c: c.run(), vrt_cmds)
+    executor.map(lambda c: c.run(), json_cmds)
