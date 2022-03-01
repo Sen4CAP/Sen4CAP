@@ -465,9 +465,11 @@ class DataPreparation(object):
         sys.stdout.write("\n")
         sys.stdout.flush()
 
-        overlaps = list(set.union(*map(set, res.get())))
-        logging.info("{} overlapping parcels".format(len(overlaps)))
-        self.mark_overlapping_parcels(overlaps)
+        parcels = []
+        for b in res.get():
+            parcels.extend(b)
+        logging.info("{} overlapping parcels".format(len(parcels)))
+        self.mark_overlapping_parcels(parcels)
 
     def find_duplicates(self, srid, tile_counts, total):
         q = multiprocessing.dummy.Queue()
@@ -666,6 +668,7 @@ parcel_id int not null,
 geom_valid boolean not null,
 duplicate boolean,
 overlap boolean not null,
+overlap_amount real not null default 0,
 associated boolean not null,
 area_meters real not null,
 shape_index real,
@@ -702,6 +705,7 @@ with polygons_srid as (
      polygons_extent as (
          select ST_Extent(wkb_geometry) as extent
          from {}
+         where ST_IsValid(wkb_geometry)
      ),
      polygons_extent_4326 as (
          select ST_Transform(ST_SetSRID(polygons_extent.extent,
@@ -743,6 +747,7 @@ insert into {} (
     geom_valid,
     duplicate,
     overlap,
+    overlap_amount,
     associated,
     area_meters,
     shape_index,
@@ -756,6 +761,7 @@ select
     coalesce(ST_IsValid(wkb_geometry), false),
     false,
     false,
+    0,
     false,
     {},
     {} / (2 * sqrt(pi() * nullif({}, 0))),
@@ -763,13 +769,15 @@ select
     (
         select site_municipalities.municipality_code
         from site_municipalities
-        where ST_Intersects(site_municipalities.geom, polygons.wkb_geometry)
+        where ST_IsValid(polygons.wkb_geometry)
+          and ST_Intersects(site_municipalities.geom, polygons.wkb_geometry)
         limit 1
     ),
     coalesce(
         (select stratum_id
          from stratum
          where (site_id, year, stratum_type_id) = ({}, {}, {})
+           and ST_IsValid(polygons.wkb_geometry)
            and ST_Intersects(polygons.wkb_geometry, stratum.wkb_geometry)
          limit 1)
         , 0),
@@ -777,6 +785,7 @@ select
         (select stratum_id
          from stratum
          where (site_id, year, stratum_type_id) = ({}, {}, {})
+           and ST_IsValid(polygons.wkb_geometry)
            and ST_Intersects(polygons.wkb_geometry, stratum.wkb_geometry)
          limit 1)
         , 0)
@@ -867,9 +876,11 @@ where new.ogc_fid = t.ogc_fid;"""
 
                 conn.commit()
 
-                query = SQL("alter table {} alter column crop_id set not null").format(
-                    statistical_data_staging_id
-                )
+                query = SQL(
+                    """
+                    alter table {} alter column crop_id set not null;
+                    """
+                ).format(statistical_data_staging_id)
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
 
@@ -878,12 +889,23 @@ where new.ogc_fid = t.ogc_fid;"""
                 print("Checking for associated crops")
                 sql = SQL(
                     """
-with associated as (
-    select parcel_id
+with ranges as (
+    select crop_id,
+           parcel_id,
+           tsrange(planting_date, harvest_date) as range
     from {}
-    group by parcel_id
-    having count(*) > 1
-)
+),
+     associated as (
+         select distinct parcel_id
+         from ranges r1
+         where exists(
+                       select *
+                       from ranges r2
+                       where r2.parcel_id = r1.parcel_id
+                         and r2.crop_id <> r1.crop_id
+                         and r1.range && r2.range
+                   )
+     )
 update {} attributes
 set associated = true
 from associated
@@ -983,7 +1005,8 @@ with transformed as (
 )
 select parcel_id, ST_Buffer(ST_Transform(wkb_geometry, epsg_code), -10)
 from {}, transformed
-where ST_Intersects(wkb_geometry, transformed.geom);
+where ST_IsValid(wkb_geometry)
+  and ST_Intersects(wkb_geometry, transformed.geom);
 """
                 )
                 sql = sql.format(
@@ -1189,103 +1212,6 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
                 epsg_codes = get_site_utm_epsg_codes(conn, self.config.site_id)
 
                 commands = []
-
-                csv = "{}.csv".format(self.parcels_table)
-                csv = os.path.join(self.insitu_path, csv)
-
-                try_rm_file(csv)
-
-                gpkg = "{}.gpkg".format(self.parcels_table)
-                real_working_path = os.path.realpath(self.working_path)
-                gpkg_working = os.path.join(real_working_path, gpkg)
-                gpkg = os.path.join(self.insitu_path, gpkg)
-
-                try_rm_file(gpkg_working)
-
-                sql = SQL(
-                    """
-select parcels.parcel_id,
-       parcels.segment_id,
-       parcels.wkb_geometry,
-       parcel_attributes.geom_valid,
-       parcel_attributes.duplicate,
-       parcel_attributes.overlap,
-       parcel_attributes.associated,
-       parcel_attributes.area_meters,
-       parcel_attributes.shape_index,
-       parcel_attributes.multipart,
-       parcel_attributes.municipality_code,
-       parcel_attributes.stratum_crop_id,
-       parcel_attributes.stratum_yield_id,
-       parcel_attributes.pix_10m,
-       statistical_data.crop_code,
-       statistical_data.crop_id,
-       statistical_data.harvest_date,
-       statistical_data.yield_estimate,
-       statistical_data.yield_method,
-       statistical_data.crop_density,
-       statistical_data.crop_quality,
-       statistical_data.irrigated,
-       crop_list_n3.code_n3,
-       crop_list_n2.code_n2,
-       crop_list_n2.code_n1
-from {} parcels
-inner join {} parcel_attributes using (parcel_id)
-inner join {} statistical_data using (parcel_id)
-inner join crop_list_n4 on statistical_data.crop_code = crop_list_n4.code_n4
-inner join crop_list_n3 using (code_n3)
-inner join crop_list_n2 using (code_n2)
-"""
-                ).format(
-                    Identifier(self.parcels_table),
-                    Identifier(self.parcel_attributes_table),
-                    Identifier(self.statistical_data_table),
-                )
-                sql = sql.as_string(conn)
-
-                command = []
-                command += ["docker", "run", "--rm"]
-                command += [
-                    "-v",
-                    "{}:{}".format(self.insitu_path, self.insitu_path),
-                ]
-                command += ["-v", "/etc/passwd:/etc/passwd"]
-                command += ["-v", "/etc/group:/etc/group"]
-                command += ["-v", "/var/run/postgresql:/var/run/postgresql"]
-                command += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
-                command += [GDAL_IMAGE_NAME]
-                command += ["ogr2ogr"]
-                command += ["-overwrite"]
-                command += ["-lco", "STRING_QUOTING=IF_NEEDED"]
-                command += ["-sql", sql]
-                command += [csv]
-                command += [
-                    "PG:host=/var/run/postgresql dbname={}".format(self.config.dbname)
-                ]
-                commands.append((command, 5))
-
-                srid = get_site_srid(conn, self.parcels_table)
-                command = []
-                command += ["docker", "run", "--rm"]
-                command += [
-                    "-v",
-                    "{}:{}".format(real_working_path, real_working_path),
-                ]
-                command += ["-v", "/etc/passwd:/etc/passwd"]
-                command += ["-v", "/etc/group:/etc/group"]
-                command += ["-v", "/var/run/postgresql:/var/run/postgresql"]
-                command += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
-                command += [GDAL_IMAGE_NAME]
-                command += ["ogr2ogr"]
-                command += ["-overwrite"]
-                command += ["-a_srs", "EPSG:{}".format(srid)]
-                command += ["-sql", sql]
-                command += [gpkg_working]
-                command += [
-                    "PG:host=/var/run/postgresql dbname={}".format(self.config.dbname)
-                ]
-                commands.append((command, 12))
-
                 for epsg_code in epsg_codes:
                     wkt = get_esri_wkt(epsg_code)
 
@@ -1328,7 +1254,7 @@ inner join crop_list_n2 using (code_n2)
                             self.config.dbname
                         )
                     ]
-                    commands.append((command, 23))
+                    commands.append((command, 1))
 
         q = multiprocessing.dummy.Queue()
 
@@ -1354,11 +1280,6 @@ inner join crop_list_n2 using (code_n2)
 
         res.get()
 
-        if self.working_path != self.insitu_path:
-            print("Moving exported table")
-            shutil.copy2(gpkg_working, gpkg)
-            try_rm_file(gpkg_working)
-
     def get_tile_parcel_counts(self, srid):
         print("Counting polygons")
         with self.get_connection() as conn:
@@ -1373,7 +1294,8 @@ with tiles as (
 select tile_id, (
     select count(*)
     from {} polygons
-    where ST_Intersects(polygons.wkb_geometry, tiles.geom)
+    where ST_IsValid(polygons.wkb_geometry)
+      and ST_Intersects(polygons.wkb_geometry, tiles.geom)
 ) as count
 from tiles;"""
                 ).format(Identifier(self.parcels_table))
@@ -1389,44 +1311,53 @@ from tiles;"""
                 return counts
 
     def get_overlapping_parcels(self, srid, q, tile):
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                query = SQL(
-                    """
-with tile as (
-    select ST_Transform(geom, %s) as geom
-    from shape_tiles_s2
-    where tile_id = %s
-)
-select parcel_id
-from tile, {} parcels
-inner join {} parcel_attributes using (parcel_id)
-where geom_valid
-and exists (
-    select 1
-    from {} t
-    inner join {} ta using (parcel_id)
-    where t.parcel_id != parcels.parcel_id
-    and ta.geom_valid
-    and ST_Intersects(t.wkb_geometry, tile.geom)
-    and ST_Intersects(t.wkb_geometry, parcels.wkb_geometry)
-    having sum(ST_Area(ST_Intersection(t.wkb_geometry, parcels.wkb_geometry))) / nullif(parcel_attributes.area_meters, 0) > 0.1
-)
-and ST_Intersects(parcels.wkb_geometry, tile.geom);"""
-                )
-                parcels_table_id = Identifier(self.parcels_table)
-                parcel_attributes_table_id = Identifier(self.parcel_attributes_table)
-                query = query.format(
-                    parcels_table_id,
-                    parcel_attributes_table_id,
-                    parcels_table_id,
-                    parcel_attributes_table_id,
-                )
-                logging.debug(query.as_string(conn))
-                cursor.execute(query, (srid, tile.tile_id))
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    query = SQL(
+                        """
+    with tile as (
+        select ST_Transform(geom, %s) as geom
+        from shape_tiles_s2
+        where tile_id = %s
+    )
+    select parcel_id,
+           t.overlap_amount
+    from tile, {} parcels
+    inner join {} parcel_attributes using (parcel_id)
+    inner join lateral (
+        select sum(ST_Area(ST_Intersection(t.wkb_geometry, parcels.wkb_geometry))) / nullif(parcel_attributes.area_meters, 0) as overlap_amount
+        from {} t
+        inner join {} ta using (parcel_id)
+        where t.parcel_id != parcels.parcel_id
+        and ta.geom_valid
+        and ST_Intersects(t.wkb_geometry, tile.geom)
+        and ST_Intersects(t.wkb_geometry, parcels.wkb_geometry)
+    ) t on true
+    where geom_valid
+    and ST_Intersects(parcels.wkb_geometry, tile.geom)
+    and t.overlap_amount > 0.001;
+    """
+                    )
+                    parcels_table_id = Identifier(self.parcels_table)
+                    parcel_attributes_table_id = Identifier(
+                        self.parcel_attributes_table
+                    )
+                    query = query.format(
+                        parcels_table_id,
+                        parcel_attributes_table_id,
+                        parcels_table_id,
+                        parcel_attributes_table_id,
+                    )
+                    logging.debug(query.as_string(conn))
+                    cursor.execute(query, (srid, tile.tile_id))
 
-                q.put(tile)
-                return [r[0] for r in cursor]
+                    q.put(tile)
+                    return [(r[0], r[1]) for r in cursor]
+        except Exception as e:
+            print(e)
+            q.put(tile)
+            return []
 
     def get_duplicate_parcels(self, srid, q, tile):
         with self.get_connection() as conn:
@@ -1437,13 +1368,19 @@ with tile as (
     select ST_Transform(geom, %s) as geom
     from shape_tiles_s2
     where tile_id = %s
+),
+parcels as (
+    select parcel_id,
+        ST_SnapToGrid(wkb_geometry, 1) as wkb_geometry
+    from {}, tile
+    where ST_IsValid(wkb_geometry)
+    and ST_Intersects(wkb_geometry, tile.geom)
 )
 select parcel_id
 from (
     select parcel_id,
-            count(*) over(partition by wkb_geometry) as count
-    from {}, tile
-    where ST_Intersects(wkb_geometry, tile.geom)
+        count(*) over(partition by wkb_geometry) as count
+    from parcels
 ) t where count > 1;"""
                 )
                 query = query.format(Identifier(self.parcels_table))
@@ -1463,10 +1400,22 @@ from (
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
-                    sql = SQL("update {} set overlap = true where parcel_id = any(%s)")
+                    parcel_ids = [p[0] for p in b]
+                    overlap_amounts = [p[1] for p in b]
+
+                    sql = SQL(
+                        """
+update {} parcels
+set overlap = upd.overlap_amount > 0.1,
+    overlap_amount = upd.overlap_amount + 1
+from (select unnest(%s) as parcel_id,
+             unnest(%s) as overlap_amount
+     ) upd
+where upd.parcel_id = parcels.parcel_id;"""
+                    )
                     sql = sql.format(Identifier(self.parcel_attributes_table))
                     logging.debug(sql.as_string(conn))
-                    cursor.execute(sql, (b,))
+                    cursor.execute(sql, (parcel_ids, overlap_amounts))
                     conn.commit()
 
                     progress += len(b)
