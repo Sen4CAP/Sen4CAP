@@ -16,9 +16,17 @@ IF (WIN32)
     link_directories(C:/OTB-release-xdk-win32/lib)
 ENDIF(WIN32)
 
+set(RadiometricIndices_HEADERS
+    ./include/otbBandName.h
+    ./include/otbIndicesStackFunctor.h
+    ./include/otbRadiometricIndex.h
+    ./include/otbSoilIndicesFunctor.h
+    ./include/otbVegetationIndicesFunctor.h
+    ./include/otbWaterIndicesFunctor.h)
+
 otb_create_application(
   NAME           Sen4XRadiometricIndices
-  SOURCES        otbSen4XRadiometricIndices.cxx
+  SOURCES        ${RadiometricIndices_HEADERS} otbSen4XRadiometricIndices.cxx
   LINK_LIBRARIES Sen2AgriProductReaders;${OTB_LIBRARIES})
 
 install(TARGETS otbapp_Sen4XRadiometricIndices DESTINATION usr/lib/otb/applications/)
