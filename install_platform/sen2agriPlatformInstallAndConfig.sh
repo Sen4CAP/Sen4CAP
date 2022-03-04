@@ -238,7 +238,7 @@ function create_system_account()
 {
    #create system account for running services
    adduser -m ${SYS_ACC_NAME}
-   usermod -aG dockerroot ${SYS_ACC_NAME}
+   usermod -aG docker ${SYS_ACC_NAME}
 }
 #-----------------------------------------------------------#
 function create_slurm_account()
