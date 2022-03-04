@@ -70,7 +70,11 @@ SOURCES += main.cpp \
     processor/products/productdetails.cpp \
     productdetailsbuilder.cpp \
     processor/s4s_yieldhandler.cpp \
-    processor/trex_handler.cpp
+    processor/trex_handler.cpp \
+    processor/products/l3bproducthelper.cpp \
+    processor/genericcompositehandlerbase.cpp \
+    processor/compositehandlerindicators.cpp \
+    processor/compositehandlers1.cpp
 
 HEADERS += \
     pch.hpp \
@@ -120,7 +124,11 @@ HEADERS += \
     processor/products/productdetails.h \
     productdetailsbuilder.h \
     processor/s4s_yieldhandler.hpp \
-    processor/trex_handler.hpp
+    processor/trex_handler.hpp \
+    processor/products/l3bproducthelper.h \
+    processor/compositehandlers1.hpp \
+    processor/compositehandlerindicators.hpp \
+    processor/genericcompositehandlerbase.hpp
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \

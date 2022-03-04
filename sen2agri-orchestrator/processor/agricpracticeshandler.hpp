@@ -19,9 +19,6 @@ typedef struct AgricPracticesSiteCfg {
     // map from practice name to practices file path
     QMap<QString, QString> practices;
 
-    // LPIS informations
-    QString fullDeclsFilePath;
-
     // TSA parameters
     TQStrQStrMap ccTsaParams;
     TQStrQStrMap flTsaParams;

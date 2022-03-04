@@ -59,8 +59,7 @@ QList<MarkerType> S4CMarkersDB1DataExtractStepsBuilder::allMarkerFileTypes =
 };
 
 S4CMarkersDB1DataExtractStepsBuilder::S4CMarkersDB1DataExtractStepsBuilder() :
-    m_idFieldName("NewID"), m_allParcelsCsvPattern("decl_.*_\\d{4}.csv"),
-    m_optParcelsPattern(".*_buf_5m.shp"), m_sarParcelsPattern(".*_buf_10m.shp")
+    m_idFieldName("NewID"), m_optParcelsPattern(".*_buf_5m.shp"), m_sarParcelsPattern(".*_buf_10m.shp")
 {
 }
 
@@ -278,7 +277,6 @@ QMap<int, LpisInfos> S4CMarkersDB1DataExtractStepsBuilder::ExtractLpisInfos() {
 
     QMap<int, LpisInfos> lpisInfos;
 
-    QRegularExpression re(m_allParcelsCsvPattern);
     QRegularExpression reOpt(m_optParcelsPattern);
     QRegularExpression reSar(m_sarParcelsPattern);
     for(const Product &lpisPrd: lpisPrds) {
@@ -287,7 +285,7 @@ QMap<int, LpisInfos> S4CMarkersDB1DataExtractStepsBuilder::ExtractLpisInfos() {
         if (i != lpisInfos.end()) {
             if (lpisPrd.inserted < i.value().insertedDate) {
                 Logger::info(QStringLiteral("MDB1: LPIS product %1 ignored as there is another one more recent than it for the same year %2").
-                             arg(lpisPrd.fullPath).arg(i.value().fullDeclsFilePath));
+                             arg(lpisPrd.fullPath).arg(i.value().productPath));
                 continue;
             }
         }
@@ -310,14 +308,11 @@ QMap<int, LpisInfos> S4CMarkersDB1DataExtractStepsBuilder::ExtractLpisInfos() {
             if (reSar.match(fileName).hasMatch() && lpisInfo.sarGeomShapePath.size() == 0) {
                 lpisInfo.sarGeomShapePath = directory.filePath(fileName);
             }
-            // we know its name but we want to be sure it is there
-            if (re.match(fileName).hasMatch()) {
-                lpisInfo.fullDeclsFilePath = directory.filePath(fileName);
-            }
         }
         if (lpisInfo.opticalIdsGeomShapePath.size() != 0 &&
-                lpisInfo.sarGeomShapePath.size() != 0 &&
-                lpisInfo.fullDeclsFilePath.size() != 0) {
+                lpisInfo.sarGeomShapePath.size() != 0) {
+            lpisInfo.productName = lpisPrd.name;
+            lpisInfo.productPath = lpisPrd.fullPath;
             lpisInfo.productDate = lpisPrd.created;
             lpisInfo.insertedDate = lpisPrd.inserted;
             lpisInfos[lpisInfo.productDate.date().year()] = lpisInfo;
@@ -486,11 +481,6 @@ void S4CMarkersDB1DataExtractStepsBuilder::UpdateParcelsPrdDescriptionsFromDB() 
     if(parcelIdColName.size() > 0) {
         Logger::info(QStringLiteral("MDB1: Configured field name %1 from parcels product").arg(parcelIdColName));
         m_idFieldName = parcelIdColName;
-    }
-    const QString &parcelsCsvFileNamePat = ProcessorHandlerHelper::GetStringConfigValue(parameters, parcelsPrdKeys, "parcels_csv_file_name_pattern", PARCELS_PRD_KEYS_PREFIX);
-    if(parcelsCsvFileNamePat.size() > 0) {
-        Logger::info(QStringLiteral("MDB1: Configured pattern %1 for parcels product csv file").arg(parcelsCsvFileNamePat));
-        m_allParcelsCsvPattern = parcelsCsvFileNamePat;
     }
     const QString &parcelsOptFileNamePat = ProcessorHandlerHelper::GetStringConfigValue(parameters, parcelsPrdKeys, "parcels_optical_file_name_pattern", PARCELS_PRD_KEYS_PREFIX);
     if(parcelsOptFileNamePat.size() > 0) {

@@ -242,7 +242,9 @@ enum class ProductType {
     MaskedL2AProductTypeId       = 26,
     S4SPermCropsProductTypeId    = 27,
     S4SYieldFeatProductTypeId    = 28,
-    ERA5WeatherProductTypeId     = 29
+    ERA5WeatherProductTypeId     = 29,
+    S1CompositeProductTypeId     = 30,
+    L3IndicatorsCompositeProductTypeId     = 31
 };
 
 QDBusArgument &operator<<(QDBusArgument &argument, const ProductType &productType);
@@ -1048,6 +1050,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, ProcessingRequest
 struct JobDefinition
 {
     bool isValid;
+    bool retryLater;
     int processorId;
     int siteId;
     QString jobDefinitionJson;
@@ -1064,6 +1067,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, JobDefinition &jo
 struct ProcessorJobDefinitionParams
 {
     bool isValid;
+    bool retryLater;
     ProductList productList;
     QString jsonParameters;
 };

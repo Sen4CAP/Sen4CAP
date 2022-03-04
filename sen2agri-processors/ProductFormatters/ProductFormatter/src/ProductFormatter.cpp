@@ -236,6 +236,14 @@ std::vector<ProcessorInputDescriptor> ProcessorDescriptors = {
           SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MCTFLG"}
      }
     },
+    {"", "l3genericcomposite", "L3 Generic Composite product", "Specifies a Generic Composite product", false,
+     {
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.l3genericcomposite.files", "Composite raster files list for composite separated by TILE_{tile_id} delimiter", false,
+          GENERIC_RASTER, false, 1, false, ""},
+         {otb::Wrapper::ParameterType_InputFilenameList, "processor.l3genericcomposite.flags", "Flags mask files list for composite separated by TILE_{tile_id} delimiter", false,
+         SIMPLE_DISCRETE_FLAGS_RASTER, false, 1, false, "MFLG"}
+     }
+    },
 };
 
 std::vector<CompositeBand> CompositeBandList = {
@@ -424,6 +432,9 @@ private:
         MandatoryOff("vectprd");
         SetDefaultParameterInt("vectprd", 0);
 
+        AddParameter(ParameterType_String, "prdnamesuffix", "Specifies a suffix to be added to the product name");
+        MandatoryOff("prdnamesuffix");
+
         SetDocExampleParameterValue("destroot", "/home/ata/sen2agri/sen2agri-processors-build/Testing/Temporary/Dest");
         SetDocExampleParameterValue("fileclass", "SVT1");
         SetDocExampleParameterValue("level", "L3A");
@@ -481,6 +492,9 @@ private:
 
       // Get ISD file list
       m_ISDList = this->GetParameterStringList("isd");
+
+      // Get the product name suffix
+      m_strProductNameSuffix = this->GetParameterString("prdnamesuffix");
 
       m_procInputDescr = GetProcessorInputDescriptor(m_strProcessor, m_strProductLevel);
 
@@ -609,14 +623,11 @@ private:
       for(const ProcessorInputDescriptor &prdDescr: ProcessorDescriptors) {
           // check first the processor
           if (processor == prdDescr.processor) {
-              if (processor == "generic") {
+              if (processor == "generic" || prdDescr.productLevel.size() == 0 || prdLevel == prdDescr.productLevel) {
                   // set the product level to the one received
                   ProcessorInputDescriptor descr = prdDescr;
                   descr.productLevel = prdLevel;
                   return descr;
-              }
-              if (prdLevel == prdDescr.productLevel) {
-                  return prdDescr;
               }
           }
       }
@@ -1476,10 +1487,14 @@ private:
           if(rasterFileEl.strTileID != tileInfoEl.strTileID) {
               continue;
           }
-          std::string suffix = TIF_EXTENSION;
+          std::string suffix;
           if(rasterFileEl.paramDescr.bAddResolutionToSuffix) {
-              suffix = "_" + std::to_string(rasterFileEl.nResolution) + "M" + suffix;
+              suffix = "_" + std::to_string(rasterFileEl.nResolution) + "M";
           }
+          if (m_strProductNameSuffix.size() > 0) {
+              suffix += ("_" + m_strProductNameSuffix);
+          }
+          suffix += TIF_EXTENSION;
           rasterFileEl.strNewRasterFileName = BuildFileName(rasterFileEl.paramDescr.outSuffix,
                                                             tileInfoEl.strTileID, suffix,
                                                             rasterFileEl.rasterTimePeriod);
@@ -1932,7 +1947,11 @@ private:
 
   std::string BuildProductDirectoryName() {
       const std::string &strCreationDate = currentDateTimeFormattted("%Y%m%dT%H%M%S");
-      return BuildFileName(MAIN_FOLDER_CATEG, "", "", m_strTimePeriod, m_strSiteId, strCreationDate);
+      std::string prdName = BuildFileName(MAIN_FOLDER_CATEG, "", "", m_strTimePeriod, m_strSiteId, strCreationDate);
+      if (m_strProductNameSuffix.size() > 0) {
+          prdName += ("_" + m_strProductNameSuffix);
+      }
+      return prdName;
   }
 
   std::string BuildTileName(const tileInfo &tileInfoEl) {
@@ -2054,6 +2073,7 @@ private:
   std::string m_strDestRoot;
   std::string m_strBaseline;
   std::string m_strSiteId;
+  std::string m_strProductNameSuffix;
   std::vector<previewInfo> m_previewList;
   std::vector<std::string> m_GIPPList;
   std::vector<std::string> m_ISDList;

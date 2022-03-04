@@ -15,7 +15,8 @@ typedef struct MDB1JobPayload {
         siteShortName = pContext->GetSiteShortName(evt.siteId);
         int jobVal;
         isScheduledJob = ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1);
-        ampvvvhEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "amp_vvvh_enabled", MDB1_CFG_PREFIX);
+        ampvvvhEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "amp_vvvh_enabled", MDB1_CFG_PREFIX) &&
+                         ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "amp_enabled", MDB1_CFG_PREFIX);
         mdb3M1M5Enabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "mdb3_enabled", MDB1_CFG_PREFIX);
     }
     EventProcessingContext *pCtx;

@@ -278,6 +278,7 @@ ProcessorJobDefinitionParams CropMaskHandler::GetProcessingDefinitionImpl(Schedu
 {
     ProcessorJobDefinitionParams params;
     params.isValid = false;
+    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;

@@ -177,6 +177,7 @@ ProcessorJobDefinitionParams S4CMarkersDB1Handler::GetProcessingDefinitionImpl(S
 {
     ProcessorJobDefinitionParams params;
     params.isValid = false;
+    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;

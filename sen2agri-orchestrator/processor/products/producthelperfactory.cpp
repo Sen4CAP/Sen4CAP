@@ -4,6 +4,7 @@
 #include "s1l2producthelper.h"
 #include "maskedl2aproducthelper.h"
 #include "generichighlevelproducthelper.h"
+#include "l3bproducthelper.h"
 
 #include "productdetails.h"
 
@@ -35,6 +36,11 @@ std::unique_ptr<ProductHelper> ProductHelperFactory::GetProductHelper(const Prod
         return s1l2Helper;
     }
 
+    if (L3BProductHelper::IsIntendedFor(prdWrp.GetProduct().productTypeId)) {
+        std::unique_ptr<ProductHelper> l3bHelper(new L3BProductHelper(prdWrp));
+        return l3bHelper;
+    }
+
     if (GenericHighLevelProductHelper::IsIntendedFor(prdWrp.GetProduct().productTypeId)) {
         std::unique_ptr<ProductHelper> genericHelper(new GenericHighLevelProductHelper(prdWrp));
         return genericHelper;
@@ -61,6 +67,11 @@ std::unique_ptr<ProductHelper> ProductHelperFactory::GetProductHelper(const QStr
         return s1l2Helper;
     }
 
+    if (L3BProductHelper::IsIntendedFor(prdPath)) {
+        std::unique_ptr<ProductHelper> l3bHelper(new L3BProductHelper(prdPath));
+        return l3bHelper;
+    }
+
     if (GenericHighLevelProductHelper::IsIntendedFor(prdPath)) {
         std::unique_ptr<ProductHelper> genericHelper(new GenericHighLevelProductHelper(prdPath));
         return genericHelper;
@@ -85,6 +96,11 @@ std::unique_ptr<ProductHelper> ProductHelperFactory::GetProductHelper(const Prod
     if (S1L2ProductHelper::IsIntendedFor(prdType)) {
         std::unique_ptr<ProductHelper> s1l2Helper(new S1L2ProductHelper());
         return s1l2Helper;
+    }
+
+    if (L3BProductHelper::IsIntendedFor(prdType)) {
+        std::unique_ptr<ProductHelper> l3bHelper(new L3BProductHelper());
+        return l3bHelper;
     }
 
     if (GenericHighLevelProductHelper::IsIntendedFor(prdType)) {

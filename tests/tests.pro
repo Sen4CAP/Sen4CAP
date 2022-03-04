@@ -32,6 +32,7 @@ SOURCES += ../sen2agri-scheduler/taskloader.cpp \
     ../sen2agri-scheduler/runestimator.cpp \
     ../sen2agri-orchestrator/processor/products/l2aproducthelper.cpp \
     ../sen2agri-orchestrator/processor/products/generichighlevelproducthelper.cpp \
+    ../sen2agri-orchestrator/processor/products/l3bproducthelper.cpp \
     ../sen2agri-orchestrator/processor/products/s1l2producthelper.cpp \
     ../sen2agri-orchestrator/processor/products/productdetails.cpp \
     ../sen2agri-orchestrator/processor/products/producthelper.cpp \
@@ -85,6 +86,7 @@ HEADERS += \
     ../sen2agri-scheduler/runestimator.hpp \
     ../sen2agri-orchestrator/processor/products/l2aproducthelper.h \
     ../sen2agri-orchestrator/processor/products/generichighlevelproducthelper.h \
+    ../sen2agri-orchestrator/processor/products/l3bproducthelper.h \
     ../sen2agri-orchestrator/processor/products/s1l2producthelper.h \
     ../sen2agri-orchestrator/processor/products/producthelper.h \
     ../sen2agri-orchestrator/processor/products/producthelperfactory.h \

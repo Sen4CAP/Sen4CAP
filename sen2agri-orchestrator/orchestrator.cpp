@@ -22,6 +22,8 @@
 #include "processor/s4s_permanent_crop_handler.hpp"
 #include "processor/s4s_yieldhandler.hpp"
 #include "processor/trex_handler.hpp"
+#include "processor/compositehandlers1.hpp"
+#include "processor/compositehandlerindicators.hpp"
 #include "json_conversions.hpp"
 #include "schedulingcontext.h"
 #include "logger.hpp"
@@ -65,6 +67,10 @@ std::map<int, std::unique_ptr<ProcessorHandler>> & GetHandlersMap(PersistenceMan
             handlersMap.emplace(procDescr.processorId, std::make_unique<TRexHandler>());
         } else if(procDescr.shortName == "s4s_yield_feat") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4SYieldHandler>());
+        } else if(procDescr.processorId == 22) {            // l3_s1_comp
+            handlersMap.emplace(procDescr.processorId, std::make_unique<CompositeHandlerS1>());
+        } else if(procDescr.processorId == 23) {            // l3_ind_comp
+            handlersMap.emplace(procDescr.processorId, std::make_unique<CompositeHandlerIndicators>());
         } else {
             bAdded = false;
             Logger::error(QStringLiteral("Invalid processor configuration found in database: %1, "
@@ -136,6 +142,7 @@ JobDefinition Orchestrator::GetJobDefinition(const ProcessingRequest &request)
         ProcessorHandler &handler = worker.GetHandler(request.processorId);
         ProcessorJobDefinitionParams procDefParams = handler.GetProcessingDefinition(ctx, request.siteId, request.ttNextScheduledRunTime, requestOverrideCfgValues);
         jobDef.isValid = procDefParams.isValid;
+        jobDef.retryLater = procDefParams.retryLater;
         if(jobDef.isValid) {
             QJsonArray inputProductsArr;
             for (const auto &p : procDefParams.productList) {

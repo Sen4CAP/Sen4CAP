@@ -12,9 +12,9 @@
 #include "products/generichighlevelproducthelper.h"
 using namespace orchestrator::products;
 
-#define ANNUAL_CROP_EXP     "(im1b2 > 5  && im1b2 > im1b3 && im1b2 > im1b4) ? 1 : 0"
-#define PERENIAL_CROP_EXP   "(im1b3 > 15 && im1b3 > im1b2 && im1b3 > im1b4) ? 2 : 0"
-#define NO_CROPLAND_EXP     "(im1b4 > 0  && im1b4 > im1b2 && im1b4 > im1b3) ? 3 : 0"
+#define ANNUAL_CROP_EXP     "(im1b1 > 5  && im1b1 > im2b1 && im1b1 > im3b1) ? 1 : 0"
+#define PERENIAL_CROP_EXP   "(im2b1 > 15 && im2b1 > im1b1 && im2b1 > im3b1) ? 2 : 0"
+#define NO_CROPLAND_EXP     "(im3b1 > 0  && im3b1 > im1b1 && im3b1 > im2b1) ? 3 : 0"
 
 #define ANNUAL_PERMANENT_CROP_EXP     "im1b1 + im2b1 + im3b1"
 
@@ -100,6 +100,9 @@ NewStepList S4SPermanentCropHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
     const QString &finalUpdateSamples = samplesExtractionTask.GetFilePath("resulted_update_samples.shp");
     const QString &rasterizedSamples = samplesRasterizationTask.GetFilePath("conversion_output.tif");
     const QString &broceliandeOutput = broceliandeTask.GetFilePath("broceliande_output.tif");
+    const QString &broceliandeClass1Output = broceliandeTask.GetFilePath("broceliande_output_class000.tif");
+    const QString &broceliandeClass2Output = broceliandeTask.GetFilePath("broceliande_output_class001.tif");
+    const QString &broceliandeClass3Output = broceliandeTask.GetFilePath("broceliande_output_class002.tif");
 
     const QString &annualCropExtrResult = annualCropExtractionTask.GetFilePath("annual_crop_extraction.tif");
     const QString &perenialCropExtrResult = perenialCropExtractionTask.GetFilePath("perenial_crop_extraction.tif");
@@ -142,7 +145,7 @@ NewStepList S4SPermanentCropHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
     allSteps.append(CreateTaskStep(broceliandeTask, "Broceliande", broceliandeArgs));
 
     // Crop extractions
-    const QStringList &extrInputsList = {broceliandeOutput};
+    const QStringList &extrInputsList = {broceliandeClass1Output, broceliandeClass2Output, broceliandeClass3Output};
     const QStringList &annualCropExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, ANNUAL_CROP_EXP, annualCropExtrResult);
     allSteps.append(CreateTaskStep(annualCropExtractionTask, "AnnualCropExtraction", annualCropExtrArgs));
     const QStringList &perenialCropExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, PERENIAL_CROP_EXP, perenialCropExtrResult);
@@ -393,6 +396,7 @@ ProcessorJobDefinitionParams S4SPermanentCropHandler::GetProcessingDefinitionImp
 {
     ProcessorJobDefinitionParams params;
     params.isValid = false;
+    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;

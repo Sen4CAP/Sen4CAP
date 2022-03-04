@@ -12,7 +12,8 @@ typedef struct {
     QDateTime insertedDate;
 
     // LPIS informations
-    QString fullDeclsFilePath;
+    QString productName;
+    QString productPath;
     QString opticalIdsGeomShapePath;
     QString sarGeomShapePath;
 
@@ -56,7 +57,6 @@ public:
     static bool HasAnyMarkerEnabled(const ProductType &prdType, const std::map<QString, QString> &cfgParams);
 
     void SetIdFieldName(const QString &idFieldName) { m_idFieldName = idFieldName; }
-    void SetAllParcelsCsvPattern(const QString &pattern) { m_allParcelsCsvPattern = pattern; }
     void SetOptParcelsPattern(const QString &pattern) { m_optParcelsPattern = pattern; }
     void SetSarParcelsPattern(const QString &pattern) { m_sarParcelsPattern = pattern; }
 
@@ -100,7 +100,6 @@ private:
     QList<PrdMarkerInfo> fileInfos;
 
     QString m_idFieldName;
-    QString m_allParcelsCsvPattern;
     QString m_optParcelsPattern;
     QString m_sarParcelsPattern;
 };

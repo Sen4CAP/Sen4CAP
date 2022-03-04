@@ -149,7 +149,7 @@ QStringList StepExecutionDecorator::EnsureUniqueDockerMounts(const QString &addi
             if (mountParts.size() == 2) {
                 const QString &newMount = NormalizeMountDirName(mountParts[0]) +
                         ":" + NormalizeMountDirName(mountParts[1]);
-                if (!retList.contains(newMount)) {
+                if (!HasMount(retList, newMount)) {
                     retList.append(newMount);
                 }
             } else {
@@ -160,7 +160,26 @@ QStringList StepExecutionDecorator::EnsureUniqueDockerMounts(const QString &addi
     return retList;
 }
 
+bool StepExecutionDecorator::HasMount(const QStringList &mounts, const QString &mount) {
+    if (mounts.contains(mount)) {
+        return true;
+    }
+    for (const QString &mnt: mounts) {
+        const QStringList &mountParts = mount.split(':');
+        const QStringList &mntParts = mnt.split(':');
+        if (mntParts.size() == 2 && mountParts.size() == 2) {
+            // mount point already added.
+            if (mntParts[1] == mountParts[1]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 QStringList StepExecutionDecorator::GetDockerMounts(const QString &procName, const QString &taskName) {
+    // The user added additional mounts have priority in the automatically detected mounts.
+    // This is why they are added first (see also the above EnsureUniqueDockerMounts and HasMount functions)
     QString mounts;
     QString key = ORCHESTRATOR_CFG_KEYS_ROOT + taskName + "." + DOCKER_ADD_MOUNTS_STEP_CFG_KEY;
     QString val = GetParamValue(m_orchestratorConfig,  key, "");

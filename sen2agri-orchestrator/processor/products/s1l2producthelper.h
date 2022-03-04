@@ -8,6 +8,36 @@ namespace orchestrator
 namespace products
 {
 
+typedef struct FileNameInfos {
+    QString prdType;
+    QDateTime startDate;
+    QDateTime endDate;
+    QString orbitId;
+    QString tileId;
+} FileNameInfosType;
+
+class FileNameInfosExtractor
+{
+public:
+    FileNameInfosExtractor() {}
+    FileNameInfosExtractor(const QString &regex, int regexVersionIdx, int regexDateIdx, int regexDate2Idx,
+                           int regexTypeIdx, int regexOrbitIdx, int regexTileIdx = -1) :
+        regex(regex), regexVersionIdx(regexVersionIdx), regexDateIdx(regexDateIdx), regexDate2Idx(regexDate2Idx),
+        regexTypeIdx(regexTypeIdx), regexOrbitIdx(regexOrbitIdx), regexTileIdx(regexTileIdx)
+    {
+    }
+    bool IsIntended(const QString &productPath) const;
+    virtual FileNameInfosType ExtractInfos(const QString &productPath);
+
+private:
+    QString regex;
+    int regexVersionIdx;
+    int regexDateIdx;
+    int regexDate2Idx;
+    int regexTypeIdx;
+    int regexOrbitIdx;
+    int regexTileIdx;
+};
 class S1L2ProductHelper : public ProductHelper
 {
 public:
@@ -19,11 +49,15 @@ public:
     virtual bool HasSatellite() { return true;}
     virtual bool IsRaster()  { return true; }
     virtual QStringList GetProductFiles(const QString &fileNameSubstrFilter="");
+    virtual QMap<QString, QString> GetProductFilesByTile(const QString &pattern, bool isQi);
 
     static bool IsIntendedFor(const QString &product);
     static bool IsIntendedFor(const ProductType &prdType);
 
 private:
+    bool GetFileNameInfosExtractor(const QString &productPath, FileNameInfosExtractor &extractor);
+    const static QList<FileNameInfosExtractor> fnInfoExtractors;
+//    void test();
 };
 
 } // end of namespace products

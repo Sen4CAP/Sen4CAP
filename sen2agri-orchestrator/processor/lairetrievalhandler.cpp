@@ -48,6 +48,8 @@ ProcessorJobDefinitionParams LaiRetrievalHandler::GetProcessingDefinitionImpl(Sc
 {
     ProcessorJobDefinitionParams params;
     params.isValid = false;
+    params.retryLater = false;
+
     std::map<QString, QString> configParameters = ctx.GetConfigurationParameterValues("processor.l3b.");
     if (IsNewLaiMonoDateVersion(configParameters)) {
         return m_l3bHandlerNew.GetProcessingDefinition(ctx, siteId, scheduledDate, requestOverrideCfgValues);

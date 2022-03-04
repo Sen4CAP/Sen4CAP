@@ -443,6 +443,7 @@ ProcessorJobDefinitionParams NdviHandler::GetProcessingDefinitionImpl(Scheduling
 {
     ProcessorJobDefinitionParams params;
     params.isValid = false;
+    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;

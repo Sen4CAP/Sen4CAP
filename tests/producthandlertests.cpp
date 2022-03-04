@@ -5,6 +5,7 @@
 
 #include "processor/products/l2aproducthelper.h"
 #include "processor/products/generichighlevelproducthelper.h"
+#include "processor/products/l3bproducthelper.h"
 #include "processor/products/s1l2producthelper.h"
 #include "processor/products/producthelperfactory.h"
 

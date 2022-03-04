@@ -207,7 +207,7 @@ PersistenceManagerDBProvider::GetJobDefinition(int jobId)
 
         JobDefinition result;
         while (query.next()) {
-            result = { true, query.value(proceIdCol).toInt(),
+            result = { true, false, query.value(proceIdCol).toInt(),
                             query.value(siteIdCol).toInt(),
                             query.value(paramsCol).toString() };
         }
