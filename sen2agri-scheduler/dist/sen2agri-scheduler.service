@@ -1,9 +1,14 @@
 [Unit]
 Description=Scheduler for Sen2Agri
+After=docker.service
+Requires=docker.service
 
 [Service]
+Type=simple
 ExecStart=/usr/bin/sen2agri-scheduler
 User=sen2agri-service
+RestartSec=5
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
