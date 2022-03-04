@@ -66,5 +66,7 @@ int main(int argc, char *argv[])
         return a.exec();
     } catch (const std::exception &e) {
         Logger::fatal(e.what());
+
+        return EXIT_FAILURE;
     }
 }
