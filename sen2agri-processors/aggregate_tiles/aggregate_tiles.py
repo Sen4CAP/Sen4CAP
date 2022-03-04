@@ -305,7 +305,7 @@ def create_processing_list_upon_sufix(initialList):
 def build_standardized_legacy_file_name_output(inputFileName):
 
    #extract needed parts to build the output name for the file
-   pattern = re.compile("([A-Z_0-9]*_L[0-9][A-Z]*_[A-Z]*)\w+$")
+   pattern = re.compile("([A-Z_0-9]*_L[0-9][0-9A-Z]*_[A-Z]*)\w+$")
    #extract part S2AGRI_L3B_PRD for example
    result_first=pattern.search(inputFileName)
 
