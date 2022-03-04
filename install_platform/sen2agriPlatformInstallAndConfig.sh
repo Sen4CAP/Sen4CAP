@@ -699,13 +699,10 @@ disable_firewall
 
 ##install EPEL for dependencies, PGDG for the Postgres client libraries and
 yum -y install epel-release https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm yum-utils
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum -y update epel-release pgdg-redhat-repo
 yum-config-manager --disable pgdg95
-yum -y install docker docker-compose gdal jq
-sed -i "s/'--selinux-enabled /'/" /etc/sysconfig/docker
-
-jq '. + { group: "dockerroot" }' < /etc/docker/daemon.json > /etc/docker/daemon.json.new
-mv -f /etc/docker/daemon.json.new /etc/docker/daemon.json
+yum -y install docker-ce docker-ce-cli containerd.io docker-compose gdal jq
 
 systemctl enable docker
 systemctl restart docker
