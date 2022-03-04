@@ -243,7 +243,12 @@ def make_vrt(data_list, wkt_dst_srs, outputDir, output_vrt_file, outputBounds=No
     for file, dst_file in zip(data_list, output_tmp_file_list):
         # Open source dataset and read source SRS
         gdal_data = gdal.Open(file)
-        data_proj = gdal_data.GetProjection()
+        try:
+            data_proj = gdal_data.GetProjection()
+        except RuntimeError:
+            print("geoprojection RuntimeError in file", file, ", skipping")
+            data_proj = ''
+
         if data_proj == '':
             print("Data without geoprojection info. DISCARDED!")
         else:
