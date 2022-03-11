@@ -773,7 +773,6 @@ class WeeklyComposite(object):
         ymax,
         force_input_epsg,
         tile_epsg_code,
-        tile_srs,
         tile_extent,
         inputs,
     ):
@@ -786,7 +785,6 @@ class WeeklyComposite(object):
         self.ymax = ymax
         self.force_input_epsg = force_input_epsg
         self.tile_epsg_code = tile_epsg_code
-        self.tile_srs = tile_srs
         self.tile_extent = tile_extent
         self.inputs = inputs
 
@@ -1081,16 +1079,10 @@ def process_radar(args, pool):
 
     groups = sorted(list(groups.items()))
     ref_map = get_lpis_map(args.lpis_path, 20)
-    ref_srs_map = {}
     ref_extent_map = {}
     for (tile_id, path) in ref_map.items():
         ds = gdal.Open(path, gdalconst.GA_ReadOnly)
-
         ref_extent_map[tile_id] = get_extent(ds)
-
-        tile_srs = osr.SpatialReference()
-        tile_srs.ImportFromWkt(ds.GetProjection())
-        ref_srs_map[tile_id] = tile_srs
 
     weekly_composites = []
     backscatter_groups = defaultdict(list)
@@ -1104,9 +1096,8 @@ def process_radar(args, pool):
             hdrs.append(product.path)
 
         tile_ref = ref_map.get(group.tile_id)
-        tile_srs = ref_srs_map.get(group.tile_id)
         tile_extent = ref_extent_map.get(group.tile_id)
-        if tile_ref is None or tile_srs is None or tile_extent is None:
+        if tile_ref is None or tile_extent is None:
             continue
 
         output = os.path.join(args.path, group.format(args.site_id))
@@ -1124,7 +1115,6 @@ def process_radar(args, pool):
             ymax,
             force_input_epsg,
             epsg_code,
-            tile_srs,
             tile_extent,
             hdrs,
         )
