@@ -1053,10 +1053,17 @@ def process_radar(args, pool):
         if input_srs is None:
             (input_srs, force_input_epsg) = get_projection(product.path)
 
+        # TODO: py3
+        group_week = (
+            int((product.week - 1) / args.radar_compositing_weeks)
+            * args.radar_compositing_weeks
+            + 1
+        )
+
         group = RadarGroup(
             product.year,
             product.month,
-            product.week,
+            group_week,
             product.tile_id,
             product.orbit_type_id,
             product.polarization,
@@ -1368,6 +1375,12 @@ def main():
         "--optical-products", required=False, help="optical products CSV"
     )
     parser.add_argument("--radar-products", required=False, help="radar products CSV")
+    parser.add_argument(
+        "--radar-compositing-weeks",
+        default=1,
+        type=int,
+        help="radar compositing period in weeks",
+    )
 
     re = parser.add_mutually_exclusive_group(required=False)
     re.add_argument(
