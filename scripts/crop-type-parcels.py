@@ -1078,11 +1078,23 @@ def process_radar(args, pool):
         tiles_input_srs[tile_id] = geom
 
     groups = sorted(list(groups.items()))
-    ref_map = get_lpis_map(args.lpis_path, 20)
+    if args.lpis_path:
+        ref_map = get_lpis_map(args.lpis_path, 20)
+    else:
+        ref_map = None
+
     ref_extent_map = {}
-    for (tile_id, path) in ref_map.items():
-        ds = gdal.Open(path, gdalconst.GA_ReadOnly)
-        ref_extent_map[tile_id] = get_extent(ds)
+    if args.lpis_path:
+        for (tile_id, path) in ref_map.items():
+            ds = gdal.Open(path, gdalconst.GA_ReadOnly)
+            ref_extent_map[tile_id] = get_extent(ds)
+            del ds
+    else:
+        for (group, products) in groups:
+            if group.tile_id not in ref_extent_map:
+                ds = gdal.Open(products[0].path, gdalconst.GA_ReadOnly)
+                ref_extent_map[group.tile_id] = get_extent(ds)
+                del ds
 
     weekly_composites = []
     backscatter_groups = defaultdict(list)
@@ -1095,16 +1107,25 @@ def process_radar(args, pool):
         for product in products:
             hdrs.append(product.path)
 
-        tile_ref = ref_map.get(group.tile_id)
-        tile_extent = ref_extent_map.get(group.tile_id)
-        if tile_ref is None or tile_extent is None:
-            continue
+        if args.lpis_path:
+            tile_ref = ref_map.get(group.tile_id)
+            tile_extent = ref_extent_map.get(group.tile_id)
+            if tile_ref is None or tile_extent is None:
+                continue
+        else:
+            tile_ref = None
+            tile_extent = ref_extent_map.get(group.tile_id)
 
         output = os.path.join(args.path, group.format(args.site_id))
         temp = os.path.splitext(output)[0] + "_TMP.tif"
 
         epsg_code = tiles[group.tile_id][1]
-        (xmin, xmax, ymin, ymax) = tiles_input_srs[group.tile_id].GetEnvelope()
+        if args.lpis_path:
+            (xmin, xmax, ymin, ymax) = tiles_input_srs[group.tile_id].GetEnvelope()
+        else:
+            (xmin, ymax) = tile_extent[0]
+            (xmax, ymin) = tile_extent[2]
+
         composite = WeeklyComposite(
             output,
             temp,
