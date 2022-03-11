@@ -292,13 +292,9 @@ def process_optical(args, pool, satellite_id):
             products.sort(key=lambda product: product.date)
 
             for product in products:
-                if (
-                    first_date is None or product.date < first_date
-                ):
+                if first_date is None or product.date < first_date:
                     first_date = product.date
-                if (
-                    last_date is None or product.date > last_date
-                ):
+                if last_date is None or product.date > last_date:
                     last_date = product.date
 
         start_date = first_date
@@ -844,9 +840,10 @@ class WeeklyComposite(object):
             command += [self.output]
             run_command(command, env)
 
-        command = get_statistics_invocation(self.output, self.tile_ref)
-        if command:
-            run_command(command, env)
+        if self.tile_ref:
+            command = get_statistics_invocation(self.output, self.tile_ref)
+            if command:
+                run_command(command, env)
 
 
 class WeeklyRatioStatistics(object):
@@ -861,6 +858,9 @@ class WeeklyRatioStatistics(object):
         env["ITK_USE_THREADPOOL"] = str(1)
         env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(2)
         env["OTB_MAX_RAM_HINT"] = str(1024)
+
+        if not self.tile_ref:
+            return
 
         (mean, dev, count) = get_statistics_file_names(self.output)
 
@@ -913,9 +913,10 @@ class BackscatterMonthlyComposite(object):
             command += [self.output]
             run_command(command, env)
 
-        command = get_statistics_invocation(self.output, self.tile_ref)
-        if command:
-            run_command(command, env)
+        if self.tile_ref:
+            command = get_statistics_invocation(self.output, self.tile_ref)
+            if command:
+                run_command(command, env)
 
 
 class CoherenceMonthlyComposite(object):
@@ -950,9 +951,10 @@ class CoherenceMonthlyComposite(object):
             command += [self.output]
             run_command(command, env)
 
-        command = get_statistics_invocation(self.output, self.tile_ref)
-        if command:
-            run_command(command, env)
+        if self.tile_ref:
+            command = get_statistics_invocation(self.output, self.tile_ref)
+            if command:
+                run_command(command, env)
 
 
 class CoherenceSeasonComposite(object):
@@ -987,9 +989,10 @@ class CoherenceSeasonComposite(object):
             command += [self.output]
             run_command(command, env)
 
-        command = get_statistics_invocation(self.output, self.tile_ref)
-        if command:
-            run_command(command, env)
+        if self.tile_ref:
+            command = get_statistics_invocation(self.output, self.tile_ref)
+            if command:
+                run_command(command, env)
 
 
 def get_projection(file):
@@ -1173,9 +1176,12 @@ def process_radar(args, pool):
     backscatter_composites = []
     backscatter_groups = sorted(list(backscatter_groups.items()))
     for (group, products) in backscatter_groups:
-        tile_ref = ref_map.get(group.tile_id)
-        if tile_ref is None:
-            continue
+        if args.lpis_path:
+            tile_ref = ref_map.get(group.tile_id)
+            if tile_ref is None:
+                continue
+        else:
+            tile_ref = None
 
         output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
@@ -1190,9 +1196,12 @@ def process_radar(args, pool):
         list(backscatter_ratio_weekly_groups.items())
     )
     for (group, pair) in backscatter_ratio_weekly_groups:
-        tile_ref = ref_map.get(group.tile_id)
-        if tile_ref is None:
-            continue
+        if args.lpis_path:
+            tile_ref = ref_map.get(group.tile_id)
+            if tile_ref is None:
+                continue
+        else:
+            tile_ref = None
 
         if pair.vv is None or pair.vh is None:
             continue
@@ -1206,9 +1215,12 @@ def process_radar(args, pool):
         list(backscatter_ratio_bi_monthly_groups.items())
     )
     for (group, pair) in backscatter_ratio_bi_monthly_groups:
-        tile_ref = ref_map.get(group.tile_id)
-        if tile_ref is None:
-            continue
+        if args.lpis_path:
+            tile_ref = ref_map.get(group.tile_id)
+            if tile_ref is None:
+                continue
+        else:
+            tile_ref = None
 
         output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
@@ -1229,9 +1241,12 @@ def process_radar(args, pool):
     coherence_monthly_composites = []
     coherence_monthly_groups = sorted(list(coherence_monthly_groups.items()))
     for (group, products) in coherence_monthly_groups:
-        tile_ref = ref_map.get(group.tile_id)
-        if tile_ref is None:
-            continue
+        if args.lpis_path:
+            tile_ref = ref_map.get(group.tile_id)
+            if tile_ref is None:
+                continue
+        else:
+            tile_ref = None
 
         output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
@@ -1244,9 +1259,12 @@ def process_radar(args, pool):
     coherence_season_composites = []
     coherence_season_groups = sorted(list(coherence_season_groups.items()))
     for (group, products) in coherence_season_groups:
-        tile_ref = ref_map.get(group.tile_id)
-        if tile_ref is None:
-            continue
+        if args.lpis_path:
+            tile_ref = ref_map.get(group.tile_id)
+            if tile_ref is None:
+                continue
+        else:
+            tile_ref = None
 
         output = os.path.join(args.path, group.format(args.site_id))
         output_extended = get_otb_extended_filename_with_tiling(output)
@@ -1331,9 +1349,13 @@ def main():
         "-m", "--mode", required=True, choices=["optical", "sar"], help="mode"
     )
     parser.add_argument("-p", "--path", default=".", help="working path")
-    parser.add_argument("--lpis-path", help="path to the rasterized LPIS")
+    parser.add_argument(
+        "--lpis-path", required=False, help="path to the rasterized LPIS"
+    )
     parser.add_argument("--tile-footprints", required=False, help="tile footprints CSV")
-    parser.add_argument("--optical-products", required=False, help="optical products CSV")
+    parser.add_argument(
+        "--optical-products", required=False, help="optical products CSV"
+    )
     parser.add_argument("--radar-products", required=False, help="radar products CSV")
 
     re = parser.add_mutually_exclusive_group(required=False)
