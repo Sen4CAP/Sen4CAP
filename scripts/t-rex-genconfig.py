@@ -71,7 +71,7 @@ def get_tilesets(conn, cursor):
         select table_name
         from information_schema.tables
         where table_schema = 'public'
-            and table_name like 'decl_%';
+            and (table_name like 'decl_%' or table_name like 'in_situ_polygons_%');
     """
     logging.debug(query)
     cursor.execute(query)
@@ -84,7 +84,7 @@ def get_tilesets(conn, cursor):
         select table_name
         from information_schema.tables
         where table_schema = 'public'
-            and table_name like 'lut_%';
+            and (table_name like 'lut_%' or table_name like 'polygon_attributes_%');
     """
     logging.debug(query)
     cursor.execute(query)
@@ -98,10 +98,13 @@ def get_tilesets(conn, cursor):
         tables = site_lpis_tables[site_id]
         for (id, name, date) in site_lpis_products[site_id]:
             year = date.year
-            lpis_table_name = f"decl_{short_name}_{year}"
-            if lpis_table_name in lpis_tables:
-                found_lpis_tables.append((lpis_table_name, name))
-                tables.append((lpis_table_name, date))
+            for lpis_table_name in [
+                f"decl_{short_name}_{year}",
+                f"in_situ_polygons_{short_name}_{year}",
+            ]:
+                if lpis_table_name in lpis_tables:
+                    found_lpis_tables.append((lpis_table_name, name))
+                    tables.append((lpis_table_name, date))
         tables.sort(key=lambda t: t[1])
 
     lpis_table_info = {}
@@ -163,8 +166,14 @@ def get_tilesets(conn, cursor):
         if not lpis_table:
             continue
 
-        lut_table = "lut" + lpis_table[4:]
+        if lpis_table.startswith("decl_"):
+            lpis_table_name = lpis_table[4:]
+        elif lpis_table.startswith("in_situ_polygons_"):
+            lpis_table_name = lpis_table[16:]
+
+        lut_table = "lut" + lpis_table_name
         if lut_table not in lut_tables:
+            lut_table = "polygon_attributes_" + lpis_table_name
             continue
 
         info = lpis_table_info.get(lpis_table)
