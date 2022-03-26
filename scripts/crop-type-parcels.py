@@ -889,6 +889,65 @@ class WeeklyComposite(object):
                 run_command(command, env)
 
 
+class WeeklyCompositeS4S(object):
+    def __init__(
+        self,
+        output,
+        temp,
+        tile_ref,
+        xmin,
+        xmax,
+        ymin,
+        ymax,
+        force_input_epsg,
+        tile_epsg_code,
+        tile_extent,
+        inputs,
+    ):
+        self.output = output
+        self.temp = temp
+        self.tile_ref = tile_ref
+        self.xmin = xmin
+        self.xmax = xmax
+        self.ymin = ymin
+        self.ymax = ymax
+        self.force_input_epsg = force_input_epsg
+        self.tile_epsg_code = tile_epsg_code
+        self.tile_extent = tile_extent
+        self.inputs = inputs
+
+    def run(self):
+        env = os.environ.copy()
+        env["ITK_USE_THREADPOOL"] = str(1)
+        env["ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"] = str(2)
+        env["OTB_MAX_RAM_HINT"] = str(1024)
+
+        if not os.path.exists(self.output):
+            self.inputs = filter(os.path.exists, self.inputs)
+            inputs = [
+                get_otb_extended_filename_skipgeom(input) for input in self.inputs
+            ]
+
+            command = []
+            command += ["otbcli", "Composite2"]
+            command += ["-progress", "false"]
+            command += ["-out", self.output, "uint16"]
+            command += ["-il"] + inputs
+            command += ["-bv", 0]
+            run_command(command, env)
+
+            command = []
+            command += ["optimize_gtiff.py"]
+            command += ["--no-data", 0]
+            command += [self.output]
+            run_command(command, env)
+
+        if self.tile_ref:
+            command = get_statistics_invocation(self.output, self.tile_ref)
+            if command:
+                run_command(command, env)
+
+
 class WeeklyRatioStatistics(object):
     def __init__(self, output, vv, vh, tile_ref):
         self.output = output
@@ -1136,16 +1195,19 @@ def process_radar(args, pool):
         ref_map = None
 
     ref_extent_map = {}
+    ref_gt_map = {}
     if args.lpis_path:
         for (tile_id, path) in ref_map.items():
             ds = gdal.Open(path, gdalconst.GA_ReadOnly)
             ref_extent_map[tile_id] = get_extent(ds)
+            ref_gt_map[tile_id] = ds.GetGeoTransform()
             del ds
     else:
         for (group, products) in groups:
             if group.tile_id not in ref_extent_map:
                 ds = gdal.Open(products[0].path, gdalconst.GA_ReadOnly)
                 ref_extent_map[group.tile_id] = get_extent(ds)
+                ref_gt_map[group.tile_id] = ds.GetGeoTransform()
                 del ds
 
     vrt_bands = defaultdict(list)
@@ -1179,19 +1241,34 @@ def process_radar(args, pool):
             (xmin, ymax) = tile_extent[0]
             (xmax, ymin) = tile_extent[2]
 
-        composite = WeeklyComposite(
-            output,
-            temp,
-            tile_ref,
-            xmin,
-            xmax,
-            ymin,
-            ymax,
-            force_input_epsg,
-            epsg_code,
-            tile_extent,
-            hdrs,
-        )
+        if args.lpis_path:
+            composite = WeeklyComposite(
+                output,
+                temp,
+                tile_ref,
+                xmin,
+                xmax,
+                ymin,
+                ymax,
+                force_input_epsg,
+                epsg_code,
+                tile_extent,
+                hdrs,
+            )
+        else:
+            composite = WeeklyCompositeS4S(
+                output,
+                temp,
+                tile_ref,
+                xmin,
+                xmax,
+                ymin,
+                ymax,
+                force_input_epsg,
+                epsg_code,
+                tile_extent,
+                hdrs,
+            )
         weekly_composites.append(composite)
         tile_vrt_bands = vrt_bands[group.tile_id]
         vrt_raster_band = E.VRTRasterBand(
