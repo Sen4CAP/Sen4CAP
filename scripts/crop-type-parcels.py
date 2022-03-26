@@ -15,6 +15,8 @@ from osgeo import ogr
 from osgeo import osr
 from osgeo import gdal
 from gdal import gdalconst
+from lxml import etree
+from lxml.builder import E
 import pipes
 import subprocess
 import sys
@@ -467,6 +469,17 @@ class RadarGroup(object):
             product_type,
         )
 
+    def band_description(self):
+        orbit_type = get_orbit_type(self.orbit_type_id)
+        product_type = get_product_type(self.product_type)
+        return "S1_W{:04}{:02}_{}_{}_{}".format(
+            self.year,
+            self.week,
+            orbit_type,
+            self.polarization,
+            product_type,
+        )
+
 
 class BackscatterWeeklyRatioGroup(object):
     def __init__(self, year, week, tile_id, orbit_type_id):
@@ -550,6 +563,16 @@ class BackscatterBiMonthlyGroup(object):
             site_id, self.year, self.month, self.tile_id, orbit_type, self.polarization
         )
 
+    def band_description(self, band_number):
+        orbit_type = get_orbit_type(self.orbit_type_id)
+        if band_number == 1:
+            desc = "MEAN"
+        elif band_number == 2:
+            desc = "CVAR"
+        return "S1_M{:04}{:02}_{}_{}_BCK_{}".format(
+            self.year, self.month, orbit_type, self.polarization, desc
+        )
+
 
 class BackscatterRatioBiMonthlyGroup(object):
     def __init__(self, year, month, tile_id, orbit_type_id):
@@ -586,6 +609,16 @@ class BackscatterRatioBiMonthlyGroup(object):
         orbit_type = get_orbit_type(self.orbit_type_id)
         return "SEN4CAP_L2A_PRD_S{}_M{:04}{:02}_T{}_{}_RATIO_BCK.tif".format(
             site_id, self.year, self.month, self.tile_id, orbit_type
+        )
+
+    def band_description(self, band_number):
+        orbit_type = get_orbit_type(self.orbit_type_id)
+        if band_number == 1:
+            desc = "MEAN"
+        elif band_number == 2:
+            desc = "CVAR"
+        return "S1_M{:04}{:02}_{}_RATIO_BCK_{}".format(
+            self.year, self.month, orbit_type, desc
         )
 
 
@@ -637,6 +670,15 @@ class CoherenceMonthlyGroup(object):
             site_id, self.year, self.month, self.tile_id, self.polarization
         )
 
+    def band_description(self, band_number):
+        if band_number == 1:
+            desc = "MEAN"
+        elif band_number == 2:
+            desc = "Q10"
+        return "S1_M{:04}{:02}_{}_COHE_{}".format(
+            self.year, self.month, self.polarization, desc
+        )
+
 
 class CoherenceSeasonGroup(object):
     def __init__(self, tile_id, polarization):
@@ -671,6 +713,9 @@ class CoherenceSeasonGroup(object):
         return "SEN4CAP_L2A_PRD_S{}_S_T{}_{}_COHE.tif".format(
             site_id, self.tile_id, self.polarization
         )
+
+    def band_description(self):
+        return "S1_S_{}_COHE_STDDEV.tif".format(self.polarization)
 
 
 def get_tile_footprints(file):
@@ -1103,6 +1148,7 @@ def process_radar(args, pool):
                 ref_extent_map[group.tile_id] = get_extent(ds)
                 del ds
 
+    vrt_bands = defaultdict(list)
     weekly_composites = []
     backscatter_groups = defaultdict(list)
     backscatter_ratio_weekly_groups = defaultdict(BackscatterPair)
@@ -1147,6 +1193,30 @@ def process_radar(args, pool):
             hdrs,
         )
         weekly_composites.append(composite)
+        tile_vrt_bands = vrt_bands[group.tile_id]
+        vrt_raster_band = E.VRTRasterBand(
+            {
+                "dataType": "Int16",
+                "band": str(len(tile_vrt_bands) + 1),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
+            },
+            E.Description(group.band_description()),
+            E.SimpleSource(
+                E.SourceFileName({"relativeToVRT": "1"}, output),
+                E.SourceBand("1"),
+                E.SourceProperties(
+                    {
+                        "RasterXSize": str(5490),
+                        "RasterYSize": str(5490),
+                        "DataType": "Int16",
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
+                    }
+                ),
+            ),
+        )
+        tile_vrt_bands.append(vrt_raster_band)
 
         if group.product_type == PRODUCT_TYPE_ID_BCK:
             month = group.month
@@ -1209,6 +1279,54 @@ def process_radar(args, pool):
         )
         backscatter_composites.append(composite)
 
+        tile_vrt_bands = vrt_bands[group.tile_id]
+        vrt_raster_band = E.VRTRasterBand(
+            {
+                "dataType": "Float32",
+                "band": str(len(tile_vrt_bands) + 1),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
+            },
+            E.Description(group.band_description(1)),
+            E.SimpleSource(
+                E.SourceFileName({"relativeToVRT": "1"}, output),
+                E.SourceBand("1"),
+                E.SourceProperties(
+                    {
+                        "RasterXSize": str(5490),
+                        "RasterYSize": str(5490),
+                        "DataType": "Float32",
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
+                    }
+                ),
+            ),
+        )
+        tile_vrt_bands.append(vrt_raster_band)
+        vrt_raster_band = E.VRTRasterBand(
+            {
+                "dataType": "Float32",
+                "band": str(len(tile_vrt_bands) + 1),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
+            },
+            E.Description(group.band_description(2)),
+            E.SimpleSource(
+                E.SourceFileName({"relativeToVRT": "1"}, output),
+                E.SourceBand("2"),
+                E.SourceProperties(
+                    {
+                        "RasterXSize": str(5490),
+                        "RasterYSize": str(5490),
+                        "DataType": "Float32",
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
+                    }
+                ),
+            ),
+        )
+        tile_vrt_bands.append(vrt_raster_band)
+
     backscater_ratio_statistics = []
     backscatter_ratio_weekly_groups = sorted(
         list(backscatter_ratio_weekly_groups.items())
@@ -1256,6 +1374,54 @@ def process_radar(args, pool):
             )
             backscatter_composites.append(composite)
 
+            tile_vrt_bands = vrt_bands[group.tile_id]
+            vrt_raster_band = E.VRTRasterBand(
+                {
+                    "dataType": "Float32",
+                    "band": str(len(tile_vrt_bands) + 1),
+                    "blockXSize": str(1024),
+                    "blockYSize": str(1024),
+                },
+                E.Description(group.band_description(1)),
+                E.SimpleSource(
+                    E.SourceFileName({"relativeToVRT": "1"}, output),
+                    E.SourceBand("1"),
+                    E.SourceProperties(
+                        {
+                            "RasterXSize": str(5490),
+                            "RasterYSize": str(5490),
+                            "DataType": "Float32",
+                            "BlockXSize": str(1024),
+                            "BlockYSize": str(1024),
+                        }
+                    ),
+                ),
+            )
+            tile_vrt_bands.append(vrt_raster_band)
+            vrt_raster_band = E.VRTRasterBand(
+                {
+                    "dataType": "Float32",
+                    "band": str(len(tile_vrt_bands) + 1),
+                    "blockXSize": str(1024),
+                    "blockYSize": str(1024),
+                },
+                E.Description(group.band_description(2)),
+                E.SimpleSource(
+                    E.SourceFileName({"relativeToVRT": "1"}, output),
+                    E.SourceBand("2"),
+                    E.SourceProperties(
+                        {
+                            "RasterXSize": str(5490),
+                            "RasterYSize": str(5490),
+                            "DataType": "Float32",
+                            "BlockXSize": str(1024),
+                            "BlockYSize": str(1024),
+                        }
+                    ),
+                ),
+            )
+            tile_vrt_bands.append(vrt_raster_band)
+
     coherence_monthly_composites = []
     coherence_monthly_groups = sorted(list(coherence_monthly_groups.items()))
     for (group, products) in coherence_monthly_groups:
@@ -1273,6 +1439,54 @@ def process_radar(args, pool):
             tile_ref, output, output_extended, products
         )
         coherence_monthly_composites.append(composite)
+
+        tile_vrt_bands = vrt_bands[group.tile_id]
+        vrt_raster_band = E.VRTRasterBand(
+            {
+                "dataType": "Float32",
+                "band": str(len(tile_vrt_bands) + 1),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
+            },
+            E.Description(group.band_description(1)),
+            E.SimpleSource(
+                E.SourceFileName({"relativeToVRT": "1"}, output),
+                E.SourceBand("1"),
+                E.SourceProperties(
+                    {
+                        "RasterXSize": str(5490),
+                        "RasterYSize": str(5490),
+                        "DataType": "Float32",
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
+                    }
+                ),
+            ),
+        )
+        tile_vrt_bands.append(vrt_raster_band)
+        vrt_raster_band = E.VRTRasterBand(
+            {
+                "dataType": "Float32",
+                "band": str(len(tile_vrt_bands) + 1),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
+            },
+            E.Description(group.band_description(2)),
+            E.SimpleSource(
+                E.SourceFileName({"relativeToVRT": "1"}, output),
+                E.SourceBand("2"),
+                E.SourceProperties(
+                    {
+                        "RasterXSize": str(5490),
+                        "RasterYSize": str(5490),
+                        "DataType": "Float32",
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
+                    }
+                ),
+            ),
+        )
+        tile_vrt_bands.append(vrt_raster_band)
 
     coherence_season_composites = []
     coherence_season_groups = sorted(list(coherence_season_groups.items()))
@@ -1292,10 +1506,73 @@ def process_radar(args, pool):
         )
         coherence_season_composites.append(composite)
 
+        tile_vrt_bands = vrt_bands[group.tile_id]
+        vrt_raster_band = E.VRTRasterBand(
+            {
+                "dataType": "Float32",
+                "band": str(len(tile_vrt_bands) + 1),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
+            },
+            E.Description(group.band_description()),
+            E.SimpleSource(
+                E.SourceFileName({"relativeToVRT": "1"}, output),
+                E.SourceBand("1"),
+                E.SourceProperties(
+                    {
+                        "RasterXSize": str(5490),
+                        "RasterYSize": str(5490),
+                        "DataType": "Float32",
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
+                    }
+                ),
+            ),
+        )
+        tile_vrt_bands.append(vrt_raster_band)
+
     pool.map(lambda c: c.run(), backscatter_composites)
     pool.map(lambda c: c.run(), backscater_ratio_statistics)
     pool.map(lambda c: c.run(), coherence_monthly_composites)
     pool.map(lambda c: c.run(), coherence_season_composites)
+
+    for (tile_id, vrt_bands) in vrt_bands.items():
+        gt = ref_gt_map[tile_id]
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(tiles[tile_id][1])
+        vrt_dataset = E.VRTDataset(
+            {
+                "rasterXSize": str(5490),
+                "rasterYSize": str(5490),
+            },
+            E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, srs.ExportToWkt()),
+            E.GeoTransform(
+                "{}, {}, {}, {}, {}, {}".format(
+                    gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]
+                )
+            ),
+            E.BlockXSize(str(1024)),
+            E.BlockYSize(str(1024)),
+        )
+        for vrt_band in vrt_bands:
+            vrt_dataset.append(vrt_band)
+
+        root = etree.ElementTree(vrt_dataset)
+        # TODO: py3
+        bands_vrt = "s1_{}.vrt".format(tile_id)
+        bands_vrt_10m = "s1_{}_10m.vrt".format(tile_id)
+        root.write(bands_vrt, pretty_print=True, encoding="utf-8")
+        command = [
+            "gdal_translate",
+            "-r",
+            "cubic",
+            "-tr",
+            "10",
+            "10",
+            bands_vrt,
+            bands_vrt_10m,
+        ]
+        run_command(command)
 
 
 def generate_headers(
