@@ -1032,14 +1032,6 @@ class L2aProcessor(object):
         self.l2a.site_id = self.lin.site_id
         self.l2a.product_id = self.lin.product_id
         self.l2a.orbit_id = self.lin.orbit_id
-        log_file_name = "l2a_{}.log".format(self.lin.product_id)
-        l2a_log_path = os.path.join(LAUNCHER_LOG_DIR, log_file_name)
-        self.l2a_log = LogHandler(
-            l2a_log_path,
-            "l2a_log",
-            self.launcher_log.level,
-            self.context.worker_id
-        )
         return True
 
     def update_rejection_reason(self, message):
@@ -1698,6 +1690,16 @@ class Maja(L2aProcessor):
         footprint_ok = False
         mosaic_ok = False
         move_ok = False
+
+        # create product log
+        log_file_name = "l2a_{}.log".format(self.lin.product_id)
+        l2a_log_path = os.path.join(LAUNCHER_LOG_DIR, log_file_name)
+        self.l2a_log = LogHandler(
+            l2a_log_path,
+            "l2a_log",
+            self.launcher_log.level,
+            self.context.worker_id
+        )
 
         # pre-processing
         if self.check_lin() and self.l2a_setup():
