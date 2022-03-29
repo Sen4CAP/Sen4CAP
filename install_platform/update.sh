@@ -148,13 +148,14 @@ function install_sen2agri_services()
     fi
     # it might happen that some files to be packaged with the wrong read rights
     chmod -R a+r ${TARGET_SERVICES_DIR}
+    chown -R ${SYS_ACC_NAME}: ${TARGET_SERVICES_DIR}/static/
     
     # cleanup the /home/sen2agri-service/.snap and /home/sen2agri-service/.sen2agri-services in case the gdal version changed
-    if [ -d /home/sen2agri-service/.snap ] ; then
-        rm -fr /home/sen2agri-service/.snap
+    if [ -d /home/${SYS_ACC_NAME}/.snap ] ; then
+        rm -fr /home/${SYS_ACC_NAME}/.snap
     fi
-    if [ -d /home/sen2agri-service/.sen2agri-services ] ; then
-        rm -fr /home/sen2agri-service/.sen2agri-services
+    if [ -d /home/${SYS_ACC_NAME}/.sen2agri-services ] ; then
+        rm -fr /home/${SYS_ACC_NAME}/.sen2agri-services
     fi
 }
 
@@ -433,7 +434,7 @@ fi
 
 if [ ! -d /var/log/sen2agri ]; then
     mkdir -p /var/log/sen2agri
-    chown sen2agri-service: /var/log/sen2agri
+    chown ${SYS_ACC_NAME}: /var/log/sen2agri
 fi
 
 systemctl start sen2agri-executor sen2agri-orchestrator sen2agri-http-listener sen2agri-demmaccs sen2agri-demmaccs.timer sen2agri-monitor-agent sen2agri-scheduler sen2agri-services

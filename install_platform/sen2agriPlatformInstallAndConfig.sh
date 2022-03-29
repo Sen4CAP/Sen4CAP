@@ -653,6 +653,7 @@ function install_sen2agri_services()
             sed -i -e "s/sen2agri?stringtype=unspecified/${DB_NAME}?stringtype=unspecified/" /usr/share/sen2agri/sen2agri-services/config/services.properties
         fi
     fi
+    chown -R ${SYS_ACC_NAME}: /usr/share/sen2agri/sen2agri-services/static/
 }
 
 function disable_selinux()
