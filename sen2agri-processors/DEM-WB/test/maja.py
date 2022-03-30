@@ -117,7 +117,10 @@ def get_prev_l2a_tile_path(tile_id, prev_l2a_product_path):
     tile_files = []
     print("START get_prev_l2a_tile_path")
     print("Tile_id = {} | prev_l2a_product_path = {}".format(tile_id, prev_l2a_product_path))
-    if os.path.exists(prev_l2a_product_path) and os.path.isdir(prev_l2a_product_path):
+    if (
+        (prev_l2a_product_path is not None) and
+        os.path.isdir(prev_l2a_product_path)
+    ):
         all_files = glob.glob("{}/*".format(prev_l2a_product_path))
         print("all_files = {}".format(all_files))
         for filename in all_files:

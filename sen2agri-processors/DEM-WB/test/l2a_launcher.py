@@ -774,7 +774,10 @@ class Tile(object):
             log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
-        if not os.path.exists(self.path):
+        if (
+            (self.path is None) or
+            (not os.path.exists(self.path))
+        ):
             rejection_reason = "Aborting processing for product {} because the input path does not exist".format(
                 self.downloader_history_id
             ) 
@@ -838,7 +841,11 @@ class L2aProcessor(object):
         self.l2a_log = None # created in l2a_setup
 
     def __del__(self):
-        if self.lin.was_archived and os.path.exists(self.lin.path):
+        if ( 
+            (self.lin.was_archived) and
+            (self.lin.path is not None) and
+            os.path.exists(self.lin.path)
+        ):
             remove_dir(self.lin.path)
 
     def get_envelope(self, footprints):
