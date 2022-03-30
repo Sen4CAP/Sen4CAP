@@ -1389,7 +1389,7 @@ class Maja(L2aProcessor):
             self.l2a_log.error(rejection_reason, print_msg = True)
             return False
         if mtd_file == False:
-            rejection_reason = "Can rejection_reason NOT find MTD files."
+            rejection_reason = "Can NOT find MTD files."
             self.update_rejection_reason(rejection_reason)
             self.l2a_log.error(rejection_reason, print_msg = True)
             return False
