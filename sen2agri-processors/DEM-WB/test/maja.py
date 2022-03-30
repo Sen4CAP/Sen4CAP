@@ -61,62 +61,27 @@ def get_product_info(product_name):
 
     return sat_id and (sat_id, acquisition_date)
 
-def check_maja_valid_output(maja_out, tile_id):
-    if not os.path.isdir(maja_out):
-        return False
-    dir_content = glob.glob("{}/*".format(maja_out))
-    atb_files_count = 0
-    fre_files_count = 0
-    sre_files_count = 0
-    qkl_file = False
-    mtd_file = False
-    data_dir = False
-    masks_dir = False
-    for filename in dir_content:
-        if os.path.isfile(filename) and re.search(r"_L2A_.*ATB.*\.tif$", filename, re.IGNORECASE) is not None:
-            atb_files_count += 1
-        if os.path.isfile(filename) and re.search(r"_L2A_.*FRE.*\.tif$", filename, re.IGNORECASE) is not None:
-            fre_files_count += 1
-        if os.path.isfile(filename) and re.search(r"_L2A_.*SRE.*\.tif$", filename, re.IGNORECASE) is not None:
-            sre_files_count += 1
-        if os.path.isfile(filename) and re.search(r"_L2A_.*MTD.*\.xml$", filename, re.IGNORECASE) is not None:
-            mtd_file = True
-        if os.path.isfile(filename) and re.search(r"_L2A_.*QKL.*\.jpg$", filename, re.IGNORECASE) is not None:
-            qkl_file = True
-        if os.path.isdir(filename) and re.search(r".*DATA$", filename) is not None:
-            data_dir = True
-        if os.path.isdir(filename) and re.search(r".*MASKS$", filename) is not None:
-            masks_dir = True
-
-        if args.removeFreFiles:
-            fre_files_count = 1
-
-        if args.removeSreFiles:
-            sre_files_count = 1
-            
-    res = (atb_files_count > 0 and
-           fre_files_count > 0 and
-           sre_files_count > 0 and
-           qkl_file and mtd_file and
-           data_dir and masks_dir)
-
-    return res
 
 def get_l1c_processor_output_format(working_directory, tile_id):
     if not os.path.isdir(working_directory):
+        l2a_log.error("The working dir {} does not exist".format(working_dir))
         return UNKNOWN_PROCESSOR_OUTPUT_FORMAT, None
     #check for MACCS output
     maccs_dbl_dir = glob.glob("{}/*_L2VALD_{}*.DBL.DIR".format(working_directory, tile_id))
     maccs_hdr_file = glob.glob("{}/*_L2VALD_{}*.HDR".format(working_directory, tile_id))
     if len(maccs_dbl_dir) >= 1 and len(maccs_hdr_file) >= 1:
+        l2a_log.info("MACCS_PROCESSOR_OUTPUT_FORMAT detected")
         return MACCS_PROCESSOR_OUTPUT_FORMAT, None
     #check for THEIA/MUSCATE format
     working_dir_content = glob.glob("{}/*".format(working_directory))
     for maja_out in working_dir_content:
-        if os.path.isdir(maja_out) and re.search(r".*_L2A_.*", maja_out, re.IGNORECASE) and check_maja_valid_output(maja_out, tile_id):
+        if os.path.isdir(maja_out) and re.search(r".*_L2A_.*", maja_out, re.IGNORECASE):
+            l2a_log.info("THEIA_MUSCATE_OUTPUT_FORMAT detected")
             return THEIA_MUSCATE_OUTPUT_FORMAT, maja_out
-		
+	
+    l2a_log.error("UNKNOWN_PROCESSOR_OUTPUT_FORMAT")
     return UNKNOWN_PROCESSOR_OUTPUT_FORMAT, None
+
 
 def create_sym_links(filenames, target_directory, log):
 
@@ -164,6 +129,7 @@ def get_prev_l2a_tile_path(tile_id, prev_l2a_product_path):
     print("STOP get_prev_l2a_tile_path")
     return tile_files
 
+
 def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context):
     l2a_log.info("Checking for MAJA JPI file in directory {} ...".format(maja_working_dir))
     
@@ -201,6 +167,7 @@ def get_maja_jpi_log_extract(maja_working_dir, demmaccs_context):
         l2a_log.error("Exception received when trying to read the MAJA JPI from file {}: {}".format(maja_jpi_file, e), print_msg = True, trace = True)
         pass
     return True
+
 
 def copy_common_gipp_file(working_dir, gipp_base_dir, gipp_sat_dir, gipp_sat_prefix, full_gipp_sat_prefix, gipp_tile_type, gipp_tile_prefix, tile_id, common_tile_id):
     #take the common one
@@ -246,6 +213,7 @@ class DEMMACCSContext(object):
         self.maccs_address = maccs_address
         self.input = l1c_input
         self.output = l2a_output
+
 
 def maccs_launcher(demmaccs_context, dem_output_dir):
     global running_containers
@@ -622,6 +590,7 @@ def postprocess(working_dir):
 
     return True
 
+
 def signal_handler(signum, frame):
 
     print("(Maja info) Signal caught: {}.".format(signum))
@@ -631,11 +600,13 @@ def signal_handler(signum, frame):
     )
     stop()
 
+
 def stop():
     global running_containers, l2a_log 
 
     stop_containers(running_containers, l2a_log)
     os._exit(0)
+
 
 parser = argparse.ArgumentParser(
     description="Launches DEM and MACCS/MAJA for L2A product creation")
