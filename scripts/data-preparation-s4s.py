@@ -2,14 +2,14 @@
 from __future__ import print_function
 
 import argparse
+from configparser import ConfigParser
 import csv
-from collections import defaultdict
 from datetime import date
+import docker
 import logging
 import multiprocessing.dummy
 import os
 import os.path
-from posixpath import dirname
 from osgeo import osr
 from osgeo import ogr
 import pipes
@@ -17,14 +17,8 @@ import psycopg2
 from psycopg2.sql import SQL, Literal, Identifier
 import psycopg2.extras
 import psycopg2.extensions
-import shutil
 import subprocess
 import sys
-
-try:
-    from configparser import ConfigParser
-except ImportError:
-    from ConfigParser import ConfigParser
 
 
 PRODUCT_TYPE_S4S_PARCELS = 14
@@ -45,19 +39,17 @@ def try_rm_file(f):
         return False
 
 
-def try_mkdir(p):
-    try:
-        os.makedirs(p)
-    except OSError:
-        pass
-
-
 class Config(object):
     def __init__(self, args):
         parser = ConfigParser()
         parser.read([args.config_file])
 
         self.host = parser.get("Database", "HostName")
+
+        # work around Docker networking scheme
+        if self.host == "127.0.0.1" or self.host == "::1" or self.host == "localhost":
+            self.host = "172.17.0.1"
+
         self.port = int(parser.get("Database", "Port", vars={"Port": "5432"}))
         self.dbname = parser.get("Database", "DatabaseName")
         self.user = parser.get("Database", "UserName")
@@ -108,48 +100,54 @@ class RasterizeDatasetCommand(object):
         run_command(command)
 
 
-class ComputeClassCountsCommand(object):
+class ComputeClassCountsCommand:
     def __init__(self, input, output):
         self.input = input
         self.output = output
 
     def run(self):
         output_dir = os.path.dirname(self.output)
+        client = docker.from_env()
+        volumes = {
+            self.input: {"bind": self.input, "mode": "ro"},
+            output_dir: {"bind": output_dir, "mode": "rw"},
+        }
         command = []
-        command += ["docker", "run", "--rm"]
-        command += [
-            "-v",
-            "{}:{}".format(
-                self.input,
-                self.input,
-            ),
-        ]
-        command += [
-            "-v",
-            "{}:{}".format(
-                output_dir,
-                output_dir,
-            ),
-        ]
-        command += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
-        command += [OTB_IMAGE_NAME]
         command += ["otbcli", "ComputeClassCounts"]
         command += ["-in", self.input]
         command += ["-out", self.output]
-        run_command(command)
+        client.containers.run(
+            image=OTB_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
 
 
-class MergeClassCountsCommand(object):
+class MergeClassCountsCommand:
     def __init__(self, inputs, output):
         self.inputs = inputs
         self.output = output
 
     def run(self):
+        # inputs should be in the same directory
+        output_dir = os.path.dirname(self.output)
+        client = docker.from_env()
+        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
         command = []
         command += ["merge-counts"]
         command += [self.output]
         command += self.inputs
-        run_command(command)
+        client.containers.run(
+            image=OTB_IMAGE_NAME,
+            remove=True,
+            user=f"{os.getuid()}:{os.getgid()}",
+            volumes=volumes,
+            command=command,
+        )
+        client.close()
 
 
 def run_command(args, env=None):
@@ -434,14 +432,20 @@ class DataPreparation(object):
 
     def get_connection(self):
         return psycopg2.connect(
-            host="/var/run/postgresql",
+            host=self.config.host,
+            port=self.config.port,
             dbname=self.config.dbname,
+            user=self.config.user,
+            password=self.config.password,
         )
 
     def get_ogr_connection_string(self):
-        return "PG:host={} dbname={}".format(
-            "/var/run/postgresql",
+        return "PG:dbname={} host={} port={} user={} password={}".format(
             self.config.dbname,
+            self.config.host,
+            self.config.port,
+            self.config.user,
+            self.config.password,
         )
 
     def find_overlaps(self, srid, tile_counts, total):
@@ -512,22 +516,9 @@ class DataPreparation(object):
         )
 
         cmd = []
-        cmd += ["docker", "run", "--rm"]
-        cmd += [
-            "-v",
-            "{}:{}".format(
-                os.path.dirname(os.path.realpath(strata)),
-                os.path.dirname(os.path.realpath(strata)),
-            ),
-        ]
-        cmd += ["-v", "/etc/passwd:/etc/passwd"]
-        cmd += ["-v", "/etc/group:/etc/group"]
-        cmd += ["-v", "/var/run/postgresql:/var/run/postgresql"]
-        cmd += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
-        cmd += [GDAL_IMAGE_NAME]
         cmd += ["ogr2ogr"]
         cmd += [
-            "PG:host=/var/run/postgresql dbname={}".format(self.config.dbname),
+            self.get_ogr_connection_string(),
             os.path.realpath(strata),
         ]
         cmd += ["-overwrite"]
@@ -586,7 +577,13 @@ from {}
         self,
         parcels,
     ):
-        ds = ogr.Open(parcels, 0)
+        parcels = os.path.realpath(parcels)
+        if os.path.splitext(parcels)[1].lower() == ".zip":
+            parcels_adj = f"/vsizip/{parcels}"
+        else:
+            parcels_adj = parcels
+
+        ds = ogr.Open(parcels_adj, 0)
         layer = ds.GetLayer()
         srs = layer.GetSpatialRef()
         is_projected = srs.IsProjected()
@@ -594,23 +591,10 @@ from {}
 
         print("Importing parcels")
         cmd = []
-        cmd += ["docker", "run", "--rm"]
-        cmd += [
-            "-v",
-            "{}:{}".format(
-                os.path.dirname(os.path.realpath(parcels)),
-                os.path.dirname(os.path.realpath(parcels)),
-            ),
-        ]
-        cmd += ["-v", "/etc/passwd:/etc/passwd"]
-        cmd += ["-v", "/etc/group:/etc/group"]
-        cmd += ["-v", "/var/run/postgresql:/var/run/postgresql"]
-        cmd += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
-        cmd += [GDAL_IMAGE_NAME]
         cmd += ["ogr2ogr"]
         cmd += [
-            "PG:host=/var/run/postgresql dbname={}".format(self.config.dbname),
-            os.path.realpath(parcels),
+            self.get_ogr_connection_string(),
+            parcels_adj,
         ]
         cmd += ["-overwrite"]
         cmd += ["-lco", "SPATIAL_INDEX=NONE"]
@@ -827,21 +811,9 @@ from {} polygons;"""
 
         print("Importing statistical data")
         cmd = []
-        cmd += ["docker", "run", "--rm"]
-        cmd += [
-            "-v",
-            "{}:{}".format(
-                os.path.realpath(statistical_data), os.path.realpath(statistical_data)
-            ),
-        ]
-        cmd += ["-v", "/etc/passwd:/etc/passwd"]
-        cmd += ["-v", "/etc/group:/etc/group"]
-        cmd += ["-v", "/var/run/postgresql:/var/run/postgresql"]
-        cmd += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
-        cmd += [GDAL_IMAGE_NAME]
         cmd += ["ogr2ogr"]
         cmd += [
-            "PG:host=/var/run/postgresql dbname={}".format(self.config.dbname),
+            self.get_ogr_connection_string(),
             os.path.realpath(statistical_data),
         ]
         cmd += ["-overwrite"]
@@ -878,7 +850,9 @@ where new.ogc_fid = t.ogc_fid;"""
 
                 query = SQL(
                     """
-                    alter table {} alter column crop_id set not null;
+                    alter table {} alter column crop_id set not null,
+                                   alter column planting_date type date using nullif(planting_date :: text, '') :: date,
+                                   alter column harvest_date type date using nullif(harvest_date :: text, '') :: date;
                     """
                 ).format(statistical_data_staging_id)
                 logging.debug(query.as_string(conn))
@@ -1108,7 +1082,7 @@ where ST_IsValid(wkb_geometry)
 
         if class_counts:
             del class_counts[0]
-            updates = class_counts.items()
+            updates = list(class_counts.items())
             del class_counts
 
             def update_batch(b):
@@ -1222,7 +1196,7 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
                     prj = "{}_{}_buf_{}m.prj".format(self.parcels_table, epsg_code, 10)
                     prj = os.path.join(self.insitu_path, prj)
 
-                    with open(prj, "wb") as f:
+                    with open(prj, "wt") as f:
                         f.write(wkt)
 
                     sql = SQL(
@@ -1235,25 +1209,11 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
                     sql = sql.as_string(conn)
 
                     command = []
-                    command += ["docker", "run", "--rm"]
-                    command += [
-                        "-v",
-                        "{}:{}".format(self.insitu_path, self.insitu_path),
-                    ]
-                    command += ["-v", "/etc/passwd:/etc/passwd"]
-                    command += ["-v", "/etc/group:/etc/group"]
-                    command += ["-v", "/var/run/postgresql:/var/run/postgresql"]
-                    command += ["-u", "{}:{}".format(os.getuid(), os.getgid())]
-                    command += [GDAL_IMAGE_NAME]
                     command += ["ogr2ogr"]
                     command += ["-overwrite"]
                     command += ["-sql", sql]
                     command += [output]
-                    command += [
-                        "PG:host=/var/run/postgresql dbname={}".format(
-                            self.config.dbname
-                        )
-                    ]
+                    command += [self.get_ogr_connection_string()]
                     commands.append((command, 1))
 
         q = multiprocessing.dummy.Queue()
@@ -1483,7 +1443,7 @@ order by site_id;"""
 def read_counts_csv(path):
     counts = {}
 
-    with open(path, "r") as file:
+    with open(path, "rt") as file:
         reader = csv.reader(file)
 
         for row in reader:
@@ -1529,8 +1489,8 @@ def main():
     config = Config(args)
     data_preparation = DataPreparation(config, args.year, args.working_path)
 
-    try_mkdir(data_preparation.insitu_path)
-    try_mkdir(data_preparation.working_path)
+    os.makedirs(data_preparation.insitu_path, exist_ok=True)
+    os.makedirs(data_preparation.working_path, exist_ok=True)
 
     if args.classification_strata:
         data_preparation.prepare_strata(
