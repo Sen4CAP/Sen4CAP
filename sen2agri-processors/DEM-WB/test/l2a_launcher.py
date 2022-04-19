@@ -774,7 +774,10 @@ class Tile(object):
             log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
 
-        if not os.path.exists(self.path):
+        if (
+            (self.path is None) or
+            (not os.path.exists(self.path))
+        ):
             rejection_reason = "Aborting processing for product {} because the input path does not exist".format(
                 self.downloader_history_id
             ) 
@@ -838,7 +841,11 @@ class L2aProcessor(object):
         self.l2a_log = None # created in l2a_setup
 
     def __del__(self):
-        if self.lin.was_archived and os.path.exists(self.lin.path):
+        if ( 
+            (self.lin.was_archived) and
+            (self.lin.path is not None) and
+            os.path.exists(self.lin.path)
+        ):
             remove_dir(self.lin.path)
 
     def get_envelope(self, footprints):
@@ -1032,14 +1039,6 @@ class L2aProcessor(object):
         self.l2a.site_id = self.lin.site_id
         self.l2a.product_id = self.lin.product_id
         self.l2a.orbit_id = self.lin.orbit_id
-        log_file_name = "l2a_{}.log".format(self.lin.product_id)
-        l2a_log_path = os.path.join(LAUNCHER_LOG_DIR, log_file_name)
-        self.l2a_log = LogHandler(
-            l2a_log_path,
-            "l2a_log",
-            self.launcher_log.level,
-            self.context.worker_id
-        )
         return True
 
     def update_rejection_reason(self, message):
@@ -1397,7 +1396,7 @@ class Maja(L2aProcessor):
             self.l2a_log.error(rejection_reason, print_msg = True)
             return False
         if mtd_file == False:
-            rejection_reason = "Can rejection_reason NOT find MTD files."
+            rejection_reason = "Can NOT find MTD files."
             self.update_rejection_reason(rejection_reason)
             self.l2a_log.error(rejection_reason, print_msg = True)
             return False
@@ -1698,6 +1697,16 @@ class Maja(L2aProcessor):
         footprint_ok = False
         mosaic_ok = False
         move_ok = False
+
+        # create product log
+        log_file_name = "l2a_{}.log".format(self.lin.product_id)
+        l2a_log_path = os.path.join(LAUNCHER_LOG_DIR, log_file_name)
+        self.l2a_log = LogHandler(
+            l2a_log_path,
+            "l2a_log",
+            self.launcher_log.level,
+            self.context.worker_id
+        )
 
         # pre-processing
         if self.check_lin() and self.l2a_setup():
