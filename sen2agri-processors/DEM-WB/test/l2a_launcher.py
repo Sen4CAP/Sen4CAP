@@ -570,7 +570,7 @@ class L2aMaster(object):
                     break
 
         except Exception as e:
-            self.launcher_log.info("Exception encountered: {}.".format(e), print_msg = True, trace = True)
+            self.launcher_log.error("Exception encountered: {}.".format(e), print_msg = True, trace = True)
         finally:
             self.stop_workers()
 
