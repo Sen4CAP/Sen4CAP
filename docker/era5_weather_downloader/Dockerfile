@@ -1,7 +1,7 @@
 # Filename: Dockerfile
 
 #Ubuntu 20.04 Focal Fossa
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 LABEL name="era5-weather" \
       maintainer="Alexandru Becheru <abecheru@c-s.ro>"

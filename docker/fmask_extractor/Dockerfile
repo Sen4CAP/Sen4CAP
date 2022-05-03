@@ -1,6 +1,5 @@
 # Filename: Dockerfile
 
-#Ubuntu 20.04 Focal Fossa
 FROM ubuntu:22.04
 
 LABEL name="fmask_extractor" \
