@@ -231,9 +231,9 @@ def signal_handler(signum, frame):
     stop()
 
 def stop():
-    global running_containers, fmask_context, log_filename
+    global running_containers, fmask_context, fmask_log
 
-    stop_containers(running_containers, fmask_context.output, log_filename)
+    stop_containers(running_containers, fmask_log)
     os._exit(0)
 
 parser = argparse.ArgumentParser(

@@ -23,8 +23,7 @@ from __future__ import absolute_import
 import subprocess
 import os
 import shutil
-import osr
-import gdal
+from osgeo import osr, gdal
 import ntpath
 import zipfile
 import tarfile

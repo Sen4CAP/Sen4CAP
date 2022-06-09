@@ -570,7 +570,7 @@ class L2aMaster(object):
                     break
 
         except Exception as e:
-            self.launcher_log.info("Exception encountered: {}.".format(e), print_msg = True, trace = True)
+            self.launcher_log.error("Exception encountered: {}.".format(e), print_msg = True, trace = True)
         finally:
             self.stop_workers()
 
@@ -838,7 +838,7 @@ class L2aProcessor(object):
         self.l2a = L2aProduct()
         self.master_q = master_q
         self.launcher_log = launcher_log
-        self.l2a_log = None # created in l2a_setup
+        self.l2a_log = None # created in sen2cor/maja run
 
     def __del__(self):
         if ( 
@@ -2171,6 +2171,16 @@ class Sen2Cor(L2aProcessor):
         mosaic_ok = False
         quality_ok = False
         move_ok = False
+
+        # create product log
+        log_file_name = "l2a_{}.log".format(self.lin.product_id)
+        l2a_log_path = os.path.join(LAUNCHER_LOG_DIR, log_file_name)
+        self.l2a_log = LogHandler(
+            l2a_log_path,
+            "l2a_log",
+            self.launcher_log.level,
+            self.context.worker_id
+        )
 
         #Perform lin checks and l2a setup
         if self.check_lin() and self.l2a_setup():
