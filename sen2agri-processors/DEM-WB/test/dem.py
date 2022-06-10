@@ -31,9 +31,7 @@ try:
     import pipes
     import subprocess
     import sys
-    from signal import signal, SIGINT, SIG_IGN
     import time
-    from multiprocessing import Pool, TimeoutError
 except Exception as e:
     print(e)
 
@@ -74,7 +72,14 @@ def run_command(cmd_array, log_path="", log_filename="", fake_command=False):
             return 1
     ok = "OK"
     nok = "NOK"
-    logging.debug("Command finished {} (res = {}) in {} : {}".format((ok if res == 0 else nok), res, datetime.timedelta(seconds=(time.time() - start)), cmd_str))
+    logging.debug(
+        "Command finished {} (res = {}) in {} : {}".format(
+            (ok if res == 0 else nok),
+            res,
+            datetime.timedelta(seconds=(time.time() - start)),
+            cmd_str,
+        )
+    )
     return res
 
 
@@ -481,9 +486,11 @@ def create_context(args):
     elif mode == "S2":
         dir_base += "/GRANULE/"
         if not os.path.exists(dir_base) or not os.path.isdir(dir_base):
-            logging.error("The path for Sentinel 2 (with GRANULE) does not exist ! {}".format(
+            logging.error(
+                "The path for Sentinel 2 (with GRANULE) does not exist ! {}".format(
                     dir_base
-                ))
+                )
+            )
             return []
         tile_dirs = [
             "{}{}".format(dir_base, f)
@@ -921,11 +928,11 @@ def process_WB(context):
             else:
                 xp = -x
                 lon = "w"
-            tile = "{}{}{}{}".format(
-                lon, str(xp).zfill(3), lat, str(yp).zfill(2)
-            )
+            tile = "{}{}{}{}".format(lon, str(xp).zfill(3), lat, str(yp).zfill(2))
             for continent in continents:
-                tile_path = os.path.join(context.swbd_directory, tile + continent + ".shp")
+                tile_path = os.path.join(
+                    context.swbd_directory, tile + continent + ".shp"
+                )
                 if os.path.exists(tile_path):
                     swbd_tiles.append(tile_path)
                     break
@@ -939,8 +946,10 @@ def process_WB(context):
             "ogrmerge.py",
             "-overwrite_ds",
             "-single",
-            "-a_srs", "EPSG:4326",
-            "-t_srs", "EPSG:{}".format(context.epsg_code),
+            "-a_srs",
+            "EPSG:4326",
+            "-t_srs",
+            "EPSG:{}".format(context.epsg_code),
             "-o",
             context.wb,
         ]
@@ -950,10 +959,18 @@ def process_WB(context):
     run_command(
         [
             "gdal_rasterize",
-            "-ot", "Byte",
-            "-burn", 1,
-            "-te", context.extent[1][0], context.extent[1][1], context.extent[3][0], context.extent[3][1],
-            "-tr", 240, 240,
+            "-ot",
+            "Byte",
+            "-burn",
+            1,
+            "-te",
+            context.extent[1][0],
+            context.extent[1][1],
+            context.extent[3][0],
+            context.extent[3][1],
+            "-tr",
+            240,
+            240,
             context.wb,
             context.water_mask,
         ]
@@ -1001,7 +1018,9 @@ def process_context(context):
         try:
             os.rmdir(context.temp_directory)
         except Exception as e:
-            logging.error("Couldn't remove the temp dir {}: {}".format(context.temp_directory, e))
+            logging.error(
+                "Couldn't remove the temp dir {}: {}".format(context.temp_directory, e)
+            )
     except Exception as e:
         logging.error(e)
         os._exit(1)
@@ -1022,39 +1041,19 @@ def parse_arguments():
         help="If set, only these tiles will be processed",
     )
     parser.add_argument("-w", "--working-dir", required=True, help="working directory")
-    parser.add_argument(
-        "-p",
-        "--processes-number",
-        required=False,
-        help="number of processed to run",
-        default="3",
-    )
     parser.add_argument("output", help="output location")
 
     args = parser.parse_args()
 
-    return int(args.processes_number), create_context(args)
+    return create_context(args)
 
 
 logging.basicConfig(level=logging.DEBUG)
-proc_number, contexts = parse_arguments()
+contexts = parse_arguments()
 
 if len(contexts) == 0:
     logging.error("The context could not be created")
     sys.exit(1)
 
-p = None
-try:
-    p = Pool(int(proc_number), lambda: signal(SIGINT, SIG_IGN))
-    res = p.map_async(process_context, contexts)
-    while True:
-        try:
-            res.get(1)
-            break
-        except TimeoutError:
-            pass
-    p.close()
-except KeyboardInterrupt:
-    if p:
-        p.terminate()
-        p.join()
+for context in contexts:
+    process_context(context)
