@@ -74,7 +74,9 @@ SOURCES += main.cpp \
     processor/products/l3bproducthelper.cpp \
     processor/genericcompositehandlerbase.cpp \
     processor/compositehandlerindicators.cpp \
-    processor/compositehandlers1.cpp
+    processor/compositehandlers1.cpp \
+    processor/s4s_croptypemappinghandler.cpp \
+    processor/zarr_handler.cpp
 
 HEADERS += \
     pch.hpp \
@@ -128,7 +130,9 @@ HEADERS += \
     processor/products/l3bproducthelper.h \
     processor/compositehandlers1.hpp \
     processor/compositehandlerindicators.hpp \
-    processor/genericcompositehandlerbase.hpp
+    processor/genericcompositehandlerbase.hpp \
+    processor/s4s_croptypemappinghandler.hpp \
+    processor/zarr_handler.hpp
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \
