@@ -1,6 +1,4 @@
-# Filename: Dockerfile
-
-FROM ubuntu:22.04
+FROM ubuntu:20.04
 
 LABEL name="fmask_extractor" \
       maintainer="Laurentiu Nicola <laurentiu.nicola@c-s.ro>"

@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:20.04
 
 LABEL name="sen2agri-l2a-processors" \
       maintainer="Laurentiu Nicola <laurentiu.nicola@c-s.ro>"
