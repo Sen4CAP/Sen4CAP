@@ -1732,7 +1732,7 @@ class Maja(L2aProcessor):
         self.l2a_log.info(msg, print_msg = True)
 
         #Compute footprint
-        if l2a_ok and self.create_mosaic():
+        if l2a_ok and self.get_l2a_footprint():
             footprint_ok = True
         msg = "Footprint computed: {}".format(
             "OK" if footprint_ok else "NOK"
