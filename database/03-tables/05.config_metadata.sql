@@ -8,5 +8,6 @@
   is_site_visible boolean NOT NULL DEFAULT false,
   label character varying,
   values json,
+  is_service_ui_visible boolean NOT NULL DEFAULT false,
   CONSTRAINT config_metadata_pkey PRIMARY KEY (key)
 )

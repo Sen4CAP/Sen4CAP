@@ -157,10 +157,10 @@ INSERT INTO config_metadata VALUES('processor.l2a.dem_image','DEM image name','s
 -- L2S1 processor Specific Keys
 -- -----------------------------------------------------------
 INSERT INTO config_metadata VALUES ('processor.l2s1.enabled', 'S1 pre-processing enabled', 'bool', false, 23, FALSE, 'S1 pre-processing enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.parallelism', 'Tiles to classify in parallel', 'int', false, 23, FALSE, 'Tiles to classify in parallel', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.path', 'The path where the S1 L2 products will be created', 'string', false, 23, FALSE, 'The path where the S1 L2 products will be created', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.temporal.offset', 'S1 pre-processor offset', 'int', false, 23, FALSE, 'S1 pre-processor offset', NULL) ;
-INSERT INTO config_metadata VALUES ('processor.l2s1.work.dir', 'The path where to create the temporary S1 L2A files', 'string', false, 23, FALSE, 'The path where to create the temporary S1 L2A files', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.parallelism', 'Number of jobs to run in parallel', 'int', false, 23, FALSE, 'Number of jobs to run in parallel', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.path', 'Final S1 L2 products path', 'string', false, 23, FALSE, 'Final S1 L2 products path', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.temporal.offset', 'Coherence interval', 'int', false, 23, FALSE, 'Coherence interval', NULL) ;
+INSERT INTO config_metadata VALUES ('processor.l2s1.work.dir', 'Temporary S1 L2 files path', 'string', false, 23, FALSE, 'Temporary S1 L2 files path', NULL);
 
 INSERT INTO config_metadata VALUES ('processor.l2s1.compute.amplitude', 'Compute amplitude', 'bool', false, 23, FALSE, 'Compute amplitude', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.compute.coherence', 'Compute coherence', 'bool', false, 23, FALSE, 'Compute coherence', NULL);
@@ -170,31 +170,40 @@ INSERT INTO config_metadata VALUES ('processor.l2s1.join.amplitude.steps', 'Join
 INSERT INTO config_metadata VALUES ('processor.l2s1.join.coherence.steps', 'Join coherence steps', 'bool', false, 23, FALSE, 'Join coherence steps', NULL);
 
 
-INSERT INTO config_metadata VALUES ('dem.name', 'DEM name', 'string', false, 23, FALSE, 'DEM name', NULL);
-INSERT INTO config_metadata VALUES ('primary.sensor', 'Primary sensor', 'string', false, 23, FALSE, 'Primary sensor', NULL);
+INSERT INTO config_metadata VALUES ('dem.name', 'DEM to use', 'string', false, 23, FALSE, 'DEM to use', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.acquisition.delay', 'Acquisition delay', 'int', false, 23, FALSE, 'Acquisition delay', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.copy.locally', 'Copy input products locally', 'bool', false, 23, FALSE, 'Copy input products locally', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.crop.nodata', 'Crop NODATA', 'bool', false, 23, FALSE, 'Crop NODATA', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.crop.output', 'Crop output', 'bool', false, 23, FALSE, 'Crop output', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.extract.histogram', 'Extract histogram', 'bool', false, 23, FALSE, 'Extract histogram', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.interval', 'Interval', 'int', false, 23, FALSE, 'Interval', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.interval', 'Preprocessing job interval', 'int', false, 23, FALSE, 'Preprocessing job interval', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.keep.intermediate', 'Keep intermediate files', 'bool', false, 23, FALSE, 'Keep intermediate files', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.master', 'S1 master name', 'string', false, 23, FALSE, 'S1 master name', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.min.intersection', 'Minimum intersection', 'float', false, 23, FALSE, 'Minimum intersection', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.master', 'Primary acquisition for colocation', 'string', false, 23, FALSE, 'Primary acquisition for colocation', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.min.intersection', 'Minimum % of SLC overlaps for coherence', 'float', false, 23, FALSE, 'Minimum % of SLC overlaps for coherence', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.output.extension', 'Output extension', 'string', false, 23, FALSE, 'Output extension', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.output.format', 'Output format', 'string', false, 23, FALSE, 'Output format', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.overwrite.existing', 'Overwrite existing products', 'bool', false, 23, FALSE, 'Overwrite existing products', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.parallel.steps.enabled', 'Parallel steps enabled', 'bool', false, 23, FALSE, 'Parallel steps enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.pixel.spacing', 'Pixel spacing', 'float', false, 23, FALSE, 'Pixel spacing', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.parallel.steps.enabled', 'Run steps in parallel', 'bool', false, 23, FALSE, 'Run steps in parallel', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.pixel.spacing', 'Output spatial resolution', 'float', false, 23, FALSE, 'Output spatial resolution', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.polarisations', 'Polarisations', 'string', false, 23, FALSE, 'Polarisations', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.process.newest', 'Process newest first', 'bool', false, 23, FALSE, 'Process newest first', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.projection', 'Projection', 'string', false, 23, FALSE, 'Projection', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.process.newest', 'Process newest scenes first', 'bool', false, 23, FALSE, 'Process newest scenes first', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.projection', 'Output projection', 'string', false, 23, FALSE, 'Output projection', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.resolve.links', 'Resolve links', 'bool', false, 23, FALSE, 'Resolve links', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.step.timeout', 'Step timeout', 'int', false, 23, FALSE, 'Step timeout', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.temporal.filter.interval', 'Temporal filter interval', 'int', false, 23, FALSE, 'Temporal filter interval', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.temporal.filter.interval', 'Temporal filter window', 'int', false, 23, FALSE, 'Temporal filter window', NULL);
 INSERT INTO config_metadata VALUES ('processor.l2s1.version', 'Processor version', 'string', false, 23, FALSE, 'Processor version', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.min.memory', 'Minimum memory to run step', 'string', false, 23, FALSE, 'Minimum memory to run step', NULL);
-INSERT INTO config_metadata VALUES ('processor.l2s1.min.disk', 'Minimum disk to run step', 'string', false, 23, FALSE, 'Minimum disk to run step', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.min.memory', 'Minimum free memory for a step', 'string', false, 23, FALSE, 'Minimum free memory for a step', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.min.disk', 'Minimum disk storage for a step', 'string', false, 23, FALSE, 'Minimum disk storage for a step', NULL);
+
+INSERT INTO config_metadata VALUES ('processor.l2s1.use.other.site.products', 'Reuse S1 L2 products created for other sites', 'string', false, 23, FALSE, 'Reuse S1 L2 products created for other sites', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.min.s2.intersection', 'Minimum % of intersection for S2 tile clipping', 'string', false, 23, FALSE, 'Minimum % of intersection for S2 tile clipping', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.ignore.previous.orbit.failure', 'Continue processing in case of a failure from the same orbit', 'string', false, 23, FALSE, 'Continue processing in case of a failure from the same orbit', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.convert.int', 'Make S1 L2 product pixel type UInt16', 'string', false, 23, FALSE, 'Make S1 L2 product pixel type UInt16', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.otb.min.memory', 'Memory to allocate to OTB steps', 'string', false, 23, FALSE, 'Memory to allocate to OTB steps', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.otb.enable.compression', 'Compress OTB steps output', 'string', false, 23, FALSE, 'Compress OTB steps output', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.terrain.flattening.autodetect', 'Decide usage of gamma naught correction based on detected elevation', 'string', false, 23, FALSE, 'Decide usage of gamma naught correction based on detected elevation', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.terrain.flattening.enabled', 'Enable usage of gamma naught correction', 'string', false, 23, FALSE, 'Enable usage of gamma naught correction', NULL);
+INSERT INTO config_metadata VALUES ('processor.l2s1.subset.before.tc.enabled', 'Subset SLC scene before terrain correction', 'string', false, 23, FALSE, 'Subset SLC scene before terrain correction', NULL);
 
 -- -----------------------------------------------------------
 -- LPIS configuration Specific Keys
@@ -214,15 +223,17 @@ INSERT INTO config_metadata VALUES ('archiver.max_age.l3b', 'L3B Product Max Age
 INSERT INTO config_metadata VALUES ('executor.processor.l3b.keep_job_folders', 'Keep L3B temporary product files for the orchestrator jobs', 'int', false, 8, FALSE, 'Keep L3B temporary product files for the orchestrator jobs', NULL);
 INSERT INTO config_metadata VALUES ('executor.processor.l3b.slurm_qos', 'Slurm QOS for L3B processor', 'string', true, 8, FALSE, 'Slurm QOS for LAI processor', NULL);
 INSERT INTO config_metadata VALUES ('general.scratch-path.l3b', 'Path for L3B temporary files', 'string', false, 1, FALSE, 'Path for L3B temporary files', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.cloud_optimized_geotiff_output', 'Generate L3B Cloud Optimized Geotiff outputs', 'bool', false, 4, FALSE, 'Generate L3B Cloud Optimized Geotiff outputs', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_fapar', 'L3B processor will produce FAPAR', 'int', false, 4, FALSE, 'L3B processor will produce FAPAR', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_fcover', 'L3B processor will produce FCOVER', 'int', false, 4, FALSE, 'L3B processor will produce FCOVER', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_in_domain_flags', 'L3B processor will produce input domain flags', 'int', false, 4, FALSE, 'Produce input domain flags', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_lai', 'L3B processor will produce LAI', 'int', false, 4, FALSE, 'Produce LAI', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_ndvi', 'L3B processor will produce NDVI', 'int', false, 4, FALSE, 'Produce NDVI', NULL);
+INSERT INTO config_metadata VALUES ('processor.l3b.cloud_optimized_geotiff_output', 'Generate L3B Cloud Optimized Geotiff outputs', 'bool', TRUE, 4, TRUE, 'Generate L3B Cloud Optimized Geotiff outputs', NULL);
+INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_fapar', 'L3B processor will produce FAPAR', 'bool', TRUE, 4, TRUE, 'Produce FAPAR', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_fcover', 'L3B processor will produce FCOVER', 'bool', TRUE, 4, TRUE, 'Produce FCOVER', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_in_domain_flags', 'L3B processor will produce input domain flags', 'bool', TRUE, 4, TRUE, 'Produce input domain flags', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_lai', 'L3B processor will produce LAI', 'bool', TRUE, 4, TRUE, 'Produce LAI', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_ndvi', 'L3B processor will produce NDVI', 'bool', TRUE, 4, TRUE, 'Produce NDVI', NULL, true);
 
-INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_ndwi', 'L3B processor will produce NDWI', 'int', false, 4, FALSE, 'Produce NDVI', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_brightness', 'L3B processor will produce brightness', 'int', false, 4, FALSE, 'Produce brightness', NULL);
+INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_ndwi', 'L3B processor will produce NDWI', 'bool', TRUE, 4, TRUE, 'Produce NDWI', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.l3b.filter.produce_brightness', 'L3B processor will produce brightness', 'bool', TRUE, 4, FALSE, 'Produce brightness', NULL, false);
+
+INSERT INTO config_metadata VALUES ('processor.l3b.produce_mosaic', 'L3B processor will produce mosaic and product preview', 'bool', TRUE, 4, FALSE, 'Produce mosaic', NULL, false);
 
 INSERT INTO config_metadata VALUES ('processor.l3b.generate_models', 'Specifies if models should be generated or not for LAI', 'int', false, 4, FALSE, 'Specifies if models should be generated or not for LAI', NULL);
 INSERT INTO config_metadata VALUES ('processor.l3b.l1c_availability_days', 'Number of days before current scheduled date within we must have L1C processed (default 20)', 'int', false, 4, FALSE, 'Number of days before current scheduled date within we must have L1C processed (default 20)', NULL);
@@ -235,8 +246,9 @@ INSERT INTO config_metadata VALUES ('processor.l3b.lai.tiles_filter', 'L3B tiles
 INSERT INTO config_metadata VALUES ('processor.l3b.lai.use_inra_version', 'L3B LAI processor will use INRA algorithm implementation', 'int', false, 4, FALSE, 'L3B LAI processor will use INRA algorithm implementation', NULL);
 INSERT INTO config_metadata VALUES ('processor.l3b.lai.use_lai_bands_cfg', 'Use LAI bands configuration file', 'int', false, 4, FALSE, 'Use LAI bands configuration file', NULL);
 INSERT INTO config_metadata VALUES ('processor.l3b.production_interval', 'The backward processing interval from the scheduled date for L3B products', 'int', false, 4, FALSE, 'The backward processing interval from the scheduled date for L3B products', NULL);
+-- TODO: This should be removed or moved to S2A_L3C ?
 INSERT INTO config_metadata VALUES ('processor.l3b.reproc_production_interval', 'The backward processing interval from the scheduled date for L3C products', 'int', false, 4, FALSE, 'The backward processing interval from the scheduled date for L3C products', NULL);
-INSERT INTO config_metadata VALUES ('processor.l3b.sched_wait_proc_inputs', 'L3B/L3C/L3D LAI scheduled jobs wait for products to become available', 'int', false, 4, FALSE, 'L3B/L3C/L3D LAI scheduled jobs wait for products to become available', NULL);
+INSERT INTO config_metadata VALUES ('processor.l3b.sched_wait_proc_inputs', 'Scheduled jobs wait for products to become available', 'int', false, 4, FALSE, 'Scheduled jobs wait for products to become available', NULL);
 
 -- -----------------------------------------------------------
 -- L2A Masked Specific Keys
@@ -276,7 +288,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_l4a.lc', 'LC classes to asses
 INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-node-size', 'Minimum node size', 'int', TRUE, 22, TRUE, 'Minimum node size', '{ "bounds": { "min": 0, "max": 100 } }');
 INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-s1-pix', 'Minimum number of S1 pixels', 'int', TRUE, 22, TRUE, 'Minimum number of S1 pixels', '{ "bounds": { "min": 0, "max": 100 } }');
 INSERT INTO config_metadata VALUES ('processor.s4c_l4a.min-s2-pix', 'Minimum number of S2 pixels', 'int', TRUE, 22, TRUE, 'Minimum number of S2 pixels', '{ "bounds": { "min": 0, "max": 100 } }');
-INSERT INTO config_metadata VALUES ('processor.s4c_l4a.mode', 'Mode', 'string', FALSE, 22, TRUE, 'Mode (both, s1-only, s2-only)', '{ "allowed_values": [{ "value": "s1-only", "display": "S1 Only" }, { "value": "s2-only", "display": "S2 only" }, { "value": "both", "display": "Both" }] }');
+INSERT INTO config_metadata VALUES ('processor.s4c_l4a.mode', 'Mode', 'string', FALSE, 22, TRUE, 'Mode (both, s1-only, s2-only)', '{ "allowed_values": [{ "value": "s1-only", "display": "S1 Only" }, { "value": "s2-only", "display": "S2 only" }, { "value": "both", "display": "Both" }] }', true);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4a.num-trees', 'Number of RF trees', 'int', TRUE, 22, TRUE, 'Number of RF trees', '{ "bounds": { "min": 0, "max": 1000 } }');
 INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-min', 'Minimum parcels to assess a crop type', 'int', TRUE, 22, TRUE, 'Minimum parcels to assess a crop type', '{ "bounds": { "min": 0, "max": 100 } }');
 INSERT INTO config_metadata VALUES ('processor.s4c_l4a.pa-train-h', 'Upper threshold for parcel counts by crop type', 'int', TRUE, 22, TRUE, 'Upper threshold for parcel counts by crop type', '{ "bounds": { "min": 0, "max": 5000 } }');
@@ -326,7 +338,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of 
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.markers_add_no_data_rows', 'Add in markers parcel rows containg only NA/NA1/NR', 'bool', true, 20, true, 'Add in markers parcel rows containg only NA/NA1/NR', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.prds_per_group', 'Data extraction number of products per group', 'int', FALSE, 20, FALSE, 'Data extraction number of products per group', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.sched_prds_hist_file', 'File where the list of the scheduled L4Cs is kept', 'string', true, 20, FALSE, 'File where the list of the scheduled L4Cs is kept', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable tillage monitoring', 'int', false, 20, true, 'Enable tillage monitoring', NULL);
+INSERT INTO config_metadata VALUES ('processor.s4c_l4c.tillage_monitoring', 'Enable tillage monitoring', 'bool', false, 20, true, 'Enable tillage monitoring', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_dir', 'Config files directory', 'string', FALSE, 20, FALSE, 'Config files directory', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.cfg_upload_dir', 'Site upload files directory', 'string', FALSE, 20, FALSE, 'Site upload files directory', NULL);
 INSERT INTO config_metadata VALUES ('processor.s4c_l4c.country', 'Site country', 'string', FALSE, 20, FALSE, 'Site country', NULL);
@@ -348,35 +360,40 @@ INSERT INTO config_metadata VALUES ('processor.s4c_l4c.year', 'Current L4C proce
 INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.slurm_qos', 'Slurm QOS for MDB1 processor', 'string', true, 8, FALSE, 'Slurm QOS for MDB1 processor', NULL);
 INSERT INTO config_metadata VALUES ('executor.processor.s4c_mdb1.keep_job_folders', 'Keep MDB1 temporary product files for the orchestrator jobs', 'string', true, 8, FALSE, 'Keep MDB1 temporary product files for the orchestrator jobs', NULL);
 INSERT INTO config_metadata VALUES ('general.scratch-path.s4c_mdb1', 'Path for S4C MDB1 temporary files', 'string', false, 1, FALSE, 'Path for S4C MDB1 temporary files', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_enabled', 'AMP markers extraction enabled', 'bool', true, 26, FALSE, 'AMP markers extraction enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.cohe_enabled', 'COHE markers extraction enabled', 'bool', true, 26, FALSE, 'COHE markers extraction enabled', NULL);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_enabled', 'AMP markers extraction enabled', 'bool', true, 26, true, 'Extract Amplitude markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.cohe_enabled', 'COHE markers extraction enabled', 'bool', true, 26, true, 'Extract Coherence markers', NULL, true);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.data_extr_dir', 'Location for the MDB1 data extration files', 'string', true, 26, FALSE, 'Location for the MDB1 data extration files', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fapar_enabled', 'FAPAR markers extraction enabled', 'bool', true, 26, FALSE, 'FAPAR markers extraction enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fcover_enabled', 'FCOVER markers extraction enabled', 'bool', true, 26, FALSE, 'FCOVER markers extraction enabled', NULL);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fapar_enabled', 'FAPAR markers extraction enabled', 'bool', true, 26, true, 'Extract FAPAR markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.fcover_enabled', 'FCOVER markers extraction enabled', 'bool', true, 26, true, 'Extract FCOVER markers', NULL, true);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_amp', 'The list of AMP products', 'select', FALSE, 26, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}');
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_cohe', 'The list of COHE products', 'select', FALSE, 26, TRUE, 'Available COHE input files', '{"name":"inputFiles_COHE[]","product_type_id":11,"satellite_ids":[3]}');
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}');
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.lai_enabled', 'LAI markers extraction enabled', 'bool', true, 26, FALSE, 'LAI markers extraction enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.ndvi_enabled', 'NDVI markers extraction enabled', 'bool', true, 26, FALSE, 'NDVI markers extraction enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_vvvh_enabled', 'AMP VV/VH markers extraction enabled', 'bool', true, 26, FALSE, 'AMP VV/VH markers extraction enabled', NULL);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.valid_pixels_enabled', 'Number of valid pixels per parcels extraction enabled', 'bool', true, 26, FALSE, 'Number of valid pixels per parcels extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab02_enabled', 'Reflectance band B02 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B02 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab03_enabled', 'Reflectance band B03 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B03 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab04_enabled', 'Reflectance band B04 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B04 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab05_enabled', 'Reflectance band B05 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B05 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab06_enabled', 'Reflectance band B06 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B06 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab07_enabled', 'Reflectance band B07 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B07 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab08_enabled', 'Reflectance band B08 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B08 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab8a_enabled', 'Reflectance band B8A markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B8A markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab11_enabled', 'Reflectance band B11 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B11 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab12_enabled', 'Reflectance band B12 markers extraction enabled', 'bool', true, 26, FALSE, 'Reflectance band B12 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_enabled', 'MDB3 markers extraction enabled', 'bool', true, 26, FALSE, 'MDB3 markers extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'string', true, 26, FALSE, 'MDB3 input tables location', NULL); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.lai_enabled', 'LAI markers extraction enabled', 'bool', true, 26, true, 'Extract LAI markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.ndvi_enabled', 'NDVI markers extraction enabled', 'bool', true, 26, true, 'Extract NDVI markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_vvvh_enabled', 'AMP VV/VH markers extraction enabled', 'bool', true, 26, true, 'Extract Amplitude VV/VH markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.valid_pixels_enabled', 'Number of valid pixels per parcels extraction enabled', 'bool', true, 26, FALSE, 'Extract number of valid pixels per parcel', NULL, true); 
+-- INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.stdev_enabled', 'Stdev per parcel extraction enabled', 'bool', true, 26, FALSE, 'Stdev per parcel extraction enabled', NULL); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.minmax_enabled', 'Min/Max per parcel extraction enabled', 'bool', true, 26, true, 'Min/Max per parcel extraction enabled', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.median_enabled', 'Median per parcels extraction enabled', 'bool', true, 26, true, 'Median per parcels extraction enabled', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.p25_enabled', 'P25 per parcels extraction enabled', 'bool', true, 26, true, 'P25 per parcels extraction enabled', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.p75_enabled', 'P75 per parcels extraction enabled', 'bool', true, 26, true, 'P75 per parcels extraction enabled', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab02_enabled', 'Reflectance band B02 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B02 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab03_enabled', 'Reflectance band B03 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B03 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab04_enabled', 'Reflectance band B04 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B04 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab05_enabled', 'Reflectance band B05 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B05 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab06_enabled', 'Reflectance band B06 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B06 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab07_enabled', 'Reflectance band B07 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B07 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab08_enabled', 'Reflectance band B08 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B08 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab8a_enabled', 'Reflectance band B8A markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B8A markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab11_enabled', 'Reflectance band B11 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B11 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab12_enabled', 'Reflectance band B12 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B12 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_enabled', 'MDB3 markers extraction enabled', 'bool', true, 26, true, 'Extract MDB3 markers', NULL, true); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'string', true, 26, true, 'MDB3 input tables location', NULL); 
 
 -- -----------------------------------------------------------
 -- Fmask Specific Keys
 -- -----------------------------------------------------------
-INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 31, FALSE, 'Controls whether to run Fmask on optical products', NULL);
+INSERT INTO config_metadata VALUES ('processor.fmask.enabled', 'Controls whether to run Fmask on optical products', 'bool', false, 31, FALSE, 'Enable FMask', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.extractor_image', 'FMask extractor docker image name', 'string', false, 31, FALSE, 'FMask extractor docker image name', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.gdal_image', 'gdal docker image for FMask', 'string', false, 31, FALSE, 'gdal docker image for FMask', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.image', 'FMask docker image', 'string', false, 31, FALSE, 'FMask docker image', NULL);
@@ -388,7 +405,7 @@ INSERT INTO config_metadata VALUES ('processor.fmask.optical.dilation.snow', 'Sn
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.max-retries', 'Maximum number of retries for a product', 'int', false, 31, FALSE, 'Maximum number of retries for a product', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.num-workers', 'Number of workers', 'int', false, 31, FALSE, 'Number of workers', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.output-path', 'Output path', 'string', false, 31, FALSE, 'Output path', NULL);
-INSERT INTO config_metadata VALUES ('processor.fmask.optical.retry-interval', 'Retry interval', 'int', false, 31, FALSE, 'Retry interval', NULL);
+INSERT INTO config_metadata VALUES ('processor.fmask.optical.retry-interval', 'Retry interval', 'string', false, 31, FALSE, 'Retry interval', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.l8', 'Threshold for L8', 'int', false, 31, FALSE, 'Threshold for L8', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold.s2', 'Threshold for S2', 'int', false, 31, FALSE, 'Threshold for S2', NULL);
 INSERT INTO config_metadata VALUES ('processor.fmask.optical.threshold', 'Global threshold', 'int', false, 31, FALSE, 'Global threshold', NULL);

@@ -20,6 +20,7 @@ CREATE TABLE datasource
   enabled boolean NOT NULL DEFAULT false,
   site_id smallint,
   secondary_datasource_id integer,
+  product_type character varying(50),
   CONSTRAINT pk_datasource PRIMARY KEY (id),
   CONSTRAINT datasource_satellite_id_fkey FOREIGN KEY (satellite_id)
       REFERENCES satellite (id) MATCH SIMPLE

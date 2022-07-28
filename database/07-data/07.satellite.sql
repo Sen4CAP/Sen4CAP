@@ -18,3 +18,10 @@ satellite_name)
 VALUES (
 3,
 'sentinel1');
+
+INSERT INTO satellite(
+id,
+satellite_name)
+VALUES (
+4,
+'landsat9');

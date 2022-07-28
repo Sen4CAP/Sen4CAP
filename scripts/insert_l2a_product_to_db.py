@@ -155,8 +155,8 @@ def get_product_info(product_name):
             if (acquisition_date != ""):
                 if (not "T" in acquisition_date):
                     acquisition_date = acquisition_date + "T000000"
-
-    return sat_id and (sat_id, acquisition_date)
+    
+    return (sat_id, acquisition_date)
 
 
 def get_product_orbit_id(product_name):

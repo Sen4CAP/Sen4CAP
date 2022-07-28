@@ -47,12 +47,12 @@ def broceliande (image, output, sample, mounts, docker_image):
     for i,j in zip(range(0,nbr_band_per_image,2), range(1,nbr_band_per_image,2)):
         cmd += " --ndviBands %s,%s"%(i,j)
 
-    nombre_total_bande = (nbr_band_per_image + int(nombre_ndvi))
+    nbr_band_total = (nbr_band_per_image + int(nombre_ndvi))
 
-    for k in range(nbr_band_per_image,nombre_total_bande,1):
+    for k in range(nbr_band_per_image,nbr_band_total,1):
         cmd += " -b %s -f AP -t Max -a area --thresholds 400,1000,10000,30000"%(k)
 
-    cmd += " --autoThreadFlag -c {}-{} --bgRate \"100%\" --bgTagRate \"100%\" --showChannel --tagValue 1,2,3 --bgValue 100".format(str(nbr_band_per_image), str(nombre_total_bande-1))
+    cmd += " --autoThreadFlag -c {}-{} --bgRate \"100%\" --bgTagRate \"100%\" --showChannel --tagValue 1,2,3 --bgValue 100".format(str(nbr_band_per_image), str(nbr_band_total-1))
 
     # print ("Executing command: {}".format(cmd))
     run_command(cmd)
