@@ -24,6 +24,7 @@ set(GenericComposite_HEADERS
     ./include/otbMinCompositeFunctor.h
     ./include/otbMaxCompositeFunctor.h
     ./include/otbLastValueCompositeFunctor.h
+    ./include/otbCountValidPixelsFunctor.h
     ./include/otbImageListCompositeFilter.h)
 
 otb_create_application(
