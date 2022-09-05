@@ -37,6 +37,8 @@
 #include "include/otbWeightedAverageCompositeFunctor.h"
 #include "include/otbMedianCompositeFunctor.h"
 #include "include/otbLastValueCompositeFunctor.h"
+#include "include/otbCountValidPixelsFunctor.h"
+
 
 #include "otbImageToGenericRSOutputParameters.h"
 #include "otbGenericRSResampleImageFilter.h"
@@ -342,6 +344,7 @@ private:
       m_Map.push_back({"median", "Composite:MEDIAN", new otb::Functor::MedianCompositeFunctor<InputPixelType, OutputPixelType>()});
       m_Map.push_back({"waverage", "Composite:WEIGHTED_AVERAGE", new otb::Functor::WeightedAverageCompositeFunctor<InputPixelType, OutputPixelType>()});
       m_Map.push_back({"last", "Composite:LAST", new otb::Functor::LastValueCompositeFunctor<InputPixelType, OutputPixelType>()});
+      m_Map.push_back({"cntvldpix", "Composite:COUNT_VALID_PIXELS_ONLY", new otb::Functor::CountValidPixelsOnlyFunctor<InputPixelType, OutputPixelType>()});
 
       // TODO : Add new functors
       // m_Map.push_back({"last", "Composite:LAST", new otb::Functor::LastValueCompositeFunctor<InputPixelType, OutputPixelType>()});
@@ -483,7 +486,7 @@ private:
   {
       auto inImages = GetParameterStringList("il");
       // Just return the image if a single image
-      if (inImages.size() == 1)
+      if ((inImages.size() == 1) && (GetParameterString("method") != "cntvldpix"))
       {
           SetParameterOutputImage("out", GetReader(inImages[0])->GetOutput());
           return;
