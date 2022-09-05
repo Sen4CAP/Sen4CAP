@@ -424,6 +424,11 @@ private:
         AddParameter(ParameterType_String, "lutqgis", "QGIS color map file");
         MandatoryOff("lutqgis");
 
+        AddParameter(ParameterType_Int, "aggregatetiles", "Specifies, in the in case of rasters product, if the aggregate of tiles should be"
+                                                  " performed or not. This implies also the creation or not of the preview image. By default is created");
+        MandatoryOff("aggregatetiles");
+        SetDefaultParameterInt("aggregatetiles", 1);
+
         AddParameter(ParameterType_Int, "aggregatescale", "The aggregate rescale resolution");
         MandatoryOff("aggregatescale");
         SetDefaultParameterInt("aggregatescale", 60);
@@ -434,6 +439,10 @@ private:
 
         AddParameter(ParameterType_String, "prdnamesuffix", "Specifies a suffix to be added to the product name");
         MandatoryOff("prdnamesuffix");
+
+        AddParameter(ParameterType_Int, "zarr", "Specifies if the product should be exported to zarr");
+        MandatoryOff("zarr");
+        SetDefaultParameterInt("zarr", 0);
 
         SetDocExampleParameterValue("destroot", "/home/ata/sen2agri/sen2agri-processors-build/Testing/Temporary/Dest");
         SetDocExampleParameterValue("fileclass", "SVT1");
@@ -458,6 +467,8 @@ private:
 #endif
 
       m_bVectPrd = (this->GetParameterInt("vectprd") != 0);
+
+      m_bExportToZarr = (this->GetParameterInt("zarr") != 0);
 
       // by default, we expect a "timeperiod" parameter
       m_bDynamicallyTimePeriod = false;
@@ -589,9 +600,16 @@ private:
           const std::string &strProductFileName = BuildFileName(METADATA_CATEG, "", ".xml");
           generateProductMetadataFile(strMainFolderFullPath + "/" + strProductFileName);
           if (!m_bVectPrd) {
-              bool bAgSuccess = ExecuteAgregateTiles(strMainFolderFullPath, this->GetParameterInt("aggregatescale"));
-              std::cout << "Aggregating tiles " << (bAgSuccess ? "SUCCESS!" : "FAILED!") << std::endl;
-              TransferMainProductPreviewFile();
+              if (this->GetParameterInt("aggregatetiles")) {
+                  bool bAgSuccess = ExecuteAgregateTiles(strMainFolderFullPath, this->GetParameterInt("aggregatescale"));
+                  std::cout << "Aggregating tiles " << (bAgSuccess ? "SUCCESS!" : "FAILED!") << std::endl;
+                  TransferMainProductPreviewFile();
+              }
+
+              if (m_bExportToZarr) {
+                  bool bSuccess = ExecuteZarrExport(strMainFolderFullPath);
+                  std::cout << "Export to zarr was " << (bSuccess ? "SUCCESS!" : "FAILED!") << std::endl;
+              }
           }
       }
 
@@ -1863,6 +1881,14 @@ private:
 #endif
   }
 
+  bool ExecuteZarrExport(const std::string &strMainFolderFullPath) {
+      std::cout << "Starting exporting ZARR tiles for product " << strMainFolderFullPath << std::endl;
+      std::vector<const char *> args;
+      args.emplace_back("--product-path");
+      args.emplace_back(strMainFolderFullPath.c_str());
+      return ExecuteExternalProgram("s2x_prd_to_zarr.py", args);
+  }
+
   bool ExecuteGdalTranslateOps(const std::string &rasterFileName, bool bHasDiscreteValues) {
       bool compress = (GetParameterInt("compress") != 0);
       bool cog = (GetParameterInt("cog") != 0);
@@ -2093,6 +2119,7 @@ private:
     bool m_bDynamicallyTimePeriod;
 
     bool m_bVectPrd;
+    bool m_bExportToZarr;
     ProcessorInputDescriptor m_procInputDescr;
 };
 }
