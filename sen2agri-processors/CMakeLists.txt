@@ -74,6 +74,7 @@ install(FILES ../scripts/insert_l2a_product_to_db.py
               ../scripts/arrow/csv_to_ipc.py
               ../scripts/arrow/ipc_to_csv.py
               ../scripts/arrow/extract_mdb3_markers.py
+              ../scripts/zarr/s2x_prd_to_zarr.py
         DESTINATION usr/bin/
 	    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                     GROUP_READ GROUP_EXECUTE
