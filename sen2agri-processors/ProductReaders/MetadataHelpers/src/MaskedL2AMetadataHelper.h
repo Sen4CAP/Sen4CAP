@@ -171,6 +171,11 @@ public:
     {
         return m_pHelper->GetNoDataValue();
     }
+    virtual int GetBOAAddOffset(const std::string &bandName)
+    {
+        return m_pHelper->GetBOAAddOffset(bandName);
+    }
+
     // MASKS API
     // if binarizeResult is true, it returns a mask image having 0 as valid pixel and 1 for invalid pixels
     // if binarizeResult is false, the pixels are:

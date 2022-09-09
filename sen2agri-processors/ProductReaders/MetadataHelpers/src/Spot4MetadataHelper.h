@@ -117,6 +117,7 @@ public:
     virtual std::vector<std::string> GetAllBandNames();
     virtual std::vector<std::string> GetPhysicalBandNames();
     virtual int GetResolutionForBand(const std::string &bandName);
+    virtual int GetBOAAddOffset(const std::string &bandName);
 
     virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution);
 

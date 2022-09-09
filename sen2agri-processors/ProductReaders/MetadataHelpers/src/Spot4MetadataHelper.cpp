@@ -188,6 +188,12 @@ int Spot4MetadataHelper<PixelType, MasksPixelType>::GetResolutionForBand(const s
 }
 
 template <typename PixelType, typename MasksPixelType>
+int Spot4MetadataHelper<PixelType, MasksPixelType>::GetBOAAddOffset(const std::string &)
+{
+    return 0;
+}
+
+template <typename PixelType, typename MasksPixelType>
 float Spot4MetadataHelper<PixelType, MasksPixelType>::GetAotQuantificationValue(int)
 {
     return 1000.0;

@@ -30,6 +30,29 @@ template <typename PixelType, typename MasksPixelType>
 class SEN2CORMetadataHelper : public MetadataHelper<PixelType, MasksPixelType>
 {
     template< class TInput, class TOutput>
+    class Sen2CorBoAAddOffsetFunctor
+    {
+    public:
+        Sen2CorBoAAddOffsetFunctor(){}
+        void Initialize(int boaOffset) { m_BoaOffset = boaOffset;}
+        Sen2CorBoAAddOffsetFunctor& operator =(const Sen2CorBoAAddOffsetFunctor& copy) {
+            return *this;
+        }
+        bool operator!=( const Sen2CorBoAAddOffsetFunctor & a) const { return true ;}
+        bool operator==( const Sen2CorBoAAddOffsetFunctor & a ) const { return !(*this != a); }
+
+        TOutput operator()( const TInput & A) {
+            TOutput ret(A.Size());
+            for(int i = 0; i<A.Size(); i++) {
+                ret[i] = A[i] + m_BoaOffset;
+            }
+            return ret;
+        }
+    private:
+        int m_BoaOffset;
+    };
+        
+    template< class TInput, class TOutput>
     class Sen2CorMaskHandlerFunctor
     {
     public:
@@ -105,13 +128,17 @@ class SEN2CORMetadataHelper : public MetadataHelper<PixelType, MasksPixelType>
 public:
     typedef Sen2CorMaskHandlerFunctor<typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::PixelType,
                                         typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::PixelType>    Sen2CorMaskHandlerFunctorType;
-    typedef itk::NaryFunctorImageFilter< typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType,
-                                        typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType,
-                                        Sen2CorMaskHandlerFunctorType>                             Sen2CorNaryFunctorImageFilterType;
+
+    typedef Sen2CorBoAAddOffsetFunctor<typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::PixelType,
+                                        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::PixelType>    Sen2CorBoAAddOffsetFunctorType;
 
     typedef itk::UnaryFunctorImageFilter< typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType,
                                         typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType,
                                         Sen2CorMaskHandlerFunctorType>                             Sen2CorUnaryFunctorImageFilterType;
+
+    typedef itk::UnaryFunctorImageFilter< typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType,
+                                        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType,
+                                        Sen2CorBoAAddOffsetFunctorType>                             BoaAddOffsetFilterType;
 
     SEN2CORMetadataHelper();
 
@@ -128,6 +155,7 @@ public:
     virtual std::vector<std::string> GetAllBandNames();
     virtual std::vector<std::string> GetPhysicalBandNames();
     virtual int GetResolutionForBand(const std::string &bandName);
+    virtual int GetBOAAddOffset(const std::string &bandName);
 
     virtual typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer GetL2AMasksImage(MasksFlagType nMaskFlags, bool binarizeResult, int resolution);
 
@@ -179,6 +207,16 @@ private:
     std::string GetGranuleXmlPath(const std::unique_ptr<MACCSFileMetadata> &metadata);
     void UpdateFromGranuleMetadata();
     std::string NormalizeBandName(const std::string &bandName);
+
+    typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer ApplyBoaOffset(
+            typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer inImg, const std::string &bandName);
+
+    typename BoaAddOffsetFilterType::Pointer GetBoaAddOffsetFilter() {
+        typename BoaAddOffsetFilterType::Pointer filter = BoaAddOffsetFilterType::New();
+        m_boaAddOffsetFilters.push_back(filter);
+        return filter;
+    }
+    std::vector<typename BoaAddOffsetFilterType::Pointer> m_boaAddOffsetFilters;
 
 };
 

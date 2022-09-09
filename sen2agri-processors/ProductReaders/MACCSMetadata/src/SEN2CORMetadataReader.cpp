@@ -95,6 +95,18 @@ MACCSImageInformation ReadSEN2CORProductImageCharacteristics(const TiXmlElement 
             result.Bands.push_back(band);
         }
     }
+
+    if (auto boaOffsetValueListEl = el->FirstChildElement("BOA_ADD_OFFSET_VALUES_LIST")) {
+        for (auto boaOffsetEl = boaOffsetValueListEl->FirstChildElement("BOA_ADD_OFFSET"); boaOffsetEl;
+             boaOffsetEl = boaOffsetEl->NextSiblingElement("BOA_ADD_OFFSET")) {
+            const std::string &bandId = GetAttribute(boaOffsetEl, "band_id");
+            auto it = std::find_if(result.Bands.begin(), result.Bands.end(), [&bandId](const CommonBand& obj) {return obj.Id == bandId;});
+            if (it != result.Bands.end()) {
+                it->boaAddOffset = GetText(boaOffsetEl);
+            }
+        }
+    }
+
     return result;
 }
 

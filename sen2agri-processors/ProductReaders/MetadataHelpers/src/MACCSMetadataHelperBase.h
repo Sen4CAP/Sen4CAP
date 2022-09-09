@@ -190,6 +190,8 @@ public:
 
     const char * GetNameOfClass() { return "MACCSMetadataHelperBase"; }
 
+    virtual int GetBOAAddOffset(const std::string &) {return 0;}
+
 protected:
     virtual bool DoLoadMetadata(const std::string &file);
 

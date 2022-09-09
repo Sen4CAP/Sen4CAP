@@ -38,6 +38,7 @@ struct CommonBand
 {
     std::string Id;
     std::string Name;
+    std::string boaAddOffset;
 };
 
 struct CommonGeoPosition

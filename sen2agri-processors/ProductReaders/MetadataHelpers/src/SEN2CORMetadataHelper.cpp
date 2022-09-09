@@ -128,17 +128,17 @@ SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetImage(
     if (validBandNames.size() == 1) {
         typename MetadataHelper<PixelType, MasksPixelType>::ImageReaderType::Pointer reader =
             this->CreateReader(GetImageFileName(validBandNames[0], outRes));
-        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer img =
+        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer readerImg =
             reader->GetOutput();
-        img->UpdateOutputInformation();
+        readerImg->UpdateOutputInformation();
+        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer img = ApplyBoaOffset(readerImg, validBandNames[0]);
         int curRes = img->GetSpacing()[0];
         // if no resampling, just return the raster
         if (outRes == curRes) {
-            return reader->GetOutput();
+            return img;
         }
         float fMultiplicationFactor = ((float)curRes) / outRes;
-        return this->m_ImageResampler.getResampler(reader->GetOutput(), fMultiplicationFactor)
-            ->GetOutput();
+        return this->m_ImageResampler.getResampler(img, fMultiplicationFactor)->GetOutput();
     }
 
     // if we have several bands
@@ -147,11 +147,12 @@ SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetImage(
     for (const std::string &bandName : validBandNames) {
         typename MetadataHelper<PixelType, MasksPixelType>::ImageReaderType::Pointer reader =
             this->CreateReader(GetImageFileName(bandName, outRes));
-        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer img =
+        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer readerImg =
             reader->GetOutput();
-        img->UpdateOutputInformation();
+        readerImg->UpdateOutputInformation();
+        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer img = ApplyBoaOffset(readerImg, validBandNames[0]);
         int curRes = img->GetSpacing()[0];
-        // for MAJA we have only one band per reflectance raster
+        // for Sen2Cor we have only one band per reflectance raster
         this->m_bandsExtractor.ExtractImageBands(img, imageList, { 0 }, Interpolator_NNeighbor,
                                                  curRes, outRes);
     }
@@ -188,6 +189,7 @@ SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetImageList(
         typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer img =
             reader->GetOutput();
         img->UpdateOutputInformation();
+        img = ApplyBoaOffset(img, bandName);
         int curRes = img->GetSpacing()[0];
         // for MAJA we have only one band per reflectance raster
         this->m_bandsExtractor.ExtractImageBands(img, imageList, { 0 }, Interpolator_NNeighbor,
@@ -250,6 +252,17 @@ int SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetResolutionForBand(
         }
     }
     return -1;
+}
+
+template <typename PixelType, typename MasksPixelType>
+int SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetBOAAddOffset(const std::string &bandName)
+{
+    auto it = std::find_if(this->m_metadata->ImageInformation.Bands.begin(), this->m_metadata->ImageInformation.Bands.end(),
+                           [&bandName](const CommonBand& obj) {return obj.Name == bandName;});
+    if (it != this->m_metadata->ImageInformation.Bands.end()) {
+        return std::atoi(it->boaAddOffset.c_str());
+    }
+    return 0;
 }
 
 template <typename PixelType, typename MasksPixelType>
@@ -717,4 +730,21 @@ void SEN2CORMetadataHelper<PixelType, MasksPixelType>::UpdateFromGranuleMetadata
                 granuleMetadata->ProductInformation.ViewingAngles;
         }
     }
+}
+
+template <typename PixelType, typename MasksPixelType>
+typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer
+SEN2CORMetadataHelper<PixelType, MasksPixelType>::ApplyBoaOffset(typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer inImg,
+                                                                 const std::string &bandName)
+{
+    int boaOffset = GetBOAAddOffset(bandName);
+    if (boaOffset != 0) {
+        typename BoaAddOffsetFilterType::Pointer filter = GetBoaAddOffsetFilter();
+        filter->GetFunctor().Initialize(boaOffset);
+        filter->SetInput(inImg);
+        typename MetadataHelper<PixelType, MasksPixelType>::VectorImageType::Pointer retImg = filter->GetOutput();
+        retImg->UpdateOutputInformation();
+        return retImg;
+    }
+    return inImg;
 }

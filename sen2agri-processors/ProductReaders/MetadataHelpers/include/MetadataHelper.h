@@ -89,6 +89,7 @@ public:
     virtual std::vector<std::string> GetAllBandNames() = 0;
     virtual std::vector<std::string> GetPhysicalBandNames() = 0;
     virtual int GetResolutionForBand(const std::string &bandName) = 0;
+    virtual int GetBOAAddOffset(const std::string &bandName) = 0;
 
     virtual std::string GetRedBandName() { return m_nRedBandName; }
     virtual std::string GetBlueBandName() { return m_nBlueBandName; }
