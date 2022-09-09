@@ -34,7 +34,8 @@ namespace otb {
 template < class TMeasurementVector >
 Markers1CsvWriter<TMeasurementVector>
 ::Markers1CsvWriter(): m_TargetFileName(""),
-    m_bUseMinMax(false), m_bUseValidityCnt(false)
+    m_bUseMinMax(false), m_bUseValidityCnt(false),
+    m_bUseMedian(false), m_bUseP25(false), m_bUseP75(false)
 {
     m_IdPosInHeader = -1;
     m_MeanPosInHeader = -1;
@@ -42,6 +43,9 @@ Markers1CsvWriter<TMeasurementVector>
     m_MinPosInHeader = -1;
     m_MaxPosInHeader = -1;
     m_ValidPixelsPosInHeader = -1;
+    m_MedianPosInHeader = -1;
+    m_P25PosInHeader = -1;
+    m_P75PosInHeader = -1;
     m_csvSeparator = ',';
     m_mapValuesIndex = 0;
 }
@@ -92,91 +96,52 @@ Markers1CsvWriter<TMeasurementVector>
 
     m_bIdIsInteger = bIdIsInteger;
     bool isFieldNameHdrItem;
+    int idx = 0;
     for (const auto &hdrItem: vec) {
         isFieldNameHdrItem = (hdrItem == idFieldName);
-        bool isDoubleValHdr = (!isFieldNameHdrItem && (hdrItem == "mean" || hdrItem == "stdev"));
+        bool isIntValHdr = (hdrItem == "valid_pixels_cnt");
         const HeaderInfoType &hdrInfo = isFieldNameHdrItem ?
-                    HeaderInfoType(hdrItem, m_bIdIsInteger) :
+                    HeaderInfoType(hdrItem, hdrItem, m_bIdIsInteger, true, idx) :
                     HeaderInfoType(BuildHeaderItem(dateStr, hdrItem, fileType, headerAdditionalFields),
-                                   isDoubleValHdr);
+                                   hdrItem, isIntValHdr, false, idx);
         m_vecHeaderFields.emplace_back(hdrInfo);
+        idx++;
     }
-    m_IdPosInHeader = GetPositionInHeader(idFieldName);
-    m_MeanPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "mean",  fileType, headerAdditionalFields));
-    m_StdevPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "stdev",  fileType, headerAdditionalFields));
-    m_MinPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "min",  fileType, headerAdditionalFields));
-    m_MaxPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "max",  fileType, headerAdditionalFields));
-    m_ValidPixelsPosInHeader = GetPositionInHeader(BuildHeaderItem(dateStr, "valid_pixels_cnt",  fileType, headerAdditionalFields));
 }
 
 template < class TMeasurementVector >
 template <typename MapType, typename MapMinMaxType>
 void
 Markers1CsvWriter<TMeasurementVector>
-::AddInputMap(const MapType& map, const MapMinMaxType& mapMins, const MapMinMaxType& mapMax,
-              const MapMinMaxType& mapValidPixels)
+::AddInputMap(const std::map<std::string, const MapType*> &map, const std::map<std::string, const MapMinMaxType*> &mapOptionals)
 {
-    // We ensure that we have the same number of values for these maps as in the input map
-    bool useStdev = false;
-    if (m_bUseStdev && m_StdevPosInHeader > 0) {
-        useStdev = true;
-    }
-
-    bool useMinMax = false;
-    if (m_bUseMinMax) {
-        if (map.size() == mapMins.size() && map.size() == mapMax.size() &&
-                m_MinPosInHeader > 0 && m_MaxPosInHeader > 0) {
-            useMinMax = true;
-        }
-    }
-    bool useValidityCnt = false;
-    if (m_bUseValidityCnt) {
-        if (map.size() == mapValidPixels.size() && m_ValidPixelsPosInHeader > 0) {
-            useValidityCnt = true;
+    std::vector<ColumnToValuesInfo<const MapType, const MapMinMaxType>> columnToVals;
+    for (const HeaderInfoType &hdrField: m_vecHeaderFields) {
+        if (!hdrField.IsFieldIdColumn() && hdrField.GetPositionInHeader() > 0) {
+            columnToVals.push_back(ColumnToValuesInfo<const MapType, const MapMinMaxType>(hdrField, map, mapOptionals));
         }
     }
 
+    const MapType* mapMean = map.find("mean")->second;
     typename MapType::const_iterator it;
-    typename MapMinMaxType::const_iterator itMin = mapMins.begin();
-    typename MapMinMaxType::const_iterator itMax = mapMax.begin();
-    typename MapMinMaxType::const_iterator itValidPixelsCnt = mapValidPixels.begin();
-
-    std::string fieldId;
-    for ( it = map.begin() ; it != map.end() ; ++it)
+    for ( it = mapMean->begin() ; it != mapMean->end() ; ++it)
     {
-      fieldId = boost::lexical_cast<std::string>(it->first);
-      const auto &meanVal = it->second.mean[m_mapValuesIndex];
-
       FieldEntriesType fieldEntry;
       // we exclude from the header the fid
       fieldEntry.values.resize(m_vecHeaderFields.size() - 1);
       // exclude header so subtract 1 from the pos in header
-      fieldEntry.values[m_MeanPosInHeader-1] = meanVal;
-      if (useStdev) {
-          const auto &stdDevVal = it->second.stdDev[m_mapValuesIndex];
-          fieldEntry.values[m_StdevPosInHeader-1] = stdDevVal;
-      }
-      if (useMinMax) {
-          fieldEntry.values[m_MinPosInHeader-1] = itMin->second[m_mapValuesIndex];
-          fieldEntry.values[m_MaxPosInHeader-1] = itMax->second[m_mapValuesIndex];
-      }
-      if (useValidityCnt) {
-          fieldEntry.values[m_ValidPixelsPosInHeader-1] = itValidPixelsCnt->second[m_mapValuesIndex];
+      for (auto &colVals: columnToVals) {
+          if (!colVals.hdrItemInfo.IsFieldIdColumn()) {
+              fieldEntry.values[colVals.hdrItemInfo.GetPositionInHeader()-1] = colVals.GetNextValue(m_mapValuesIndex);
+          }
       }
 
       // add it into the container
       FileFieldsInfoType fileFieldsInfoType;
-      fileFieldsInfoType.fid = fieldId;
+      fileFieldsInfoType.fid = boost::lexical_cast<std::string>(it->first);
       fileFieldsInfoType.fieldsEntries.push_back(fieldEntry);
 
       m_FileFieldsContainer.push_back(fileFieldsInfoType);
-      if (useMinMax) {
-          ++itMin;
-          ++itMax;
-      }
-      if (useValidityCnt) {
-          ++itValidPixelsCnt;
-      }
     }
 }
 
@@ -219,19 +184,19 @@ Markers1CsvWriter<TMeasurementVector>
 
     outStream << fileFieldsInfos.fid.c_str() << m_csvSeparator;
     int fieldEntriesSize = fileFieldsInfos.fieldsEntries.size();
-    bool isDoubleFieldVal;
+    bool isIntValue;
     int curHdrItemIdx;
     int hdrVecSize = m_vecHeaderFields.size();  // do not consider the id
     for (int i = 0; i<fieldEntriesSize; i++) {
         const std::vector<double> &curLineVect = fileFieldsInfos.fieldsEntries[i].values;
         for (int j = 0; j<curLineVect.size(); j++) {
-            isDoubleFieldVal = true;
+            isIntValue = false;
             curHdrItemIdx = j+1;
             if (curHdrItemIdx < hdrVecSize) {
                 const HeaderInfoType &hdrItem = m_vecHeaderFields[curHdrItemIdx];
-                isDoubleFieldVal = hdrItem.IsDouble();
+                isIntValue = hdrItem.IsIntegerValue();
             }
-            if (isDoubleFieldVal) {
+            if (!isIntValue) {
                 outStream << DoubleToString(curLineVect[j]).c_str();
             } else {
                 outStream << (int)curLineVect[j];
@@ -266,7 +231,7 @@ void
 Markers1CsvWriter<TMeasurementVector>
 ::WriteCsvHeader(std::ofstream &fileStream) {
     for (int i = 0; i<m_vecHeaderFields.size(); i++) {
-        fileStream << m_vecHeaderFields[i].GetName();
+        fileStream << m_vecHeaderFields[i].GetFullColumnName();
         if (i < m_vecHeaderFields.size()-1) {
             fileStream << m_csvSeparator;
         }
@@ -307,7 +272,7 @@ Markers1CsvWriter<TMeasurementVector>
 ::GetPositionInHeader(const std::string &name)
 {
     auto pred = [name](const HeaderInfoType &hdrItem) {
-        return hdrItem.GetName() == name;
+        return hdrItem.GetFullColumnName() == name;
     };
     // check if the name is found in the headers list
     typename std::vector<HeaderInfoType>::const_iterator hdrIt =std::find_if(std::begin(m_vecHeaderFields), std::end(m_vecHeaderFields), pred);

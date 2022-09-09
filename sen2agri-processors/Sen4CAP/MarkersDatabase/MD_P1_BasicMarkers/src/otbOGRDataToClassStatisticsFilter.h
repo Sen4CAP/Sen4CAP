@@ -25,6 +25,8 @@
 #include "otbPersistentFilterStreamingDecorator.h"
 #include "itkSimpleDataObjectDecorator.h"
 
+#define NO_DATA -10000
+
 namespace otb
 {
 
@@ -71,6 +73,7 @@ public:
         StatisticsAccumulator(const TRealVectorPixelType & pixel)
         {
             m_Pixels.push_back(pixel);
+            TRealVectorPixelType &addedPixel = m_Pixels[m_Pixels.size()-1];
 
             m_Count = pixel;
             m_CountInvalid = pixel;
@@ -90,6 +93,7 @@ public:
                     m_Min[band] = 0;
                     m_Max[band] = 0;
                     m_SqSum[band] = 0;
+                    addedPixel[band] = NO_DATA;
                 }
             }
         }
@@ -114,6 +118,7 @@ public:
         void Update(const TRealVectorPixelType & pixel)
         {
             m_Pixels.push_back(pixel);
+            TRealVectorPixelType &addedPixel = m_Pixels[m_Pixels.size()-1];
 
             const unsigned int nBands = pixel.GetSize();
             for (unsigned int band = 0 ; band < nBands ; band ++ )
@@ -127,6 +132,7 @@ public:
                            m_Sum[band], m_SqSum[band], m_Min[band], m_Max[band]);
                 } else {
                     m_CountInvalid[band]++;
+                    addedPixel[band] = NO_DATA;
                 }
             }
         }
@@ -148,12 +154,41 @@ public:
 
         bool checkValid(const RealValueType &value)
         {
-            if ((value != 0.0) && (value != -10000))
+            if ((value != 0.0) && (value != NO_DATA))
             {
                 return true;
             }
             return false;
         }
+
+        std::vector<RealValueType> GetBandSortedValues(int band) {
+            std::vector<RealValueType> retVals;
+            for(auto it = std::begin(m_Pixels); it != std::end(m_Pixels); ++it) {
+                const auto &val = (*it)[band];
+                if (val != NO_DATA) {
+                    retVals.push_back(val);
+                }
+            }
+            std::sort(retVals.begin(), retVals.end());
+            // keep the only values
+            retVals.erase(std::unique(retVals.begin(), retVals.end()), retVals.end());
+            return retVals;
+        }
+
+        RealValueType ComputeQuartile(const std::vector<RealValueType> &vals, int percentile) {
+            RealValueType ret = 0;
+            int sz = vals.size();
+            if (sz > 0) {
+                int first = sz * percentile/100;
+                if ((sz % 2) == 0) {
+                    ret = (vals[first] + vals[first + 1])/2;
+                } else {
+                    ret = vals[first + 1];
+                }
+            }
+            return ret;
+        }
+
 
         // Accessors
         itkGetMacro(Sum, TRealVectorPixelType);
@@ -162,6 +197,7 @@ public:
         itkGetMacro(Max, TRealVectorPixelType);
         itkGetMacro(Count, TRealVectorPixelType);
         itkGetMacro(CountInvalid, TRealVectorPixelType);
+        itkGetMacro(Pixels, std::vector<TRealVectorPixelType>);
 
     private:
         void UpdateValues(const RealValueType & otherSum, const RealValueType & otherSqSum,
@@ -273,6 +309,15 @@ public:
    /** Return the computed the number of invalid pixels for each label in the input label image */
    PixelValueMapType GetInvalidPixelsCntMap() const;
 
+   /** Return the computed the median for each label in the input label image */
+   PixelValueMapType GetMedianValuesMap() const;
+
+   /** Return the computed the P25 quartile for each label in the input label image */
+   PixelValueMapType GetP25ValuesMap() const;
+
+   /** Return the computed the P55 quartile for each label in the input label image */
+   PixelValueMapType GetP75ValuesMap() const;
+
   /** Make a DataObject of the correct type to be used as the specified
    * output. */
   itk::DataObject::Pointer MakeOutput(DataObjectPointerArraySizeType idx) override;
@@ -289,6 +334,18 @@ public:
   /** Set/Get macro for the flag specifying if min/max should be computed or not */
   itkSetMacro(ComputeValidityPixelsCnt, bool);
   itkGetMacro(ComputeValidityPixelsCnt, bool);
+
+  /** Set/Get macro for the flag specifying if median should be computed or not */
+  itkSetMacro(ComputeMedian, bool);
+  itkGetMacro(ComputeMedian, bool);
+
+  /** Set/Get macro for the flag specifying if P25 quartile should be computed or not */
+  itkSetMacro(ComputeP25, bool);
+  itkGetMacro(ComputeP25, bool);
+
+  /** Set/Get macro for the flag specifying if P75 quartile should be computed or not */
+  itkSetMacro(ComputeP75, bool);
+  itkGetMacro(ComputeP75, bool);
 
 protected:
   /** Convert values to decibels before processing, default to 0 */
@@ -339,10 +396,15 @@ private:
 
   PixelValueMapType                      m_MinRadiometricValue;
   PixelValueMapType                      m_MaxRadiometricValue;
-
   PixelValueMapType                      m_ValidPixelsCnt;
+  PixelValueMapType                      m_MedianValue;
+  PixelValueMapType                      m_P25Value;
+  PixelValueMapType                      m_P75Value;
 
   bool m_ComputeMinMax;
+  bool m_ComputeMedian;
+  bool m_ComputeP25;
+  bool m_ComputeP75;
   bool m_ComputeValidityPixelsCnt;
 };
 
@@ -412,6 +474,15 @@ public:
   void SetComputeValidityPixelsCnt(bool exp);
   bool GetComputeValidityPixelsCnt();
 
+  void SetComputeMedian(bool exp);
+  bool GetComputeMedian();
+
+  void SetComputeP25(bool exp);
+  bool GetComputeP25();
+
+  void SetComputeP75(bool exp);
+  bool GetComputeP75();
+
   void SetMaskValidValue(int val);
   int GetMaskValidValue();
 
@@ -447,6 +518,15 @@ public:
 
    /** Return the computed the number of valid pixels for each label in the input label image */
    PixelValueMapType GetValidPixelsCntMap() const;
+
+   /** Return the computed median for each label in the input label image */
+   PixelValueMapType GetMedianValuesMap() const;
+
+   /** Return the computed the P25 quatrile for each label in the input label image */
+   PixelValueMapType GetP25ValuesMap() const;
+
+   /** Return the computed the P75 quatrile for each label in the input label image */
+   PixelValueMapType GetP75ValuesMap() const;
 
 protected:
   /** Constructor */

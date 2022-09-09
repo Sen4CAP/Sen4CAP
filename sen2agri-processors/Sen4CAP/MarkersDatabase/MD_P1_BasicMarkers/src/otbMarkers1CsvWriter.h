@@ -69,23 +69,79 @@ public:
   class HeaderInfoType {
   public:
       HeaderInfoType() {}
-      HeaderInfoType(const std::string &hdr, bool isDbl) {
-          name = hdr;
-          isDouble = isDbl;
+      HeaderInfoType(const std::string &hdr, const std::string &marker, bool isInt, bool isFieldIdCol, int posInHdr) {
+          fullColumnName = hdr;
+          markerName = marker;
+          isFieldIdColumn = isFieldIdCol;
+          isIntegerVal = isInt;
+          posInHeader = posInHdr;
       }
-      std::string GetName() const {return name;}
-      bool IsDouble() const {return isDouble;}
+      std::string GetSimpleMarkerName() const {return markerName;}
+      std::string GetFullColumnName() const {return fullColumnName;}
+      bool IsIntegerValue() const {return isIntegerVal;}
+      bool IsFieldIdColumn() const {return isFieldIdColumn;}
+      int GetPositionInHeader() const {return posInHeader;}
     private:
-      std::string name;
-      bool isDouble;
+      std::string fullColumnName;
+      std::string markerName;
+      bool isIntegerVal;
+      bool isFieldIdColumn;
+      int posInHeader;
+  };
+
+  template <typename MapType, typename MapMinMaxType>
+  class ColumnToValuesInfo {
+  public:
+      ColumnToValuesInfo() {}
+      ColumnToValuesInfo(const HeaderInfoType &hdrInfo, const std::map<std::string, const MapType*> &mMain,
+                             const std::map<std::string, const MapMinMaxType*> &mOpt) {
+          hdrItemInfo = hdrInfo;
+          const std::string &name = hdrInfo.GetSimpleMarkerName();
+          typename std::map<std::string, const MapType*>::const_iterator it1 = mMain.find(name);
+          typename std::map<std::string, const MapMinMaxType*>::const_iterator it2 = mOpt.find(name);
+          const MapType* mapMain = ((it1 != mMain.end()) ? it1->second : NULL);
+          const MapMinMaxType* mapOpt = ((it2 != mOpt.end()) ? it2->second : NULL);
+          isMeanField = (name == "mean");
+          itMainValid = itOptValid = false;
+          if (mapMain != NULL) {
+              itMain = mapMain->begin();
+              itMainValid = true;
+          }
+          if (mapOpt != NULL) {
+              itOpt = mapOpt->begin();
+              itOptValid = true;
+          }
+      }
+
+      double GetNextValue(int bandIdx) {
+          double retVal;
+          if (itMainValid) {
+              retVal = (isMeanField ? itMain->second.mean[bandIdx] : itMain->second.stdDev[bandIdx]);
+              ++itMain;
+          } else {
+              retVal = itOpt->second[bandIdx];
+              ++itOpt;
+          }
+          return retVal;
+      }
+
+  public:
+      HeaderInfoType hdrItemInfo;
+
+  private:
+      typename MapType::const_iterator itMain;
+      typename MapMinMaxType::const_iterator itOpt;
+      bool itMainValid;
+      bool itOptValid;
+      bool isMeanField;
   };
 
   typedef std::vector<FileFieldsInfoType>         FileFieldsContainer;
 
   /** Method to add a map statistic with a given type */
   template <typename MapType, typename MapMinMaxType>
-  void AddInputMap(const MapType& map, const MapMinMaxType& mapMins, const MapMinMaxType& mapMax,
-                   const MapMinMaxType& mapValidPixels);
+  void AddInputMap(const std::map<std::string, const MapType*> &map, const std::map<std::string,
+                   const MapMinMaxType*> &mapOptionals);
 
   void WriteOutputCsvFormat();
   void WriteCsvHeader(std::ofstream &fileStream);
@@ -121,6 +177,18 @@ public:
 
   inline void SetUseValidityCnt(bool bValidityCnt) {
       m_bUseValidityCnt = bValidityCnt;
+  }
+
+  inline void SetUseMedian(bool bUseMedian) {
+      m_bUseMedian = bUseMedian;
+  }
+
+  inline void SetUseP25(bool bUseP25) {
+      m_bUseP25 = bUseP25;
+  }
+
+  inline void SetUseP75(bool bUseP75) {
+      m_bUseP75 = bUseP75;
   }
 
   inline void SetCsvSeparator(char sep) {
@@ -171,6 +239,9 @@ private:
   bool                          m_bUseMinMax;
   bool                          m_bUseStdev;
   bool                          m_bUseValidityCnt;
+  bool                          m_bUseMedian;
+  bool                          m_bUseP25;
+  bool                          m_bUseP75;
 
 private:
     int m_IdPosInHeader;
@@ -182,6 +253,9 @@ private:
     char m_csvSeparator;
     int m_mapValuesIndex;
     std::string m_defaultPrdType;
+    int m_MedianPosInHeader;
+    int m_P25PosInHeader;
+    int m_P75PosInHeader;
 }; // end of class Markers1CsvWriter
 
 } // end of namespace otb

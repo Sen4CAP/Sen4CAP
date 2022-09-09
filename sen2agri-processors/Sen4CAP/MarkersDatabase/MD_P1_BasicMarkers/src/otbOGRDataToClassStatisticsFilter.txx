@@ -37,6 +37,9 @@ PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
     m_ConvertValuesToDecibels = false;
     m_ComputeMinMax = false;
     m_ComputeValidityPixelsCnt = false;
+    m_ComputeMedian = false;
+    m_ComputeP25 = false;
+    m_ComputeP75 = false;
 // NOT NEEDED FOR AGRICULTURAL PRACTICES
 //  this->SetNthOutput(2,PolygonSizeObjectType::New());
 }
@@ -169,6 +172,32 @@ PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
          }
          if (m_ComputeValidityPixelsCnt) {
             m_ValidPixelsCnt[label] = count;
+         }
+         // median, P25 and P75
+         if (m_ComputeMedian || m_ComputeP25 || m_ComputeP75) {
+             // Fill first with the minimum pixel
+             if (m_ComputeMedian) {
+                m_MedianValue[label] = it.second.GetMin();
+             }
+             if (m_ComputeP25) {
+                m_P25Value[label] = it.second.GetMin();
+             }
+             if (m_ComputeP75) {
+                m_P75Value[label] = it.second.GetMin();
+             }
+             // Then, update for each band the value of the corresponding marker
+             for (unsigned int band = 0 ; band < count.GetSize() ; band++) {
+                 const std::vector<double> &values = it.second.GetBandSortedValues(band);
+                 if (m_ComputeMedian) {
+                    m_MedianValue[label][band] = it.second.ComputeQuartile(values, 50);
+                 }
+                 if (m_ComputeP25) {
+                    m_P25Value[label][band] = it.second.ComputeQuartile(values, 25);
+                 }
+                 if (m_ComputeP75) {
+                    m_P75Value[label][band] = it.second.ComputeQuartile(values, 75);
+                 }
+             }
          }
      }
    }
@@ -308,6 +337,30 @@ PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
 ::GetValidPixelsCntMap() const
 {
     return m_ValidPixelsCnt;
+}
+
+template<class TInputImage, class TMaskImage>
+typename PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>::PixelValueMapType
+PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::GetMedianValuesMap() const
+{
+    return m_MedianValue;
+}
+
+template<class TInputImage, class TMaskImage>
+typename PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>::PixelValueMapType
+PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::GetP25ValuesMap() const
+{
+    return m_P25Value;
+}
+
+template<class TInputImage, class TMaskImage>
+typename PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>::PixelValueMapType
+PersistentOGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::GetP75ValuesMap() const
+{
+    return m_P75Value;
 }
 
 template<class TInputImage, class TMaskImage>
@@ -533,6 +586,46 @@ bool OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::GetComputeValidity
 template<class TInputImage, class TMaskImage>
 void
 OGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::SetComputeMedian(bool exp)
+{
+  this->GetFilter()->SetComputeMedian(exp);
+}
+
+template<class TInputImage, class TMaskImage>
+bool OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::GetComputeMedian()
+{
+  return this->GetFilter()->GetComputeMedian();
+}
+template<class TInputImage, class TMaskImage>
+void
+OGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::SetComputeP25(bool exp)
+{
+  this->GetFilter()->SetComputeP25(exp);
+}
+
+template<class TInputImage, class TMaskImage>
+bool OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::GetComputeP25()
+{
+  return this->GetFilter()->GetComputeP25();
+}
+template<class TInputImage, class TMaskImage>
+void
+OGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
+::SetComputeP75(bool exp)
+{
+  this->GetFilter()->SetComputeP75(exp);
+}
+
+template<class TInputImage, class TMaskImage>
+bool OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::GetComputeP75()
+{
+  return this->GetFilter()->GetComputeP75();
+}
+
+template<class TInputImage, class TMaskImage>
+void
+OGRDataToClassStatisticsFilter<TInputImage,TMaskImage>
 ::SetMaskValidValue(int val)
 {
   this->GetFilter()->SetValidMaskValue(val);
@@ -639,6 +732,30 @@ OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>
 ::GetValidPixelsCntMap() const
 {
   return this->GetFilter()->GetValidPixelsCntMap();
+}
+
+template<class TInputImage, class TMaskImage>
+typename OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::PixelValueMapType
+OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>
+::GetMedianValuesMap() const
+{
+  return this->GetFilter()->GetMedianValuesMap();
+}
+
+template<class TInputImage, class TMaskImage>
+typename OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::PixelValueMapType
+OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>
+::GetP25ValuesMap() const
+{
+  return this->GetFilter()->GetP25ValuesMap();
+}
+
+template<class TInputImage, class TMaskImage>
+typename OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>::PixelValueMapType
+OGRDataToClassStatisticsFilter<TInputImage, TMaskImage>
+::GetP75ValuesMap() const
+{
+  return this->GetFilter()->GetP75ValuesMap();
 }
 
 } // end of namespace otb

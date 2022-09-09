@@ -36,6 +36,15 @@
 
 #include "../../../Common/Filters/otbStreamingStatisticsMapFromLabelImageFilter.h"
 
+#define MEAN_COL_NAME "mean"
+#define STDEV_COL_NAME "stdev"
+#define MIN_COL_NAME "min"
+#define MAX_COL_NAME "max"
+#define VALD_PIX_CNT_COL_NAME "valid_pixels_cnt"
+#define MEDIAN_COL_NAME "median"
+#define P25_COL_NAME "p25"
+#define P75_COL_NAME "p75"
+
 namespace otb
 {
 namespace Wrapper
@@ -144,13 +153,9 @@ private:
     Markers1Extractor()
     {
         m_fieldName = SEQ_UNIQUE_ID;
-        m_header = {SEQ_UNIQUE_ID, "mean"};
-        m_minMaxHeader = {"min", "max"};
-        m_validityCntHeader = {"valid_pixels_cnt"};
         m_bFieldNameIsInteger = true;
 
         m_concatenateImagesFilter = ConcatenateImagesFilterType::New();
-        m_bOutputMinMax = false;
         m_bConvToDb = false;
         m_noDataValue = 0;
         m_csvWriterSeparator = ',';
@@ -245,6 +250,21 @@ private:
         MandatoryOff("validity");
         SetDefaultParameterInt("validity",0);
 
+        AddParameter(ParameterType_Int, "median", "Extract the median for each parcel statistics.");
+        SetParameterDescription("median", "Extract the median for each parcel statistics");
+        MandatoryOff("median");
+        SetDefaultParameterInt("median",0);
+
+        AddParameter(ParameterType_Int, "p25", "Extract the P25 for each parcel statistics.");
+        SetParameterDescription("p25", "Extract the P25 for each parcel statistics");
+        MandatoryOff("p25");
+        SetDefaultParameterInt("p25",0);
+
+        AddParameter(ParameterType_Int, "p75", "Extract the P75 for each parcel statistics.");
+        SetParameterDescription("p75", "Extract the P75 for each parcel statistics");
+        MandatoryOff("p75");
+        SetDefaultParameterInt("p75",0);
+
         AddParameter(ParameterType_Int, "sep", "Output CSV separator.");
         SetParameterDescription("sep", "Output CSV separator");
         MandatoryOff("sep");
@@ -300,9 +320,6 @@ private:
             }
         }
 
-        m_bOutputStdev = (GetParameterInt("stdev") != 0);
-        m_bOutputMinMax = (GetParameterInt("minmax") != 0);
-        m_bOutputValidity = (GetParameterInt("validity") != 0);
         m_maskValidValue = GetParameterInt("mskval");
         m_bandDiscr = GetParameterString("banddiscr");
 
@@ -381,10 +398,27 @@ private:
         const FilterType::PixeMeanStdDevlValueMapType &meanStdValues = filter->GetMeanStdDevValueMap();
         const FilterType::PixelValueMapType &minValues = filter->GetMinValueMap();
         const FilterType::PixelValueMapType &maxValues = filter->GetMaxValueMap();
+        const FilterType::PixelValueMapType &medianValues = filter->GetMedianValuesMap();
+        const FilterType::PixelValueMapType &p25Values = filter->GetP25ValuesMap();
+        const FilterType::PixelValueMapType &p75Values = filter->GetP75ValuesMap();
         const FilterType::PixelValueMapType &validPixelsCntValues = filter->GetValidPixelsCntMap();
+        std::map<std::string, const FilterType::PixeMeanStdDevlValueMapType*> mapMeanStd;
+        std::map<std::string, const FilterType::PixelValueMapType*> mapOptionals;
+        mapMeanStd[MEAN_COL_NAME] = &meanStdValues;
+        mapMeanStd[STDEV_COL_NAME] = &meanStdValues;
+        mapOptionals[MIN_COL_NAME] = &minValues;
+        mapOptionals[MAX_COL_NAME] = &maxValues;
+        mapOptionals[MEDIAN_COL_NAME] = &medianValues;
+        mapOptionals[P25_COL_NAME] = &p25Values;
+        mapOptionals[P75_COL_NAME] = &p75Values;
+        mapOptionals[VALD_PIX_CNT_COL_NAME] = &validPixelsCntValues;
+
         writer->AddInputMap<FilterType::PixeMeanStdDevlValueMapType,
-                FilterType::PixelValueMapType>(meanStdValues, minValues, maxValues,
-                                               validPixelsCntValues);
+                 FilterType::PixelValueMapType>(mapMeanStd, mapOptionals);
+
+//        writer->AddInputMap<FilterType::PixeMeanStdDevlValueMapType,
+//                FilterType::PixelValueMapType>(meanStdValues, minValues, maxValues,
+//                                               validPixelsCntValues);
 
         otbAppLogINFO("Extracted a number of " << meanStdValues.size() << " values for file " << infoImg.inputImagePath);
 
@@ -411,12 +445,23 @@ private:
             filter->SetMask(infoImg.mskImage);
             filter->SetMaskValidValue(infoImg.mskImgValidityValue);
         }
-        if (m_bOutputMinMax) {
+
+        if (GetParameterInt("minmax") != 0) {
             filter->SetComputeMinMax(true);
         }
-        if (m_bOutputValidity) {
+        if (GetParameterInt("validity") != 0) {
             filter->SetComputeValidityPixelsCnt(true);
         }
+        if (GetParameterInt("median") != 0) {
+            filter->SetComputeMedian(true);
+        }
+        if (GetParameterInt("p25") != 0) {
+            filter->SetComputeP25(true);
+        }
+        if (GetParameterInt("p75") != 0) {
+            filter->SetComputeP75(true);
+        }
+
         filter->SetFieldValueFilterIds(m_FilterIdsMap);
         filter->SetOGRData(reprojVector);
         filter->SetFieldName(fieldName);
@@ -453,19 +498,27 @@ private:
     Markers1CsvWriterType::Pointer CreateWriter(const InputFileInfoType &infoFile, const std::string &outDir) {
         Markers1CsvWriterType::Pointer agricPracticesDataWriter = Markers1CsvWriterType::New();
         agricPracticesDataWriter->SetTargetFileName(BuildUniqueFileName(outDir, infoFile.inputImagePath));
-        std::vector<std::string> header = m_header;
-        if (m_bOutputStdev) {
-            header.push_back("stdev");
-            agricPracticesDataWriter->SetUseStdev(true);
+        std::vector<std::string> header = {SEQ_UNIQUE_ID, MEAN_COL_NAME};
+        if ((GetParameterInt("stdev") != 0)) {
+            header.push_back(STDEV_COL_NAME);
         }
-        if (m_bOutputMinMax) {
-            header.insert(std::end(header), std::begin(m_minMaxHeader), std::end(m_minMaxHeader));
-            agricPracticesDataWriter->SetUseMinMax(true);
+        if (GetParameterInt("minmax") != 0) {
+            header.push_back(MIN_COL_NAME);
+            header.push_back(MAX_COL_NAME);
         }
-        if (m_bOutputValidity) {
-            header.insert(std::end(header), std::begin(m_validityCntHeader), std::end(m_validityCntHeader));
-            agricPracticesDataWriter->SetUseValidityCnt(true);
+        if (GetParameterInt("median") != 0) {
+            header.push_back(MEDIAN_COL_NAME);
         }
+        if (GetParameterInt("p25") != 0) {
+            header.push_back(P25_COL_NAME);
+        }
+        if (GetParameterInt("p75") != 0) {
+            header.push_back(P75_COL_NAME);
+        }
+        if (GetParameterInt("validity") != 0) {
+            header.push_back(VALD_PIX_CNT_COL_NAME);
+        }
+
         agricPracticesDataWriter->SetDefaultProductType(m_prdType);
         agricPracticesDataWriter->SetCsvSeparator(m_csvWriterSeparator);
         agricPracticesDataWriter->SetHeaderFields(infoFile.inputImagePath, header, SEQ_UNIQUE_ID,
@@ -746,9 +799,6 @@ private:
     }
 
     private:
-        std::vector<std::string> m_header;
-        std::vector<std::string> m_minMaxHeader;
-        std::vector<std::string> m_validityCntHeader;
         bool m_bFieldNameIsInteger;
 
         std::string m_prdType;
@@ -756,9 +806,6 @@ private:
         std::vector<PrdInfoType> m_prdTypeInfos;
         bool m_bConvToDb;
         int m_noDataValue;
-        bool m_bOutputStdev;
-        bool m_bOutputMinMax;
-        bool m_bOutputValidity;
         int m_maskValidValue;
         std::string m_fieldName;
         otb::ogr::DataSource::Pointer m_vectors;
