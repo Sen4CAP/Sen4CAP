@@ -17,8 +17,9 @@ S4SCropTypeMappingHandler::S4SCropTypeMappingHandler()
 QList<std::reference_wrapper<TaskToSubmit>>
 S4SCropTypeMappingHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList)
 {
+    int curIdx = 0;
     outAllTasksList.append(TaskToSubmit{ "s4s-crop-type-mapping", { } });
-    outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[1]} });
+    outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[curIdx++]} });
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     for (TaskToSubmit &task : outAllTasksList) {
@@ -63,8 +64,13 @@ QStringList S4SCropTypeMappingHandler::GetCropTypeTaskArgs(const CropTypeJobConf
                                  cfg.endDate.toString("yyyy-MM-dd"),
                                  "--working-path",
                                  workingPath,
-                                 "--out-path",
+                                 "--output-path",
                                  prdTargetDir};
+    int remappingId = ProcessorHandlerHelper::GetIntConfigValue(cfg.parameters, cfg.configParameters,
+                                                                                 "crop_remapping_set_id", S4S_CTM_CFG_PREFIX, -1);
+    if (remappingId >= 0) {
+        cropTypeArgs += {"--remapping-set-id", QString::number(remappingId)};
+    }
 
     return cropTypeArgs;
 }
@@ -79,7 +85,7 @@ QStringList S4SCropTypeMappingHandler::GetProductFormatterArgs(TaskToSubmit &pro
     QString strTimePeriod = minDate.toString("yyyyMMddTHHmmss").append("_").append(maxDate.toString("yyyyMMddTHHmmss"));
     QStringList additionalArgs = {"-processor.generic.files", tmpPrdDir};
     return GetDefaultProductFormatterArgs(ctx, productFormatterTask, event.jobId, event.siteId, "S4S_L4A", strTimePeriod,
-                                         "generic", additionalArgs, true);
+                                         "generic", additionalArgs, false, "", true);
 }
 
 bool S4SCropTypeMappingHandler::GetStartEndDatesFromProducts(EventProcessingContext &ctx,
@@ -116,6 +122,7 @@ void S4SCropTypeMappingHandler::HandleTaskFinishedImpl(EventProcessingContext &c
         const QString &productFolder =
             GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
         if (prodName != "") {
+            ctx.MarkJobFinished(event.jobId);
             const QString &quicklook = GetProductFormatterQuicklook(ctx, event);
             const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
@@ -141,8 +148,6 @@ void S4SCropTypeMappingHandler::HandleTaskFinishedImpl(EventProcessingContext &c
                     .arg(prodName)
                     .arg(productFolder));
         }
-    } else if (event.module == "export-product-launcher") {
-        ctx.MarkJobFinished(event.jobId);
         // Now remove the job folder containing temporary files
         RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
     }
