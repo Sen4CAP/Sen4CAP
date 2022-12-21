@@ -614,9 +614,9 @@ from {}
                 query = SQL(
                     """
 alter table {}
-alter column parcel_id type int,
+alter column parcel_id type int using parcel_id :: int,
 alter column parcel_id set not null,
-alter column segment_id type int;
+alter column segment_id type int using segment_id :: int;
 """
                 ).format(parcels_table_staging_id)
                 logging.debug(query.as_string(conn))
