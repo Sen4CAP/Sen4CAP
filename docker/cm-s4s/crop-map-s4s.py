@@ -1,0 +1,1 @@
+../../scripts/crop-map-s4s.py
