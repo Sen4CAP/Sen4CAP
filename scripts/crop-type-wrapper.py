@@ -21,7 +21,9 @@ def run_command(args, env=None):
     print(cmd_line)
     result = subprocess.call(args, env=env)
     if result != 0:
-        raise RuntimeError("Command `{}` failed with exit code {}".format(cmd_line, result))
+        raise RuntimeError(
+            "Command `{}` failed with exit code {}".format(cmd_line, result)
+        )
 
 
 def check_file(p):
@@ -44,7 +46,7 @@ def makedirs2(path):
 
 def read_optical_products_tiles(file):
     tiles = set()
-    with open(file, 'r') as file:
+    with open(file, "r") as file:
         # skip headers
         reader = csv.reader(file)
         next(reader)
@@ -55,7 +57,7 @@ def read_optical_products_tiles(file):
 
 def read_radar_products_tiles(file):
     tiles = set()
-    with open(file, 'r') as file:
+    with open(file, "r") as file:
         reader = csv.reader(file)
         # skip headers
         next(reader)
@@ -131,17 +133,21 @@ def main():
         "--min-node-size", type=int, help="minimum node size", default=10
     )
     parser.add_argument(
-        "--standalone", action="store_true", help="standalone mode"
+        "--backscatter-compositing-months",
+        default=2,
+        type=int,
+        help="backscatter compositing period in months",
     )
-    parser.add_argument(
-        "--parcels", required=False, help="parcels file"
-    )
+    parser.add_argument("--standalone", action="store_true", help="standalone mode")
+    parser.add_argument("--parcels", required=False, help="parcels file")
     parser.add_argument("--lut", required=False, help="LUT file")
     parser.add_argument("--tile-footprints", required=False, help="tile footprints")
     parser.add_argument("--optical-products", required=False, help="optical products")
     parser.add_argument("--radar-products", required=False, help="radar products")
     parser.add_argument("--lpis-path", required=False, help="LPIS path file")
-    parser.add_argument("--target-path", required=False, help="Target directory for marker products")
+    parser.add_argument(
+        "--target-path", required=False, help="Target directory for marker products"
+    )
     parser.add_argument("--outputs", required=False, help="Output marker products CSV")
     args = parser.parse_args()
 
@@ -184,7 +190,14 @@ def main():
         if args.products:
             command += ["--products"] + args.products
         command += ["--"]
-        command += [parcels, lut, tile_footprints, optical_products, radar_products, lpis_path]
+        command += [
+            parcels,
+            lut,
+            tile_footprints,
+            optical_products,
+            radar_products,
+            lpis_path,
+        ]
 
         run_command(command)
 
@@ -195,7 +208,14 @@ def main():
         radar_products = os.path.abspath(radar_products)
         lpis_path = os.path.abspath(lpis_path)
     else:
-        if not args.parcels or not args.lut or not args.tile_footprints or not args.optical_products or not args.radar_products or not args.lpis_path:
+        if (
+            not args.parcels
+            or not args.lut
+            or not args.tile_footprints
+            or not args.optical_products
+            or not args.radar_products
+            or not args.lpis_path
+        ):
             print("The input files are required when not using `--standalone`")
             sys.exit(1)
 
@@ -236,6 +256,10 @@ def main():
         command += ["--lpis-path", lpis_path]
         command += ["--tile-footprints", tile_footprints]
         command += ["--radar-products", radar_products]
+        command += [
+            "--backscatter-compositing-months",
+            args.backscatter_compositing_months,
+        ]
 
         run_command(command)
 
@@ -276,22 +300,58 @@ def main():
 
     if optical_features:
         ipc_file = os.path.join(args.working_path, "features/optical-features.ipc")
-        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", optical_features, "-o", ipc_file, "--int32-columns", "NewID"]
+        command = [
+            "python3",
+            "/usr/bin/csv_to_ipc.py",
+            "-i",
+            optical_features,
+            "-o",
+            ipc_file,
+            "--int32-columns",
+            "NewID",
+        ]
         run_command(command)
         optical_features = ipc_file
     if optical_re_features:
         ipc_file = os.path.join(args.working_path, "features/optical-features-re.ipc")
-        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", optical_re_features, "-o", ipc_file, "--int32-columns", "NewID"]
+        command = [
+            "python3",
+            "/usr/bin/csv_to_ipc.py",
+            "-i",
+            optical_re_features,
+            "-o",
+            ipc_file,
+            "--int32-columns",
+            "NewID",
+        ]
         run_command(command)
         optical_re_features = ipc_file
     if sar_features:
         ipc_file = os.path.join(args.working_path, "features/sar-features.ipc")
-        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", sar_features, "-o", ipc_file, "--int32-columns", "NewID"]
+        command = [
+            "python3",
+            "/usr/bin/csv_to_ipc.py",
+            "-i",
+            sar_features,
+            "-o",
+            ipc_file,
+            "--int32-columns",
+            "NewID",
+        ]
         run_command(command)
         sar_features = ipc_file
     if sar_temporal:
         ipc_file = os.path.join(args.working_path, "features/sar-temporal.ipc")
-        command = ["python3", "/usr/bin/csv_to_ipc.py", "-i", sar_temporal, "-o", ipc_file, "--int32-columns", "NewID"]
+        command = [
+            "python3",
+            "/usr/bin/csv_to_ipc.py",
+            "-i",
+            sar_temporal,
+            "-o",
+            ipc_file,
+            "--int32-columns",
+            "NewID",
+        ]
         run_command(command)
         sar_temporal = ipc_file
 
@@ -329,9 +389,11 @@ def main():
     run_command(command)
 
     if args.outputs:
-        csvfile = open(args.outputs, 'w')
+        csvfile = open(args.outputs, "w")
         writer = csv.writer(csvfile, quoting=csv.QUOTE_MINIMAL)
-        writer.writerow(["product_type_id", "name", "path", "created_timestamp", "tiles"])
+        writer.writerow(
+            ["product_type_id", "name", "path", "created_timestamp", "tiles"]
+        )
     else:
         csvfile = None
         writer = None
@@ -342,20 +404,36 @@ def main():
         created_timestamp = season_end.strftime("%Y-%m-%d %H:%M:%S")
         season_end = season_end.strftime("%Y%m%d")
         now = datetime.now().strftime("%Y%m%dT%H%M%S")
-        feature_files = [optical_features, optical_re_features, sar_features, sar_temporal]
+        feature_files = [
+            optical_features,
+            optical_re_features,
+            sar_features,
+            sar_temporal,
+        ]
         infixes = ["OPT_MAIN", "OPT_RE", "SAR_MAIN", "SAR_RE"]
         product_types = [20, 21, 22, 23]
-        for (features, infix, product_type) in zip(feature_files, infixes, product_types):
+        for (features, infix, product_type) in zip(
+            feature_files, infixes, product_types
+        ):
             if features:
-                product_name = "SEN4CAP_MDB_L4A_{}_V{}_{}_{}".format(infix, season_start, season_end, now)
+                product_name = "SEN4CAP_MDB_L4A_{}_V{}_{}_{}".format(
+                    infix, season_start, season_end, now
+                )
                 product_dir = os.path.join(args.target_path, product_name)
                 makedirs2(product_dir)
                 product_path = os.path.join(product_dir, product_name + ".ipc")
                 shutil.move(features, product_path)
                 shutil.move(features + ".idx", product_path + ".idx")
-                print(product_path)
                 if writer:
-                    writer.writerow([product_type, product_name, product_path, created_timestamp, tiles])
+                    writer.writerow(
+                        [
+                            product_type,
+                            product_name,
+                            product_path,
+                            created_timestamp,
+                            tiles,
+                        ]
+                    )
 
     if csvfile:
         csvfile.close()

@@ -715,7 +715,7 @@ class CoherenceSeasonGroup(object):
         )
 
     def band_description(self):
-        return "S1_S_{}_COHE_STDDEV.tif".format(self.polarization)
+        return "S1_S_{}_COHE_STDDEV".format(self.polarization)
 
 
 def get_tile_footprints(file):
@@ -819,6 +819,7 @@ class WeeklyComposite(object):
         force_input_epsg,
         tile_epsg_code,
         tile_extent,
+        spacing,
         inputs,
     ):
         self.output = output
@@ -831,6 +832,7 @@ class WeeklyComposite(object):
         self.force_input_epsg = force_input_epsg
         self.tile_epsg_code = tile_epsg_code
         self.tile_extent = tile_extent
+        self.spacing = spacing
         self.inputs = inputs
 
     def run(self):
@@ -853,11 +855,11 @@ class WeeklyComposite(object):
             command += ["-outputs.uly", self.ymax]
             command += ["-outputs.lrx", self.xmax]
             command += ["-outputs.lry", self.ymin]
-            command += ["-outputs.spacingx", 20]
-            command += ["-outputs.spacingy", -20]
+            command += ["-outputs.spacingx", self.spacing]
+            command += ["-outputs.spacingy", -self.spacing]
             command += ["-il"] + inputs
             command += ["-bv", 0]
-            command += ["-opt.gridspacing", 240]
+            command += ["-opt.gridspacing", self.spacing * 12]
             run_command(command, env)
 
             (xmin, ymax) = self.tile_extent[0]
@@ -869,7 +871,7 @@ class WeeklyComposite(object):
             if self.force_input_epsg is not None:
                 command += ["-s_srs", "EPSG:{}".format(self.force_input_epsg)]
             command += ["-t_srs", "EPSG:{}".format(self.tile_epsg_code)]
-            command += ["-tr", 20, 20]
+            command += ["-tr", self.spacing, self.spacing]
             command += ["-te", xmin, ymin, xmax, ymax]
             command += [self.temp]
             command += [self.output]
@@ -1143,6 +1145,9 @@ def process_radar(args, pool):
     force_input_epsg = None
     missing_products = set()
     found_products = set()
+    # TODO dedup with tile_gt_map
+    tile_spacing = {}
+    tile_product_ref = {}
     for product in products:
         if product.path in missing_products:
             continue
@@ -1153,6 +1158,14 @@ def process_radar(args, pool):
                 continue
             else:
                 found_products.add(product.path)
+        if product.tile_id not in tile_spacing:
+            ds = gdal.Open(product.path, gdalconst.GA_ReadOnly)
+            if ds:
+                gt = ds.GetGeoTransform()
+                tile_spacing[product.tile_id] = gt[1]
+            del ds
+        if product.tile_id not in tile_product_ref:
+            tile_product_ref[product.tile_id] = product.path
 
         if input_srs is None:
             (input_srs, force_input_epsg) = get_projection(product.path)
@@ -1190,25 +1203,28 @@ def process_radar(args, pool):
 
     groups = sorted(list(groups.items()))
     if args.lpis_path:
-        ref_map = get_lpis_map(args.lpis_path, 20)
+        ref_map_10m = get_lpis_map(args.lpis_path, 10)
+        ref_map_20m = get_lpis_map(args.lpis_path, 20)
     else:
-        ref_map = None
+        ref_map_10m = None
+        ref_map_20m = None
 
     ref_extent_map = {}
     ref_gt_map = {}
-    if args.lpis_path:
-        for (tile_id, path) in ref_map.items():
-            ds = gdal.Open(path, gdalconst.GA_ReadOnly)
-            ref_extent_map[tile_id] = get_extent(ds)
-            ref_gt_map[tile_id] = ds.GetGeoTransform()
-            del ds
-    else:
-        for (group, products) in groups:
-            if group.tile_id not in ref_extent_map:
-                ds = gdal.Open(products[0].path, gdalconst.GA_ReadOnly)
-                ref_extent_map[group.tile_id] = get_extent(ds)
-                ref_gt_map[group.tile_id] = ds.GetGeoTransform()
-                del ds
+    for tile_id in tiles.keys():
+        if ref_map_10m and tile_spacing[tile_id] == 10:
+            ref = ref_map_10m[tile_id]
+        elif ref_map_20m and tile_spacing[tile_id] == 20:
+            ref = ref_map_20m[tile_id]
+        else:
+            ref = None
+        if not ref:
+            ref = tile_product_ref[tile_id]
+
+        ds = gdal.Open(ref, gdalconst.GA_ReadOnly)
+        ref_extent_map[tile_id] = get_extent(ds)
+        ref_gt_map[tile_id] = ds.GetGeoTransform()
+        del ds
 
     vrt_bands = defaultdict(list)
     weekly_composites = []
@@ -1222,14 +1238,19 @@ def process_radar(args, pool):
         for product in products:
             hdrs.append(product.path)
 
-        if args.lpis_path:
-            tile_ref = ref_map.get(group.tile_id)
-            tile_extent = ref_extent_map.get(group.tile_id)
-            if tile_ref is None or tile_extent is None:
-                continue
+        if ref_map_10m and tile_spacing[group.tile_id] == 10:
+            tile_ref = ref_map_10m[group.tile_id]
+        elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+            tile_ref = ref_map_20m[group.tile_id]
         else:
             tile_ref = None
+        if tile_ref:
             tile_extent = ref_extent_map.get(group.tile_id)
+        if not tile_extent:
+            tile_extent = ref_extent_map.get(group.tile_id)
+
+        if args.lpis_path and (tile_ref is None or tile_extent is None):
+            continue
 
         output = os.path.join(args.path, group.format(args.site_id))
         temp = os.path.splitext(output)[0] + "_TMP.tif"
@@ -1253,6 +1274,7 @@ def process_radar(args, pool):
                 force_input_epsg,
                 epsg_code,
                 tile_extent,
+                tile_spacing[group.tile_id],
                 hdrs,
             )
         else:
@@ -1297,7 +1319,11 @@ def process_radar(args, pool):
 
         if group.product_type == PRODUCT_TYPE_ID_BCK:
             month = group.month
-            backscatter_group_month = int((month - 1) / 2) * 2 + 1
+            backscatter_group_month = (
+                int((month - 1) / args.backscatter_compositing_months)
+                * args.backscatter_compositing_months
+                + 1
+            )
 
             backscatter_group = BackscatterBiMonthlyGroup(
                 group.year,
@@ -1342,8 +1368,11 @@ def process_radar(args, pool):
     backscatter_groups = sorted(list(backscatter_groups.items()))
     for (group, products) in backscatter_groups:
         if args.lpis_path:
-            tile_ref = ref_map.get(group.tile_id)
-            if tile_ref is None:
+            if ref_map_10m and tile_spacing[group.tile_id] == 10:
+                tile_ref = ref_map_10m.get(group.tile_id)
+            elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+                tile_ref = ref_map_20m.get(group.tile_id)
+            else:
                 continue
         else:
             tile_ref = None
@@ -1410,8 +1439,11 @@ def process_radar(args, pool):
     )
     for (group, pair) in backscatter_ratio_weekly_groups:
         if args.lpis_path:
-            tile_ref = ref_map.get(group.tile_id)
-            if tile_ref is None:
+            if ref_map_10m and tile_spacing[group.tile_id] == 10:
+                tile_ref = ref_map_10m.get(group.tile_id)
+            elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+                tile_ref = ref_map_20m.get(group.tile_id)
+            else:
                 continue
         else:
             tile_ref = None
@@ -1429,7 +1461,12 @@ def process_radar(args, pool):
     )
     for (group, pair) in backscatter_ratio_bi_monthly_groups:
         if args.lpis_path:
-            tile_ref = ref_map.get(group.tile_id)
+            if ref_map_10m and tile_spacing[group.tile_id] == 10:
+                tile_ref = ref_map_10m.get(group.tile_id)
+            elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+                tile_ref = ref_map_20m.get(group.tile_id)
+            else:
+                continue
             if tile_ref is None:
                 continue
         else:
@@ -1503,7 +1540,12 @@ def process_radar(args, pool):
     coherence_monthly_groups = sorted(list(coherence_monthly_groups.items()))
     for (group, products) in coherence_monthly_groups:
         if args.lpis_path:
-            tile_ref = ref_map.get(group.tile_id)
+            if ref_map_10m and tile_spacing[group.tile_id] == 10:
+                tile_ref = ref_map_10m.get(group.tile_id)
+            elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+                tile_ref = ref_map_20m.get(group.tile_id)
+            else:
+                continue
             if tile_ref is None:
                 continue
         else:
@@ -1569,8 +1611,11 @@ def process_radar(args, pool):
     coherence_season_groups = sorted(list(coherence_season_groups.items()))
     for (group, products) in coherence_season_groups:
         if args.lpis_path:
-            tile_ref = ref_map.get(group.tile_id)
-            if tile_ref is None:
+            if ref_map_10m and tile_spacing[group.tile_id] == 10:
+                tile_ref = ref_map_10m.get(group.tile_id)
+            elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+                tile_ref = ref_map_20m.get(group.tile_id)
+            else:
                 continue
         else:
             tile_ref = None
@@ -1734,6 +1779,12 @@ def main():
         default=1,
         type=int,
         help="radar compositing period in weeks",
+    )
+    parser.add_argument(
+        "--backscatter-compositing-months",
+        default=2,
+        type=int,
+        help="backscatter compositing period in months",
     )
 
     re = parser.add_mutually_exclusive_group(required=False)
