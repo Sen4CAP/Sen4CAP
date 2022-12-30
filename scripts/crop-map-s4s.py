@@ -239,45 +239,93 @@ def load_tiles(conn, site_id, tile_filter):
 
 def get_maja_band_files(path):
     files = glob.glob(os.path.join(path, "*_FRE_*.tif"))
-    b2 = next(p for p in files if p.endswith("_FRE_B2.tif"))
-    b3 = next(p for p in files if p.endswith("_FRE_B3.tif"))
-    b4 = next(p for p in files if p.endswith("_FRE_B4.tif"))
-    b5 = next(p for p in files if p.endswith("_FRE_B5.tif"))
-    b6 = next(p for p in files if p.endswith("_FRE_B6.tif"))
-    b7 = next(p for p in files if p.endswith("_FRE_B7.tif"))
-    b8 = next(p for p in files if p.endswith("_FRE_B8.tif"))
-    b8a = next(p for p in files if p.endswith("_FRE_B8A.tif"))
-    b11 = next(p for p in files if p.endswith("_FRE_B11.tif"))
-    b12 = next(p for p in files if p.endswith("_FRE_B12.tif"))
+    b2 = next((p for p in files if p.endswith("_FRE_B2.tif")), None)
+    b3 = next((p for p in files if p.endswith("_FRE_B3.tif")), None)
+    b4 = next((p for p in files if p.endswith("_FRE_B4.tif")), None)
+    b5 = next((p for p in files if p.endswith("_FRE_B5.tif")), None)
+    b6 = next((p for p in files if p.endswith("_FRE_B6.tif")), None)
+    b7 = next((p for p in files if p.endswith("_FRE_B7.tif")), None)
+    b8 = next((p for p in files if p.endswith("_FRE_B8.tif")), None)
+    b8a = next((p for p in files if p.endswith("_FRE_B8A.tif")), None)
+    b11 = next((p for p in files if p.endswith("_FRE_B11.tif")), None)
+    b12 = next((p for p in files if p.endswith("_FRE_B12.tif")), None)
     return (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12)
 
 
 def get_sen2cor_band_files(path):
     files_10m = glob.glob(os.path.join(path, "R10m/*_B*_10m.jp2"))
     files_20m = glob.glob(os.path.join(path, "R20m/*_B*_20m.jp2"))
-    b2 = next(p for p in files_10m if p.endswith("_B02_10m.jp2"))
-    b3 = next(p for p in files_10m if p.endswith("_B03_10m.jp2"))
-    b4 = next(p for p in files_10m if p.endswith("_B04_10m.jp2"))
-    b8 = next(p for p in files_10m if p.endswith("_B08_10m.jp2"))
-    b5 = next(p for p in files_20m if p.endswith("_B05_20m.jp2"))
-    b6 = next(p for p in files_20m if p.endswith("_B06_20m.jp2"))
-    b7 = next(p for p in files_20m if p.endswith("_B07_20m.jp2"))
-    b8a = next(p for p in files_20m if p.endswith("_B8A_20m.jp2"))
-    b11 = next(p for p in files_20m if p.endswith("_B11_20m.jp2"))
-    b12 = next(p for p in files_20m if p.endswith("_B12_20m.jp2"))
+    b2 = next((p for p in files_10m if p.endswith("_B02_10m.jp2")), None)
+    b3 = next((p for p in files_10m if p.endswith("_B03_10m.jp2")), None)
+    b4 = next((p for p in files_10m if p.endswith("_B04_10m.jp2")), None)
+    b8 = next((p for p in files_10m if p.endswith("_B08_10m.jp2")), None)
+    b5 = next((p for p in files_20m if p.endswith("_B05_20m.jp2")), None)
+    b6 = next((p for p in files_20m if p.endswith("_B06_20m.jp2")), None)
+    b7 = next((p for p in files_20m if p.endswith("_B07_20m.jp2")), None)
+    b8a = next((p for p in files_20m if p.endswith("_B8A_20m.jp2")), None)
+    b11 = next((p for p in files_20m if p.endswith("_B11_20m.jp2")), None)
+    b12 = next((p for p in files_20m if p.endswith("_B12_20m.jp2")), None)
     return (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12)
 
 
 def get_band_files(l2a_path):
-    product_dir = glob.glob(os.path.join(l2a_path, "SENTINEL2*"))
-    if product_dir:
-        return get_maja_band_files(product_dir[0])
     product_dir = glob.glob(os.path.join(l2a_path, "GRANULE/L2A*/IMG_DATA"))
     if product_dir:
         return get_sen2cor_band_files(product_dir[0])
+    product_dir = glob.glob(os.path.join(l2a_path, "SENTINEL2*"))
+    if product_dir:
+        return get_maja_band_files(product_dir[0])
+    return None
 
 
-def load_products(conn, site_id, season_start, season_end, tiles):
+def get_product(name, l2a_path, created_timestamp, mask_path):
+    mask_name = os.path.basename(mask_path)
+    mask_name_10m = mask_name.replace(".SAFE", "_10M.tif")
+    mask_name_20m = mask_name.replace(".SAFE", "_20M.tif")
+    mask_10m = os.path.join(
+        mask_path,
+        mask_name_10m,
+    )
+    mask_20m = os.path.join(
+        mask_path,
+        mask_name_20m,
+    )
+
+    (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12) = get_band_files(l2a_path)
+
+    if (
+        not b2
+        or not b3
+        or not b4
+        or not b5
+        or not b6
+        or not b7
+        or not b8
+        or not b8a
+        or not b11
+        or not b12
+    ):
+        return None
+
+    product = L2AProduct(
+        created_timestamp,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b8a,
+        b11,
+        b12,
+        mask_10m,
+        mask_20m,
+    )
+    return product
+
+
+def load_products(conn, pool, site_id, season_start, season_end, tiles):
     products_by_tile = {}
     for tile in tiles:
         query = SQL(
@@ -310,55 +358,50 @@ order by product_l2a.created_timestamp;
                     tile,
                 ),
             )
+            result = cursor.fetchall()
 
-            products = []
-            for (name, l2a_path, created_timestamp, mask_path) in cursor:
-                mask_name = os.path.basename(mask_path)
-                mask_name_10m = mask_name.replace(".SAFE", "_10M.tif")
-                mask_name_20m = mask_name.replace(".SAFE", "_20M.tif")
-                mask_10m = os.path.join(
-                    mask_path,
-                    mask_name_10m,
-                )
-                mask_20m = os.path.join(
-                    mask_path,
-                    mask_name_20m,
-                )
-
-                (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12) = get_band_files(l2a_path)
-
-                if (
-                    not b2
-                    or not b3
-                    or not b4
-                    or not b5
-                    or not b6
-                    or not b7
-                    or not b8
-                    or not b8a
-                    or not b11
-                    or not b12
-                ):
-                    continue
-
-                product = L2AProduct(
-                    created_timestamp,
-                    b2,
-                    b3,
-                    b4,
-                    b5,
-                    b6,
-                    b7,
-                    b8,
-                    b8a,
-                    b11,
-                    b12,
-                    mask_10m,
-                    mask_20m,
-                )
-                products.append(product)
+            products = [p for p in pool.map(lambda r: get_product(*r), result) if p]
+            products = sorted(products, key=lambda p: p.date)
             products_by_tile[tile] = products
+
     return products_by_tile
+
+
+def get_band_names(feature_set, output_dates, s1_features):
+    band_names = []
+    if feature_set.want_s2_reflectance_10m():
+        for b in [
+            "S2_B03",
+            "S2_B04",
+            "S2_B08",
+        ]:
+            for d in output_dates:
+                band_names.append(f"{b}_{d}")
+    if feature_set.want_s2_reflectance_20m():
+        for b in [
+            "S2_B05",
+            "S2_B06",
+            "S2_B07",
+            "S2_B11",
+            "S2_B12",
+        ]:
+            for d in output_dates:
+                band_names.append(f"{b}_{d}")
+    if feature_set.want_vegetation_indices():
+        for b in [
+            "NDVI",
+            "NDWI",
+            "BRIGHTNESS",
+        ]:
+            for d in output_dates:
+                band_names.append(f"{b}_{d}")
+    if feature_set.want_vegetation_indices_statistics():
+        for indicator in ["NDVI", "NDWI", "BRIGHTNESS"]:
+            for statistic in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
+                band_name = f"{indicator}_{statistic}"
+                band_names.append(band_name)
+    band_names += s1_features
+    return band_names
 
 
 def main():
@@ -512,7 +555,7 @@ def main():
     with get_connection(config) as conn:
         tiles = load_tiles(conn, config.site_id, args.tiles)
         products_by_tile = load_products(
-            conn, config.site_id, season_start, season_end, tiles
+            conn, pool, config.site_id, season_start, season_end, tiles
         )
 
         first_date = season_end
@@ -551,42 +594,14 @@ def main():
                 s1_features = set.intersection(*s1_feature_list)
             else:
                 s1_features = set()
+        else:
+            s1_features = set()
 
+        band_names = get_band_names(feature_set, output_dates, s1_features)
         for (tile, products) in products_by_tile.items():
-            band_names = []
-            if feature_set.want_s2_reflectance_10m():
-                for b in [
-                    "S2_B03",
-                    "S2_B04",
-                    "S2_B08",
-                ]:
-                    for d in output_dates:
-                        band_names.append(f"{b}_{d}")
-            if feature_set.want_s2_reflectance_20m():
-                for b in [
-                    "S2_B05",
-                    "S2_B06",
-                    "S2_B07",
-                    "S2_B11",
-                    "S2_B12",
-                ]:
-                    for d in output_dates:
-                        band_names.append(f"{b}_{d}")
-            if feature_set.want_vegetation_indices():
-                for b in [
-                    "NDVI",
-                    "NDWI",
-                    "BRIGHTNESS",
-                ]:
-                    for d in output_dates:
-                        band_names.append(f"{b}_{d}")
-
-            # 10m bands
             b3s = [p.b3 for p in products]
             b4s = [p.b4 for p in products]
             b8s = [p.b8 for p in products]
-
-            # 20m bands
             b5s = [p.b5 for p in products]
             b6s = [p.b6 for p in products]
             b7s = [p.b7 for p in products]
@@ -1164,7 +1179,6 @@ def main():
                         )
                         vrt_dataset.append(vrt_raster_band)
                         out_band += 1
-                        band_names.append(band_name)
 
             if feature_set.want_s1_features():
                 s1_vrt = f"S1_{tile}.vrt"
@@ -1201,18 +1215,19 @@ def main():
                     )
                     vrt_dataset.append(vrt_raster_band)
                     out_band += 1
-                    band_names.append(band_name)
 
             root = etree.ElementTree(vrt_dataset)
             bands_vrt = f"bands_{tile}.vrt"
             root.write(bands_vrt, pretty_print=True, encoding="utf-8")
 
+        band_names_lower = list(map(lambda x: x.lower(), band_names))
+        for (tile, products) in products_by_tile.items():
             training_points = f"training_points_{tile}.shp"
             validation_points = f"validation_points_{tile}.shp"
             training_samples = f"training_samples_{tile}.sqlite"
             validation_samples = f"validation_samples_{tile}.sqlite"
 
-            band_names_lower = list(map(lambda x: x.lower(), band_names))
+            bands_vrt = f"bands_{tile}.vrt"
 
             commands = []
             if not os.path.exists(training_samples) and os.path.exists(training_points):
