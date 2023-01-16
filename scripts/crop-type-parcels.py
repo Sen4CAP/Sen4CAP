@@ -1161,7 +1161,7 @@ def process_radar(args, pool):
             ds = gdal.Open(product.path, gdalconst.GA_ReadOnly)
             if ds:
                 gt = ds.GetGeoTransform()
-                tile_spacing[product.tile_id] = gt[1]
+                tile_spacing[product.tile_id] = int(round(gt[1]))
             del ds
         if product.tile_id not in tile_product_ref:
             tile_product_ref[product.tile_id] = product.path
