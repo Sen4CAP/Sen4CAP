@@ -1245,8 +1245,6 @@ def process_radar(args, pool):
             tile_ref = None
         if tile_ref:
             tile_extent = ref_extent_map.get(group.tile_id)
-        if not tile_extent:
-            tile_extent = ref_extent_map.get(group.tile_id)
 
         if args.lpis_path and (tile_ref is None or tile_extent is None):
             continue
