@@ -865,9 +865,8 @@ class WeeklyComposite(object):
             (xmin, ymax) = self.tile_extent[0]
             (xmax, ymin) = self.tile_extent[2]
 
-            command = []
-            command += ["gdalwarp", "-q"]
-            command += ["-r", "cubic"]
+            command = ["gdalwarp"]
+            command += ["-q", "-r", "cubic"]
             if self.force_input_epsg is not None:
                 command += ["-s_srs", "EPSG:{}".format(self.force_input_epsg)]
             command += ["-t_srs", "EPSG:{}".format(self.tile_epsg_code)]
