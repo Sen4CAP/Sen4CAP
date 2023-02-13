@@ -2,7 +2,7 @@
 from __future__ import print_function
 
 import argparse
-from configparser import ConfigParser
+# from configparser import ConfigParser
 import os
 import os.path
 import pipes
@@ -11,6 +11,10 @@ from psycopg2.sql import SQL, Literal, Identifier
 import psycopg2.extras
 import subprocess
 
+try:
+    from configparser import ConfigParser
+except ImportError:
+    from ConfigParser import ConfigParser
 
 class Config(object):
     def __init__(self, args):
