@@ -25,6 +25,7 @@ from osgeo import osr
 
 import sys
 import docker
+from docker.types import LogConfig
 
 agric_codes = [2, 21, 22, 23, 24, 211, 212, 213, 221, 222, 223, 231, 241, 242, 243, 244]
 
@@ -44,7 +45,6 @@ class Config(object):
             self.host = "172.17.0.1"
 
         self.site_id = args.site_id
-        self.timeout = args.timeout
 
 def run_command(args, env=None):
     args = list(map(str, args))
@@ -52,31 +52,12 @@ def run_command(args, env=None):
     print(cmd_line)
     subprocess.call(args, env=env)
 
-def run_command_out_to_file(args, file_path):
-    args = list(map(str, args))
-    cmd_line = " ".join(map(pipes.quote, args))
-    print(cmd_line)
-    f = open(file_path, "w")
-    subprocess.call(args, stdout=f)
-
-
-def getSiteWKT(conn, site_id):
-    site_wkt = ""
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-            select st_asText(geog) from site
-            where id = {}
-            """
-        )
-        query = query.format(Literal(site_id))
-        print(query.as_string(conn))
-
-        cursor.execute(query)
-        for row in cursor:
-            site_wkt = row[0]
-        conn.commit()
-    return site_wkt
+# def run_command_out_to_file(args, file_path):
+#     args = list(map(str, args))
+#     cmd_line = " ".join(map(pipes.quote, args))
+#     print(cmd_line)
+#     f = open(file_path, "w")
+#     subprocess.call(args, stdout=f)
 
 def getSiteTiles(conn, site_id):
     site_tiles = ""
@@ -94,125 +75,6 @@ def getSiteTiles(conn, site_id):
             site_tiles = row[0]
         conn.commit()
     return site_tiles
-
-
-def getSiteShortName(conn, site_id):
-    site_short_name = ""
-    with conn.cursor() as cursor:
-        query = SQL(
-            """
-            select short_name from site
-            where id = {}
-            """
-        )
-        query = query.format(Literal(site_id))
-        print(query.as_string(conn))
-
-        cursor.execute(query)
-        for row in cursor:
-            site_short_name = row[0]
-        conn.commit()
-    return site_short_name
-
-def setConfigValue(conn, site_id, key, value):
-    with conn.cursor() as cursor:
-        id = -1
-        if not site_id:
-            query = SQL(
-                """ select id from config where key = {} and site_id is null"""
-            ).format(Literal(key), Literal(site_id))
-        else:
-            query = SQL(
-                """ select id from config where key = {} and site_id = {}"""
-            ).format(Literal(key), Literal(site_id))
-        print(query.as_string(conn))
-        cursor.execute(query)
-        for row in cursor:
-            id = row[0]
-        conn.commit()
-
-        if id == -1:
-            if not site_id:
-                query = SQL(
-                    """ insert into config (key, value) values ({}, {}) """
-                ).format(Literal(key), Literal(value))
-            else:
-                query = SQL(
-                    """ insert into config (key, site_id, value) values ({}, {}, {}) """
-                ).format(Literal(key), Literal(site_id), Literal(value))
-            print(query.as_string(conn))
-            cursor.execute(query)
-            conn.commit()
-        else:
-            if not site_id:
-                query = SQL(
-                    """ update config set value = {} where key = {} and site_id is null """
-                ).format(Literal(value), Literal(key), Literal(site_id))
-            else:
-                query = SQL(
-                    """ update config set value = {} where key = {} and site_id = {} """
-                ).format(Literal(value), Literal(key), Literal(site_id))
-            print(query.as_string(conn))
-            cursor.execute(query)
-            conn.commit()
-
-        if not site_id:
-            query = SQL(
-                """ select value from config where key = {} and site_id is null"""
-            ).format(Literal(key), Literal(site_id))
-        else:
-            query = SQL(
-                """ select value from config where key = {} and site_id = {}"""
-            ).format(Literal(key), Literal(site_id))
-        print(query.as_string(conn))
-        cursor.execute(query)
-        read_value = ""
-        for row in cursor:
-            read_value = row[0]
-        conn.commit()
-
-        print("========")
-        if str(value) == str(read_value):
-            print(
-                "Key {} succesfuly updated for site id {} with value {}".format(
-                    key, site_id, value
-                )
-            )
-        else:
-            print(
-                "Error updating key {} for site id {} with value {}. The read value was: {}".format(
-                    key, site_id, value, read_value
-                )
-            )
-        print("========")
-
-
-def getSiteConfigKey(conn, key, site_id):
-    value = ""
-    with conn.cursor() as cursor:
-        query = SQL(""" select value from config where key = {} and site_id = {} """)
-        query = query.format(Literal(key), Literal(site_id))
-        print(query.as_string(conn))
-
-        cursor.execute(query)
-        for row in cursor:
-            value = row[0]
-        conn.commit()
-
-        # get the default value if not found
-        if value == "":
-            query = SQL(
-                """ select value from config where key = {} and site_id is null """
-            )
-            query = query.format(Literal(key))
-            print(query.as_string(conn))
-
-            cursor.execute(query)
-            for row in cursor:
-                value = row[0]
-            conn.commit()
-
-    return value
 
 def getTileEPSGCode(conn, s2_tile):
     value = ""
@@ -253,32 +115,42 @@ def getTileWKT(conn, s2_tile, epsg_code = ""):
 def queryEarthSignature(start_date, end_date, wkt, output_dir, out_path) :
     # output_dir = os.path.dirname(output_dir)
     print("Querying EarthSignature ...")
+    
     client = docker.from_env()
     volumes = {
         # self.input: {"bind": self.input, "mode": "ro"},
         output_dir: {"bind": output_dir, "mode": "rw"},
     }
+    lc = LogConfig(type=LogConfig.types.JSON, config={
+        'max-size': '1g'
+    })
+    
     if end_date is not None:
         msg = "{{\"n_results\": \"10\", \"start_date\": \"{}\", \"end_date\": \"{}\", \"wkt\": \"{}\" }}".format(start_date, end_date, wkt)
     else :
         msg = "{{\"n_results\": \"10\", \"start_date\": \"{}\", \"wkt\": \"{}\" }}".format(start_date, wkt)
     command = []
+#    command += ["-H", "apikey: xLNnvdiAmNK0rChLk0YnUP7v"]
     # command += ["-insecure"]
     command += ["-max-msg-sz", "8000000000"]
     command += ["-d", msg]
     command += ["earthsignature.snapearth.eu:443"]
-    command += ["snapearth.api.v1.database.DatabaseProductService.ListSegmentation"]
+##    command += ["earthsignature.snapearth.csgroup.space:443"]
+    command += ["snapearth.api.v1.DatabaseProductService.ListSegmentation"]
+    # command += ["snapearth.api.v1.database.DatabaseProductService.ListSegmentation"]
+    print ("Executing : docker run fullstorydev/grpcurl {}".format(" ".join(command)))
     container = client.containers.run(
         image="fullstorydev/grpcurl",
         remove=True,
         user=f"{os.getuid()}:{os.getgid()}",
         volumes=volumes,
         command=command,
+        log_config=lc
     )
     client.close()
-    
+
     f = open(out_path, "wb")
-    f. write(container)
+    f.write(container)
     f. close()
     
     # ------------ Old implementation -----
@@ -307,7 +179,7 @@ def filter_pixels_in_raster(in_raster, out_dir, out_raster, valid_vals) :
     }
     command = []
     command += ["otbcli", "BandMath", "-il", in_raster]
-    command += ["-out", out_raster]
+    command += ["-out", out_raster, "int16"]
     exp = "("
     for i in range(0, len(valid_vals)):
         if i > 0 :
@@ -331,7 +203,12 @@ def decode_base64(in_file, out_file) :
     image = open(in_file, 'rb')
     image_read = image.read()
     image_64_decode = base64.decodebytes(image_read) 
-
+    try:
+        image_64_decode = base64.b64decode(image_64_decode, validate=True)
+        print("Content of file {} is doubled base64 encoded. Decoded it twice ...".format(in_file))
+    except Exception as e:
+        print("No double Base64 encoding for file {} ...".format(in_file))
+    
     image_result = open(out_file, 'wb') 
     # print("Decoded buffer has a length of {} bytes".format(len(image_64_decode)))
     # print("Decoded buffer is : ")
@@ -377,17 +254,6 @@ def extract_json_files(jsonl_file, output_dir) :
 
     return json_files
 
-# def extract_json_infos(json_file) :
-#     with open(json_file) as jsonFile:
-#         jsonObject = json.load(jsonFile)
-# 
-#         for segmentation in data['segmentations']:
-#             segmentation_content = segmentation["segmentation"]
-#             productId = segmentation["productId"]
-#             
-# 
-#         jsonFile.close()
-
 def extract_base64_segmentation_file(json_file, out_dir, s2_tile_filter) :
     ret_files = []
     with open(json_file) as jsonFile:
@@ -418,15 +284,6 @@ def extract_base64_segmentation_file(json_file, out_dir, s2_tile_filter) :
 def create_path(dir_path) :
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
-
-def GetInputRasterExtent(ds):
-    """ Return list of corner coordinates from a gdal Dataset """
-    xmin, xpixel, _, ymax, _, ypixel = ds.GetGeoTransform()
-    width, height = ds.RasterXSize, ds.RasterYSize
-    xmax = xmin + width * xpixel
-    ymin = ymax + height * ypixel
-
-    return [(xmin, ymax), (xmax, ymax), (xmax, ymin), (xmin, ymin)]
 
 def GetTileExtent(conn, s2tile):
     wkt, epsg = getTileWKT(conn, s2tile)
@@ -507,6 +364,7 @@ def reproject_tile_wkt(wkt, src_epsg, target_epsg):
     return ret_wkt
 
 def do_georeference_raster(conn, s2tile, in_raster, out_raster) :
+   
     print("Georeferencing segmentation file {} into {}".format(in_raster, out_raster))
     
     points = GetTileExtent(conn, s2tile)
@@ -524,15 +382,6 @@ def do_georeference_raster(conn, s2tile, in_raster, out_raster) :
     command += [in_raster, out_raster]
 
     run_command(command)
-    
-    # source_ds = gdal.Open( in_raster, gdalconst.GA_ReadOnly)
-    # ext = GetInputRasterExtent(source_ds)
-    # print ("In extent: {}".format(ext))
-    # 
-    # gcps = []
-    # for i in range(0, len(ext)):
-    #     gcps.append([ext[i][0], ext[i][1], points[i][0], points[i][1]])
-    # print("gcps : {}".format(gcps))
     
 def update_shape_codes(in_shp) :
     dataset = ogr.Open(in_shp, gdalconst.GA_Update)
@@ -557,7 +406,7 @@ def update_shape_codes(in_shp) :
             feature.SetField(crop_field_idx, 1)
         else :
             feature.SetField(crop_field_idx, 0)
-            feature.SetField(code_field_idx, 0)
+            feature.SetField(code_field_idx, code_val)
         layer.SetFeature(feature)
 
     dataset.CommitTransaction()
@@ -624,10 +473,6 @@ def main():
         "-o", "--out-shp", required=True, help="The output shp file"
     )
 
-    parser.add_argument(
-        "-t", "--timeout", required=False, default=1000, type=int, help="The output shp file"
-    )
-    
     args = parser.parse_args()
 
     config = Config(args)
@@ -642,6 +487,7 @@ def main():
         site_tiles = getSiteTiles(conn, config.site_id)
         georef_segm_files = []
         for s2tile in site_tiles:
+
             print("Tile = {}".format(s2tile))
             tile_wkt_wgs84 = getTileWKT(conn, s2tile, 4326)
             tile_wkt_utm, epsg = getTileWKT(conn, s2tile)
@@ -680,12 +526,15 @@ def main():
             create_path(georef_files_dir)
              
             for segm_file in segm_files:
-                base_fn = os.path.splitext(os.path.basename(segm_file))[0]
-                out_georef_segm_file = os.path.join(georef_files_dir, "{}_GEOREF.tif".format(base_fn))
-                do_georeference_raster(conn, s2tile, segm_file, out_georef_segm_file)
-                out_seg_filtered_file = os.path.join(georef_files_dir, "{}_GEOREF_filtered.tif".format(base_fn))
-                filter_pixels_in_raster(out_georef_segm_file, georef_files_dir, out_seg_filtered_file, agric_codes)
-                georef_segm_files += [out_seg_filtered_file] 
+                try :
+                    base_fn = os.path.splitext(os.path.basename(segm_file))[0]
+                    out_georef_segm_file = os.path.join(georef_files_dir, "{}_GEOREF.tif".format(base_fn))
+                    do_georeference_raster(conn, s2tile, segm_file, out_georef_segm_file)
+                    out_seg_filtered_file = os.path.join(georef_files_dir, "{}_GEOREF_filtered.tif".format(base_fn))
+                    filter_pixels_in_raster(out_georef_segm_file, georef_files_dir, out_seg_filtered_file, agric_codes)
+                    georef_segm_files += [out_seg_filtered_file] 
+                except:
+                    print("Error processing segmentation file {}".format(segm_file))
 
         polygonize_rasters_dir = os.path.join(args.working_dir, "polygonize")
         create_path(polygonize_rasters_dir)
