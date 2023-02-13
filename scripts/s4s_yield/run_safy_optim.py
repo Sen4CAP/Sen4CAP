@@ -31,6 +31,9 @@ import json
 
 from copy import deepcopy
 
+#MIN_WEATHER_SAMPLES = 100
+MIN_WEATHER_SAMPLES = 50
+
 NETCDF_WEATHER_BANDS = ["tmin", "tmax", "rad"]
 CROP_LIST = ['wheat','maize','sunfl']
 
@@ -450,9 +453,9 @@ def get_weather_features(inputs) :
     # print all_tair_vals_arr.shape[0]
     # print all_tair_vals_arr.shape[1]
     
-def get_weather(tair_grid_vals, rglb_grid_vals) :
+def get_weather(tair_grid_vals, rglb_grid_vals, min_weather_samples) :
     Weather = {}
-    if tair_grid_vals.shape[0] <= 100:
+    if tair_grid_vals.shape[0] <= min_weather_samples:
         print("Only {} values are in the array. It will be ignored ....".format(tair_grid_vals.shape[0]))
         return Weather
 
@@ -524,12 +527,12 @@ def FloatOrZero(value):
     except:
         return 0.0
         
-def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, d0v, ELUEv, SenAv, SenBv, json_parameters, lut_dir, writer) :
+def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, d0v, ELUEv, SenAv, SenBv, json_parameters, lut_dir, writer, min_weather_samples) :
     # load also the LAI for the parcels in the grid
     lai_parcel_rows = lai_file_handler.get_lai_rows(grid_parcels)
     if len(lai_parcel_rows) == 0 :
         print ("Grid {} has no intersecting parcels ...".format(grid_no))
-        return
+        return None
 
     tair_grid_vals = all_tair_vals_arr[:, grid_no]
     rglb_grid_vals = all_rglb_vals[:, grid_no]
@@ -537,9 +540,9 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
     
     LAImat, ParametersTMPAll = get_safy_lut_params(lut_dir, grid_no, json_parameters)
     
-    weather_all = get_weather(tair_grid_vals, rglb_grid_vals)
+    weather_all = get_weather(tair_grid_vals, rglb_grid_vals, min_weather_samples)
     if len(weather_all.keys()) == 0:
-        return
+        return None
     
     calibrate_safy_param_wrps = [] 
     for row in lai_parcel_rows:
@@ -620,6 +623,7 @@ def main():
     parser.add_argument("-l", "--lut-dir", help="Directory from where the resulted LUT files are loaded", required=True)
     parser.add_argument("-w", "--working-dir", help="Working dir", required=True)
     parser.add_argument("-o", "--out", help="File where the safy optim results will be written", required=True)
+    parser.add_argument("-m", "--min-weather-samples", help="The minimum number of weather acquisitions", required=False, type=int, default=MIN_WEATHER_SAMPLES)
     
     args = parser.parse_args()
 
@@ -647,8 +651,10 @@ def main():
             grid_no = int(row[0])
             if prev_grid_no != grid_no:
                 if len(grid_parcels) > 0 :
-                    all_output += handle_grid_parcels(args.year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, 
-                                        d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer)
+                    outputs = handle_grid_parcels(args.year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, 
+                                        d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer, args.min_weather_samples)
+                    if outputs is not None and len(outputs) > 0:
+                        all_output += outputs                    
                     grid_parcels = []
             
             # add the parcel id
@@ -656,8 +662,11 @@ def main():
             prev_grid_no = grid_no
                  
         if len(grid_parcels) > 0 :
-            all_output += handle_grid_parcels(args.year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, 
-                    d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer)            
+            outputs = handle_grid_parcels(args.year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, 
+                    d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer, args.min_weather_samples)  
+            if outputs is not None and len(outputs) > 0:
+                all_output += outputs                    
+                    
         
         all_output.sort()
         print(all_output)

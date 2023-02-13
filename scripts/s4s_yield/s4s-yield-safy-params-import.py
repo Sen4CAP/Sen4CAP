@@ -175,22 +175,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Handles the upload of the SAFY config file"
     )
-    parser.add_argument(
-        "-c",
-        "--config-file",
-        default="/etc/sen2agri/sen2agri.conf",
-        help="Configuration file location",
-    )
-    parser.add_argument(
-        "-s",
-        "--site-id",
-        required=True,
-        help="Site id for which the file was uploaded",
-    )
+    parser.add_argument("-c", "--config-file", default="/etc/sen2agri/sen2agri.conf", help="Configuration file location")
+    parser.add_argument("-s", "--site-id", required=True, help="Site id for which the file was uploaded")
     parser.add_argument("-y", "--year", type=int, required=True, help="The year")
-    parser.add_argument(
-        "-i", "--input-file", required=True, help="The uploaded config file"
-    )
+    parser.add_argument("-i", "--input-file", required=True, help="The uploaded config file")
     args = parser.parse_args()
 
     config = Config(args)

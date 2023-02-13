@@ -174,10 +174,21 @@ def handle_batch_record(rows, column_infos, writer):
         # print("safy_yield = {}".format(safy_yield))
         # print("safy_d0 = {}".format(safy_d0))
         # print("safy_senb = {}".format(safy_senb))
+        
+        if safy_yield is not None and len(safy_yield) > 0:
+            result[34] = safy_yield[0]                                                        # ['safyyield'] 
+        else :
+            result[34] = None                                                              
 
-        result[34] = safy_yield[0]                                                        # ['safyyield'] 
-        result[35] = safy_d0[0]                                                           # ['safyd0'] 
-        result[36] = safy_senb[0]                                                         # ['safysenb'] 
+        if safy_d0 is not None and len(safy_d0) > 0:
+            result[35] = safy_d0[0]                                                        # ['safyd0'] 
+        else :
+            result[35] = None                                                              
+
+        if safy_senb is not None and len(safy_senb) > 0:
+            result[36] = safy_senb[0]                                                        # ['safysenb']
+        else :
+            result[36] = None                                                              
                 
         batch_results.append(result)
 

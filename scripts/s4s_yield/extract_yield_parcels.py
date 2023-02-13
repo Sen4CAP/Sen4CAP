@@ -154,12 +154,18 @@ class DataExtraction(object):
                 """
 select parcels.parcel_id,
     parcels.wkb_geometry,
-   parcel_attributes.geom_valid,
-   statistical_data.crop_code,
-   statistical_data.crop_id
+    parcel_attributes.geom_valid,
+    statistical_data.crop_code,
+    statistical_data.crop_id,
+    crop_list_n3.code_n3,
+    crop_list_n2.code_n2,
+    crop_list_n2.code_n1
 from {} parcels
 inner join {} parcel_attributes using (parcel_id)
 inner join {} statistical_data using (parcel_id)
+inner join crop_list_n4 on statistical_data.crop_code = crop_list_n4.code_n4
+inner join crop_list_n3 using (code_n3)
+inner join crop_list_n2 using (code_n2)
 where parcel_attributes.geom_valid = true
 
 """

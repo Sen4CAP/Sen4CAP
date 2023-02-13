@@ -28,6 +28,9 @@ INDICES_COLUMN_SUFFIXES=["Ind_MaxLai", "Ind_HalfLai", "Ind_Emerg", "Ind_EndLai"]
 
 ID_COL_NAME = "NewID"
 
+SG_DEFAULT_WINDOW_LEN = 21
+SG_DEFAULT_MIN_INDICES = 50
+
 class OutputsHandler(object) :
     def __init__(self, sg_writer, indices_writer, metrics_writer):
         self.sg_writer = sg_writer
@@ -97,10 +100,10 @@ def NoneInt(x):
 
 def SGInterp(DOY2, lai2, xDoy):
     Flinear = interp1d(DOY2, lai2, kind='linear')
-    savgol = savgol_filter(Flinear(xDoy), window_length=21, polyorder=1)
+    savgol = savgol_filter(Flinear(xDoy), window_length=SG_DEFAULT_WINDOW_LEN, polyorder=1)
     return savgol
 
-def SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0):
+def SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0, window_length):
     LAI   = bi_vals
     savgol = np.ones(len(DoyList))*np.nan
     if len(LAI)>1:  
@@ -109,10 +112,10 @@ def SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0):
         Date = dates
         doy = np.array([(x - Date0).days  for x in Date])
         test = (DoyList>=min(doy))&(DoyList<=max(doy))
-        if np.sum(test)>=21:
+        if np.sum(test)>=window_length:
             print("Interpolating ...")
             Flinear = interp1d(doy, LAI, kind='linear')
-            dum = savgol_filter(Flinear(DoyList[test]), window_length=21, polyorder=1)
+            dum = savgol_filter(Flinear(DoyList[test]), window_length=window_length, polyorder=1)
             savgol[test] = dum
             print("Interpolating done")
         print("SG done")
@@ -148,7 +151,7 @@ def get_selected_columns(columns) :
     # print("Selected columns: {}".format(col_names))
     return SelectedColumns(col_names, global_col_indices, id_col_global_idx, ID_COL_NAME)
 
-def handle_ipc_file(input, output_handler, DoyList, Date0) :
+def handle_ipc_file(input, output_handler, DoyList, Date0, window_length, min_indices) :
     reader = ipc.open_file(input)
     
     print("Having a number of {} columns ...".format(len(reader.schema.names)))
@@ -170,9 +173,9 @@ def handle_ipc_file(input, output_handler, DoyList, Date0) :
         pd = rb.to_pandas()
         all_cropfields = pd.to_numpy()
         # print("Result: {}".format(all_cropfields))
-        handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler)
+        handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler, window_length, min_indices)
         
-def handle_csv_file(input, output_handler, DoyList, Date0) :
+def handle_csv_file(input, output_handler, DoyList, Date0, window_length, min_indices) :
     with open(input, 'r') as read_obj:
         # pass the file object to reader() to get the reader object
         csv_reader = csv.reader(read_obj)
@@ -188,17 +191,19 @@ def handle_csv_file(input, output_handler, DoyList, Date0) :
                 arr = np.genfromtxt(gen, delimiter=',', usecols=selCols.get_all_global_col_indices(), encoding=None)
                 all_cropfields = np.array(arr.tolist())
                 # all_cropfields = arr.view(np.float).reshape(arr.shape + (-1,))
-                handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler)
+                handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler, window_length, min_indices)
                 if arr.shape[0]<N:
                     break
 
-def compute_crop_partitioning_indices(SG) :
+def compute_crop_partitioning_indices(SG, min_indices) :
 
+    if min_indices is None:
+        min_indices = SG_DEFAULT_MIN_INDICES 
     # Extract an array with IndMaxLai IndHalfLai IndEmerg IndEndLai
     print("Computing crop partitioning indices ...")
     dum, = np.where(SG!=None)
     # print(dum)
-    if len(dum)<50:
+    if len(dum)<min_indices:
         print("Cannot extract indices as the length of SG array is {}".format(len(dum)))
         return None
         # return [None, None, None, None]
@@ -232,6 +237,9 @@ def compute_crop_partitioning_indices(SG) :
         # print("dum1 = {}".format(dum))
         # get the indices of the values before the maximum index whose difference with min emegence LAI  > half of the max - min LAI
         dum, = np.where((SG[:IndMaxLai]-MinEmerg)/(Max-MinEmerg)>.5)
+        if len(dum) == 0:
+            print("Cannot extract the indices of the values before the maximum index whose difference with min emegence LAI  > half of the max - min LAI (len 0) {}".format(len(dum)))
+            return None
         # print("dum2 = {}".format(dum))
         # First value is considered half of LAI
         IndHalfLai = NoneInt(dum[0])
@@ -282,7 +290,7 @@ def build_lai_metrics_output_record(savgol, indices, orig_lai_max_val) :
     # outputs :=["mean_LaiSGWinter", "sum_LaiSGInt0", "sum_LaiSGInt1", "sum_LaiSGInt2", "max_SG", "daymax_SG", "max_LAI"]
     return [MeanLaiSGWinter, SumLaiSGInt0, SumLaiSGInt1, SumLaiSGInt2, LaiSGmax, LaiSGdaymax, Laimax]
     
-def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler):
+def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler, window_length, min_indices):
     sg_outputs = []
     indices_outputs = []
     metrics_outputs = []
@@ -294,6 +302,7 @@ def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler)
         total_pixels = valid_pixels # TODO: For now we go with this but the line above should be uncommented
         
         # TODO: Threshold should be configurable
+        # print("Total pixels = {}, valid pixels = {}".format(total_pixels, valid_pixels))
         test = np.array([y>0.8*x for x,y in zip(total_pixels,valid_pixels)])
 
         # print ("Test = {}".format(test))
@@ -304,14 +313,14 @@ def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler)
         bi_vals     =  mean_vals[test] / 1e3
         
         cropfield = cropfield_descr[0]
-        savgol = SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0)
+        savgol = SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0, window_length)
         
         cropfield_n = int(cropfield)
         # add the output to the output lines
         sg_outputs.append( [cropfield_n] + list(savgol) )
 
         # compute the crop partitioning indices
-        indices = compute_crop_partitioning_indices(savgol)
+        indices = compute_crop_partitioning_indices(savgol, min_indices)
         if indices is not None:
             # add the indices to the output list
             indices_outputs.append([cropfield_n] + indices)
@@ -346,10 +355,15 @@ def build_metrics_output_header(first_date) :
     
     return header
 
-def handle_file(input, output_handler, year):
+def handle_file(input, output_handler, year, season_start, season_end, window_length, min_indices):
     # TODO: These dates should be configurables (or at least the end date)
     Date0 = dt.date(int(year), 1, 1)
     DateEnd = dt.date(int(year), 11, 30)
+
+    if season_start is not None and season_end is not None :
+        Date0 = dt.datetime.strptime(season_start, '%Y-%m-%d').date()
+        DateEnd = dt.datetime.strptime(season_end, '%Y-%m-%d').date()
+        
     DateList = [Date0 + dt.timedelta(days=x) for x in range(0,(DateEnd-Date0).days   + 1,1)]
     DateList=np.unique(DateList)
     DoyList = np.array([(x-Date0 ).days for x in DateList])
@@ -365,9 +379,11 @@ def handle_file(input, output_handler, year):
     
     lcinput = input.lower()
     if lcinput.endswith('.ipc'):
-        handle_ipc_file(input, output_handler, DoyList, Date0)
+        print("Handling ipc file {}".format(input))
+        handle_ipc_file(input, output_handler, DoyList, Date0, window_length, min_indices)
     elif lcinput.endswith('.csv'):
-        handle_csv_file(input, output_handler, DoyList, Date0)
+        print("Handling csv file {}".format(input))
+        handle_csv_file(input, output_handler, DoyList, Date0, window_length, min_indices)
     else :
         print("Invalid file type received as input (unknow extension for {})".format(input))
         sys.exit(1)
@@ -381,15 +397,19 @@ def main():
     parser.add_argument("-x", "--indices-output", help="Output file for crop growth indices extracted values", required=True)
     parser.add_argument("-m", "--metrics-output", help="Output file LAI metrics extracted values", required=True)
     parser.add_argument("-y", "--year", help="The processing year", required=True)
+    parser.add_argument("-w", "--window-length", help="Window length", required=False, type=int, default=SG_DEFAULT_WINDOW_LEN)
+    parser.add_argument("-n", "--min-indices", help="Minimum number of indices", required=False, type=int, default=SG_DEFAULT_MIN_INDICES)
+    parser.add_argument("-b", "--season-start", help="Season start (format YYYY-mm-dd)", required=False)
+    parser.add_argument("-e", "--season-end", help="Season end (format YYYY-mm-dd)", required=False)
     
     args = parser.parse_args()
- 
+    
     with open(args.sg_output, "w") as sg_file, open(args.indices_output, "w") as indices_file, open(args.metrics_output, "w") as metrics_file:
         output_handler = OutputsHandler(csv.writer(sg_file, quoting=csv.QUOTE_MINIMAL), 
                                         csv.writer(indices_file, quoting=csv.QUOTE_MINIMAL),
                                         csv.writer(metrics_file, quoting=csv.QUOTE_MINIMAL))
         
-        handle_file(args.input, output_handler, args.year)
+        handle_file(args.input, output_handler, args.year, args.season_start, args.season_end, args.window_length, args.min_indices)
     
 if __name__ == "__main__":
     main()
