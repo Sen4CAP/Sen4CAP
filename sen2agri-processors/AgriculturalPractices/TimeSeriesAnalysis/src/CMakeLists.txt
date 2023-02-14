@@ -41,20 +41,6 @@ otb_create_application(
                  TsaDebugPrinter.cpp
                  TsaPrevPrdReader.h
                  TsaPrevPrdReader.cpp
-#                 TsaCountryPluginsFactory.h
-#                 TsaCountryPluginIntf.h
-#                 TsaCountryDefaultPlugin.h
-#                 TsaCountryDefaultPlugin.cpp
-#                 TsaCountryCzePlugin.h
-#                 TsaCountryCzePlugin.cpp
-#                 TsaCountryRouPlugin.h
-#                 TsaCountryRouPlugin.cpp
-#                 TsaCountryLtuPlugin.h
-#                 TsaCountryLtuPlugin.cpp
-#                 TsaCountryItaPlugin.h
-#                 TsaCountryItaPlugin.cpp
-#                 TsaCountryEspPlugin.h
-#                 TsaCountryEspPlugin.cpp
                  TsaEfaAnalysisBase.h
                  TsaEfaAnalysisBase.cpp
                  TsaDataPreProcessor.h
@@ -74,7 +60,6 @@ otb_create_application(
                  TsaHarvestOnlyAnalysisHandler.h
                  TsaTillageAnalysisHandler.cpp
                  TsaTillageAnalysisHandler.h
-
 
   LINK_LIBRARIES ${OTBExtensions} ${OTB_LIBRARIES} ${OTBCommon_LIBRARIES} ${OTBITK_LIBRARIES} MACCSMetadata Sen2AgriPrdMetaWriters ${Boost_LIBRARIES} gsl)
 
