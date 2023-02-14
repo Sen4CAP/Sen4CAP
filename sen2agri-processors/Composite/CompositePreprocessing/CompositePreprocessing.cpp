@@ -27,6 +27,48 @@ namespace Wrapper
 {
 class CompositePreprocessing : public Application
 {
+
+    template< class TInput, class TOutput>
+    class NoDataNormalizationFunctor
+    {
+    public:
+        NoDataNormalizationFunctor() {}
+        NoDataNormalizationFunctor& operator =(const NoDataNormalizationFunctor& copy)
+        {
+            m_fReflNoDataValue = copy.m_fReflNoDataValue;
+            return *this;
+        }
+        bool operator!=( const NoDataNormalizationFunctor & ) const { return true; }
+        bool operator==( const NoDataNormalizationFunctor & other ) const { return !(*this != other); }
+        void Initialize(float fReflNoDataValue) {m_fReflNoDataValue = fReflNoDataValue;}
+        const char * GetNameOfClass() { return "NoDataNormalizationFunctor"; }
+        inline TOutput operator()( const TInput & A )
+        {
+            return HandleMultiSizeInput(A,
+                   std::integral_constant<bool, HasSizeMethod<TInput>::Has>());
+        }
+
+        inline TOutput HandleMultiSizeInput(const TInput & A, std::true_type)
+        {
+            TOutput ret(A.Size());
+            for(int i = 0; i<A.Size(); i++) {
+                 if(fabs(A[i] - m_fReflNoDataValue) < NO_DATA_EPSILON) {
+                     ret[i] = NO_DATA_VALUE;
+                 } else {
+                      ret[i] = A[i];
+                 }
+            }
+
+            return ret;
+        }
+
+        inline TOutput HandleMultiSizeInput(const TInput & A, std::false_type)
+        {
+              return (fabs(A - m_fReflNoDataValue) < NO_DATA_EPSILON) ? NO_DATA_VALUE : A;
+        }
+    private:
+        float m_fReflNoDataValue;
+    };
 public:
     typedef CompositePreprocessing Self;
     typedef Application Superclass;
@@ -40,7 +82,9 @@ public:
     typedef otb::Wrapper::FloatVectorImageType                    ImageType1;
     typedef float                                                 PixelType;
     typedef otb::Image<PixelType, 2>                              ImageType2;
-    //typedef DirectionalCorrectionFilter<InputImageType, InputImageType >    DirectionalCorrectionFilterType;
+    typedef NoDataNormalizationFunctor <ImageType1::PixelType, ImageType1::PixelType> NoDataNormalizationFunctorType;
+    typedef itk::UnaryFunctorImageFilter<ImageType1, ImageType1, NoDataNormalizationFunctorType> NoDataNormalizationFilterType;
+
 
 private:
 
@@ -110,7 +154,6 @@ private:
         auto factory = MetadataHelperFactory::New();
         auto pHelper = factory->GetMetadataHelper<short>(inXml);
 
-
         std::string masterInfoFileName;
         if(HasValue("masterinfo")) {
             masterInfoFileName = GetParameterString("masterinfo");
@@ -125,6 +168,7 @@ private:
 
         // if we have detailded angles, then we apply the directional correction
         if(pHelper->HasDetailedAngles() && HasValue("scatcoef")) {
+            otbAppLogINFO( "Running using scattering coefficients ..." );
             std::string scatCoeffsFile = GetParameterAsString("scatcoef");
             m_computeNdvi.DoInit(inXml, res);
             m_creatAngles.DoInit(res, inXml);
@@ -137,7 +181,20 @@ private:
             m_dirCorr.DoExecute();
             SetParameterOutputImage("outres", m_dirCorr.GetCorrectedImg().GetPointer());
         } else {
-            SetParameterOutputImage("outres", m_resampleAtS2Res.GetResampledMainImg());
+            otbAppLogINFO( "Running without scattering coefficients ..." );
+            float fReflNoDataValue = NO_DATA_VALUE;
+            const std::string &reflNoDataVal = pHelper->GetNoDataValue();
+            if (reflNoDataVal.size() > 0) {
+                fReflNoDataValue = std::atoi(reflNoDataVal.c_str());
+            }
+            m_NoDataNormalizationFunctor.Initialize(fReflNoDataValue);
+            m_NoDataNormalizationFilter = NoDataNormalizationFilterType::New();
+            m_NoDataNormalizationFilter->SetFunctor(m_NoDataNormalizationFunctor);
+            m_NoDataNormalizationFilter->SetInput(m_resampleAtS2Res.GetResampledMainImg());
+            m_NoDataNormalizationFilter->UpdateOutputInformation();
+            SetParameterOutputImage("outres", m_NoDataNormalizationFilter->GetOutput());
+
+            //SetParameterOutputImage("outres", m_resampleAtS2Res.GetResampledMainImg());
         }
         SetParameterOutputImage("outcmres", m_resampleAtS2Res.GetResampledCloudMaskImg().GetPointer());
         SetParameterOutputImage("outwmres", m_resampleAtS2Res.GetResampledWaterMaskImg().GetPointer());
@@ -150,6 +207,8 @@ private:
     CreateS2AnglesRaster    m_creatAngles;
     DirectionalCorrection   m_dirCorr;
     ResampleAtS2Res        m_resampleAtS2Res;
+    NoDataNormalizationFunctorType  m_NoDataNormalizationFunctor;
+    NoDataNormalizationFilterType::Pointer m_NoDataNormalizationFilter;
 
 };
 }

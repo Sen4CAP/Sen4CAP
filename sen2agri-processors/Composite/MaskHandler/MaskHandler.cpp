@@ -93,10 +93,13 @@ namespace Functor
         TOutput operator()( const TInput & A)
         {
             TOutput var(3);
-            var.Fill(-10000);
-            var[0] = (A == IMG_FLG_CLOUD);
-            var[1] = (A == IMG_FLG_WATER);
-            var[2] = (A == IMG_FLG_SNOW);
+            if ((A == IMG_FLG_NO_DATA) || (A == -10000)) {
+                var.Fill(IMG_FLG_NO_DATA);
+            } else {
+                var[0] = (A == IMG_FLG_CLOUD);
+                var[1] = (A == IMG_FLG_WATER);
+                var[2] = (A == IMG_FLG_SNOW);
+            }
             return var;
         }
     };

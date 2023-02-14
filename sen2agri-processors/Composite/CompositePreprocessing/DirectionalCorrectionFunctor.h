@@ -34,7 +34,7 @@ public:
     bool operator!=( const DirectionalCorrectionFunctor & other) const;
     bool operator==( const DirectionalCorrectionFunctor & other ) const;
     TOutput operator()( const TInput & A );
-    void Initialize(const std::vector<ScaterringFunctionCoefficients> &coeffs);
+    void Initialize(const std::vector<ScaterringFunctionCoefficients> &coeffs, float fReflNoDataValue);
 
     const char * GetNameOfClass() { return "DirectionalCorrectionFunctor"; }
 

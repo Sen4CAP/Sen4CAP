@@ -6,6 +6,7 @@ template< class TInput, class TOutput>
 DirectionalCorrectionFunctor<TInput,TOutput>::DirectionalCorrectionFunctor()
 {
     m_nReflBandsCount = 0;
+    m_fReflNoDataValue = NO_DATA_VALUE;
 }
 
 template< class TInput, class TOutput>
@@ -27,7 +28,7 @@ DirectionalCorrectionFunctor<TInput,TOutput>& DirectionalCorrectionFunctor<TInpu
 }
 
 template< class TInput, class TOutput>
-void DirectionalCorrectionFunctor<TInput,TOutput>::Initialize(const std::vector<ScaterringFunctionCoefficients> &coeffs)
+void DirectionalCorrectionFunctor<TInput,TOutput>::Initialize(const std::vector<ScaterringFunctionCoefficients> &coeffs, float fReflNoDataValue)
 {
     m_nReflBandsCount = coeffs.size();
     m_ScatteringCoeffs = coeffs;
@@ -40,7 +41,7 @@ void DirectionalCorrectionFunctor<TInput,TOutput>::Initialize(const std::vector<
     m_nSunAnglesBandStartIdx = m_nNdviBandIdx + 1;
     // we have 2 sun angles bands (for azimuth and zenith)
     m_nSensoAnglesBandStartIdx = m_nSunAnglesBandStartIdx+2;
-    m_fReflNoDataValue = NO_DATA_VALUE;
+    m_fReflNoDataValue = fReflNoDataValue;
 }
 
 template< class TInput, class TOutput>
@@ -67,7 +68,7 @@ TOutput DirectionalCorrectionFunctor<TInput,TOutput>::operator()( const TInput &
     for(int i = 0; i<bandsNo; i++) {
         float fReflVal = (float)(A[i]);
         if(IsNoDataValue(fReflVal, m_fReflNoDataValue)) {
-            var[i] = m_fReflNoDataValue;
+            var[i] = NO_DATA_VALUE; // We normalize the NO_DATA to the internal defined NO_DATA (-10000)
         } else {
             // if is water, snow or cloud, there is made no correction
             if(IsCloudPixel(A) || IsWaterPixel(A) || IsSnowPixel(A)) {

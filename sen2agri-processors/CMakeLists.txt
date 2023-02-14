@@ -62,6 +62,10 @@ install(FILES ../scripts/insert_l2a_product_to_db.py
               ../scripts/crop-type-wrapper.py
               ../scripts/crop-diversification.py
               ../scripts/data-preparation-s4s.py
+              ../scripts/s4s_perm_crops/s4s-perm-crops-extract-inputs.py
+              ../scripts/s4s_perm_crops/s4s-perm-crops-build-refl-stack.py
+              ../scripts/s4s_perm_crops/s4s-perm-crops-rasterization.py
+              ../scripts/s4s_perm_crops/s4s-perm-crops-run-broceliande.py
               ../scripts/merge-sar.py
               ../scripts/s4c_l4c_manual_exec/agric_practices_data_extraction.py
               ../scripts/s4c_l4c_manual_exec/agric_practices_data_extraction.sh

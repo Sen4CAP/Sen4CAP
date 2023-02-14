@@ -233,13 +233,13 @@ void UpdateSynthesisFunctor<TInput,TOutput>::HandleLandPixel(const TInput & A, O
             }
 
             if((bIsPrevReflNoData == false) && (bIsCurReflNoData == false)) {
-                if(IsNoDataValue(fPrevWeight, 0)) {
+                if(IsNoDataValue(fPrevWeight, WEIGHT_NO_DATA) || IsNoDataValue(fPrevWeight, 0)) {
                     fPrevWeight = 0;
                 }
-                if(IsNoDataValue(fPrevWeightedDate, 0)) {
+                if(IsNoDataValue(fPrevWeightedDate, DATE_NO_DATA) || IsNoDataValue(fPrevWeightedDate, 0)) {
                     fPrevWeightedDate = 0;
                 }
-                if(IsNoDataValue(fCurrentWeight, 0)) {
+                if(IsNoDataValue(fCurrentWeight, WEIGHT_NO_DATA) || IsNoDataValue(fCurrentWeight, 0)) {
                     fCurrentWeight = 0;
                 }
 
@@ -299,7 +299,7 @@ void UpdateSynthesisFunctor<TInput,TOutput>::HandleSnowOrWaterPixel(const TInput
             float fPrevWeight = GetPrevL3AWeightValue(A, i);
             // if pixel never observed without cloud, water or snow ON THIS BAND
             // but we might have bands with completely NO_DATA (missing bands in 2 satellites configuration)
-            if(IsNoDataValue(fPrevWeight, 0)) {
+            if(IsNoDataValue(fPrevWeight, WEIGHT_NO_DATA) || IsNoDataValue(fPrevWeight, 0)) {
                 float fCurRefl = GetL2AReflectanceForPixelVal(A[nCurrentBandIndex]);
                 // check if the current reflectance is valid (maybe we have missing areas)
                 // in this case, we will keep the existing reflectance
@@ -429,7 +429,7 @@ bool UpdateSynthesisFunctor<TInput,TOutput>::IsSnowPixel(const TInput & A)
 
     int val = (int)static_cast<float>(A[m_nSnowMaskBandIndex]);
     // No data should not be considered as snow
-    if(IsNoDataValue(val, 0)) {
+    if(IsNoDataValue(val, IMG_FLG_NO_DATA)) {
         return false;
     }
     return (val != 0);
@@ -443,7 +443,7 @@ bool UpdateSynthesisFunctor<TInput,TOutput>::IsWaterPixel(const TInput & A)
 
     int val = (int)static_cast<float>(A[m_nWaterMaskBandIndex]);
     // No data should not be considered as water
-    if(IsNoDataValue(val, 0)) {
+    if(IsNoDataValue(val, IMG_FLG_NO_DATA)) {
         return false;
     }
     return (val != 0);
@@ -457,7 +457,7 @@ bool UpdateSynthesisFunctor<TInput,TOutput>::IsCloudPixel(const TInput & A)
 
     int val = (int)static_cast<float>(A[m_nCloudMaskBandIndex]);
     // No data should not be considered as cloud
-    if(IsNoDataValue(val, 0)) {
+    if(IsNoDataValue(val, IMG_FLG_NO_DATA)) {
         return false;
     }
     return (val != 0);

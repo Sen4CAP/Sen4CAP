@@ -64,7 +64,12 @@ void DirectionalCorrection::DoExecute()
                           << " but are expected coefficients for " << bandNames.size() << " bands!");
     }
 
-    m_Functor.Initialize(scatteringCoeffs);
+    float fReflNoDataValue = NO_DATA_VALUE;
+    const std::string &reflNoDataVal = m_pHelper->GetNoDataValue();
+    if (reflNoDataVal.size() > 0) {
+        fReflNoDataValue = std::atoi(reflNoDataVal.c_str());
+    }
+    m_Functor.Initialize(scatteringCoeffs, fReflNoDataValue);
     m_DirectionalCorrectionFunctor = FunctorFilterType::New();
     m_DirectionalCorrectionFunctor->SetFunctor(m_Functor);
     m_DirectionalCorrectionFunctor->SetInput(m_Concat->GetOutput());
