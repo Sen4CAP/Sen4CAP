@@ -252,39 +252,18 @@ void GrasslandMowingHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
 
 QStringList GrasslandMowingHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask,
                                                             GrasslandMowingExecConfig &cfg, const QStringList &listFiles) {
-    // ProductFormatter /home/cudroiu/sen2agri-processors-build
-    //    -vectprd 1 -destroot /mnt/archive_new/test/Sen4CAP_L4B_Tests/NLD_Validation_TSA/OutPrdFormatter
-    //    -fileclass OPER -level S4C_L4B -baseline 01.00 -siteid 4 -timeperiod 20180101_20181231 -processor generic
-    //    -processor.generic.files <files_list>
-
-    const auto &targetFolder = GetFinalProductFolder(*(cfg.pCtx), cfg.jobId, cfg.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.txt");
     QString strTimePeriod = cfg.startDate.toString("yyyyMMddTHHmmss").append("_").append(cfg.endDate.toString("yyyyMMddTHHmmss"));
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot", targetFolder,
-                                         "-fileclass", "OPER",
-                                         "-level", "S4C_L4B",
-                                         "-vectprd", "1",
-                                         "-baseline", "01.00",
-                                         "-siteid", QString::number(cfg.siteId),
-                                         "-timeperiod", strTimePeriod,
-                                         "-processor", "generic",
-                                         "-outprops", outPropsPath,
-                                         "-gipp", executionInfosPath
-                                       };
-    productFormatterArgs += "-processor.generic.files";
-    productFormatterArgs += listFiles;
-
-    return productFormatterArgs;
+    QStringList additionalArgs = {"-processor.generic.files"};
+    additionalArgs += listFiles;
+    return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.jobId,
+                                                     cfg.siteId, "S4C_L4B", strTimePeriod,
+                                                     "generic", additionalArgs, true);
 }
 
 ProcessorJobDefinitionParams GrasslandMowingHandler::GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -296,6 +275,13 @@ ProcessorJobDefinitionParams GrasslandMowingHandler::GetProcessingDefinitionImpl
         return params;
     }
 
+    // we need at least 30 days for launching a job otherwise it will give errors
+    if (qScheduledDate < seasonStartDate.addDays(30)) {
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_NOOP_AND_SCHEDULE_NEXT;
+        params.isValid = true;
+        return params;
+    }
+
     ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(L4B_GM_CFG_PREFIX), siteId, requestOverrideCfgValues);
     std::map<QString, QString> configParams;
     for (const auto &p : mapCfg) {
@@ -304,11 +290,10 @@ ProcessorJobDefinitionParams GrasslandMowingHandler::GetProcessingDefinitionImpl
 
     // we might have an offset in days from starting the downloading products to start the S4C_L4B production
     int startSeasonOffset = mapCfg["processor.s4c_l4b.start_season_offset"].value.toInt();
-    seasonStartDate = seasonStartDate.addDays(startSeasonOffset);
+    QDateTime startDate = seasonStartDate.addDays(startSeasonOffset);
 
     // Get the start and end date for the production
     QDateTime endDate = qScheduledDate;
-    QDateTime startDate = seasonStartDate;
     QJsonObject parameters;
     const QString &startDateStr = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParams,
                                                                                "start_date", L4B_GM_CFG_PREFIX);
@@ -332,33 +317,28 @@ ProcessorJobDefinitionParams GrasslandMowingHandler::GetProcessingDefinitionImpl
         params.jsonParameters.append("}");
     }
 
-    params.isValid = true;
-
     if ((prdType & L3B) != 0) {
-        // we should have at least some products in the last 60 days to launch the processing
-        if (startDate.daysTo(endDate) > 60) {
-            const QDateTime &bufIntervalTime = endDate.addDays(-60);
-            ProductList l3bPrdsList = ctx.GetProducts(siteId, (int)ProductType::L3BProductTypeId, bufIntervalTime, endDate);
-            if (l3bPrdsList.size() == 0) {
-                params.isValid = false;
-                Logger::debug(QStringLiteral("Executing S4C_L4B scheduled job. No NDVI products were found 60 days before "
-                                             "scheduled time for site ID %1 within interval [ %2 and %3]! "
-                                             "The schedule for this date will wait ...")
-                              .arg(siteId).arg(bufIntervalTime.toString()).arg(endDate.toString()));
-            }
+        if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L3BProductTypeId, startDate, endDate)) {
+            // do not trigger yet the schedule.
+            params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+            Logger::debug(QStringLiteral("Executing S4C_L4B scheduled job. Not all L3B products "
+                                         "were processed for site ID %1 within interval [ %2 and %3]! "
+                                         "The schedule for this date will be retried later ...")
+                          .arg(siteId).arg(startDate.toString()).arg(endDate.toString()));
         }
     }
     if ((prdType & L2_S1) != 0) {
-        const QDateTime &bufIntervalTime = endDate.addDays(-15);
-        const ProductList &ampPrdsList = ctx.GetProducts(siteId, (int)ProductType::S4CS1L2AmpProductTypeId, bufIntervalTime, endDate);
-        const ProductList &cohePrdsList = ctx.GetProducts(siteId, (int)ProductType::S4CS1L2CoheProductTypeId, bufIntervalTime, endDate);
-        if(ampPrdsList.size() == 0 && cohePrdsList.size() == 0) {
-            params.isValid = false;
-            Logger::debug(QStringLiteral("Executing S4C_L4B scheduled job. No S1 products were found 15 days before scheduled time "
-                                         "for site ID %1 within interval [ %2 and %3]! The schedule for this date will wait ...")
-                          .arg(siteId).arg(bufIntervalTime.toString()).arg(endDate.toString()));
+        // we might have at the begining of season some COHE products that do not have previous acq and in that
+        // case they remain forever with status 2
+        QDateTime s1Start = seasonStartDate.addDays(15);
+        if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2AmpProductTypeId, s1Start, endDate) ||
+            !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2CoheProductTypeId, s1Start, endDate)) {
+            // do not trigger yet the schedule.
+            params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
         }
     }
+
+    params.isValid = true;
 
     return params;
 }

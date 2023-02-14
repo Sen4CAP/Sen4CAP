@@ -36,7 +36,8 @@ private:
     bool GetPairedProduct(EventProcessingContext &ctx,  int siteId, ProductType targetPrdType, int dwnHistId, Product &outFMaskPrd);
     bool CreateMaskedL2AProduct(EventProcessingContext &ctx, const TaskFinishedEvent &event);
     void CreateValidityMaskExtractorStep(EventProcessingContext &ctx, const JobSubmittedEvent &evt,
-                                             const InputPrdInfo &prdInfo, TaskToSubmit &task, NewStepList &steps);
+                                         const InputPrdInfo &prdInfo, TaskToSubmit &task, NewStepList &steps, bool compress, bool cog,
+                                         bool continueOnMissingInput);
 
     int GetProductsFromSchedReq(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                              QJsonObject &parameters, ProductList &outPrdsList);

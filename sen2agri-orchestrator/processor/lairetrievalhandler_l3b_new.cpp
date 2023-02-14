@@ -69,6 +69,9 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
         for (const QString &index: L3BJobContext::spectralIndicators.keys()) {
             if (jobCtx.mapIndexGenFlags[index]) {
                 outAllTasksList.append(TaskToSubmit{"lai-processor-" + index + "-extractor", {}});
+                if (jobCtx.bExtractVegStats && index == "ndvi") {
+                    outAllTasksList.append(TaskToSubmit{"ndvi-veg-stats", {}});
+                }
             }
         }
         if (jobCtx.hasBiophysicalIndex) {
@@ -94,21 +97,12 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
         outAllTasksList.append(TaskToSubmit{ "files-remover", {} });
     }
 
-    //
-    // NOTE: In this moment, the products in loop are not executed in parallel. To do this, the if(i > 0) below
-    //      should be removed but in this case, the time-series-builders should wait for all the monodate images
-    int i;
     QList<std::reference_wrapper<const TaskToSubmit>> productFormatterParentsRefs;
-
     int nCurTaskIdx = initialTasksNo;
 
-    // Specifies if the products creation should be chained or not.
-    // TODO: This should be taken from the configuration
-    bool bChainProducts = jobCtx.parallelizeProducts;
-
-    for(i = 0; i<nbLaiMonoProducts; i++) {
+    for(int i = 0; i<nbLaiMonoProducts; i++) {
         // if we want chaining products and we have a previous product executed
-        if(bChainProducts && initialTasksNo > 0) {
+        if(jobCtx.bChainInputsSteps && initialTasksNo > 0) {
             // we create a dependency to the last task of the previous product
             outAllTasksList[nCurTaskIdx].parentTasks.append(outAllTasksList[nCurTaskIdx-1]);
         }   // else  skip over the lai-processor-mask-flags as we run it with no previous dependency,
@@ -122,7 +116,11 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
 
         for (const QString &index: L3BJobContext::spectralIndicators.keys()) {
             if (jobCtx.mapIndexGenFlags[index]) {
+                int indicatorTaskIdx = nCurTaskIdx;
                 nCurTaskIdx = CreateSpectralIndicatorTasks(flagsTaskIdx, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
+                if (jobCtx.bExtractVegStats && index == "ndvi") {
+                    nCurTaskIdx = CreateNdviVegStatsTasks(indicatorTaskIdx, outAllTasksList, productFormatterParentsRefs, nCurTaskIdx);
+                }
             }
         }
 
@@ -178,6 +176,17 @@ int LaiRetrievalHandlerL3BNew::CreateSpectralIndicatorTasks(int parentTaskId, QL
     return nCurTaskIdx;
 }
 
+int LaiRetrievalHandlerL3BNew::CreateNdviVegStatsTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
+                                     QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
+                                     int nCurTaskIdx) {
+    int vegStatsTaskIdx = nCurTaskIdx++;
+    outAllTasksList[vegStatsTaskIdx].parentTasks.append(outAllTasksList[parentTaskId]);
+    // add the spectral indicator task to the list of the product formatter corresponding to this product
+    productFormatterParentsRefs.append(outAllTasksList[vegStatsTaskIdx]);
+
+    return nCurTaskIdx;
+}
+
 int LaiRetrievalHandlerL3BNew::CreateBiophysicalIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
                                      QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
                                      int nCurTaskIdx)
@@ -189,6 +198,7 @@ int LaiRetrievalHandlerL3BNew::CreateBiophysicalIndicatorTasks(int parentTaskId,
     int nBIDomainFlagsImageIdx = nCurTaskIdx++;
     outAllTasksList[nBIDomainFlagsImageIdx].parentTasks.append(outAllTasksList[nBIProcessorIdx]);
 
+    // TODO: We should add here an option to avoid creation of these flags
     // BI-quantify-image -> domain-flags-image
     int nBIQuantifyImageIdx = nCurTaskIdx++;
     outAllTasksList[nBIQuantifyImageIdx].parentTasks.append(outAllTasksList[nBIDomainFlagsImageIdx]);
@@ -221,6 +231,10 @@ NewStepList LaiRetrievalHandlerL3BNew::GetStepsForNewProduct(const L3BJobContext
             if (jobCtx.mapIndexGenFlags[index]) {
                 curTaskIdx = GetStepsForSpectralIndicator(allTasksList, index, curTaskIdx, tileResultFileInfo,
                                              steps, cleanupTemporaryFilesList);
+                if (jobCtx.bExtractVegStats && index == "ndvi") {
+                    curTaskIdx = GetStepsForNdviVegStats(jobCtx, allTasksList, index, curTaskIdx, prdTileInfo,
+                                                         tileResultFileInfo, steps);
+                }
             }
         }
         if (jobCtx.hasBiophysicalIndex) {
@@ -283,6 +297,24 @@ int LaiRetrievalHandlerL3BNew::GetStepsForSpectralIndicator(QList<TaskToSubmit> 
     steps.append(CreateTaskStep(spectralIndicatorExtractorTask, indexName.toUpper() + "Extraction", spectralIndicatorExtractionArgs));
     // save the file to be sent to product formatter
     cleanupTemporaryFilesList.append(indexFile);
+
+    return curTaskIdx;
+}
+
+int LaiRetrievalHandlerL3BNew::GetStepsForNdviVegStats(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, const QString &indexName, int curTaskIdx,
+                                                       const TileInfos &prdInfo, TileResultFiles &tileResultFileInfo,
+                                                       NewStepList &steps) {
+
+    TaskToSubmit &vegStatsTask = allTasksList[curTaskIdx++];
+    const QString &workingDir = vegStatsTask.GetFilePath("");
+    const QStringList &spectralIndicatorExtractionArgs = {
+            "-s", QString::number(jobCtx.event.siteId),
+            "-i", tileResultFileInfo.mapIndexFile[indexName],
+            "-p", prdInfo.parentProductInfo.name,
+            "-w", workingDir
+    };
+
+    steps.append(CreateTaskStep(vegStatsTask, "NdviVegetationStats", spectralIndicatorExtractionArgs));
 
     return curTaskIdx;
 }
@@ -708,76 +740,72 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
                                                                       const QList<TileResultFiles> &tileResultFilesList) {
 
     //const auto &targetFolder = productFormatterTask.GetFilePath("");
-    const auto &targetFolder = GetFinalProductFolder(*jobCtx.pCtx, jobCtx.event.jobId, jobCtx.event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
     const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.xml");
     const auto &inputPrdsIdsInfosPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_IN_PRD_IDS_FILE);
 
     WriteExecutionInfosFile(executionInfosPath, tileResultFilesList);
     WriteInputPrdIdsInfosFile(inputPrdsIdsInfosPath, prdTilesInfosList);
 
-    QStringList productFormatterArgs = { "ProductFormatter",
-                            "-destroot", targetFolder,
-                            "-fileclass", "OPER",
-                            "-level", "L3B",
-                            "-baseline", "01.00",
-                            "-siteid", QString::number(jobCtx.event.siteId),
-                            "-processor", "vegetation",
-                            "-compress", "1",
-                            "-gipp", executionInfosPath,
-                            "-outprops", outPropsPath};
-    productFormatterArgs += "-il";
+    QStringList additionalArgs = {"-il"};
     for(const TileResultFiles &tileInfo: tileResultFilesList) {
-        productFormatterArgs.append(tileInfo.tileFile);
+        additionalArgs.append(tileInfo.tileFile);
     }
 
     if(jobCtx.lutFile.size() > 0) {
-        productFormatterArgs += "-lut";
-        productFormatterArgs += jobCtx.lutFile;
+        additionalArgs += "-lut";
+        additionalArgs += jobCtx.lutFile;
     }
 
-    productFormatterArgs += "-processor.vegetation.laistatusflgs";
+    additionalArgs += "-processor.vegetation.laistatusflgs";
     for(int i = 0; i<tileResultFilesList.size(); i++) {
-        productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-        productFormatterArgs += tileResultFilesList[i].statusFlagsFileResampled;
+        additionalArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+        additionalArgs += tileResultFilesList[i].statusFlagsFileResampled;
     }
 
-    productFormatterArgs += "-processor.vegetation.indomainflgs";
-    for(int i = 0; i<tileResultFilesList.size(); i++) {
-        productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-        productFormatterArgs += tileResultFilesList[i].inDomainFlagsFile;
+    if (jobCtx.bGenInDomainFlags) {
+        additionalArgs += "-processor.vegetation.indomainflgs";
+        for(int i = 0; i<tileResultFilesList.size(); i++) {
+            additionalArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+            additionalArgs += tileResultFilesList[i].inDomainFlagsFile;
+        }
     }
 
     for (const QString &index: L3BJobContext::spectralIndicators.keys()) {
         if (jobCtx.mapIndexGenFlags[index]) {
-            productFormatterArgs += "-processor.vegetation." + index;
+            additionalArgs += "-processor.vegetation." + index;
             for(int i = 0; i<tileResultFilesList.size(); i++) {
-                productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-                productFormatterArgs += tileResultFilesList[i].mapIndexFile[index];
+                additionalArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+                additionalArgs += tileResultFilesList[i].mapIndexFile[index];
             }
         }
     }
     for (const QString &index: L3BJobContext::biophysicalIndicatorNames) {
         if (jobCtx.mapIndexGenFlags[index]) {
-            productFormatterArgs += "-processor.vegetation." + index + "monodate";
+            additionalArgs += "-processor.vegetation." + index + "monodate";
             for(int i = 0; i<tileResultFilesList.size(); i++) {
-                productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-                productFormatterArgs += tileResultFilesList[i].mapIndexFile[index];
+                additionalArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+                additionalArgs += tileResultFilesList[i].mapIndexFile[index];
             }
-            productFormatterArgs += "-processor.vegetation." + index + "domainflgs";
+            additionalArgs += "-processor.vegetation." + index + "domainflgs";
             for(int i = 0; i<tileResultFilesList.size(); i++) {
-                productFormatterArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
-                productFormatterArgs += tileResultFilesList[i].laiDomainFlagsFile;
+                additionalArgs += GetProductFormatterTile(tileResultFilesList[i].tileId);
+                additionalArgs += tileResultFilesList[i].laiDomainFlagsFile;
             }
         }
     }
 
     if (IsCloudOptimizedGeotiff(jobCtx.configParameters)) {
-        productFormatterArgs += "-cog";
-        productFormatterArgs += "1";
+        additionalArgs += "-cog";
+        additionalArgs += "1";
     }
 
-    return productFormatterArgs;
+    if (!jobCtx.bGenMosaic) {
+        additionalArgs += "-aggregatetiles";
+        additionalArgs += "0";
+    }
+
+    return GetDefaultProductFormatterArgs(*jobCtx.pCtx, productFormatterTask, jobCtx.event.jobId, jobCtx.event.siteId, "L3B", "",
+                                         "vegetation", additionalArgs, false, executionInfosPath);
 }
 
 const QString& LaiRetrievalHandlerL3BNew::GetDefaultCfgVal(std::map<QString, QString> &configParameters, const QString &key, const QString &defVal) {
@@ -837,8 +865,6 @@ ProcessorJobDefinitionParams LaiRetrievalHandlerL3BNew::GetProcessingDefinitionI
                                                           const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -861,26 +887,36 @@ ProcessorJobDefinitionParams LaiRetrievalHandlerL3BNew::GetProcessingDefinitionI
         return params;
     }
 
-    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString("processor.l3b."), siteId, requestOverrideCfgValues);
+    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(L3B_CFG_PREFIX), siteId, requestOverrideCfgValues);
 
-    // we might have an offset in days from starting the downloading products to start the L3B production
-    // TODO: Is this really needed
-    int startSeasonOffset = mapCfg["processor.l3b.start_season_offset"].value.toInt();
-    seasonStartDate = seasonStartDate.addDays(startSeasonOffset);
-
-    params.jsonParameters = "{ \"scheduled_job\": \"1\"";
-
-    // by default the start date is the season start date
-    QDateTime startDate = seasonStartDate;
-    QDateTime endDate = qScheduledDate;
-
-    // Use only the products after the configured start season date
-    if(startDate < seasonStartDate) {
-        startDate = seasonStartDate;
+    // we might have an offset in days from starting the downloading products to start the L3B scheduling
+    int startSeasonOffset = mapCfg[QString(L3B_CFG_PREFIX) + "scheduling_start_season_delay"].value.toInt();
+    if (startSeasonOffset == 0) {
+        startSeasonOffset = 14;
     }
-
-    params.jsonParameters.append(", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
-                                 "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
+    QDateTime currentDate = QDateTime::currentDateTime();
+    // if the current date or greater than the scheduled date, start the schedule regardless of the ancestor products processing status (NRT)
+    if (currentDate.date() <= qScheduledDate.date()) {
+        Logger::debug(QStringLiteral("Scheduler L3B: The current date %1 is equals or greater than the scheduled date %2 for site %3 (NRT). "
+                                     "The completness of processing for ancestor products will not be cheked and the job will be schedules anyway")
+                      .arg(siteId)
+                      .arg(qScheduledDate.toString())
+                      .arg(currentDate.toString()));
+    } else {
+        QDateTime minScheduleDate = seasonStartDate.addDays(startSeasonOffset);
+        // if scheduled date is less than the minimum scheduling date, return invalid to pass to the next date
+        if (qScheduledDate >= minScheduleDate) {
+            // check if the ancestor products were created
+            if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L3BProductTypeId, seasonStartDate, qScheduledDate) ||
+                 (qScheduledDate > seasonEndDate.addDays(1))) {
+                // do not trigger anymore the schedule.
+                params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+            }
+        }
+    }
+    params.jsonParameters = "{ \"scheduled_job\": \"1\"";
+    params.jsonParameters.append(", \"start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                 "\"end_date\": \"" + qScheduledDate.toString("yyyyMMdd") + "\", " +
                                  "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
                                  "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}");
     params.isValid = true;

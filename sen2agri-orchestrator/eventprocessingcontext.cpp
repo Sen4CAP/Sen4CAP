@@ -11,20 +11,6 @@ EventProcessingContext::EventProcessingContext(PersistenceManagerDBProvider &per
 {
 }
 
-std::map<QString, QString> EventProcessingContext::GetConfigurationParameters(const QString &prefix, int siteId)
-{
-    const auto &paramList = persistenceManager.GetConfigurationParameters(prefix);
-
-    std::map<QString, QString> result;
-    for (const auto &p : paramList) {
-        if (siteId == -1 || p.siteId.value_or(-1) == -1 || p.siteId == siteId) {
-            result.emplace(p.key, p.value);
-        }
-    }
-
-    return result;
-}
-
 std::map<QString, QString> EventProcessingContext::GetJobConfigurationParameters(int jobId,
                                                                                  const QString &prefix)
 {

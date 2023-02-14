@@ -1863,8 +1863,6 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, ProcessingRequest
 QString JobDefinition::toJson() const
 {
     QJsonObject node;
-    node[QStringLiteral("isValid")] = isValid;
-    node[QStringLiteral("retryLater")] = retryLater;
     node[QStringLiteral("processorId")] = processorId;
     node[QStringLiteral("siteId")] = siteId;
     node[QStringLiteral("jobDefinitionJson")] = jobDefinitionJson;
@@ -1877,9 +1875,7 @@ JobDefinition JobDefinition::fromJson(const QString &json)
     const auto &doc = QJsonDocument::fromJson(json.toUtf8());
     const auto &object = doc.object();
 
-    return { object.value(QStringLiteral("isValid")).toBool(),
-             object.value(QStringLiteral("retryLater")).toBool(),
-             object.value(QStringLiteral("processorId")).toInt(),
+    return { object.value(QStringLiteral("processorId")).toInt(),
              object.value(QStringLiteral("siteId")).toInt(),
              object.value(QStringLiteral("jobDefinitionJson")).toString()
     };
@@ -1888,7 +1884,7 @@ JobDefinition JobDefinition::fromJson(const QString &json)
 QDBusArgument &operator<<(QDBusArgument &argument, const JobDefinition &job)
 {
     argument.beginStructure();
-    argument << job.isValid << job.retryLater<< job.jobDefinitionJson << job.processorId << job.siteId;
+    argument << job.jobDefinitionJson << job.processorId << job.siteId;
     argument.endStructure();
 
     return argument;
@@ -1897,7 +1893,7 @@ QDBusArgument &operator<<(QDBusArgument &argument, const JobDefinition &job)
 const QDBusArgument &operator>>(const QDBusArgument &argument, JobDefinition &job)
 {
     argument.beginStructure();
-    argument >> job.isValid >> job.retryLater >> job.jobDefinitionJson >> job.processorId >> job.siteId;
+    argument >> job.jobDefinitionJson >> job.processorId >> job.siteId;
     argument.endStructure();
 
     return argument;
@@ -1906,7 +1902,7 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, JobDefinition &jo
 QDBusArgument &operator<<(QDBusArgument &argument, const ProcessorJobDefinitionParams &job)
 {
     argument.beginStructure();
-    argument << job.isValid << job.retryLater <<job.productList << job.jsonParameters;
+    argument << job.isValid << job.schedulingFlags <<job.productList << job.jsonParameters;
     argument.endStructure();
 
     return argument;
@@ -1915,7 +1911,7 @@ QDBusArgument &operator<<(QDBusArgument &argument, const ProcessorJobDefinitionP
 const QDBusArgument &operator>>(const QDBusArgument &argument, ProcessorJobDefinitionParams &job)
 {
     argument.beginStructure();
-    argument >> job.isValid >> job.retryLater >> job.productList >> job.jsonParameters;
+    argument >> job.isValid >> job.schedulingFlags >> job.productList >> job.jsonParameters;
     argument.endStructure();
 
     return argument;

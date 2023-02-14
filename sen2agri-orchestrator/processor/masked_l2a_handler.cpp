@@ -45,12 +45,18 @@ void MaskedL2AHandler::CreateTasksAndSteps(EventProcessingContext &ctx, const Jo
 
     SubmitTasks(ctx, evt.jobId, allTasksListRef);
 
+    const auto &parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
+    auto cfgParams = ctx.GetConfigurationParameters(MASKED_L2A_CFG_PREFIX, evt.siteId);
+    bool compressOutputs = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "compress", MASKED_L2A_CFG_PREFIX);
+    bool cogOutputs = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "cog", MASKED_L2A_CFG_PREFIX);
+    bool continueOnMissingPrd = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "continue-on-missing-input", MASKED_L2A_CFG_PREFIX);
+
     NewStepList allSteps;
 
     cnt = 0;
     for(const InputPrdInfo &prdInfo: prdInfos) {
         TaskToSubmit &curTask = allTasksList[cnt++];
-        CreateValidityMaskExtractorStep(ctx, evt, prdInfo, curTask, allSteps);
+        CreateValidityMaskExtractorStep(ctx, evt, prdInfo, curTask, allSteps, compressOutputs, cogOutputs, continueOnMissingPrd);
     }
     // create the end of all steps marker
     allSteps.append(CreateTaskStep(allTasksList[allTasksList.size()-1], "EndOfJob", QStringList()));
@@ -66,13 +72,16 @@ MaskedL2AHandler::GetInputProductsToProcess(EventProcessingContext &ctx,
     QList<InputPrdInfo> retList;
     auto fmaskCfgParams = ctx.GetConfigurationParameters("processor.fmask.", evt.siteId);
     bool fmaskEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, fmaskCfgParams, "processor.fmask.enabled", "");
+    Logger::info(QStringLiteral("MaskedL2A: found a number %1 of L2A products to process").
+                 arg(l2aPrdsList.size()));
+
     if (fmaskEnabled) {
         // extract the downloader history ids for these products
         ProductIdsList dwnHistIds;
-        std::unordered_map<int, Product> mapL2APrds;
+        std::unordered_map<int, ProductList> mapL2APrds;
         std::for_each(l2aPrdsList.begin(), l2aPrdsList.end(), [&dwnHistIds, &mapL2APrds](const Product &prd) {
             dwnHistIds.append(prd.downloaderHistoryId);
-            mapL2APrds[prd.downloaderHistoryId] = prd;
+            mapL2APrds[prd.downloaderHistoryId].push_back(prd);
         });
 
         int maskValidVal = ProcessorHandlerHelper::GetIntConfigValue(parameters, fmaskCfgParams, "processor.fmask.valid_value", "");
@@ -80,10 +89,14 @@ MaskedL2AHandler::GetInputProductsToProcess(EventProcessingContext &ctx,
         const ProductList &fmaskPrds = ctx.GetL1DerivedProducts(evt.siteId, ProductType::FMaskProductTypeId, dwnHistIds);
         // iterate the fmask products and find the matching L2A
         std::for_each(fmaskPrds.begin(), fmaskPrds.end(), [&mapL2APrds, &ctx, &retList, maskValidVal, this](const Product &fmaskPrd) {
-            std::unordered_map<int, Product>::const_iterator iter = mapL2APrds.find (fmaskPrd.downloaderHistoryId);
+            std::unordered_map<int, ProductList>::const_iterator iter = mapL2APrds.find (fmaskPrd.downloaderHistoryId);
             if (iter != mapL2APrds.end()) {
-                const Product &l2aPrd = iter->second;
-                retList.push_back({l2aPrd, fmaskPrd, maskValidVal});
+                const ProductList &l2aPrds = iter->second;
+                for (const Product& l2aPrd : l2aPrds) {
+                    retList.push_back({l2aPrd, fmaskPrd, maskValidVal});
+                    Logger::info(QStringLiteral("MaskedL2A: found pair L2A = %1, FMask=%2").
+                                 arg(l2aPrd.name).arg(fmaskPrd.name));
+                }
             }
         });
     } else {
@@ -117,9 +130,13 @@ void MaskedL2AHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
         l2aPrdsList = ctx.GetProducts(evt.siteId, prdNames);
     }
     const QList<InputPrdInfo> &prdsToProcess = GetInputProductsToProcess(ctx, evt, parameters, l2aPrdsList);
+    Logger::info(QStringLiteral("MaskedL2A: found a number %1 of products/pairs to process").
+                 arg(prdsToProcess.size()));
 
     // filter the already processed or processing products
     const QList<InputPrdInfo> &filteredPrds = FilterInputProducts(ctx, evt.siteId, evt.jobId, prdsToProcess);
+    Logger::info(QStringLiteral("MaskedL2A: A number %1 of products will be processed after filtering current running ones").
+                 arg(filteredPrds.size()));
 
     CreateTasksAndSteps(ctx, evt, filteredPrds);
 }
@@ -147,7 +164,7 @@ int MaskedL2AHandler::GetProductsFromSchedReq(EventProcessingContext &ctx,
         const auto &startDate = ProcessorHandlerHelper::GetLocalDateTime(strStartDate);
         const auto &endDate = ProcessorHandlerHelper::GetLocalDateTime(strEndDate);
 
-        Logger::info(QStringLiteral("L2AFMask Scheduled job received for siteId = %1, startDate=%2, endDate=%3").
+        Logger::info(QStringLiteral("MaskedL2A Scheduled job received for siteId = %1, startDate=%2, endDate=%3").
                      arg(event.siteId).arg(startDate.toString("yyyyMMddTHHmmss")).arg(endDate.toString("yyyyMMddTHHmmss")));
         outPrdsList = ctx.GetParentProductsNotInProvenance(event.siteId, {ProductType::L2AProductTypeId}, ProductType::MaskedL2AProductTypeId, startDate, endDate);
         return outPrdsList.size();
@@ -161,8 +178,6 @@ ProcessorJobDefinitionParams MaskedL2AHandler::GetProcessingDefinitionImpl(Sched
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -180,6 +195,19 @@ ProcessorJobDefinitionParams MaskedL2AHandler::GetProcessingDefinitionImpl(Sched
     for (const auto &p : mapCfg) {
         configParams.emplace(p.key, p.value);
     }
+
+    QDateTime minScheduleDate = seasonStartDate.addDays(14);
+    // if scheduled date is less than the minimum scheduling date, return invalid to pass to the next date
+    if (qScheduledDate >= minScheduleDate) {
+        // check if the ancestor products were created
+        if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::MaskedL2AProductTypeId, seasonStartDate, qScheduledDate) ||
+             (qScheduledDate > seasonEndDate.addDays(1))) {
+            // do not trigger anymore the schedule.
+            params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+            Logger::error("Masked_L2A Scheduled job execution will be retried later: Not all input products were yet produced");
+        }
+    }
+
     params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
                                  "\"end_date\": \"" + qScheduledDate.toString("yyyyMMdd") + "\", " +
                                  "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
@@ -193,16 +221,19 @@ ProcessorJobDefinitionParams MaskedL2AHandler::GetProcessingDefinitionImpl(Sched
 void MaskedL2AHandler::HandleProductAvailableImpl(EventProcessingContext &ctx,
                                 const ProductAvailableEvent &event)
 {
-    QJsonObject parameters;
-
     // Get the product description from the database
     const ProductList &prds = ctx.GetProducts({event.productId});
+    if (prds.size() == 0) {
+        Logger::error(QStringLiteral("MaskedL2AHandler - HandleProductAvailable - Event received for product with %1 but no such product in the database").arg(event.productId));
+        return;
+    }
     const Product &prd = prds.back();
     if (prd.productTypeId != ProductType::L2AProductTypeId &&
             prd.productTypeId != ProductType::FMaskProductTypeId) {
         return;
     }
 
+    QJsonObject parameters;
     auto cfgParams = ctx.GetConfigurationParameters(MASKED_L2A_CFG_PREFIX, prd.siteId);
     bool processorEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "enabled", MASKED_L2A_CFG_PREFIX);
     if (!processorEnabled) {
@@ -214,7 +245,7 @@ void MaskedL2AHandler::HandleProductAvailableImpl(EventProcessingContext &ctx,
     if (prd.productTypeId == ProductType::L2AProductTypeId) {
         // check if we have the FMask enabled for this site, otherwise, just send the job
         auto fmaskCfgParams = ctx.GetConfigurationParameters("processor.fmask.enabled", prd.siteId);
-        bool fmaskEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, fmaskCfgParams, "enabled", "processor.fmask.enabled.");
+        bool fmaskEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, fmaskCfgParams, "enabled", "processor.fmask.");
         if (!fmaskEnabled) {
             checkPair = false;
         }
@@ -305,16 +336,29 @@ void MaskedL2AHandler::CreateValidityMaskExtractorStep(EventProcessingContext &c
                                                       const JobSubmittedEvent &evt,
                                                       const InputPrdInfo &prdInfo,
                                                       TaskToSubmit &task,
-                                                      NewStepList &steps)
+                                                      NewStepList &steps,
+                                                       bool compress,
+                                                       bool cog,
+                                                       bool continueOnMissingInput)
 {
-    std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdInfo.l2aPrd.fullPath);
-    const QStringList &metaFiles = helper->GetProductMetadataFiles();
-    if (metaFiles.size() == 0) {
-        throw std::runtime_error(
-                    QStringLiteral("Cannot determine the metadata file from the product %1").
-                        arg(prdInfo.l2aPrd.fullPath).toStdString());
+    QString l2aMeta;
+    try {
+        std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdInfo.l2aPrd.fullPath);
+        const QStringList &metaFiles = helper->GetProductMetadataFiles();
+        if (metaFiles.size() == 0) {
+            throw std::runtime_error(
+                        QStringLiteral("Cannot determine the metadata file from the product %1").
+                            arg(prdInfo.l2aPrd.fullPath).toStdString());
+        }
+        l2aMeta = metaFiles[0];
+    } catch (const std::exception &e) {
+        if (continueOnMissingInput) {
+            Logger::error(QStringLiteral("Missing input product with name %1 and path %2. Will continue without it ...").arg(prdInfo.l2aPrd.name).arg(prdInfo.l2aPrd.fullPath));
+            return;
+        }
+        throw std::runtime_error(e.what());
     }
-    const QString &l2aMeta = metaFiles[0];
+
     QStringList args = {"ValidityMaskExtractor",
                        "-xml", l2aMeta,
                        "-out"};
@@ -345,6 +389,13 @@ void MaskedL2AHandler::CreateValidityMaskExtractorStep(EventProcessingContext &c
         args += "-extmaskvalidval";
         args += QString::number(prdInfo.maskValidVal);
     }
+    if (compress) {
+        args += {"-compress", "1"};
+    }
+    if (cog) {
+        args += {"-cog", "1"};
+    }
+
     WriteOutputProductPath(task, outProductPath);
     WriteOutputProductSourceProductIds(task, {prdInfo.l2aPrd.productId, prdInfo.fmaskPrd.productId});
 

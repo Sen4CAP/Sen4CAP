@@ -63,10 +63,18 @@ protected:
                                   QDateTime &startTime, QDateTime &endTime,
                                   const QDateTime &executionDate, const ConfigurationParameterValueMap &requestOverrideCfgValues);
     QString GetProductFormatterTile(const QString &tile);
+    TilesTimeSeries GroupL2ATiles(EventProcessingContext &ctx, const QList<ProductDetails> &productDetails);
 
     void SubmitTasks(EventProcessingContext &ctx, int jobId, const QList<std::reference_wrapper<TaskToSubmit> > &tasks);
     QMap<Satellite, TileList> GetSiteTiles(EventProcessingContext &ctx, int siteId);
     bool IsCloudOptimizedGeotiff(const std::map<QString, QString> &configParameters);
+    static bool IsL2AValidityMaskEnabled(EventProcessingContext &ctx, const QJsonObject &parameters, int siteId);
+    QStringList GetDefaultProductFormatterArgs(EventProcessingContext &ctx, TaskToSubmit &productFormatterTask,
+                                               int jobId, int siteId, const QString &level, const QString &timePeriod,
+                                                const QString &processor, const QStringList &additionalParameters,
+                                                bool isVectPrd = false, const QString &gipp = "", bool compress = true);
+    bool CheckAllAncestorProductCreation(ExecutionContextBase &ctx, int siteId, const ProductType &prdType,
+                                         const QDateTime &startDate, const QDateTime &endDate);
 
 private:
     virtual void HandleProductAvailableImpl(EventProcessingContext &ctx,

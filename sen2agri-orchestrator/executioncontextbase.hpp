@@ -8,6 +8,7 @@ class ExecutionContextBase
 {
 public:
     ExecutionContextBase(PersistenceManagerDBProvider &persistenceManager);
+    std::map<QString, QString> GetConfigurationParameters(const QString &prefix, int siteId);
     ProductList GetProducts(int siteId, int productTypeId, const QDateTime &startDate, const QDateTime &endDate);
     L1CProductList GetL1CProducts(int siteId, const SatellitesList &satelliteIds, const StatusesList &statusIds, const QDateTime &startDate, const QDateTime &endDate);
     QString GetSiteName(int siteId);
@@ -24,9 +25,10 @@ public:
                                                    const QDateTime &startDate, const QDateTime &endDate);
     ProductList GetParentProductsNotInProvenance(int siteId, const QList<ProductType> &sourcePrdTypes, const ProductType &derivedProductType,
                                                    const QDateTime &startDate, const QDateTime &endDate);
-    ProductList GetParentProductsInProvenanceById(int productId, const QList<ProductType> &sourcePrdTypes);
+    QMap<int, ProductList> GetParentProductsInProvenanceByIds(const QList<int> &productIds, const QList<ProductType> &sourcePrdTypes);
 
     JobIdsList GetActiveJobIds(int processorId, int siteId);
+    bool IsProcessingDone(ProductType prdType, int siteId, const QDateTime &startDate, const QDateTime &endDate, const QList<int> &satIds = {});
 
 
 protected:

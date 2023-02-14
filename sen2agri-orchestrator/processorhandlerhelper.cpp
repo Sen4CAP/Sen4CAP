@@ -90,62 +90,9 @@ bool ProcessorHandlerHelper::GetCropReferenceFile(const QString &refDir, QString
     return bRet;
 }
 
-bool ProcessorHandlerHelper::CompareProductDates(const ProductDetails &prd1, const ProductDetails &prd2)
-{
-    return (prd1.GetProduct().created < prd2.GetProduct().created);
-}
-
 QList<ProductDetails> ProcessorHandlerHelper::GetProductDetails(const ProductList &prds, EventProcessingContext &ctx)
 {
-    QList<ProductDetails> prdDetailsList;
-    // for each product, get the valid tiles
-    for(const Product &prd: prds) {
-        const ProductDetails &prdDetails = ProductDetailsBuilder::CreateDetails(prd, ctx);
-        prdDetailsList.append(prdDetails);
-    }
-
-    // sort the input products according to their dates
-    qSort(prdDetailsList.begin(), prdDetailsList.end(), ProcessorHandlerHelper::CompareProductDates);
-
-    return prdDetailsList;
-}
-
-TilesTimeSeries ProcessorHandlerHelper::GroupTiles(EventProcessingContext &ctx, int siteId,
-        const QList<ProductDetails> &productDetails, ProductType productType)
-{
-    // perform a first iteration to see the satellites IDs in all tiles
-    TilesTimeSeries timeSeries(productDetails);
-    // if we don't have L2A or have only one sattelite id for all tiles, then perform no filtering
-    if(productType != ProductType::L2AProductTypeId || timeSeries.GetSatellites().size() == 1)
-        return timeSeries;
-
-    // Get the primary satellite id
-    Satellite primarySatId = timeSeries.GetPrimarySatellite();
-    QMap<QString, QStringList> mapSecSatFilesForPrimaryTile;
-    const QMap<QString, TileTimeSeriesInfo> &mapTiles = timeSeries.GetTileTimeseriesInfos();
-    for(const TileTimeSeriesInfo &info : mapTiles.values())
-    {
-        bool isPrimarySatIdInfo = ((info.uniqueSatteliteIds.size() == 1) &&
-                                   (primarySatId == info.uniqueSatteliteIds[0]));
-        if (isPrimarySatIdInfo) {
-            for(Satellite satId: timeSeries.GetSatellites()) {
-                const ProductList &satSecProds = ctx.GetProductsForTile(siteId, info.tileId, productType,
-                                                                        static_cast<int>(primarySatId),
-                                                                        static_cast<int>(satId));
-                // get the metadata tiles for all found products intersecting the current tile
-                QStringList prdsTilesMetaFiles;
-                for(const Product &prod: satSecProds) {
-                    std::unique_ptr<ProductHelper> prdHelper = ProductHelperFactory::GetProductHelper(prod.fullPath);
-                    prdsTilesMetaFiles.append(prdHelper->GetProductMetadataFiles().at(0));
-                }
-                mapSecSatFilesForPrimaryTile[info.tileId] = prdsTilesMetaFiles;
-            }
-        }
-    }
-    TilesTimeSeries timeSeries2;
-    timeSeries2.InitializeFrom(timeSeries, mapSecSatFilesForPrimaryTile);
-
-    return timeSeries2;
+    return ProductDetailsBuilder::CreateDetails(prds, ctx);
 }
 
 QMap<QDate, QList<ProductDetails>> ProcessorHandlerHelper::GroupByDate(const QList<ProductDetails> &prdsDetails)
@@ -269,20 +216,27 @@ QString ProcessorHandlerHelper::GetMapValue(const std::map<QString, QString> &co
 }
 
 bool ProcessorHandlerHelper::GetBoolConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
-                                                const QString &key, const QString &cfgPrefix) {
+                                                const QString &key, const QString &cfgPrefix, bool defVal) {
     const QString &strVal = GetStringConfigValue(parameters, configParameters, key, cfgPrefix);
+    // if key not set or empty string
+    if (strVal.trimmed().size() == 0) {
+        return defVal;
+    }
     if (QString::compare(strVal, "true", Qt::CaseInsensitive) == 0) {
         return true;
     }
     if (QString::compare(strVal, "false", Qt::CaseInsensitive) == 0) {
         return false;
     }
-    return (GetIntConfigValue(parameters, configParameters, key, cfgPrefix) != 0);
+    return (GetIntConfigValue(parameters, configParameters, key, cfgPrefix, (int)defVal) != 0);
 }
 
 int ProcessorHandlerHelper::GetIntConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
-                                                const QString &key, const QString &cfgPrefix) {
-    return GetStringConfigValue(parameters, configParameters, key, cfgPrefix).toInt();
+                                                const QString &key, const QString &cfgPrefix, int defVal) {
+    bool ok;
+    const QString &strVal = GetStringConfigValue(parameters, configParameters, key, cfgPrefix);
+    int val = strVal.toInt(&ok, 10);
+    return (ok ? val : defVal);
 }
 
 QString ProcessorHandlerHelper::GetStringConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,

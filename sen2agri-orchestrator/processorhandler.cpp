@@ -268,6 +268,41 @@ QString ProcessorHandler::GetProductFormatterFootprint(EventProcessingContext &c
     return "POLYGON((0.0 0.0, 0.0 0.0, 0.0 0.0, 0.0 0.0, 0.0 0.0))";
 }
 
+QStringList ProcessorHandler::GetDefaultProductFormatterArgs(EventProcessingContext &ctx, TaskToSubmit &productFormatterTask,
+                                                             int jobId, int siteId, const QString &level, const QString &timePeriod,
+                                                             const QString &processor, const QStringList &additionalParameters,
+                                                             bool isVectPrd, const QString &gipp, bool compress) {
+    const auto &targetFolder = GetFinalProductFolder(ctx, jobId, siteId);
+    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
+    const QString &gippTmp = (gipp.size() == 0 ? productFormatterTask.GetFilePath("executionInfos.txt") : gipp);
+    QStringList productFormatterArgs =  {
+                                            "ProductFormatter",
+                                             "-destroot", targetFolder,
+                                             "-fileclass", "OPER",
+                                             "-level", level,
+                                             "-baseline", "01.00",
+                                             "-siteid", QString::number(siteId),
+                                             "-processor", processor,
+                                             "-compress", compress ? "1" : "0",
+                                             "-vectprd", isVectPrd ? "1" : "0",
+                                             "-gipp", gippTmp,
+                                             "-outprops", outPropsPath
+                                        };
+    if (timePeriod.size() > 0) {
+        productFormatterArgs += {"-timeperiod", timePeriod};
+    }
+
+    if (!isVectPrd) {
+        const std::map<QString, QString> &zarrEnabled = ctx.GetJobConfigurationParameters(jobId, "processor.zarr.enabled");
+        if (ProcessorHandlerHelper::GetBoolConfigValue(QJsonObject(), zarrEnabled,  "processor.zarr.enabled", "")) {
+            productFormatterArgs += {"-zarr", "1"};
+        }
+    }
+
+    productFormatterArgs += additionalParameters;
+    return productFormatterArgs;
+}
+
 bool IsInSeason(const QDate &startSeasonDate, const QDate &endSeasonDate, const QDate &currentDate, QDateTime &startTime, QDateTime &endTime)
 {
     if(startSeasonDate.isValid() && endSeasonDate.isValid()) {
@@ -440,7 +475,10 @@ ProductList ProcessorHandler::GetInputProducts(EventProcessingContext &ctx,
                                                           const ProductType &prdType,
                                                           QDateTime *pMinDate, QDateTime *pMaxDate) {
     ProductList retPrds;
-    const QStringList &prdNames = GetInputProductNames(parameters, prdType);
+    bool isL2AMskEnabled = IsL2AValidityMaskEnabled(ctx, parameters, siteId);
+    ProductType prodType = (isL2AMskEnabled && prdType == ProductType::L2AProductTypeId) ?
+                ProductType::MaskedL2AProductTypeId : prdType;
+    const QStringList &prdNames = GetInputProductNames(parameters, prodType);
 
     // get the products from the input_products or based on date_start or date_end
     if(prdNames.size() == 0) {
@@ -457,7 +495,7 @@ ProductList ProcessorHandler::GetInputProducts(EventProcessingContext &ctx,
                 *pMaxDate = endDate;
             }
 
-            return ctx.GetProducts(siteId, (int)prdType, startDate, endDate);
+            return ctx.GetProducts(siteId, (int)prodType, startDate, endDate);
         }
     } else {
         const ProductList &prds = ctx.GetProducts(siteId, prdNames);
@@ -482,6 +520,55 @@ ProductList ProcessorHandler::GetInputProducts(EventProcessingContext &ctx,
     }
 
     return retPrds;
+}
+
+TilesTimeSeries ProcessorHandler::GroupL2ATiles(EventProcessingContext &ctx, const QList<ProductDetails> &productDetails)
+{
+    // perform a first iteration to see the satellites IDs in all tiles
+    TilesTimeSeries timeSeries(productDetails);
+
+    // Get the primary satellite id
+    Satellite primarySatId = timeSeries.GetPrimarySatellite();
+    QMap<QString, QStringList> mapMtdFilesForPrimaryTile;
+    const QMap<QString, TileTimeSeriesInfo> &mapTiles = timeSeries.GetTileTimeseriesInfos();
+
+    // first iterate and fill the map for the primary satellite tiles
+    for(const TileTimeSeriesInfo &info : mapTiles.values())
+    {
+        bool isPrimarySatIdInfo = ((info.uniqueSatteliteIds.size() == 1) &&
+                                   (primarySatId == info.uniqueSatteliteIds[0]));
+        if (isPrimarySatIdInfo) {
+            QStringList prdsTilesMetaFiles;
+            for (const TileMetadataDetails &mtdDetails : info.GetTileTimeSeriesInfoFiles())
+            {
+                prdsTilesMetaFiles.append(mtdDetails.tileMetaFile);
+
+            }
+            const TileList &tiles = ctx.GetIntersectingTiles(primarySatId, info.tileId);
+            for(const TileTimeSeriesInfo &secInfo : mapTiles.values())
+            {
+                bool isSecSatIdInfo = !((secInfo.uniqueSatteliteIds.size() == 1) &&
+                                           (primarySatId == secInfo.uniqueSatteliteIds[0]));
+                if (isSecSatIdInfo) {
+                    for (Tile tile : tiles) {
+                        if (tile.tileId == secInfo.tileId) {
+                            for (const TileMetadataDetails &mtdDetails2 : secInfo.GetTileTimeSeriesInfoFiles())
+                            {
+                                prdsTilesMetaFiles.append(mtdDetails2.tileMetaFile);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            mapMtdFilesForPrimaryTile[info.tileId] = prdsTilesMetaFiles;
+        }
+    }
+    // rebuild the time series according to the new files
+    TilesTimeSeries timeSeries2;
+    timeSeries2.InitializeFrom(timeSeries, mapMtdFilesForPrimaryTile);
+
+    return timeSeries2;
 }
 
 QString ProcessorHandler::GetProductFormatterTile(const QString &tile) {
@@ -517,5 +604,88 @@ bool ProcessorHandler::IsCloudOptimizedGeotiff(const std::map<QString, QString> 
 NewStep ProcessorHandler::CreateTaskStep(TaskToSubmit &task, const QString &stepName, const QStringList &stepArgs)
 {
     return StepExecutionDecorator::GetInstance()->CreateTaskStep(this->processorDescr.shortName, task, stepName, stepArgs);
+}
+
+bool ProcessorHandler::IsL2AValidityMaskEnabled(EventProcessingContext &ctx, const QJsonObject &parameters, int siteId) {
+    return ProcessorHandlerHelper::GetBoolConfigValue(parameters,
+                       ctx.GetConfigurationParameters("processor.l2a_msk.enabled", siteId),
+                       "processor.l2a_msk.enabled", "");
+}
+
+bool ProcessorHandler::CheckAllAncestorProductCreation(ExecutionContextBase &ctx, int siteId, const ProductType &prdType,
+                                                       const QDateTime &startDate, const QDateTime &endDate) {
+    QJsonObject parameters;
+    bool checkAncestorsDisabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters,
+                           ctx.GetConfigurationParameters("orchestrator.check_ancestors.disabled", siteId),
+                           "orchestrator.check_ancestors.disabled", "");
+    Logger::info(QStringLiteral("orchestrator.check_ancestors.disabled = %1")
+                 .arg(checkAncestorsDisabled));
+    bool ret = true;
+    if (!checkAncestorsDisabled)
+    {
+        // TODO: We should load these mappings from a file
+        QList<ProductType> ancestorProductTypes;
+        switch (prdType) {
+            case ProductType::MaskedL2AProductTypeId :
+                ancestorProductTypes = {ProductType::L2AProductTypeId, ProductType::FMaskProductTypeId};
+                break;
+            case ProductType::L3AProductTypeId:
+            case ProductType::L3BProductTypeId:
+            case ProductType::L3EProductTypeId:
+            case ProductType::L4AProductTypeId:
+            case ProductType::L4BProductTypeId:
+            case ProductType::L3CProductTypeId:
+            case ProductType::L3DProductTypeId:
+                ancestorProductTypes = {ProductType::L2AProductTypeId, ProductType::FMaskProductTypeId,
+                                        ProductType::MaskedL2AProductTypeId};
+                break;
+            case ProductType::S4CL4AProductTypeId:
+            case ProductType::S4CL4BProductTypeId:
+            case ProductType::S4CL4CProductTypeId:
+            case ProductType::S4MDB1ProductTypeId:
+            case ProductType::S4MDB2ProductTypeId:
+            case ProductType::S4MDB3ProductTypeId:
+            case ProductType::S4MDBL4AOptMainProductTypeId:
+            case ProductType::S4MDBL4AOptReProductTypeId:
+            case ProductType::S4MDBL4ASarMainProductTypeId:
+            case ProductType::S4MDBL4ASarTempProductTypeId:
+                ancestorProductTypes = {ProductType::S4CS1L2AmpProductTypeId, ProductType::S4CS1L2CoheProductTypeId,
+                                        ProductType::L2AProductTypeId, ProductType::FMaskProductTypeId,
+                                        ProductType::MaskedL2AProductTypeId};
+                break;
+            case ProductType::S4SPermCropsProductTypeId :
+            case ProductType::S4SYieldFeatProductTypeId :
+            case ProductType::S4SCropTypeMappingProductTypeId :
+                break;
+            case ProductType::S1CompositeProductTypeId :
+                ancestorProductTypes = {ProductType::S4CS1L2AmpProductTypeId};
+                break;
+            case ProductType::L3IndicatorsCompositeProductTypeId:
+                ancestorProductTypes = {ProductType::L2AProductTypeId, ProductType::FMaskProductTypeId,
+                                        ProductType::MaskedL2AProductTypeId, ProductType::L3BProductTypeId};
+                break;
+            default:
+                break;
+        }
+        for (ProductType ancPrdType : ancestorProductTypes) {
+            QList<int> satIds;
+            if (ancPrdType == ProductType::L2AProductTypeId) {
+                satIds = {(int)Satellite::Sentinel2, (int)Satellite::Landsat8};
+            } else if (ancPrdType == ProductType::S4CS1L2AmpProductTypeId ||
+                       ancPrdType == ProductType::S4CS1L2AmpProductTypeId) {
+                satIds = {(int)Satellite::Sentinel1};
+            }
+            if (!ctx.IsProcessingDone(ancPrdType, siteId, startDate, endDate, satIds)) {
+                Logger::info(QStringLiteral("Processing is not yet finished for site = %1, product type = %2 in order to "
+                                            "be able to generate product with type id %3 for start date %4 and end date %5")
+                             .arg(siteId).arg((int)ancPrdType).arg((int)prdType)
+                             .arg(startDate.toString("yyyyMMdd")).arg(endDate.toString("yyyyMMdd")));
+                ret = false;
+                break;
+
+            }
+        }
+    }
+    return ret;
 }
 

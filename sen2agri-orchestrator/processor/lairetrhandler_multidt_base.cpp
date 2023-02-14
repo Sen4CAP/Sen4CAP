@@ -754,51 +754,40 @@ QStringList LaiRetrievalHandlerMultiDateBase::GetProductFormatterArgs(TaskToSubm
                                     const QList<TileMetadataDetails> &listProducts, const QList<LAIProductFormatterParams> &productParams) {
 
     const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, GetProcessorDBPrefix());
-
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
     const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.xml");
 
     WriteExecutionInfosFile(executionInfosPath, configParameters, l3bMapTiles, listProducts);
 
-    QStringList productFormatterArgs = { "ProductFormatter",
-                            "-destroot", GetFinalProductFolder(ctx, event.jobId, event.siteId),
-                            "-fileclass", "OPER",
-                            "-level", GetOutputProductShortName(),
-                            "-baseline", "01.00",
-                            "-siteid", QString::number(event.siteId),
-                            "-processor", "vegetation",
-                            "-gipp", executionInfosPath,
-                            "-compress", "1",
-                            "-outprops", outPropsPath};
-    productFormatterArgs += "-il";
-
-    std::for_each(listProducts.begin(), listProducts.end(), [&productFormatterArgs](const TileMetadataDetails &prd) {
-        productFormatterArgs.append(prd.tileMetaFile);
+    QStringList additionalArgs = {"-il"};
+    std::for_each(listProducts.begin(), listProducts.end(), [&additionalArgs](const TileMetadataDetails &prd) {
+        additionalArgs.append(prd.tileMetaFile);
     });
 
     const auto &lutFile = ProcessorHandlerHelper::GetMapValue(configParameters, GetProcessorDBPrefix() + "lut_path");
     if(lutFile.size() > 0) {
-        productFormatterArgs += "-lut";
-        productFormatterArgs += lutFile;
+        additionalArgs += "-lut";
+        additionalArgs += lutFile;
     }
 
-    productFormatterArgs += GetPrdFormatterRasterFlagName();
+    additionalArgs += GetPrdFormatterRasterFlagName();
     for(const LAIProductFormatterParams &params: productParams) {
-        productFormatterArgs += params.tileId;
-        productFormatterArgs += params.laiReprocParams.fileLaiReproc;
+        additionalArgs += params.tileId;
+        additionalArgs += params.laiReprocParams.fileLaiReproc;
     }
-    productFormatterArgs += GetPrdFormatterMskFlagName();
+    additionalArgs += GetPrdFormatterMskFlagName();
     for(const LAIProductFormatterParams &params: productParams) {
-        productFormatterArgs += params.tileId;
-        productFormatterArgs += params.laiReprocParams.fileLaiReprocFlgs;
+        additionalArgs += params.tileId;
+        additionalArgs += params.laiReprocParams.fileLaiReprocFlgs;
     }
 
     if (IsCloudOptimizedGeotiff(configParameters)) {
-        productFormatterArgs += "-cog";
-        productFormatterArgs += "1";
+        additionalArgs += "-cog";
+        additionalArgs += "1";
     }
 
-    return productFormatterArgs;
+    return GetDefaultProductFormatterArgs(ctx, productFormatterTask, event.jobId,
+                                         event.siteId, GetOutputProductShortName(), "",
+                                         "vegetation", additionalArgs, false, executionInfosPath);
 }
 
 int LaiRetrievalHandlerMultiDateBase::GetIntParameterValue(const QJsonObject &parameters, const QString &key, int defVal)
@@ -845,8 +834,6 @@ ProcessorJobDefinitionParams LaiRetrievalHandlerMultiDateBase::GetProcessingDefi
                                                           const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;

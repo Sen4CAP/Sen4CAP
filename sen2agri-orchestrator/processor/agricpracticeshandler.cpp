@@ -289,38 +289,17 @@ QStringList AgricPracticesHandler::GetExportProductLauncherArgs(const AgricPract
 
 QStringList AgricPracticesHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const AgricPracticesJobPayload &jobCfg,
                                                            const QStringList &listFiles) {
-    // ProductFormatter /home/cudroiu/sen2agri-processors-build
-    //    -vectprd 1 -destroot /mnt/archive_new/test/Sen4CAP_L4C_Tests/NLD_Validation_TSA/OutPrdFormatter
-    //    -fileclass OPER -level S4C_L4C -baseline 01.00 -siteid 4 -timeperiod 20180101_20181231 -processor generic
-    //    -processor.generic.files <files_list>
-
-    const auto &targetFolder = GetFinalProductFolder(*jobCfg.pCtx, jobCfg.event.jobId, jobCfg.event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.txt");
     QString strTimePeriod = jobCfg.minDate.toString("yyyyMMddTHHmmss").append("_").append(jobCfg.maxDate.toString("yyyyMMddTHHmmss"));
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot", targetFolder,
-                                         "-fileclass", "OPER",
-                                         "-level", "S4C_L4C",
-                                         "-vectprd", "1",
-                                         "-baseline", "01.00",
-                                         "-siteid", QString::number(jobCfg.event.siteId),
-                                         "-timeperiod", strTimePeriod,
-                                         "-processor", "generic",
-                                         "-outprops", outPropsPath,
-                                         "-gipp", executionInfosPath };
-    productFormatterArgs += "-processor.generic.files";
-    productFormatterArgs += listFiles;
-
-    return productFormatterArgs;
+    QStringList additionalArgs = {"-processor.generic.files"};
+    additionalArgs += listFiles;
+    return GetDefaultProductFormatterArgs(*jobCfg.pCtx, productFormatterTask, jobCfg.event.jobId, jobCfg.event.siteId,
+                                          "S4C_L4C", strTimePeriod, "generic", additionalArgs, true);
 }
 
 ProcessorJobDefinitionParams AgricPracticesHandler::GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -331,7 +310,12 @@ ProcessorJobDefinitionParams AgricPracticesHandler::GetProcessingDefinitionImpl(
     if(qScheduledDate > limitDate) {
         return params;
     }
-
+    // we need at least 30 days for launching a job otherwise it will give errors
+    if (qScheduledDate < seasonStartDate.addDays(30)) {
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_NOOP_AND_SCHEDULE_NEXT;
+        params.isValid = true;
+        return params;
+    }
 
     ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(L4C_AP_CFG_PREFIX),
                                                                            siteId, requestOverrideCfgValues);
@@ -347,28 +331,34 @@ ProcessorJobDefinitionParams AgricPracticesHandler::GetProcessingDefinitionImpl(
 
     const QString &yearStr = AgricPracticesJobPayload::GetYear(parameters, configParams, siteShortName);
     if (!CheckExecutionPreconditions(&ctx, parameters, configParams, siteId, siteShortName, yearStr, errMsg)) {
-        Logger::error("Scheduled job execution: " + errMsg);
+        Logger::error("L4C Scheduled job execution will be retried later: " + errMsg);
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
         return params;
     }
 
     // we might have an offset in days from starting the downloading products to start the S4C_L4C production
     // TODO: Is this really needed
     int startSeasonOffset = mapCfg["processor.s4c_l4c.start_season_offset"].value.toInt();
-    seasonStartDate = seasonStartDate.addDays(startSeasonOffset);
-
     // Get the start and end date for the production
+    QDateTime startDate = seasonStartDate.addDays(startSeasonOffset);
     QDateTime endDate = qScheduledDate;
-    QDateTime startDate = seasonStartDate;
-
-    params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
-                                 "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
-                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
-                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"");
-    if(requestOverrideCfgValues.contains("product_type")) {
-        const ConfigurationParameterValue &productType = requestOverrideCfgValues["product_type"];
-        params.jsonParameters.append(", \"execution_operation\": \"" + productType.value + "\"}");
+    QDateTime s1Start = seasonStartDate.addDays(15);
+    if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L3BProductTypeId, startDate, endDate) ||
+        !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2AmpProductTypeId, s1Start, endDate) ||
+        !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2CoheProductTypeId, s1Start, endDate)) {
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::error("L4C Scheduled job execution will be retried later: Not all input products were yet produced");
     } else {
-        params.jsonParameters.append("}");
+        params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
+                                     "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
+                                     "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                     "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"");
+        if(requestOverrideCfgValues.contains("product_type")) {
+            const ConfigurationParameterValue &productType = requestOverrideCfgValues["product_type"];
+            params.jsonParameters.append(", \"execution_operation\": \"" + productType.value + "\"}");
+        } else {
+            params.jsonParameters.append("}");
+        }
     }
 
     params.isValid = true;

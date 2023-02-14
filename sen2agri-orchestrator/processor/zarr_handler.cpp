@@ -139,39 +139,45 @@ ProcessorJobDefinitionParams ZarrHandler::GetProcessingDefinitionImpl(Scheduling
     return params;
 }
 
-void ZarrHandler::HandleProductAvailableImpl(EventProcessingContext &ctx,
-                                const ProductAvailableEvent &event)
+void ZarrHandler::HandleProductAvailableImpl(EventProcessingContext &,
+                                const ProductAvailableEvent &)
 {
-    // Get the product description from the database
-    const ProductList &prds = ctx.GetProducts({event.productId});
-    if(prds.size() == 0) {
-        return;
-    }
-    const Product &prd = prds.back();
+    return;
 
-    if (prd.productTypeId != ProductType::S4CS1L2AmpProductTypeId &&
-        prd.productTypeId != ProductType::S4CS1L2CoheProductTypeId) {
-        return;
-    }
+//  Zarr is created now via the product formatter.
+//  S1 products are converted by the services.
+//    If needed conversion of old products, custom or scheduled jobs can be used.
 
-    // Create a new JOB
-    NewJob newJob;
-    newJob.processorId = processorDescr.processorId;  //send the job to this processor
-    newJob.siteId = prd.siteId;
-    newJob.startType = JobStartType::Triggered;
+//    // Get the product description from the database
+//    const ProductList &prds = ctx.GetProducts({event.productId});
+//    if(prds.size() == 0) {
+//        return;
+//    }
+//    const Product &prd = prds.back();
 
-    QJsonObject processorParamsObj;
-    QJsonArray prodsJsonArray;
-    prodsJsonArray.append(prd.name);
+//    if (prd.productTypeId != ProductType::S4CS1L2AmpProductTypeId &&
+//        prd.productTypeId != ProductType::S4CS1L2CoheProductTypeId) {
+//        return;
+//    }
 
-    const QString &prdKey = "input_products";
-    processorParamsObj[prdKey] = prodsJsonArray;
-    newJob.parametersJson = jsonToString(processorParamsObj);
-    ctx.SubmitJob(newJob);
-    Logger::info(QStringLiteral("ZarrHandler - HandleProductAvailable - Submitted trigger job "
-                                "for product %1 (triggered by %2) and siteid = %3").arg(prd.fullPath)
-                 .arg(prd.fullPath)
-                 .arg(QString::number((int)prd.siteId)));
+//    // Create a new JOB
+//    NewJob newJob;
+//    newJob.processorId = processorDescr.processorId;  //send the job to this processor
+//    newJob.siteId = prd.siteId;
+//    newJob.startType = JobStartType::Triggered;
+
+//    QJsonObject processorParamsObj;
+//    QJsonArray prodsJsonArray;
+//    prodsJsonArray.append(prd.name);
+
+//    const QString &prdKey = "input_products";
+//    processorParamsObj[prdKey] = prodsJsonArray;
+//    newJob.parametersJson = jsonToString(processorParamsObj);
+//    ctx.SubmitJob(newJob);
+//    Logger::info(QStringLiteral("ZarrHandler - HandleProductAvailable - Submitted trigger job "
+//                                "for product %1 (triggered by %2) and siteid = %3").arg(prd.fullPath)
+//                 .arg(prd.fullPath)
+//                 .arg(QString::number((int)prd.siteId)));
 }
 
 void ZarrHandler::CreateZarrStep(const Product &prdInfo,

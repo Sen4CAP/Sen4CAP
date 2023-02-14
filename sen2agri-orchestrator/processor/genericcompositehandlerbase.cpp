@@ -74,10 +74,13 @@ void GenericCompositeHandler::CreateTasks(const GenericCompositeJobPayload &jobP
     int i;
     TaskToSubmit productFormatterTask{"product-formatter", {}};
 
+    int compTasksToAdd = jobPayload.validPixelsCntExtractionEnabled ? 2 : 1;
     for(i = 0; i < tileFileInfos.size(); i++) {
-        allTasksList.append(TaskToSubmit{"l3-composite", {}});
-        productFormatterTask.parentTasks += allTasksList[allTasksList.size()-1];
-        allTasksListRef.append(allTasksList[allTasksList.size()-1]);
+        for (int j = 0; j<compTasksToAdd; j++) {
+            allTasksList.append(TaskToSubmit{(j == 0) ? "l3-composite" : "l3-composite-valid-pixels-cnt", {}});
+            productFormatterTask.parentTasks += allTasksList[allTasksList.size()-1];
+            allTasksListRef.append(allTasksList[allTasksList.size()-1]);
+        }
     }
     allTasksList.append(productFormatterTask);
     allTasksListRef.append(allTasksList[allTasksList.size()-1]);
@@ -92,30 +95,30 @@ void GenericCompositeHandler::CreateSteps(const GenericCompositeJobPayload &jobP
 {
     NewStepList allSteps;
     QMap<QString, QString> results;
+    QMap<QString, QString> flags;
     int i = 0;
     QString prdNameSuffix;
+    int tasksIdxIncrement = (jobPayload.validPixelsCntExtractionEnabled ? 2 : 1);
     for(auto tile: tileFileInfos.keys()) {
-        const auto &infos = tileFileInfos.value(tile);
-        if (infos.size() > 0) {
-            TaskToSubmit &dataExtractionTask = allTasksList[i];
-            const QString &compositeFile = dataExtractionTask.GetFilePath("L3_" + infos[0].markerInfo.marker + "_" + tile + ".tif");
-            const NewStep &step = CreateStep(dataExtractionTask, tileFileInfos.value(tile), compositeFile, jobPayload.compositeMethod);
-            allSteps.append(step);
-            results[tile] = compositeFile;
+        if (CreateCompositeStep(allTasksList[i], tileFileInfos, tile, jobPayload.compositeMethod, allSteps, results)) {
+            if (jobPayload.validPixelsCntExtractionEnabled) {
+                CreateCompositeStep(allTasksList[i+1], tileFileInfos, tile, COUNT_VALID_PIXELS_FLAG, allSteps, flags);
+            }
             if (prdNameSuffix.size() == 0) {
-                prdNameSuffix = infos[0].markerInfo.marker;
+                prdNameSuffix = tileFileInfos.value(tile)[0].markerInfo.marker;
                 if (additionalFilter.size() > 0) {
                     prdNameSuffix += "_";
                     prdNameSuffix += additionalFilter;
                 }
             }
         }
-        i++;
+        i += tasksIdxIncrement;
     }
 
     // Create the product formatter step
     TaskToSubmit &productFormatterTask = allTasksList[allTasksList.size() - 1];
-    const QStringList &productFormatterArgs = GetProductFormatterArgs(jobPayload, productFormatterTask, results, prdNameSuffix);
+    const QStringList &productFormatterArgs = GetProductFormatterArgs(jobPayload, productFormatterTask, results,
+                                                                      flags, prdNameSuffix, tileFileInfos);
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
 
     jobPayload.pCtx->SubmitSteps(allSteps);
@@ -135,6 +138,7 @@ void GenericCompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx
     const QMap<QString, QList<ProductMarkerInfo>> &allTileFileInfos = ExtractFileInfos(ctx, evt, jobCfg.parameters, markers,
                                                                                        prdMinDate, prdMaxDate);
     jobCfg.UpdateMinMaxDates(prdMinDate, prdMaxDate);
+    QList<TaskToSubmit> allTasksList;
     for (auto marker: markers) {
         // Filter the products by marker
         const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfos = FilterByMarkerName(allTileFileInfos, marker.marker);
@@ -143,23 +147,32 @@ void GenericCompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx
             for (const FilterAndGroupingOptions &filter: filters) {
                 const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfosFiltered = Filter(filter, tileFileInfos);
                 if (tileFileInfosFiltered.size() > 0) {
-                    QList<TaskToSubmit> allTasksList;
-                    CreateTasks(jobCfg, tileFileInfosFiltered, allTasksList);
-                    CreateSteps(jobCfg, allTasksList, tileFileInfosFiltered, filter.name);
+                    QList<TaskToSubmit> tasksList;
+                    CreateTasks(jobCfg, tileFileInfosFiltered, tasksList);
+                    CreateSteps(jobCfg, tasksList, tileFileInfosFiltered, filter.name);
+                    allTasksList += tasksList;
                 }
             }
         } else {
-            QList<TaskToSubmit> allTasksList;
-            CreateTasks(jobCfg, tileFileInfos, allTasksList);
-            CreateSteps(jobCfg, allTasksList, tileFileInfos);
+            QList<TaskToSubmit> tasksList;
+            CreateTasks(jobCfg, tileFileInfos, tasksList);
+            CreateSteps(jobCfg, tasksList, tileFileInfos);
+            allTasksList += tasksList;
         }
     }
+    // we add a task in order to wait for all product formatter to finish.
+    // This will allow us to mark the job as finished and to remove the job folder
+    SubmitEndOfJobTask(ctx, evt, allTasksList);
 }
 
 void GenericCompositeHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
                                               const TaskFinishedEvent &event)
 {
-    if (event.module == "product-formatter") {
+    if (event.module == "end-of-job") {
+        ctx.MarkJobFinished(event.jobId);
+        // Now remove the job folder containing temporary files
+        RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
+    } else if (event.module == "product-formatter") {
         const QString &prodName = GetOutputProductName(ctx, event);
         const QString &productFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId) + "/" + prodName;
         if(prodName != "") {
@@ -170,15 +183,11 @@ void GenericCompositeHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx
             ctx.InsertProduct({ GetOutputProductType(), event.processorId, event.siteId,
                                 event.jobId, productFolder, prdHelper.GetAcqDate(),
                                 prodName, quicklook, footPrint, std::experimental::nullopt, TileIdList(), ProductIdsList()  });
-            // mark the job as finished
-            ctx.MarkJobFinished(event.jobId);
         } else {
             // mark the job as failed
             ctx.MarkJobFailed(event.jobId);
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));
         }
-        // Now remove the job folder containing temporary files
-        RemoveJobFolder(ctx, event.jobId, processorDescr.shortName);
     }
 }
 
@@ -186,8 +195,6 @@ ProcessorJobDefinitionParams GenericCompositeHandler::GetProcessingDefinitionImp
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -209,7 +216,7 @@ ProcessorJobDefinitionParams GenericCompositeHandler::GetProcessingDefinitionImp
     if(procPeriod == 0) {
         procPeriod = 30;
     }
-    QDateTime startDate = qScheduledDate.addDays(procPeriod);
+    QDateTime startDate = qScheduledDate.addDays(-procPeriod);
     if (startDate < seasonStartDate) {
         startDate = seasonStartDate;
     }
@@ -218,11 +225,15 @@ ProcessorJobDefinitionParams GenericCompositeHandler::GetProcessingDefinitionImp
         endDate = seasonEndDate.addDays(1);
     }
 
-    params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
-                                 "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
-                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
-                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}");
-
+    if (!CheckAllAncestorProductCreation(ctx, siteId, GetOutputProductType(), startDate, endDate)) {
+        // do not trigger yet the schedule.
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+    } else {
+        params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
+                                     "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
+                                     "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                     "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}");
+    }
     params.isValid = true;
 
     return params;
@@ -257,34 +268,32 @@ NewStep GenericCompositeHandler::CreateStep(TaskToSubmit &task, const QList<Prod
 }
 
 QStringList GenericCompositeHandler::GetProductFormatterArgs(const GenericCompositeJobPayload &jobPayload, TaskToSubmit &productFormatterTask,
-                                                             const QMap<QString, QString> &tileResults, const QString &prdNameSuffix) {
+                                                             const QMap<QString, QString> &tileResults,  const QMap<QString, QString> &tileFlags,
+                                                             const QString &prdNameSuffix, const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfos) {
 
     const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.xml");
-    // WriteExecutionInfosFile(executionInfosPath, jobPayload, productDetails);
+    WriteExecutionInfosFile(executionInfosPath, jobPayload, tileFileInfos);
 
-    const auto &targetFolder = GetFinalProductFolder(*jobPayload.pCtx, jobPayload.event.jobId, jobPayload.event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
     QString strTimePeriod = jobPayload.minDate.toString("yyyyMMddTHHmmss").append("_").append(jobPayload.maxDate.toString("yyyyMMddTHHmmss"));
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot", targetFolder,
-                                         "-fileclass", "OPER",
-                                         "-level", GetProductFormatterLevel(),
-                                         "-vectprd", "0",
-                                         "-baseline", "01.00",
-                                         "-siteid", QString::number(jobPayload.event.siteId),
-                                         "-timeperiod", strTimePeriod,
-                                         "-processor", "l3genericcomposite",
-                                         "-outprops", outPropsPath,
-                                         "-gipp", executionInfosPath,
-                                         "-prdnamesuffix", prdNameSuffix
-                                       };
-    productFormatterArgs += "-processor.l3genericcomposite.files";
+
+    QStringList additionalArgs = {"-prdnamesuffix", prdNameSuffix};
+    additionalArgs += "-processor.l3genericcomposite.files";
     for(const QString &key: tileResults.keys()) {
-        productFormatterArgs += GetProductFormatterTile(key);
-        productFormatterArgs += tileResults[key];
+        additionalArgs += GetProductFormatterTile(key);
+        additionalArgs += tileResults[key];
     }
 
-    return productFormatterArgs;
+    if (tileFlags.size() > 0) {
+        additionalArgs += "-processor.l3genericcomposite.flags";
+        for(const QString &key: tileFlags.keys()) {
+            additionalArgs += GetProductFormatterTile(key);
+            additionalArgs += tileFlags[key];
+        }
+    }
+
+    return GetDefaultProductFormatterArgs(*jobPayload.pCtx, productFormatterTask, jobPayload.event.jobId,
+                                          jobPayload.event.siteId, GetProductFormatterLevel(), strTimePeriod,
+                                          "l3genericcomposite", additionalArgs, false, executionInfosPath);
 }
 
 QList<MarkerDescriptorType> GenericCompositeHandler::GetMarkers(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
@@ -406,34 +415,73 @@ QString GenericCompositeHandler::GetProductFormatterLevel()
 
 void GenericCompositeHandler::WriteExecutionInfosFile(const QString &executionInfosPath,
                                                const GenericCompositeJobPayload &jobPayload,
-                                               const QList<ProductDetails> &productDetails)
+                                               const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfos)
 {
     std::ofstream executionInfosFile;
     try {
         executionInfosFile.open(executionInfosPath.toStdString().c_str(), std::ofstream::out);
         executionInfosFile << "<?xml version=\"1.0\" ?>" << std::endl;
         executionInfosFile << "<metadata>" << std::endl;
-//        executionInfosFile << "  <General>" << std::endl;
+        executionInfosFile << "  <General>" << std::endl;
+        executionInfosFile << "    <method>" << jobPayload.compositeMethod.toStdString() << "</method>" << std::endl;
+        executionInfosFile << "  </General>" << std::endl;
 
-//        executionInfosFile << "  <Dates_information>" << std::endl;
-        // TODO: We should get these infos somehow but without parsing here anything
-        // executionInfosFile << "    <start_date>" << 2013031 << "</start_date>" << std::endl;
-        // executionInfosFile << "    <end_date>" << 20130422 << "</end_date>" << std::endl;
-//        executionInfosFile << "    <synthesis_date>" << cfg.l3aSynthesisDate.toStdString()
-//                           << "</synthesis_date>" << std::endl;
-//        executionInfosFile << "    <synthesis_half>" << cfg.synthalf.toStdString()
-//                           << "</synthesis_half>" << std::endl;
-//        executionInfosFile << "  </Dates_information>" << std::endl;
+        executionInfosFile << "  <Dates_information>" << std::endl;
+        executionInfosFile << "    <start_date>" << jobPayload.minDate.toString("yyyy-MM-ddTHHmmss").toStdString() << "</start_date>" << std::endl;
+        executionInfosFile << "    <end_date>" << jobPayload.maxDate.toString("yyyy-MM-ddTHHmmss").toStdString() << "</end_date>" << std::endl;
+        executionInfosFile << "  </Dates_information>" << std::endl;
 
-        executionInfosFile << "  <XML_files>" << std::endl;
-        for (int i = 0; i < productDetails.size(); i++) {
-            executionInfosFile << "    <XML_" << std::to_string(i) << ">"
-                               << productDetails[i].GetProduct().fullPath.toStdString() << "</XML_" << std::to_string(i)
-                               << ">" << std::endl;
+        executionInfosFile << "  <input_files>" << std::endl;
+        int i = 0;
+        for(const QString &key: tileFileInfos.keys()) {
+            for (const ProductMarkerInfo &info: tileFileInfos[key]) {
+                executionInfosFile << "    <input_" << std::to_string(i) << ">"
+                                   << info.prdFileInfo.inFilePath.toStdString() << "</input_" << std::to_string(i)
+                                   << ">" << std::endl;
+                i++;
+            }
         }
-        executionInfosFile << "  </XML_files>" << std::endl;
+
+        executionInfosFile << "  </input_files>" << std::endl;
         executionInfosFile << "</metadata>" << std::endl;
         executionInfosFile.close();
     } catch (...) {
     }
+}
+
+void GenericCompositeHandler::SubmitEndOfJobTask(EventProcessingContext &ctx,
+                                                const JobSubmittedEvent &event,
+                                                const QList<TaskToSubmit> &allTasksList) {
+    // add the end of lai job that will perform the cleanup
+    QList<std::reference_wrapper<const TaskToSubmit>> endOfJobParents;
+    for(const TaskToSubmit &task: allTasksList) {
+        if(task.moduleName == "product-formatter" ||
+                task.moduleName == "files-remover") {
+            endOfJobParents.append(task);
+        }
+    }
+    // we add a task in order to wait for all product formatter to finish.
+    // This will allow us to mark the job as finished and to remove the job folder
+    TaskToSubmit endOfJobDummyTask{"end-of-job", {}};
+    endOfJobDummyTask.parentTasks.append(endOfJobParents);
+    SubmitTasks(ctx, event.jobId, {endOfJobDummyTask});
+    ctx.SubmitSteps({CreateTaskStep(endOfJobDummyTask, "EndOfJob", QStringList())});
+
+}
+
+bool GenericCompositeHandler::CreateCompositeStep(TaskToSubmit &task, const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfos,
+                                                  const QString &tile, const QString &method, NewStepList &allSteps, QMap<QString, QString> &results)
+{
+    bool ret = false;
+    const auto &infos = tileFileInfos.value(tile);
+    if (infos.size() > 0) {
+        const QString &resFile = task.GetFilePath("L3_" + infos[0].markerInfo.marker + "_" + tile + ".tif");
+        const NewStep &step = CreateStep(task, infos, resFile, method);
+        allSteps.append(step);
+        results[tile] = resFile;
+        ret = true;
+    }
+
+    return ret;
+
 }

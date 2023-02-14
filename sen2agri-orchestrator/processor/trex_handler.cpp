@@ -65,8 +65,6 @@ ProcessorJobDefinitionParams TRexHandler::GetProcessingDefinitionImpl(Scheduling
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -99,6 +97,9 @@ void TRexHandler::HandleProductAvailableImpl(EventProcessingContext &ctx,
 {
     // Get the product description from the database
     const ProductList &prds = ctx.GetProducts({event.productId});
+    if(prds.size() == 0) {
+        return;
+    }
     const Product &prd = prds.back();
 
     if (prd.productTypeId != ProductType::S4CLPISProductTypeId &&

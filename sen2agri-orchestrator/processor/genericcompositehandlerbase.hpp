@@ -4,6 +4,8 @@
 #include "processorhandler.hpp"
 #include "s4c_utils.hpp"
 
+#define COUNT_VALID_PIXELS_FLAG "cntvldpix"
+
 typedef struct {
     QString marker;
     ProductType prdType;
@@ -41,11 +43,14 @@ class GenericCompositeJobPayload {
             QString strStartDate, strEndDate;
             ProcessorHandlerHelper::GetParameterValueAsString(parameters, "start_date", strStartDate);
             ProcessorHandlerHelper::GetParameterValueAsString(parameters, "end_date", strEndDate);
+            minDate = QDateTime::fromString(strStartDate, "yyyyMMdd");
+            maxDate = QDateTime::fromString(strEndDate, "yyyyMMdd");
         }
         compositeMethod = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "method", cfgPrefix).toLower();
         if (compositeMethod.size() == 0) {
             compositeMethod = "mean";
         }
+        validPixelsCntExtractionEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "extract_valid_pixels_cnt", cfgPrefix);
     }
     void UpdateMinMaxDates(const QDateTime &start, const QDateTime &end) {
         if (!isScheduledJob) {
@@ -63,6 +68,7 @@ class GenericCompositeJobPayload {
     QDateTime minDate;
     QDateTime maxDate;
     QString compositeMethod;
+    bool validPixelsCntExtractionEnabled;
 };
 
 // Just a marker interface
@@ -111,14 +117,18 @@ private:
                                  const QString &procKeyPrefix, const QStringList &filteringMarkers = {},
                                  const QStringList &markersForcedEnabled = {});
     QStringList GetProductFormatterArgs(const GenericCompositeJobPayload &jobPayload, TaskToSubmit &productFormatterTask,
-                                        const QMap<QString, QString> &tileResults, const QString &prdNameSuffix);
+                                        const QMap<QString, QString> &tileResults, const QMap<QString, QString> &tileFlags,
+                                        const QString &prdNameSuffix, const QMap<QString, QList<ProductMarkerInfo> > &tileFileInfos);
     QList<ProductType> GetMarkerProductTypes(const QList<MarkerDescriptorType> &markers);
     QMap<QString, QList<ProductMarkerInfo> > ExtractFileInfos(EventProcessingContext &ctx, const JobSubmittedEvent &evt, const QJsonObject &parameters,
                                                               const QList<MarkerDescriptorType> &markers, QDateTime &prdMinDate, QDateTime &prdMaxDate);
     QMap<QString, QList<ProductMarkerInfo>> FilterByMarkerName(const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfos, const QString &marker);
     QString GetProductFormatterLevel();
     QString GetByTile(const QStringList &files, const QString &filter);
-    void WriteExecutionInfosFile(const QString &executionInfosPath, const GenericCompositeJobPayload &jobPayload, const QList<ProductDetails> &productDetails);
+    void WriteExecutionInfosFile(const QString &executionInfosPath, const GenericCompositeJobPayload &jobPayload, const QMap<QString, QList<ProductMarkerInfo> > &tileFileInfos);
+    void SubmitEndOfJobTask(EventProcessingContext &ctx, const JobSubmittedEvent &event, const QList<TaskToSubmit> &allTasksList);
+    bool CreateCompositeStep(TaskToSubmit &task, const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfos, const QString &tile,
+                             const QString &method, NewStepList &allSteps, QMap<QString, QString> &flags);
 
     static QList<MarkerDescriptorType> allMarkerFileTypes;
 

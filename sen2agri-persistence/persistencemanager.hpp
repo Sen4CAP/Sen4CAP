@@ -77,7 +77,7 @@ public:
     ProductList GetProducts(int siteId, const QStringList &productNames);
     ProductList GetParentProductsByProvenancePresence(int siteId, const QList<ProductType> &sourcePrdTypes, const ProductType &derivedProductType,
                                                    const QDateTime &startDate, const QDateTime &endDate, bool parentsArePresent);
-    ProductList GetParentProductsInProvenanceById(int productId, const QList<ProductType> &sourcePrdTypes);
+    QMap<int, ProductList> GetParentProductsInProvenanceByIds(QList<int> productIds, const QList<ProductType> &sourcePrdTypes);
     L1CProductList GetL1CProducts(int siteId, const SatellitesList &satelliteIds, const StatusesList &statusIds, const QDateTime &startDate, const QDateTime &endDate);
     ProductList GetL1DerivedProducts(int siteId, const int &prdTypeId, const ProductIdsList &dwnHistIds);
     ProductIdToDwnHistIdMap GetDownloaderHistoryIds(const ProductIdsList &prdIds);
@@ -109,6 +109,7 @@ public:
     void InsertScheduledTask( ScheduledTask& task);
 
     SeasonList GetSiteSeasons(int siteId);
+    bool IsProcessingDone(ProductType prdType, int siteId, const QDateTime &startDate, const QDateTime &endDate, const QList<int> &satIds);
 
     QStringList QStringListFromString(QString str, const QString &sep = ",");
     QList<int> QListIntFromString(QString str, const QString &sep = ",");

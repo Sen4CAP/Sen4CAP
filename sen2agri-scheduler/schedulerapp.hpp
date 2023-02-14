@@ -30,6 +30,7 @@ protected:
 
 private:
     QString GetTaskParametersJson(const ScheduledTask &task);
+    bool GetSchedulingParams(const JobDefinition &jd, bool &isValid, int &schedulingFlags);
 
 private:
     int m_nTimerId;

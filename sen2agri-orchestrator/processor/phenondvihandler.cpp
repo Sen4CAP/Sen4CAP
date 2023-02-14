@@ -102,7 +102,7 @@ void PhenoNdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                     toStdString());
     }
 
-    const TilesTimeSeries &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, productDetails, ProductType::L2AProductTypeId);
+    const TilesTimeSeries &mapTiles = GroupL2ATiles(ctx, productDetails);
     QList<PhenoProductFormatterParams> listParams;
 
     TaskToSubmit productFormatterTask{"product-formatter", {}};
@@ -184,56 +184,41 @@ void PhenoNdviHandler::WriteExecutionInfosFile(const QString &executionInfosPath
 
 QStringList PhenoNdviHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                     const QList<ProductDetails> &listProducts, const QList<PhenoProductFormatterParams> &productParams) {
-    const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
-
-    const auto &targetFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.txt");
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot",
-                                         targetFolder,
-                                         "-fileclass", "OPER",
-                                         "-level", "L3E",
-                                         "-baseline", "01.00",
-                                         "-siteid", QString::number(event.siteId),
-                                         "-processor", "phenondvi",
-                                         "-gipp", executionInfosPath,
-                                         "-outprops", outPropsPath};
-    productFormatterArgs += "-il";
-    std::for_each(listProducts.begin(), listProducts.end(), [&productFormatterArgs](const ProductDetails &prdDetails) {
+    const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3e.");
+    QStringList additionalArgs = {"-il"};
+    std::for_each(listProducts.begin(), listProducts.end(), [&additionalArgs](const ProductDetails &prdDetails) {
         std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdDetails);
         const QStringList &metaFiles = helper->GetProductMetadataFiles();
         for (const QString &metaFile: metaFiles) {
-            productFormatterArgs.append(metaFile);
+            additionalArgs.append(metaFile);
         }
     });
 
-    productFormatterArgs += "-processor.phenondvi.metrics";
+    additionalArgs += "-processor.phenondvi.metrics";
     for(const PhenoProductFormatterParams &params: productParams) {
-        productFormatterArgs += GetProductFormatterTile(params.tileId);
-        productFormatterArgs += params.metricsParamsImg;
+        additionalArgs += GetProductFormatterTile(params.tileId);
+        additionalArgs += params.metricsParamsImg;
     }
 
-    productFormatterArgs += "-processor.phenondvi.flags";
+    additionalArgs += "-processor.phenondvi.flags";
     for(const PhenoProductFormatterParams &params: productParams) {
-        productFormatterArgs += GetProductFormatterTile(params.tileId);
-        productFormatterArgs += params.metricsFlagsImg;
+        additionalArgs += GetProductFormatterTile(params.tileId);
+        additionalArgs += params.metricsFlagsImg;
     }
 
     if (IsCloudOptimizedGeotiff(configParameters)) {
-        productFormatterArgs += "-cog";
-        productFormatterArgs += "1";
+        additionalArgs += "-cog";
+        additionalArgs += "1";
     }
 
-    return productFormatterArgs;
+    return GetDefaultProductFormatterArgs(ctx, productFormatterTask, event.jobId, event.siteId, "L3E", "",
+                                         "phenondvi", additionalArgs);
 }
 
 ProcessorJobDefinitionParams PhenoNdviHandler::GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;

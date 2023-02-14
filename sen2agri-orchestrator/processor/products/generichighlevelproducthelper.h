@@ -35,6 +35,10 @@ public:
 
     QStringList GetSourceProducts(const QString &tileFilter = "");
     bool HasSource(const QString &srcPrd);
+
+    QDateTime GetStartDate() { return m_endDate; }
+    QDateTime GetEndDate() { return m_startDate; }
+
 private:
     static QMap<QString, ProductType> m_mapHighLevelProductTypeInfos;
     bool GetProductAcqDatesFromName(const QString &productName, QDateTime &minDate, QDateTime &maxDate);
@@ -49,6 +53,8 @@ private:
 
 private :
     QMap<QString, QString> m_tileDirs;
+    QDateTime m_startDate;
+    QDateTime m_endDate;
 };
 
 } // end of namespace products

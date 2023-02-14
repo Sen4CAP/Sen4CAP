@@ -58,6 +58,15 @@ QList<MarkerType> S4CMarkersDB1DataExtractStepsBuilder::allMarkerFileTypes =
     {"COHE", ProductType::S4CS1L2CoheProductTypeId, "COHE", ""}
 };
 
+QList<MetricType> S4CMarkersDB1DataExtractStepsBuilder::supportedMetrics = {
+  {"valid_pixels_enabled", "validity"},
+//  {"stdev_enabled", "stdev"},
+  {"minmax_enabled", "minmax"},
+  {"median_enabled", "median"},
+  {"p25_enabled", "p25"},
+  {"p75_enabled", "p75"}
+};
+
 S4CMarkersDB1DataExtractStepsBuilder::S4CMarkersDB1DataExtractStepsBuilder() :
     m_idFieldName("NewID"), m_optParcelsPattern(".*_buf_5m.shp"), m_sarParcelsPattern(".*_buf_10m.shp")
 {
@@ -354,10 +363,10 @@ QStringList S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionArgs(const QS
         retArgs += inputFileInfo.markerInfo.bandDiscriminationInfo;
     }
 
-    bool validPixelsCntExtrEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "valid_pixels_enabled", MDB1_CFG_PREFIX);
-    if (validPixelsCntExtrEnabled) {
-        retArgs += "-validity";
-        retArgs += QString::number(1);
+    for (const MetricType &mt : supportedMetrics) {
+        bool mtEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, mt.configName, MDB1_CFG_PREFIX);
+        retArgs += ("-" + mt.paramName);
+        retArgs += QString::number(mtEnabled ? 1 : 0);
     }
 
     return retArgs;

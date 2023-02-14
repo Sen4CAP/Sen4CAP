@@ -11,36 +11,51 @@
 using namespace orchestrator::products;
 
 void CropTypeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event,CropTypeJobConfig &cfg) {
-    auto configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l4b.");
-    auto l4aConfigParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l4a.reference_data_dir");
+    auto configParameters = ctx.GetJobConfigurationParameters(event.jobId, S2A_CT_PREFIX);
     auto resourceParameters = ctx.GetJobConfigurationParameters(event.jobId, "resources.working-mem");
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
 
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId,
+                                               &cfg.startDate, &cfg.endDate);
+    cfg.productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
+    if(cfg.productDetails.size() == 0) {
+        // try to get the start and end date if they are given
+        ctx.MarkJobFailed(event.jobId);
+        throw std::runtime_error(
+            QStringLiteral("No products provided at input or no products available in the specified interval").
+                    toStdString());
+    }
     cfg.jobId = event.jobId;
     cfg.siteId = event.siteId;
-    cfg.resolution = 0;
-    if(!ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "resolution", cfg.resolution) ||
-            cfg.resolution == 0) {
+    cfg.resolution = ProcessorHandlerHelper::GetIntConfigValue(parameters, configParameters, "resolution", S2A_CT_PREFIX);
+    if(cfg.resolution == 0) {
         cfg.resolution = 10;
     }
 
-    cfg.referencePolygons = parameters["reference_polygons"].toString();
-    cfg.strataShp = parameters["strata_shape"].toString();
-    // if the strata is not set by the user, try to take it from the database
-    if(cfg.strataShp.size() == 0) {
-        QString siteName = ctx.GetSiteShortName(event.siteId);
-        // Get the reference dir
-        QString refDir = l4aConfigParameters["processor.l4a.reference_data_dir"];
-        refDir = refDir.replace("{site}", siteName);
-        QString strataFile;
-        if(ProcessorHandlerHelper::GetStrataFile(refDir, strataFile) &&
-                QFile::exists(strataFile)) {
-            cfg.strataShp = strataFile;
+    QString siteName = ctx.GetSiteShortName(event.siteId);
+    cfg.referenceDataSource = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "reference_data_source", S2A_CT_PREFIX);
+    if (cfg.referenceDataSource == "earth_signature") {
+        cfg.referencePolygons = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "earth_signature_insitu", S2A_CT_PREFIX);
+        cfg.referencePolygons = cfg.referencePolygons.replace("{site}", siteName);
+    } else {
+        cfg.referencePolygons = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "reference_polygons", S2A_CT_PREFIX);
+        cfg.strataShp = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "strata_shape", S2A_CT_PREFIX);
+        // if the strata is not set by the user, try to take it from the database
+        if(cfg.strataShp.size() == 0) {
+            // Get the reference dir
+            auto l4aConfigParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l4a.reference_data_dir");
+            QString refDir = l4aConfigParameters["processor.l4a.reference_data_dir"];
+            refDir = refDir.replace("{site}", siteName);
+            QString strataFile;
+            if(ProcessorHandlerHelper::GetStrataFile(refDir, strataFile) &&
+                    QFile::exists(strataFile)) {
+                cfg.strataShp = strataFile;
+            }
         }
     }
 
     // get the crop mask
-    cfg.cropMask = parameters["crop_mask"].toString();
+    cfg.cropMask = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "crop_mask", S2A_CT_PREFIX);
 
     cfg.appsMem = resourceParameters["resources.working-mem"];
     cfg.lutPath = configParameters["processor.l4b.lut_path"];
@@ -77,8 +92,14 @@ void CropTypeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitte
     cfg.maxParallelism = maxParallelism > 0 ? std::experimental::optional<int>(maxParallelism) : std::experimental::nullopt;
 }
 
-QList<std::reference_wrapper<TaskToSubmit>> CropTypeHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList) {
-    outAllTasksList.append(TaskToSubmit{ "crop-type-fused", {}} );
+QList<std::reference_wrapper<TaskToSubmit>> CropTypeHandler::CreateTasks(const CropTypeJobConfig &jobCfg,
+                                                                         QList<TaskToSubmit> &outAllTasksList) {
+    QList<std::reference_wrapper<const TaskToSubmit>> ctParentTasks;
+    if(jobCfg.referenceDataSource == "earth_signature") {
+        outAllTasksList.append(TaskToSubmit{ "earth-signature", {}} );
+        ctParentTasks.append(outAllTasksList[0]);
+    }
+    outAllTasksList.append(TaskToSubmit{ "crop-type-fused", ctParentTasks} );
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     for(TaskToSubmit &task: outAllTasksList) {
@@ -88,21 +109,38 @@ QList<std::reference_wrapper<TaskToSubmit>> CropTypeHandler::CreateTasks(QList<T
 }
 
 NewStepList CropTypeHandler::CreateSteps(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-            QList<TaskToSubmit> &allTasksList, const CropTypeJobConfig &cfg, const QList<ProductDetails> &productDetails) {
+            QList<TaskToSubmit> &allTasksList, const CropTypeJobConfig &cfg) {
     int curTaskIdx = 0;
     NewStepList allSteps;
+    if(cfg.referenceDataSource == "earth_signature") {
+        TaskToSubmit &esTask = allTasksList[curTaskIdx++];
+        const QStringList &esArgs = GetEarthSignatureTaskArgs(cfg, esTask);
+        allSteps.append(CreateTaskStep(esTask, "EarthSignature", esArgs));
+    }
     TaskToSubmit &cropTypeTask = allTasksList[curTaskIdx++];
 
-    QStringList corpTypeArgs = GetCropTypeTaskArgs(ctx, event, cfg, productDetails, cropTypeTask);
-    allSteps.append(CreateTaskStep(cropTypeTask, "CropTypeFused", corpTypeArgs));
+    const QStringList &cropTypeArgs = GetCropTypeTaskArgs(ctx, event, cfg, cropTypeTask);
+    allSteps.append(CreateTaskStep(cropTypeTask, "CropTypeFused", cropTypeArgs));
     return allSteps;
 }
 
-QStringList CropTypeHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                    const CropTypeJobConfig &cfg, const QList<ProductDetails> &productDetails, TaskToSubmit &cropTypeTask) {
+QStringList CropTypeHandler::GetEarthSignatureTaskArgs(const CropTypeJobConfig &cfg, TaskToSubmit &earthSignatureTask) {
 
-    const TilesTimeSeries  &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, productDetails,
-                                                                          ProductType::L2AProductTypeId);
+    const auto &workingDir = earthSignatureTask.GetFilePath("");
+    QStringList esArgs = {
+                            "--site-id", QString::number(cfg.siteId),
+                            "--working-dir", workingDir,
+                            "--out-shp", cfg.referencePolygons,
+                            "--start-date", cfg.startDate.toString("yyyy-MM-dd"),
+                            "--end-date", cfg.endDate.toString("yyyy-MM-dd")
+                         };
+    return esArgs;
+}
+
+QStringList CropTypeHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+                    const CropTypeJobConfig &cfg, TaskToSubmit &cropTypeTask) {
+
+    const TilesTimeSeries  &mapTiles = GroupL2ATiles(ctx, cfg.productDetails);
 
     const auto &outputDir = cropTypeTask.GetFilePath("");
     const auto &outPropsPath = cropTypeTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
@@ -174,17 +212,6 @@ QStringList CropTypeHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, co
 void CropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
-    const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
-    if(productDetails.size() == 0) {
-        // try to get the start and end date if they are given
-        ctx.MarkJobFailed(event.jobId);
-        throw std::runtime_error(
-            QStringLiteral("No products provided at input or no products available in the specified interval").
-                    toStdString());
-    }
-
     CropTypeJobConfig cfg;
     GetJobConfig(ctx, event, cfg);
 
@@ -199,9 +226,8 @@ void CropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     // get the crop mask
     if(cfg.cropMask.isEmpty()) {
         // determine the crop mask based on the input products
-        QDateTime dtStartDate, dtEndDate;
-        if(ProcessorHandlerHelper::GetIntevalFromProducts(prds, dtStartDate, dtEndDate)) {
-            const ProductList &l4AProductList = ctx.GetProducts(event.siteId, (int)ProductType::L4AProductTypeId, dtStartDate, dtEndDate);
+        if(cfg.startDate.isValid() && cfg.endDate.isValid()) {
+            const ProductList &l4AProductList = ctx.GetProducts(event.siteId, (int)ProductType::L4AProductTypeId, cfg.startDate, cfg.endDate);
             if(l4AProductList.size() > 0) {
                 // get the last L4A product
                 cfg.cropMask = l4AProductList[l4AProductList.size()-1].fullPath;
@@ -210,9 +236,9 @@ void CropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     }
 
     QList<TaskToSubmit> allTasksList;
-    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList);
+    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(cfg, allTasksList);
     SubmitTasks(ctx, cfg.jobId, allTasksListRef);
-    NewStepList allSteps = CreateSteps(ctx, event, allTasksList, cfg, productDetails);
+    NewStepList allSteps = CreateSteps(ctx, event, allTasksList, cfg);
     ctx.SubmitSteps(allSteps);
 }
 
@@ -246,8 +272,6 @@ ProcessorJobDefinitionParams CropTypeHandler::GetProcessingDefinitionImpl(Schedu
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -302,7 +326,11 @@ ProcessorJobDefinitionParams CropTypeHandler::GetProcessingDefinitionImpl(Schedu
     QString cropMaskFolder;
     QDateTime startDate = seasonStartDate;
     QDateTime endDate = qScheduledDate;
-    ProductList l4AProductList = ctx.GetProducts(siteId, (int)ProductType::L4AProductTypeId, startDate, endDate);
+    // ensure we have at least one month of data
+    if (seasonStartDate.addMonths(1) > endDate) {
+        endDate = seasonStartDate.addMonths(1);
+    }
+    const  ProductList &l4AProductList = ctx.GetProducts(siteId, (int)ProductType::L4AProductTypeId, startDate, endDate);
     // get the last created Crop Mask
     QDateTime maxDate;
     for(int i = 0; i<l4AProductList.size(); i++) {
@@ -311,29 +339,29 @@ ProcessorJobDefinitionParams CropTypeHandler::GetProcessingDefinitionImpl(Schedu
             maxDate = l4AProductList[i].created;
         }
     }
-    params.jsonParameters = "{ \"crop_mask\": \"" + cropMaskFolder + "\", " + refStr + "}";
-    params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
-    // Normally, we need at least 1 product available, the crop mask and the shapefile in order to be able to create a L4B product
-    // but if we do not return here, the schedule block waiting for products (that might never happen)
-    bool waitForAvailProcInputs = (cfgValues["processor.l4b.sched_wait_proc_inputs"].value.toInt() != 0);
-    if((waitForAvailProcInputs == false) ||
-            ((params.productList.size() > 0) && !cropMaskFolder.isEmpty() && !shapeFile.isEmpty())) {
-        params.isValid = true;
+
+    params.isValid = true;
+    if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L4BProductTypeId, startDate, endDate) ||
+            cropMaskFolder.isEmpty() || shapeFile.isEmpty()) {
+        // do not trigger yet the schedule.
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::debug(QStringLiteral("Scheduled job for L4B and site ID %1 with start date %2 and end date %3 will "
+                                     "not be executed (retried later) "
+                                     "(cropMask = %4, shapeFile = %5)!")
+                      .arg(siteId)
+                      .arg(startDate.toString())
+                      .arg(endDate.toString())
+                      .arg(cropMaskFolder)
+                      .arg(shapeFile));
+    } else {
+        params.jsonParameters = "{ \"crop_mask\": \"" + cropMaskFolder + "\", " + refStr + "}";
+        params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
         Logger::debug(QStringLiteral("Executing scheduled job. Scheduler extracted for L4B a number "
                                      "of %1 products for site ID %2 with start date %3 and end date %4!")
                       .arg(params.productList.size())
                       .arg(siteId)
                       .arg(startDate.toString())
                       .arg(endDate.toString()));
-    } else {
-        Logger::debug(QStringLiteral("Scheduled job for L4B and site ID %1 with start date %2 and end date %3 will not be executed "
-                                     "(productsNo = %4, cropMask = %5, shapeFile = %6)!")
-                      .arg(siteId)
-                      .arg(startDate.toString())
-                      .arg(endDate.toString())
-                      .arg(params.productList.size())
-                      .arg(cropMaskFolder)
-                      .arg(shapeFile));
     }
 
     return params;

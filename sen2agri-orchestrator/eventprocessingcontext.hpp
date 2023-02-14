@@ -13,7 +13,6 @@ class EventProcessingContext : public ExecutionContextBase
 public:
     EventProcessingContext(PersistenceManagerDBProvider &persistenceManager);
 
-    std::map<QString, QString> GetConfigurationParameters(const QString &prefix, int siteId = -1);
     std::map<QString, QString> GetJobConfigurationParameters(int jobId, const QString &prefix);
 
     int SubmitJob(const NewJob &job);

@@ -13,6 +13,8 @@
 
 using namespace orchestrator::products;
 
+#define DEFAULT_HALF_SYNTHESIS      15
+
 void CompositeHandler::CreateTasksForNewProducts(const CompositeJobConfig &cfg, QList<TaskToSubmit> &outAllTasksList,
                                                 QList<std::reference_wrapper<const TaskToSubmit>> &outProdFormatterParentsList,
                                                 const TileTimeSeriesInfo &tileTemporalFilesInfo)
@@ -121,6 +123,13 @@ void CompositeHandler::HandleNewTilesList(EventProcessingContext &ctx,
         const auto &masksFile = maskHandler.GetFilePath("all_masks_file.tif");
         QStringList maskHandlerArgs = { "MaskHandler", "-xml",         inputProduct.tileMetaFile, "-out",
                                         masksFile,     "-sentinelres", resolutionStr };
+        if (inputProduct.srcPrdDetails.GetProduct().productTypeId == ProductType::MaskedL2AProductTypeId) {
+            const auto &inExtMask = GetL2AExternalMask(inputProduct.srcPrdDetails);
+            if (inExtMask != "") {
+                maskHandlerArgs.append("-extmsk");
+                maskHandlerArgs.append(inExtMask);
+            }
+        }
         steps.append(CreateTaskStep(maskHandler, "MaskHandler", maskHandlerArgs));
         cleanupTemporaryFilesList.append(masksFile);
 
@@ -366,7 +375,7 @@ void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     GetJobConfig(ctx, event, cfg);
 
     int resolution = cfg.resolution;
-    const TilesTimeSeries &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, prdDetails, ProductType::L2AProductTypeId);
+    const TilesTimeSeries &mapTiles = GroupL2ATiles(ctx, prdDetails);
 
     QList<CompositeProductFormatterParams> listParams;
 
@@ -450,12 +459,9 @@ void CompositeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitt
         cfg.resolution = 10;
     }
 
-    const QString &generate20MS2ResStr = cfg.allCfgMap["processor.l3a.generate_20m_s2_resolution"];
-    cfg.bGenerate20MS2Res = (generate20MS2ResStr.toInt() != 0);
-
-
-    cfg.l3aSynthesisDate = parameters["synthesis_date"].toString();
-    cfg.synthalf = parameters["half_synthesis"].toString();
+    cfg.bGenerate20MS2Res = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfg.allCfgMap, "generate_20m_s2_resolution", "processor.l3a.");
+    cfg.l3aSynthesisDate = ProcessorHandlerHelper::GetStringConfigValue(parameters, cfg.allCfgMap, "synthesis_date", "processor.l3a.");
+    cfg.synthalf = ProcessorHandlerHelper::GetStringConfigValue(parameters, cfg.allCfgMap, "half_synthesis", "processor.l3a.");
 
     // Get the parameters from the configuration
     // Get the Half Synthesis interval value if it was not specified by the user
@@ -487,10 +493,7 @@ void CompositeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitt
 QStringList CompositeHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const CompositeJobConfig &cfg,
                                     const QList<ProductDetails> &productDetails, const QList<CompositeProductFormatterParams> &productParams) {
 
-    const auto &targetFolder = GetFinalProductFolder(ctx, cfg.jobId, cfg.siteId);
     const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.xml");
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-
     WriteExecutionInfosFile(executionInfosPath, cfg, productDetails);
 
     QDateTime dtStartDate, dtEndDate;
@@ -498,60 +501,51 @@ QStringList CompositeHandler::GetProductFormatterArgs(TaskToSubmit &productForma
     if(ProcessorHandlerHelper::GetIntevalFromProducts(productDetails, dtStartDate, dtEndDate)) {
         timePeriod = dtStartDate.toString("yyyyMMdd") + "_" + dtEndDate.toString("yyyyMMdd");
     }
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot", targetFolder,
-                                         "-fileclass", "SVT1",
-                                         "-level", "L3A",
-                                         "-timeperiod", timePeriod,
-                                         "-baseline", "01.00",
-                                         "-siteid", QString::number(cfg.siteId),
-                                         "-processor", "composite",
-                                         "-compress", "1",
-                                         "-gipp", executionInfosPath,
-                                         "-outprops", outPropsPath};
+    QStringList additionalArgs;
     const std::unique_ptr<ProductHelper> &l2aPrdHelper = ProductHelperFactory::GetProductHelper(productDetails[productDetails.size() - 1]);
     const QStringList &l2aPrdMetaFiles = l2aPrdHelper->GetProductMetadataFiles();
     if (l2aPrdMetaFiles.size() > 0) {
-        productFormatterArgs += "-il";
-        productFormatterArgs += l2aPrdMetaFiles[0];
+        additionalArgs += "-il";
+        additionalArgs += l2aPrdMetaFiles[0];
     }
 
     if(cfg.lutPath.size() > 0) {
-        productFormatterArgs += "-lut";
-        productFormatterArgs += cfg.lutPath;
+        additionalArgs += "-lut";
+        additionalArgs += cfg.lutPath;
     }
 
-    productFormatterArgs += "-processor.composite.refls";
+    additionalArgs += "-processor.composite.refls";
     for(const CompositeProductFormatterParams &params: productParams) {
-        productFormatterArgs += GetProductFormatterTile(params.tileId);
-        productFormatterArgs += params.prevL3AProdRefls;
+        additionalArgs += GetProductFormatterTile(params.tileId);
+        additionalArgs += params.prevL3AProdRefls;
     }
-    productFormatterArgs += "-processor.composite.weights";
+    additionalArgs += "-processor.composite.weights";
     for(const CompositeProductFormatterParams &params: productParams) {
-        productFormatterArgs += GetProductFormatterTile(params.tileId);
-        productFormatterArgs += params.prevL3AProdWeights;
+        additionalArgs += GetProductFormatterTile(params.tileId);
+        additionalArgs += params.prevL3AProdWeights;
     }
-    productFormatterArgs += "-processor.composite.flags";
+    additionalArgs += "-processor.composite.flags";
     for(const CompositeProductFormatterParams &params: productParams) {
-        productFormatterArgs += GetProductFormatterTile(params.tileId);
-        productFormatterArgs += params.prevL3AProdFlags;
+        additionalArgs += GetProductFormatterTile(params.tileId);
+        additionalArgs += params.prevL3AProdFlags;
     }
-    productFormatterArgs += "-processor.composite.dates";
+    additionalArgs += "-processor.composite.dates";
     for(const CompositeProductFormatterParams &params: productParams) {
-        productFormatterArgs += GetProductFormatterTile(params.tileId);
-        productFormatterArgs += params.prevL3AProdDates;
+        additionalArgs += GetProductFormatterTile(params.tileId);
+        additionalArgs += params.prevL3AProdDates;
     }
-    productFormatterArgs += "-processor.composite.rgb";
+    additionalArgs += "-processor.composite.rgb";
     for(const CompositeProductFormatterParams &params: productParams) {
-        productFormatterArgs += GetProductFormatterTile(params.tileId);
-        productFormatterArgs += params.prevL3ARgbFile;
+        additionalArgs += GetProductFormatterTile(params.tileId);
+        additionalArgs += params.prevL3ARgbFile;
     }
     if (IsCloudOptimizedGeotiff(cfg.allCfgMap)) {
-        productFormatterArgs += "-cog";
-        productFormatterArgs += "1";
+        additionalArgs += "-cog";
+        additionalArgs += "1";
     }
 
-    return productFormatterArgs;
+    return GetDefaultProductFormatterArgs(ctx, productFormatterTask, cfg.jobId, cfg.siteId,
+                                          "L3A", timePeriod, "composite", additionalArgs, false, executionInfosPath);
 }
 
 
@@ -636,8 +630,6 @@ ProcessorJobDefinitionParams CompositeHandler::GetProcessingDefinitionImpl(Sched
                                                           const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -673,8 +665,8 @@ ProcessorJobDefinitionParams CompositeHandler::GetProcessingDefinitionImpl(Sched
     seasonStartDate = seasonStartDate.addDays(startSeasonOffset);
 
     int halfSynthesis = mapCfg["processor.l3a.half_synthesis"].value.toInt();
-    if(halfSynthesis == 0)
-        halfSynthesis = 15;
+    if(halfSynthesis == 0 || halfSynthesis < DEFAULT_HALF_SYNTHESIS)
+        halfSynthesis = DEFAULT_HALF_SYNTHESIS;
     int synthDateOffset = mapCfg["processor.l3a.synth_date_sched_offset"].value.toInt();
     if(synthDateOffset == 0)
         synthDateOffset = 30;
@@ -687,13 +679,22 @@ ProcessorJobDefinitionParams CompositeHandler::GetProcessingDefinitionImpl(Sched
         startDate = seasonStartDate;
     }
     QDateTime endDate = halfSynthesisDate.addDays(halfSynthesis);
+    // make sure that for the first month we have at least the default half synthesis
+    if (seasonStartDate.addDays(halfSynthesis) > endDate) {
+        endDate = seasonStartDate.addDays(halfSynthesis);
+    }
 
-    params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
-    // Normally, we need at least 1 product available in order to be able to create a L3A product
-    // but if we do not return here, the schedule block waiting for products (that might never happen)
-    bool waitForAvailProcInputs = (mapCfg["processor.l3a.sched_wait_proc_inputs"].value.toInt() != 0);
-    if((waitForAvailProcInputs == false) || (params.productList.size() > 0)) {
-        params.isValid = true;
+    params.isValid = true;
+    if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L3AProductTypeId, startDate, endDate)) {
+        // do not trigger yet the schedule.
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::debug(QStringLiteral("Scheduled job for L3A and site ID %1 with start date %2 and end date %3 will "
+                                     "not be executed retried later due to no products or not all inputs pre-processed!")
+                              .arg(siteId)
+                              .arg(startDate.toString())
+                              .arg(endDate.toString()));
+    } else {
+        params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
         params.jsonParameters = "{ \"synthesis_date\": \"" + halfSynthesisDate.toString("yyyyMMdd") + "\"}";
         Logger::debug(QStringLiteral("Executing scheduled job. Scheduler extracted for L3A a number "
                                      "of %1 products for site ID %2 with start date %3 and end date %4!")
@@ -701,14 +702,17 @@ ProcessorJobDefinitionParams CompositeHandler::GetProcessingDefinitionImpl(Sched
                       .arg(siteId)
                       .arg(startDate.toString())
                       .arg(endDate.toString()));
-    } else {
-        Logger::debug(QStringLiteral("Scheduled job for L3A and site ID %1 with start date %2 and end date %3 will not be executed (no products)!")
-                      .arg(siteId)
-                      .arg(startDate.toString())
-                      .arg(endDate.toString()));
     }
-
     return params;
 }
 
+QString CompositeHandler::GetL2AExternalMask(const ProductDetails &prdDetails)
+{
+    std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdDetails);
+    const QStringList &extMasks = helper->GetProductMasks();
+    if (extMasks.size() > 0 ) {
+        return extMasks[0];
+    }
+    return "";
+}
 

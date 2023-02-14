@@ -25,9 +25,7 @@ public:
     static bool GetStrataFile(const QString &refDir, QString &strataShapeFile);
     static bool GetCropReferenceFile(const QString &refDir, QString &shapeFile, QString &referenceRasterFile, QString &strataShapeFile);
 
-    static bool CompareProductDates(const ProductDetails &prd1, const ProductDetails &prd2);
     static QList<ProductDetails> GetProductDetails(const ProductList &prds, EventProcessingContext &ctx);
-    static TilesTimeSeries GroupTiles(EventProcessingContext &ctx, int siteId, const QList<ProductDetails> &productDetails, ProductType productType);
     static QMap<QDate, QList<ProductDetails>> GroupByDate(const QList<ProductDetails> &prdDetails);
     static bool GetIntevalFromProducts(const QList<ProductDetails> &prdDetails, QDateTime &minTime, QDateTime &maxTime);
     static bool GetIntevalFromProducts(const ProductList &products, QDateTime &minTime, QDateTime &maxTime);
@@ -37,9 +35,9 @@ public:
 
     static QString GetMapValue(const std::map<QString, QString> &configParameters, const QString &key, const QString &defVal = "");
     static bool GetBoolConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
-                            const QString &key, const QString &cfgPrefix);
+                            const QString &key, const QString &cfgPrefix, bool defVal = false);
     static int GetIntConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
-                          const QString &key, const QString &cfgPrefix);
+                          const QString &key, const QString &cfgPrefix, int defVal = 0);
     static QString GetStringConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                             const QString &key, const QString &cfgPrefix);
 

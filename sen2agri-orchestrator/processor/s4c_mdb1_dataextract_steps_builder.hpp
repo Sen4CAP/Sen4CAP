@@ -8,6 +8,11 @@
 #define PARCELS_PRD_KEYS_PREFIX   "general.parcels_product."
 
 typedef struct {
+    QString configName;
+    QString paramName;
+} MetricType;
+
+typedef struct {
     QDateTime productDate;
     QDateTime insertedDate;
 
@@ -92,6 +97,7 @@ private:
     QDateTime prdMinDate;
     QDateTime prdMaxDate;
 
+    static QList<MetricType> supportedMetrics;
     static QList<MarkerType> allMarkerFileTypes;
     QList<MarkerType> enabledMarkers;
     QList<ProductType> enabledMarkersProductTypes;

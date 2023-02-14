@@ -20,6 +20,15 @@ void CropMaskHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitte
     auto resourceParameters = ctx.GetJobConfigurationParameters(event.jobId, "resources.working-mem");
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
 
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId,
+                                               &cfg.startDate, &cfg.endDate);
+    cfg.productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
+    if(cfg.productDetails.size() == 0) {
+        ctx.MarkJobFailed(event.jobId);
+        throw std::runtime_error(
+            QStringLiteral("No products provided at input or no products available in the specified interval").
+                    toStdString());
+    }
     cfg.jobId = event.jobId;
     cfg.siteId = event.siteId;
     cfg.resolution = 0;
@@ -28,25 +37,29 @@ void CropMaskHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitte
         cfg.resolution = 10;
     }
 
-    cfg.referencePolygons = parameters["reference_polygons"].toString();
-    cfg.strataShp = parameters["strata_shape"].toString();
-    // if the strata is not set by the user, try to take it from the database
-    if(cfg.strataShp.size() == 0) {
-        QString siteName = ctx.GetSiteShortName(event.siteId);
-        // Get the reference dir
-        QString refDir = configParameters["processor.l4a.reference_data_dir"];
-        refDir = refDir.replace("{site}", siteName);
-        QString strataFile;
-        if(ProcessorHandlerHelper::GetStrataFile(refDir, strataFile) &&
-                QFile::exists(strataFile)) {
-            cfg.strataShp = strataFile;
-        }
-    }
+    QString siteName = ctx.GetSiteShortName(event.siteId);
+    cfg.referenceDataSource = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "reference_data_source", S2A_CM_PREFIX);
+    if (cfg.referenceDataSource == "earth_signature") {
+        cfg.referencePolygons = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "earth_signature_insitu", S2A_CM_PREFIX);
+        cfg.referencePolygons = cfg.referencePolygons.replace("{site}", siteName);
+    } else {
 
-    cfg.referenceRaster = parameters["reference_raster"].toString();
-    // if the reference raster is not set, then initialize it with the reference map
-    if(cfg.referenceRaster.size() == 0) {
-        cfg.referenceRaster = configParameters["processor.l4a.reference-map"];
+        cfg.referencePolygons = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "reference_polygons", S2A_CM_PREFIX);
+        cfg.strataShp = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "strata_shape", S2A_CM_PREFIX);
+        // if the strata is not set by the user, try to take it from the database
+        if(cfg.strataShp.size() == 0) {
+            QString siteName = ctx.GetSiteShortName(event.siteId);
+            // Get the reference dir
+            QString refDir = configParameters["processor.l4a.reference_data_dir"];
+            refDir = refDir.replace("{site}", siteName);
+            QString strataFile;
+            if(ProcessorHandlerHelper::GetStrataFile(refDir, strataFile) &&
+                    QFile::exists(strataFile)) {
+                cfg.strataShp = strataFile;
+            }
+        }
+
+        cfg.referenceRaster = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "reference-map", S2A_CM_PREFIX);
     }
 
     cfg.lutPath = configParameters["processor.l4a.lut_path"];
@@ -115,33 +128,56 @@ void CropMaskHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitte
     cfg.maxParallelism = maxParallelism > 0 ? std::experimental::optional<int>(maxParallelism) : std::experimental::nullopt;
 }
 
-QList<std::reference_wrapper<TaskToSubmit>> CropMaskHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList) {
-    outAllTasksList.append(TaskToSubmit{ "crop-mask-fused", {}} );
+QList<std::reference_wrapper<TaskToSubmit>> CropMaskHandler::CreateTasks(const CropMaskJobConfig &jobCfg,
+                                                                         QList<TaskToSubmit> &outAllTasksList) {
+    QList<std::reference_wrapper<const TaskToSubmit>> cmParentTasks;
+    if(jobCfg.referenceDataSource == "earth_signature") {
+        outAllTasksList.append(TaskToSubmit{ "earth-signature", {}} );
+        cmParentTasks.append(outAllTasksList[0]);
+    }
+    outAllTasksList.append(TaskToSubmit{ "crop-mask-fused", cmParentTasks} );
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     for(TaskToSubmit &task: outAllTasksList) {
         allTasksListRef.append(task);
     }
     return allTasksListRef;
-
 }
 
 NewStepList CropMaskHandler::CreateSteps(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-              QList<TaskToSubmit> &allTasksList, const CropMaskJobConfig &cfg, const QList<ProductDetails> &prdDetails) {
+              QList<TaskToSubmit> &allTasksList, const CropMaskJobConfig &cfg) {
     int curTaskIdx = 0;
     NewStepList allSteps;
+    if(cfg.referenceDataSource == "earth_signature") {
+        TaskToSubmit &esTask = allTasksList[curTaskIdx++];
+        const QStringList &esArgs = GetEarthSignatureTaskArgs(cfg, esTask);
+        allSteps.append(CreateTaskStep(esTask, "EarthSignature", esArgs));
+    }
+
     TaskToSubmit &cropMaskTask = allTasksList[curTaskIdx++];
 
-    QStringList corpTypeArgs = GetCropTypeTaskArgs(ctx, event, cfg, prdDetails, cropMaskTask);
+    QStringList corpTypeArgs = GetCropMaskTaskArgs(ctx, event, cfg, cropMaskTask);
     allSteps.append(CreateTaskStep(cropMaskTask, "CropMaskFused", corpTypeArgs));
     return allSteps;
 }
 
-QStringList CropMaskHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                          const CropMaskJobConfig &cfg, const QList<ProductDetails> &prdDetails, TaskToSubmit &cropMaskTask) {
+QStringList CropMaskHandler::GetEarthSignatureTaskArgs(const CropMaskJobConfig &cfg, TaskToSubmit &earthSignatureTask) {
 
-    const TilesTimeSeries  &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, prdDetails,
-                                                                ProductType::L2AProductTypeId);
+    const auto &workingDir = earthSignatureTask.GetFilePath("");
+    QStringList esArgs = {
+                            "--site-id", QString::number(cfg.siteId),
+                            "--working-dir", workingDir,
+                            "--out-shp", cfg.referencePolygons,
+                            "--start-date", cfg.startDate.toString("yyyy-MM-dd"),
+                            "--end-date", cfg.endDate.toString("yyyy-MM-dd")
+                         };
+    return esArgs;
+}
+
+QStringList CropMaskHandler::GetCropMaskTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+                          const CropMaskJobConfig &cfg, TaskToSubmit &cropMaskTask) {
+
+    const TilesTimeSeries  &mapTiles = GroupL2ATiles(ctx, cfg.productDetails);
 
     const auto &outputDir = cropMaskTask.GetFilePath("");
     const auto &outPropsPath = cropMaskTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
@@ -225,27 +261,16 @@ QStringList CropMaskHandler::GetCropTypeTaskArgs(EventProcessingContext &ctx, co
     return cropMaskArgs;
 }
 
-
 void CropMaskHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
-    const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
-    if(productDetails.size() == 0) {
-        ctx.MarkJobFailed(event.jobId);
-        throw std::runtime_error(
-            QStringLiteral("No products provided at input or no products available in the specified interval").
-                    toStdString());
-    }
-
     CropMaskJobConfig cfg;
     GetJobConfig(ctx, event, cfg);
 
     QList<TaskToSubmit> allTasksList;
-    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList);
+    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(cfg, allTasksList);
     SubmitTasks(ctx, cfg.jobId, allTasksListRef);
-    NewStepList allSteps = CreateSteps(ctx, event, allTasksList, cfg, productDetails);
+    NewStepList allSteps = CreateSteps(ctx, event, allTasksList, cfg);
     ctx.SubmitSteps(allSteps);
 }
 
@@ -277,8 +302,6 @@ ProcessorJobDefinitionParams CropMaskHandler::GetProcessingDefinitionImpl(Schedu
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -318,6 +341,11 @@ ProcessorJobDefinitionParams CropMaskHandler::GetProcessingDefinitionImpl(Schedu
     QString strataShapeFile;
     // if none of the reference files were found, cannot run the CropMask
     if(!ProcessorHandlerHelper::GetCropReferenceFile(refDir, shapeFile, referenceRasterFile, strataShapeFile) && !QFile::exists(refMap)) {
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::debug(QStringLiteral("Scheduled job for L4A and site ID %1 with scheduled date %2 will "
+                                     "not be executed (retried later due to no reference file found)!")
+                      .arg(siteId)
+                      .arg(qScheduledDate.toString()));
         return params;
     }
     if (!shapeFile.isEmpty()) {
@@ -345,6 +373,10 @@ ProcessorJobDefinitionParams CropMaskHandler::GetProcessingDefinitionImpl(Schedu
     } else {
         movingWindow = 12;
     }
+    // ensure we have at least one month of data
+    if (seasonStartDate.addMonths(1) > endDate) {
+        endDate = seasonStartDate.addMonths(1);
+    }
     // we have monthly production so we use the season date or the moving window of 12 months (or specified)
     if(endDate.addMonths(-movingWindow) > seasonStartDate) {
         startDate = endDate.addMonths(-movingWindow);
@@ -352,11 +384,16 @@ ProcessorJobDefinitionParams CropMaskHandler::GetProcessingDefinitionImpl(Schedu
         startDate = seasonStartDate;
     }
 
-    params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
-    // Normally, we need at least 1 product available in order to be able to create a L4A product
-    // but if we do not return here, the schedule block waiting for products (that might never happen)
-    bool waitForAvailProcInputs = (cfgValues["processor.l4a.sched_wait_proc_inputs"].value.toInt() != 0);
-    if((waitForAvailProcInputs == false) || (params.productList.size() > 0)) {
+    if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L4AProductTypeId, startDate, endDate)) {
+        // do not trigger yet the schedule.
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::debug(QStringLiteral("Scheduled job for L4A and site ID %1 with start date %2 and end date %3 will "
+                                     "not be executed (retried later due to no products or not all inputs pre-processed)!")
+                      .arg(siteId)
+                      .arg(startDate.toString())
+                      .arg(endDate.toString()));
+    } else {
+        params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
         params.isValid = true;
         Logger::debug(QStringLiteral("Executing scheduled job. Scheduler extracted for L4A a number "
                                      "of %1 products for site ID %2 with start date %3 and end date %4!")
@@ -364,13 +401,7 @@ ProcessorJobDefinitionParams CropMaskHandler::GetProcessingDefinitionImpl(Schedu
                       .arg(siteId)
                       .arg(startDate.toString())
                       .arg(endDate.toString()));
-    } else {
-        Logger::debug(QStringLiteral("Scheduled job for L4A and site ID %1 with start date %2 and end date %3 will not be executed (no products)!")
-                      .arg(siteId)
-                      .arg(startDate.toString())
-                      .arg(endDate.toString()));
     }
-
     return params;
 }
 

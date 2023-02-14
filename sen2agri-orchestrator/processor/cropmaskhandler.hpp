@@ -3,10 +3,15 @@
 #include "processorhandler.hpp"
 #include "optional.hpp"
 
+#define S2A_CM_PREFIX "processor.l4a."
+
 typedef struct {
     int jobId;
     int siteId;
     int resolution;
+    QList<ProductDetails> productDetails;
+    QDateTime startDate;
+    QDateTime endDate;
 
     QString referencePolygons;
     QString referenceRaster;
@@ -41,6 +46,9 @@ typedef struct {
 
     int tileThreadsHint;
     std::experimental::optional<int> maxParallelism;
+
+    QString referenceDataSource;
+
 } CropMaskJobConfig;
 
 class CropMaskHandler : public ProcessorHandler
@@ -56,9 +64,9 @@ private:
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;
 
     void GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event,CropMaskJobConfig &cfg);
-    QList<std::reference_wrapper<TaskToSubmit>> CreateTasks(QList<TaskToSubmit> &outAllTasksList);
+    QList<std::reference_wrapper<TaskToSubmit>> CreateTasks(const CropMaskJobConfig &jobCfg, QList<TaskToSubmit> &outAllTasksList);
     NewStepList CreateSteps(EventProcessingContext &ctx, const JobSubmittedEvent &event, QList<TaskToSubmit> &allTasksList,
-                            const CropMaskJobConfig &cfg, const QList<ProductDetails> &prdDetails);
-    QStringList GetCropTypeTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event, const CropMaskJobConfig &cfg,
-                                        const QList<ProductDetails> &listProducts, TaskToSubmit &cropMaskTask);
+                            const CropMaskJobConfig &cfg);
+    QStringList GetEarthSignatureTaskArgs(const CropMaskJobConfig &cfg, TaskToSubmit &earthSignatureTask);
+    QStringList GetCropMaskTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event, const CropMaskJobConfig &cfg, TaskToSubmit &cropMaskTask);
 };

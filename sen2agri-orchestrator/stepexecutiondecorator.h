@@ -37,5 +37,6 @@ private:
     ConfigurationParameterValueList m_ScratchPathConfig;
     ConfigurationParameterValueList m_modulePathsConfig;
     QString m_archiverPath;
+    QString m_configPath;
 
 };

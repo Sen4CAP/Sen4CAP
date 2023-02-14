@@ -16,50 +16,72 @@ using namespace orchestrator::products;
 static QStringList YIELD_INPUT_MARKER_NAMES = {"LAI"};
 
 QList<std::reference_wrapper<TaskToSubmit>>
-S4SYieldHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList, const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder)
+S4SYieldHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit> &outAllTasksList,
+                             const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder)
 {
     int curTaskIdx = 0;
-    const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
-    QList<int> mergeTasksIndexes;
-    QList<std::reference_wrapper<const TaskToSubmit>> mergeTasks;
-    for (const auto &marker: enabledMarkers) {
-        // Create data extraction tasks if needed
-        int minDataExtrIndex = curTaskIdx;
-        dataExtrStepsBuilder.CreateTasks(marker, outAllTasksList, curTaskIdx);
-        int maxDataExtrIndex = curTaskIdx-1;
+    int yieldFeatExtrIdx = -1;
+    int prdFormatterParentIdx = -1;
+    if (cfg.extractFeatures) {
+        const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
+        QList<int> mergeTasksIndexes;
+        QList<std::reference_wrapper<const TaskToSubmit>> mergeTasks;
+        for (const auto &marker: enabledMarkers) {
+            // Create data extraction tasks if needed
+            int minDataExtrIndex = curTaskIdx;
+            dataExtrStepsBuilder.CreateTasks(marker, outAllTasksList, curTaskIdx);
+            int maxDataExtrIndex = curTaskIdx-1;
 
-        if (YIELD_INPUT_MARKER_NAMES.contains(marker.marker)) {
-            // create the merging tasks if needed
-            int mergeTaskIdx = CreateMergeTasks(outAllTasksList, marker.marker.toLower() + "-data-extraction-merge",
-                                                    minDataExtrIndex, maxDataExtrIndex, curTaskIdx);
-            mergeTasksIndexes.push_back(mergeTaskIdx);
-            mergeTasks.append(outAllTasksList[mergeTaskIdx]);
+            if (YIELD_INPUT_MARKER_NAMES.contains(marker.marker)) {
+                // create the merging tasks if needed
+                int mergeTaskIdx = CreateMergeTasks(outAllTasksList, marker.marker.toLower() + "-data-extraction-merge",
+                                                        minDataExtrIndex, maxDataExtrIndex, curTaskIdx);
+                mergeTasksIndexes.push_back(mergeTaskIdx);
+                mergeTasks.append(outAllTasksList[mergeTaskIdx]);
+            }
         }
+
+        outAllTasksList.append(TaskToSubmit{"s4s-savitzky-golay", mergeTasks});
+        int sgIdx = curTaskIdx++;
+
+        outAllTasksList.append(TaskToSubmit{ "s4s-yield-parcels-extraction", {} });
+        int extractParcelsIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-extract-weather-features", {outAllTasksList[extractParcelsIdx]}  });
+        int weatherFeatIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-merge-weather-features", {outAllTasksList[weatherFeatIdx]}  });
+        int mergeWeatherFeatIdx = curTaskIdx++;
+
+        outAllTasksList.append(TaskToSubmit{ "s4s-safy-lut", mergeTasks });
+        int safyLutTaskIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-merge-lai-with-grid", {outAllTasksList[weatherFeatIdx]}  });
+        int mergeLaiGridIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-safy-optim", {outAllTasksList[safyLutTaskIdx], outAllTasksList[mergeLaiGridIdx]} });
+        int safyOptimIdx = curTaskIdx++;
+
+        outAllTasksList.append(TaskToSubmit{ "s4s-merge-all-features", {outAllTasksList[sgIdx],
+                                                                            outAllTasksList[mergeWeatherFeatIdx],
+                                                                            outAllTasksList[safyOptimIdx] }  });
+        int mergeAllFeatIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-yield-features-extraction", {outAllTasksList[mergeAllFeatIdx]} });
+
+        yieldFeatExtrIdx = curTaskIdx++;
+        prdFormatterParentIdx = yieldFeatExtrIdx;
     }
 
-    outAllTasksList.append(TaskToSubmit{"s4s-savitzky-golay", mergeTasks});
-    int sgIdx = curTaskIdx++;
+    if (cfg.enableYieldModel) {
+        outAllTasksList.append(TaskToSubmit{ "s4s-yield-reference-extraction", {} });
+        int yieldReferenceExtrIdx = curTaskIdx++;
 
-    outAllTasksList.append(TaskToSubmit{ "s4s-extract-weather-features", mergeTasks });
-    int weatherFeatIdx = curTaskIdx++;
-    outAllTasksList.append(TaskToSubmit{ "s4s-merge-weather-features", {outAllTasksList[weatherFeatIdx]}  });
-    int mergeWeatherFeatIdx = curTaskIdx++;
+        QList<std::reference_wrapper<const TaskToSubmit>> parentTasks = {outAllTasksList[yieldReferenceExtrIdx]};
+        if (yieldFeatExtrIdx != -1) {
+            parentTasks.append(outAllTasksList[yieldFeatExtrIdx]);
+        }
+        outAllTasksList.append(TaskToSubmit{ "s4s-yield-model", parentTasks });
+        int yieldModelIdx = curTaskIdx++;
+        prdFormatterParentIdx = yieldModelIdx;
+    }
 
-    outAllTasksList.append(TaskToSubmit{ "s4s-safy-lut", mergeTasks });
-    int safyLutTaskIdx = curTaskIdx++;
-    outAllTasksList.append(TaskToSubmit{ "s4s-merge-lai-with-grid", {outAllTasksList[weatherFeatIdx]}  });
-    int mergeLaiGridIdx = curTaskIdx++;
-    outAllTasksList.append(TaskToSubmit{ "s4s-safy-optim", {outAllTasksList[safyLutTaskIdx], outAllTasksList[mergeLaiGridIdx]} });
-    int safyOptimIdx = curTaskIdx++;
-
-    outAllTasksList.append(TaskToSubmit{ "s4s-merge-all-features", {outAllTasksList[sgIdx],
-                                                                        outAllTasksList[mergeWeatherFeatIdx],
-                                                                        outAllTasksList[safyOptimIdx] }  });
-    int mergeAllFeatIdx = curTaskIdx++;
-    outAllTasksList.append(TaskToSubmit{ "s4s-yield-features-extraction", {outAllTasksList[mergeAllFeatIdx]} });
-
-    int yieldFearExtrIdx = curTaskIdx++;
-    outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[yieldFearExtrIdx]} });
+    outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[prdFormatterParentIdx]} });
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     for (TaskToSubmit &task : outAllTasksList) {
@@ -73,106 +95,140 @@ NewStepList S4SYieldHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,const
 {
     int curTaskIdx = 0;
     NewStepList allSteps;
-    const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
-    // if only data extraction is needed, then we create the filter ids step into the general configured directory
-    QString mdb1File;
-    for (const auto &marker: enabledMarkers) {
-        QStringList dataExtrDirs;
-        // Create the data extraction steps if needed
-        dataExtrStepsBuilder.CreateSteps(marker, allTasksList, allSteps, curTaskIdx, dataExtrDirs);
+    QStringList prdFormatterFiles;
+    QString yieldFeaturesOutputPath;
+    if (cfg.extractFeatures) {
+        const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
+        // if only data extraction is needed, then we create the filter ids step into the general configured directory
+        QString mdb1File;
+        for (const auto &marker: enabledMarkers) {
+            QStringList dataExtrDirs;
+            // Create the data extraction steps if needed
+            dataExtrStepsBuilder.CreateSteps(marker, allTasksList, allSteps, curTaskIdx, dataExtrDirs);
 
-        if (YIELD_INPUT_MARKER_NAMES.contains(marker.marker)) {
-            // If scheduled jobs, force adding the data extraction directories for all markers as data extraction source
-            if (cfg.isScheduled) {
-                // add a data extraction dir corresponding to the scheduled date which is saved as jobCfg.maxPrdDate
-                const QString &dataExtrDirName = dataExtrStepsBuilder.GetDataExtractionDir(marker.marker);
-                if (!dataExtrDirs.contains(dataExtrDirName)) {
-                    QDir().mkpath(dataExtrDirName);
-                    dataExtrDirs.append(dataExtrDirName);
+            if (YIELD_INPUT_MARKER_NAMES.contains(marker.marker)) {
+                // If scheduled jobs, force adding the data extraction directories for all markers as data extraction source
+                if (cfg.isScheduled) {
+                    // add a data extraction dir corresponding to the scheduled date which is saved as jobCfg.maxPrdDate
+                    const QString &dataExtrDirName = dataExtrStepsBuilder.GetDataExtractionDir(marker.marker);
+                    if (!dataExtrDirs.contains(dataExtrDirName)) {
+                        QDir().mkpath(dataExtrDirName);
+                        dataExtrDirs.append(dataExtrDirName);
+                    }
                 }
+                const QString &retMergedFile = CreateStepsForFilesMerge(cfg, dataExtrDirs, allSteps,
+                                                                         allTasksList, curTaskIdx);
+                mdb1File = retMergedFile;
+                break;
             }
-            const QString &retMergedFile = CreateStepsForFilesMerge(cfg, dataExtrDirs, allSteps,
-                                                                     allTasksList, curTaskIdx);
-            mdb1File = retMergedFile;
-            break;
         }
-    }
-    if (mdb1File.size() == 0) {
-        cfg.pCtx->MarkJobFailed(cfg.event.jobId);
-        throw std::runtime_error(
-            QStringLiteral(
-                "Impossible to create the merged markers file. LAI Marker not enabled in database for MDB1?")
-                .toStdString());
+        if (mdb1File.size() == 0) {
+            cfg.pCtx->MarkJobFailed(cfg.event.jobId);
+            throw std::runtime_error(
+                QStringLiteral(
+                    "Impossible to create the merged markers file. LAI Marker not enabled in database for MDB1?")
+                    .toStdString());
+        }
+
+        TaskToSubmit &sgTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &parcelExtrTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &weatherFeatTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &weatherFeatMergeTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &safyLutTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &mergeLaiGridTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &safyOptimTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &mergeAllFeatTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &yieldFeatTask = allTasksList[curTaskIdx++];
+
+        // Resulting files from tasks
+        const QString &sgLaiPath = sgTask.GetFilePath("sg_lai_outputs.csv");
+        const QString &sgCropGrowthIndicesPath = sgTask.GetFilePath("sg_crop_growth_indices.csv");
+        const QString &sgYieldLaiFeaturesPath = sgTask.GetFilePath("yield_lai_features.csv");
+
+        const QString &parcelGpkgPath = parcelExtrTask.GetFilePath("parcels.gpkg");
+        const QString &weatherWorkingDirPath = weatherFeatTask.GetFilePath("");
+
+        // Workaround: Althogh created by weather featurs task, we add these here in order to avoid putting them in the same directory
+        const QString &outGridToParcelIdsPath = weatherFeatMergeTask.GetFilePath("grid_to_parcels.csv");
+        const QString &outParcelIdsToGridPath = weatherFeatMergeTask.GetFilePath("parcels_to_grid.csv");
+        const QString &outWeatherFeaturesPath = weatherFeatMergeTask.GetFilePath("weather_raw_features.csv");
+
+        const QString &safyLutRangesFilesDirPath = safyLutTask.GetFilePath("");
+        const QString &safyLutOutputDirPath = safyLutTask.GetFilePath("");
+
+        const QString &outMergedLaiGrid = mergeLaiGridTask.GetFilePath("lai_with_grid.csv");
+
+        const QString &safyOptimWorkingDirPath = safyOptimTask.GetFilePath("");
+        const QString &safyOptimOutputPath = safyOptimTask.GetFilePath("safy_optim_features.csv");
+
+        const QString &allFeatOutputPath = mergeAllFeatTask.GetFilePath("merged_weather_sg_features.csv");
+        const QString &yieldFeaturesOutputPath = yieldFeatTask.GetFilePath("yield_features.csv");
+
+        // we expect the value to be something like /mnt/archive/s4s_yield/{site}/{year}/SAFY_Config/safy_params.json
+        const QString &safyParamFile = GetProcessorDirValue(cfg.parameters, cfg.configParameters, "safy_params_path",
+                                                            cfg.siteShortName, QString::number(cfg.year));
+
+        // Inputs extraction and reflectances stack tif creation
+        const QStringList &sgArgs = GetSGLaiTaskArgs(cfg.year, mdb1File, sgLaiPath, sgCropGrowthIndicesPath, sgYieldLaiFeaturesPath);
+        allSteps.append(CreateTaskStep(sgTask, "SavitzkyGolay", sgArgs ));
+
+        const QStringList &parcelsExtractionArgs = GetParcelsExtractionTaskArgs(cfg.event.siteId, cfg.year,
+                                                                                      parcelGpkgPath);
+        allSteps.append(CreateTaskStep(parcelExtrTask, "ParcelsExtraction", parcelsExtractionArgs));
+
+        const QStringList &weatherFeaturesExtractionArgs = GetWeatherFeaturesTaskArgs(cfg.weatherPrdPaths, parcelGpkgPath,
+                                                                                      weatherWorkingDirPath,
+                                                                                      outGridToParcelIdsPath, outParcelIdsToGridPath);
+        allSteps.append(CreateTaskStep(weatherFeatTask, "WeatherFeatures", weatherFeaturesExtractionArgs));
+
+        const QStringList &weatherFeaturesMergeArgs = GetWeatherFeaturesMergeTaskArgs(weatherWorkingDirPath, outWeatherFeaturesPath);
+        allSteps.append(CreateTaskStep(weatherFeatMergeTask, "WeatherFeaturesMerge", weatherFeaturesMergeArgs));
+
+        const QStringList &safyLutArgs = GetSafyLutTaskArgs(cfg.weatherPrdPaths, safyParamFile, safyLutRangesFilesDirPath, safyLutOutputDirPath);
+        allSteps.append(CreateTaskStep(safyLutTask, "SafyLut", safyLutArgs));
+
+        const QStringList &mergeLaiGridArgs = GetMergeLaiGridTaskArgs(mdb1File, outParcelIdsToGridPath, outMergedLaiGrid);
+        allSteps.append(CreateTaskStep(mergeLaiGridTask, "MergeLaiWitGrid", mergeLaiGridArgs));
+
+        const QStringList &safyOptimArgs = GetSafyOptimTaskArgs(cfg.weatherPrdPaths, cfg.year, outMergedLaiGrid,
+                                                                outGridToParcelIdsPath, safyParamFile, safyLutRangesFilesDirPath,
+                                                                safyLutOutputDirPath, safyOptimWorkingDirPath, safyOptimOutputPath);
+        allSteps.append(CreateTaskStep(safyOptimTask, "SafyOptim", safyOptimArgs));
+
+        const QStringList &allFeatureMergeArgs = GetAllFeaturesMergeTaskArgs(outWeatherFeaturesPath, sgCropGrowthIndicesPath, safyOptimOutputPath,
+                                                                              allFeatOutputPath);
+        allSteps.append(CreateTaskStep(mergeAllFeatTask, "AllFeaturesMerge", allFeatureMergeArgs));
+
+        const QStringList &yieldFeatExtractionArgs = GetYieldFeaturesTaskArgs(allFeatOutputPath, yieldFeaturesOutputPath);
+        allSteps.append(CreateTaskStep(yieldFeatTask, "YieldFeatures", yieldFeatExtractionArgs));
+        prdFormatterFiles.append(yieldFeaturesOutputPath);
+    } else {
+        yieldFeaturesOutputPath = cfg.yieldFeatPrd;
     }
 
-    TaskToSubmit &sgTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &weatherFeatTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &weatherFeatMergeTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &safyLutTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &mergeLaiGridTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &safyOptimTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &mergeAllFeatTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &yieldFeatTask = allTasksList[curTaskIdx++];
+    int yieldRefTskId = -1;
+    int yieldModelTskId = -1;
+    if (cfg.enableYieldModel) {
+        yieldRefTskId = curTaskIdx++;
+        yieldModelTskId = curTaskIdx++;
+    }
     TaskToSubmit &productFormatterTask = allTasksList[curTaskIdx++];
 
-    // Resulting files from tasks
-    const QString &sgLaiPath = sgTask.GetFilePath("sg_lai_outputs.csv");
-    const QString &sgCropGrowthIndicesPath = sgTask.GetFilePath("sg_crop_growth_indices.csv");
-    const QString &sgYieldLaiFeaturesPath = sgTask.GetFilePath("yield_lai_features.csv");
+    if (cfg.enableYieldModel) {
+        TaskToSubmit &yieldReferenceExtrTask = allTasksList[yieldRefTskId];
+        const QString &yieldReference = yieldReferenceExtrTask.GetFilePath("yield_reference.csv");
+        const QStringList &yieldReferenceExtractionArgs = GetYieldReferenceExtractionTaskArgs(cfg.event.siteId, yieldReference, cfg.startDate, cfg.endDate);
+        allSteps.append(CreateTaskStep(yieldReferenceExtrTask, "YieldReferenceExtraction", yieldReferenceExtractionArgs));
 
-    const QString &weatherWorkingDirPath = weatherFeatTask.GetFilePath("");
+        TaskToSubmit &yieldModelTask = allTasksList[yieldModelTskId];
+        const QString &yieldEstimateOutputPath = yieldModelTask.GetFilePath("yield_estimate.csv");
+        const QString &yieldStatisticalUnitEstimateOutputPath = yieldModelTask.GetFilePath("yield_statistical_units_estimate.csv");
+        const QStringList &yieldModelExtractionArgs = GetYieldModelTaskArgs(cfg, yieldReference, yieldFeaturesOutputPath, yieldEstimateOutputPath, yieldStatisticalUnitEstimateOutputPath);
+        allSteps.append(CreateTaskStep(yieldModelTask, "YieldModel", yieldModelExtractionArgs));
+        prdFormatterFiles += {yieldEstimateOutputPath, yieldStatisticalUnitEstimateOutputPath};
+    }
 
-    // Workaround: Althogh created by weather featurs task, we add these here in order to avoid putting them in the same directory
-    const QString &outGridToParcelIdsPath = weatherFeatMergeTask.GetFilePath("grid_to_parcels.csv");
-    const QString &outParcelIdsToGridPath = weatherFeatMergeTask.GetFilePath("parcels_to_grid.csv");
-    const QString &outWeatherFeaturesPath = weatherFeatMergeTask.GetFilePath("weather_raw_features.csv");
-
-    const QString &safyLutRangesFilesDirPath = safyLutTask.GetFilePath("");
-    const QString &safyLutOutputDirPath = safyLutTask.GetFilePath("");
-
-    const QString &outMergedLaiGrid = mergeLaiGridTask.GetFilePath("lai_with_grid.csv");
-
-    const QString &safyOptimWorkingDirPath = safyOptimTask.GetFilePath("");
-    const QString &safyOptimOutputPath = safyOptimTask.GetFilePath("safy_optim_features.csv");
-
-    const QString &allFeatOutputPath = mergeAllFeatTask.GetFilePath("merged_weather_sg_features.csv");
-    const QString &yieldFeaturesOutputPath = yieldFeatTask.GetFilePath("yield_features.csv");
-
-    // we expect the value to be something like /mnt/archive/s4s_yield/{site}/{year}/SAFY_Config/safy_params.json
-    const QString &safyParamFile = GetProcessorDirValue(cfg.parameters, cfg.configParameters, "safy_params_path",
-                                                        cfg.siteShortName, QString::number(cfg.year));
-
-    // Inputs extraction and reflectances stack tif creation
-    const QStringList &sgArgs = GetSGLaiTaskArgs(cfg.year, mdb1File, sgLaiPath, sgCropGrowthIndicesPath, sgYieldLaiFeaturesPath);
-    allSteps.append(CreateTaskStep(sgTask, "SavitzkyGolay", sgArgs ));
-
-    const QStringList &weatherFeaturesExtractionArgs = GetWeatherFeaturesTaskArgs(cfg.weatherPrdPaths, cfg.parcelsFilePath,
-                                                                                  weatherWorkingDirPath,
-                                                                                  outGridToParcelIdsPath, outParcelIdsToGridPath);
-    allSteps.append(CreateTaskStep(weatherFeatTask, "WeatherFeatures", weatherFeaturesExtractionArgs));
-
-    const QStringList &weatherFeaturesMergeArgs = GetWeatherFeaturesMergeTaskArgs(weatherWorkingDirPath, outWeatherFeaturesPath);
-    allSteps.append(CreateTaskStep(weatherFeatMergeTask, "WeatherFeaturesMerge", weatherFeaturesMergeArgs));
-
-    const QStringList &safyLutArgs = GetSafyLutTaskArgs(cfg.weatherPrdPaths, safyParamFile, safyLutRangesFilesDirPath, safyLutOutputDirPath);
-    allSteps.append(CreateTaskStep(safyLutTask, "SafyLut", safyLutArgs));
-
-    const QStringList &mergeLaiGridArgs = GetMergeLaiGridTaskArgs(mdb1File, outParcelIdsToGridPath, outMergedLaiGrid);
-    allSteps.append(CreateTaskStep(mergeLaiGridTask, "MergeLaiWitGrid", mergeLaiGridArgs));
-
-    const QStringList &safyOptimArgs = GetSafyOptimTaskArgs(cfg.weatherPrdPaths, cfg.year, outMergedLaiGrid,
-                                                            outGridToParcelIdsPath, safyParamFile, safyLutRangesFilesDirPath,
-                                                            safyLutOutputDirPath, safyOptimWorkingDirPath, safyOptimOutputPath);
-    allSteps.append(CreateTaskStep(safyOptimTask, "SafyOptim", safyOptimArgs));
-
-    const QStringList &allFeatureMergeArgs = GetAllFeaturesMergeTaskArgs(outWeatherFeaturesPath, sgCropGrowthIndicesPath, safyOptimOutputPath,
-                                                                          allFeatOutputPath);
-    allSteps.append(CreateTaskStep(mergeAllFeatTask, "AllFeaturesMerge", allFeatureMergeArgs));
-
-    const QStringList &yieldFeatExtractionArgs = GetYieldFeaturesTaskArgs(allFeatOutputPath, yieldFeaturesOutputPath);
-    allSteps.append(CreateTaskStep(yieldFeatTask, "YieldFeatures", yieldFeatExtractionArgs));
-
-    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, {yieldFeaturesOutputPath});
+    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, prdFormatterFiles);
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
 
     return allSteps;
@@ -214,6 +270,11 @@ QStringList S4SYieldHandler::GetSGLaiTaskArgs(int year, const QString &mdb1File,
                 "--indices-output", outCropGrowthIndicesFile,
                 "--metrics-output", outLaiMetricsFile
     };
+}
+
+QStringList S4SYieldHandler::GetParcelsExtractionTaskArgs(int siteId, int year, const QString &outFile)
+{
+    return { "-s", QString::number(siteId), "-y", QString::number(year), "-o", outFile};
 }
 
 QStringList S4SYieldHandler::GetWeatherFeaturesTaskArgs(const QStringList &weatherFiles, const QString &parcelsShp,
@@ -279,8 +340,76 @@ QStringList S4SYieldHandler::GetAllFeaturesMergeTaskArgs(const QString &weatherF
 QStringList S4SYieldHandler::GetYieldFeaturesTaskArgs(const QString &inMergedFeatures, const QString &outYieldFeatures)
 {
 
-    return {   "-i", inMergedFeatures, "-o", outYieldFeatures};
+    return { "-i", inMergedFeatures, "-o", outYieldFeatures};
 }
+
+QStringList S4SYieldHandler::GetYieldReferenceExtractionTaskArgs(int siteId, const QString &outRefYieldFile, const QDateTime &startDate, const QDateTime &endDate)
+{
+    return { "-s", QString::number(siteId), "-o", outRefYieldFile,
+             "-b", startDate.toString("yyyy-MM-dd"),
+             "-e",  endDate.toString("yyyy-MM-dd")};
+}
+
+QStringList S4SYieldHandler::GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString & yieldReference, const QString &inYieldFeatures,
+                                                   const QString &outYieldEstimates, const QString &outYieldSUEstimates)
+{
+    const QString &algo = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
+                                                                               "algorithm", S4S_YIELD_FEATS_CFG_PREFIX);
+    const QString &selectionType = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
+                                                                               "selection-type", S4S_YIELD_FEATS_CFG_PREFIX);
+    QString maxAutomaticFeaturesNo;
+    if (selectionType == "automatic") {
+        maxAutomaticFeaturesNo = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
+                                                                                   "max-automatic-features-no", S4S_YIELD_FEATS_CFG_PREFIX);
+    }
+    QStringList manualFeatures;
+    if (selectionType == "manual") {
+        const QString &strManualFeatures = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
+                                                                                   "manual-selection-features", S4S_YIELD_FEATS_CFG_PREFIX);
+        manualFeatures = strManualFeatures.split(',', QString::SkipEmptyParts);
+    }
+
+//        "-a", "--algo", required=False, default="rf", help="The algorithm to be used. lm - LinerarRegression, svm - SupportVectortMachine. Default rf = RandomForest", choices=['rf', 'lm', 'svm']
+//        "-s", "--selection", required=False, default="none", help="The selection mode. Possible values: automatic or manual or none", choices=['none', 'manual', 'automatic']
+//        "-m", "--manual-selection-features", required=False, help="The selection features list for the manual mode", nargs='+', type=str
+//        "-n", "--max-automatic-features-no", required=False, help="The maximum number of selection features for the automatic mode", type=int, default = 44
+//        "-i", "--input-features", required=True, help="The input features file"
+//        "-r", "--yield-reference", required=True, help="The input yield reference file"
+//        "-u", "--statistical-unit-fields", required=True, help="The input statistical unit fields mapping file"
+//        "-o", "--output", required=True, help="The output estimation file"
+//        "-e", "--output-statistical-units-estimate", required=True, help="The output for statistical units estimation file"
+
+
+    QStringList args =
+    {
+        "-i", inYieldFeatures,
+        "-o", outYieldEstimates,
+        "-e", outYieldSUEstimates,
+        "-r", yieldReference,
+        // "-u", statisticalUnitFields // TODO: We should obtain this somehow
+    };
+    if (algo.size() > 0) {
+        args += "-a";
+        args.append(algo);
+    }
+    if (selectionType.size() > 0) {
+        args += "-s";
+        args.append(selectionType);
+    }
+    if (manualFeatures.size() > 0) {
+        args += "-m";
+        args.append(manualFeatures);
+    }
+    if (maxAutomaticFeaturesNo.size() > 0 && maxAutomaticFeaturesNo.toInt() > 0)
+    {
+        args += "-n";
+        args += maxAutomaticFeaturesNo;
+    }
+
+    return args;
+}
+
+
 
 bool S4SYieldHandler::GetStartEndDatesFromProducts(EventProcessingContext &ctx,
                                                       const JobSubmittedEvent &event,
@@ -299,14 +428,15 @@ void S4SYieldHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                                 const JobSubmittedEvent &event)
 {
     S4SYieldJobConfig cfg(&ctx, event);
-
     S4CMarkersDB1DataExtractStepsBuilder dataExtrStepsBuilder;
-    dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, cfg.parameters, event.siteId, event.jobId, {"LAI"});
+    if (cfg.extractFeatures) {
+        dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, cfg.parameters, event.siteId, event.jobId, {"LAI"});
+    }
 
     UpdateJobConfigParameters(cfg);
 
     QList<TaskToSubmit> allTasksList;
-    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList, dataExtrStepsBuilder);
+    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(cfg, allTasksList, dataExtrStepsBuilder);
     SubmitTasks(ctx, cfg.event.jobId, allTasksListRef);
     NewStepList allSteps = CreateSteps(allTasksList, cfg, dataExtrStepsBuilder);
     ctx.SubmitSteps(allSteps);
@@ -358,8 +488,6 @@ ProcessorJobDefinitionParams S4SYieldHandler::GetProcessingDefinitionImpl(
     const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -369,7 +497,7 @@ ProcessorJobDefinitionParams S4SYieldHandler::GetProcessingDefinitionImpl(
                                           qScheduledDate, requestOverrideCfgValues);
     // if cannot get the season dates
     if (!success) {
-        Logger::debug(QStringLiteral("Scheduler Permanent Crops: Error getting season start dates for "
+        Logger::debug(QStringLiteral("Scheduler Yield Features: Error getting season start dates for "
                                      "site %1 for scheduled date %2!")
                           .arg(siteId)
                           .arg(qScheduledDate.toString()));
@@ -378,7 +506,7 @@ ProcessorJobDefinitionParams S4SYieldHandler::GetProcessingDefinitionImpl(
 
     QDateTime limitDate = seasonEndDate.addMonths(2);
     if (qScheduledDate > limitDate) {
-        Logger::debug(QStringLiteral("Scheduler Permanent Crops: Error scheduled date %1 greater than the "
+        Logger::debug(QStringLiteral("Scheduler Yield Features: Error scheduled date %1 greater than the "
                                      "limit date %2 for site %3!")
                           .arg(qScheduledDate.toString())
                           .arg(limitDate.toString())
@@ -441,69 +569,35 @@ void S4SYieldHandler::UpdateJobConfigParameters(S4SYieldJobConfig &cfgToUpdate)
             cfgToUpdate.endDate = ProcessorHandlerHelper::GetDateTimeFromString(strEndDate);
         }
     } else {
-        const QStringList &filterProductNames = GetInputProductNames(cfgToUpdate.parameters);
-        cfgToUpdate.SetFilteringProducts(filterProductNames);
+        if (cfgToUpdate.extractFeatures) {
+            const QStringList &filterProductNames = GetInputProductNames(cfgToUpdate.parameters);
+            cfgToUpdate.SetFilteringProducts(filterProductNames);
 
-        QList<ProductDetails> productDetails;
-        bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, productDetails);
-        if (!ret || productDetails.size() == 0) {
-            // try to get the start and end date if they are given
-            cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
-            throw std::runtime_error(
-                QStringLiteral(
-                    "No products provided at input or no products available in the specified interval")
-                    .toStdString());
-        }
-    }
-    cfgToUpdate.year = cfgToUpdate.endDate.date().year();           // TODO: see if this is valid
-    const QString &parcelsFile = GetParcelsFile(cfgToUpdate);
-    cfgToUpdate.SetParcelsFile(parcelsFile);
-    const ProductList &weatherPrdsList = cfgToUpdate.pCtx->GetProducts(cfgToUpdate.event.siteId, (int)ProductType::ERA5WeatherProductTypeId,
-                                                                       cfgToUpdate.startDate, cfgToUpdate.endDate);
-    if (weatherPrdsList.size() == 0) {
-        cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
-        throw std::runtime_error(QStringLiteral("No weather products were found in database for site %1 and interval %2 - %3.")
-                                 .arg(cfgToUpdate.siteShortName)
-                                 .arg(cfgToUpdate.startDate.toString())
-                                 .arg(cfgToUpdate.endDate.toString()).toStdString());
-    }
-    cfgToUpdate.SetWeatherProducts(weatherPrdsList);
-}
-
-//TODO: We should return here only one LPIS product according to the year
-QString S4SYieldHandler::GetParcelsFile(const S4SYieldJobConfig &cfg) {
-    // We take it the last LPIS product for this site.
-    const ProductList &samplesPrds = S4CUtils::GetLpisProduct(cfg.pCtx, cfg.event.siteId);
-    if (samplesPrds.size() == 0) {
-        cfg.pCtx->MarkJobFailed(cfg.event.jobId);
-        throw std::runtime_error(QStringLiteral("No LPIS product found in database for the yield for site %1.").
-                                 arg(cfg.siteShortName).toStdString());
-    }
-
-    QDateTime lastPrdInsertedDate;
-    QString retParcelsFile;
-    for(const Product &samplesPrd: samplesPrds) {
-        int insituPrdYear = samplesPrd.created.date().year();
-        if (insituPrdYear != cfg.year) {
-            continue;
-        }
-        // ignore LPIS products from a year where we already added an LPIS product newer
-        if (lastPrdInsertedDate.isValid() && samplesPrd.inserted < lastPrdInsertedDate) {
-            continue;
-        }
-
-        QDir directory(samplesPrd.fullPath);
-        QRegularExpression reGpkg("in_?situ_.*_\\d{4}.gpkg");
-        const QStringList &dirFiles = directory.entryList(QStringList() << "*.gpkg",QDir::Files);
-        foreach(const QString &fileName, dirFiles) {
-            if (reGpkg.match(fileName).hasMatch())  {
-                retParcelsFile = directory.filePath(fileName);
-                break;
+            QList<ProductDetails> productDetails;
+            bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, productDetails);
+            if (!ret || productDetails.size() == 0) {
+                // try to get the start and end date if they are given
+                cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
+                throw std::runtime_error(
+                    QStringLiteral(
+                        "No products provided at input or no products available in the specified interval")
+                        .toStdString());
             }
         }
     }
-
-    return retParcelsFile;
+    cfgToUpdate.year = cfgToUpdate.endDate.date().year();           // TODO: see if this is valid
+    if (cfgToUpdate.extractFeatures) {
+        const ProductList &weatherPrdsList = cfgToUpdate.pCtx->GetProducts(cfgToUpdate.event.siteId, (int)ProductType::ERA5WeatherProductTypeId,
+                                                                           cfgToUpdate.startDate, cfgToUpdate.endDate);
+        if (weatherPrdsList.size() == 0) {
+            cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
+            throw std::runtime_error(QStringLiteral("No weather products were found in database for site %1 and interval %2 - %3.")
+                                     .arg(cfgToUpdate.siteShortName)
+                                     .arg(cfgToUpdate.startDate.toString())
+                                     .arg(cfgToUpdate.endDate.toString()).toStdString());
+        }
+        cfgToUpdate.SetWeatherProducts(weatherPrdsList);
+    }
 }
 
 bool S4SYieldHandler::IsScheduledJobRequest(const QJsonObject &parameters) {
@@ -529,30 +623,10 @@ QString S4SYieldHandler::GetProcessorDirValue(const QJsonObject &parameters, con
 
 QStringList S4SYieldHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask,
                                                      const S4SYieldJobConfig &cfg, const QStringList &listFiles) {
-    // ProductFormatter /home/cudroiu/sen2agri-processors-build
-    //    -vectprd 1 -destroot /mnt/archive_new/test/Sen4CAP_L4B_Tests/NLD_Validation_TSA/OutPrdFormatter
-    //    -fileclass OPER -level S4C_L4B -baseline 01.00 -siteid 4 -timeperiod 20180101_20181231 -processor generic
-    //    -processor.generic.files <files_list>
-
-    const auto &targetFolder = GetFinalProductFolder(*(cfg.pCtx), cfg.event.jobId, cfg.event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.txt");
     QString strTimePeriod = cfg.startDate.toString("yyyyMMddTHHmmss").append("_").append(cfg.endDate.toString("yyyyMMddTHHmmss"));
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot", targetFolder,
-                                         "-fileclass", "OPER",
-                                         "-level", "S4S_YIELDFEAT",
-                                         "-vectprd", "1",
-                                         "-baseline", "01.00",
-                                         "-siteid", QString::number(cfg.event.siteId),
-                                         "-timeperiod", strTimePeriod,
-                                         "-processor", "generic",
-                                         "-outprops", outPropsPath,
-                                         "-gipp", executionInfosPath
-                                       };
-    productFormatterArgs += "-processor.generic.files";
-    productFormatterArgs += listFiles;
-
-    return productFormatterArgs;
+    QStringList additionalArgs = {"-processor.generic.files"};
+    additionalArgs += listFiles;
+    return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.event.jobId, cfg.event.siteId, "S4S_YIELDFEAT", strTimePeriod,
+                                         "generic", additionalArgs, true);
 }
 

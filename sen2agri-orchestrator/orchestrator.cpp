@@ -19,11 +19,13 @@
 #include "processor/agricpracticeshandler.hpp"
 #include "processor/s4c_markersdb1.hpp"
 #include "processor/masked_l2a_handler.hpp"
+#include "processor/s4s_croptypemappinghandler.hpp"
 #include "processor/s4s_permanent_crop_handler.hpp"
 #include "processor/s4s_yieldhandler.hpp"
 #include "processor/trex_handler.hpp"
 #include "processor/compositehandlers1.hpp"
 #include "processor/compositehandlerindicators.hpp"
+#include "processor/zarr_handler.hpp"
 #include "json_conversions.hpp"
 #include "schedulingcontext.h"
 #include "logger.hpp"
@@ -63,6 +65,10 @@ std::map<int, std::unique_ptr<ProcessorHandler>> & GetHandlersMap(PersistenceMan
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4CMarkersDB1Handler>());
         } else if(procDescr.shortName == "l2a_msk") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<MaskedL2AHandler>());
+        } else if(procDescr.processorId == 19) {            // zarr converter
+            handlersMap.emplace(procDescr.processorId, std::make_unique<ZarrHandler>());
+        } else if(procDescr.processorId== 20) {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<S4SCropTypeMappingHandler>());
         } else if(procDescr.shortName == "t_rex_updater") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<TRexHandler>());
         } else if(procDescr.shortName == "s4s_yield_feat") {
@@ -141,9 +147,7 @@ JobDefinition Orchestrator::GetJobDefinition(const ProcessingRequest &request)
     try {
         ProcessorHandler &handler = worker.GetHandler(request.processorId);
         ProcessorJobDefinitionParams procDefParams = handler.GetProcessingDefinition(ctx, request.siteId, request.ttNextScheduledRunTime, requestOverrideCfgValues);
-        jobDef.isValid = procDefParams.isValid;
-        jobDef.retryLater = procDefParams.retryLater;
-        if(jobDef.isValid) {
+        if(procDefParams.isValid) {
             QJsonArray inputProductsArr;
             for (const auto &p : procDefParams.productList) {
                 inputProductsArr.append(p.name);
@@ -163,8 +167,13 @@ JobDefinition Orchestrator::GetJobDefinition(const ProcessingRequest &request)
             }
 
             retObj[QStringLiteral("processor_params")] = processorParamsObj;
-            jobDef.jobDefinitionJson = jsonToString(retObj);
         }
+        QJsonObject schedulingParamsObj;
+        schedulingParamsObj[QStringLiteral("isValid")] = procDefParams.isValid;
+        schedulingParamsObj[QStringLiteral("schedulingFlags")] = procDefParams.schedulingFlags;
+        retObj[QStringLiteral("scheduling_params")] = schedulingParamsObj;
+
+        jobDef.jobDefinitionJson = jsonToString(retObj);
     }
     catch (...) {
         std::exception_ptr p = std::current_exception();

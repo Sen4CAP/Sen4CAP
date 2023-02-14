@@ -18,9 +18,9 @@ class S4SPermanentCropHandler : public ProcessorHandler
         void SetFilteringProducts(const QStringList &filterPrds) {
             filterProductNames = filterPrds;
         }
-        void SetSamplesInfosProducts(const QString &sampleFile) {
-            samplesShapePath = sampleFile;
-        }
+//        void SetSamplesInfosProducts(const QString &sampleFile) {
+//            samplesShapePath = sampleFile;
+//        }
 
         EventProcessingContext *pCtx;
         JobSubmittedEvent event;
@@ -35,7 +35,7 @@ class S4SPermanentCropHandler : public ProcessorHandler
         QJsonObject parameters;
         bool isScheduled;
         int year;
-        QString samplesShapePath;
+        // QString samplesShapePath;
 
     } S4SPermanentCropJobConfig;
 
@@ -52,6 +52,7 @@ private:
                             const S4SPermanentCropJobConfig &cfg);
 
     QStringList GetExtractInputsTaskArgs(const S4SPermanentCropJobConfig &cfg, const QString &outFile);
+    QStringList GetExtractParcelsTaskArgs(int siteId, int year, const QString &outFile);
     QStringList GetBuildVrtTaskArgs(const QString &inputsListFile, const QString &fullStackVrtPath, const QString &workingDir);
     QStringList GetBuildFullStackTifTaskArgs(const QString &inputFilesListPath, const QString &fullStackTifPath, const QString &workingDir);
     QStringList GetPolygonClassStatisticsTaskArgs(const QString &image, const QString &samples, const QString &fieldName, const QString &sampleStats);
@@ -65,9 +66,8 @@ private:
     bool GetStartEndDatesFromProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
                                       QDateTime &startDate, QDateTime &endDate, QList<ProductDetails> &productDetails);
     void UpdateJobConfigParameters(S4SPermanentCropJobConfig &cfgToUpdate);
-    QString ExtractSamplesInfos(const S4SPermanentCropJobConfig &cfg);
-    QStringList GetTileIdsFromProducts(EventProcessingContext &ctx,
-                                        const JobSubmittedEvent &event, const QList<ProductDetails> &productDetails);
+    // QString ExtractSamplesInfos(const S4SPermanentCropJobConfig &cfg);
+    QStringList GetTileIdsFromProducts(EventProcessingContext &ctx, const QList<ProductDetails> &productDetails);
     bool IsScheduledJobRequest(const QJsonObject &parameters);
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, const S4SPermanentCropJobConfig &cfg,
                                         const QStringList &listFiles);

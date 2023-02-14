@@ -345,52 +345,39 @@ QStringList NdviHandler::GetNdviProductFormatterArgs(TaskToSubmit &productFormat
         tileIdsList.append(tileIds.at(0));
     }
 
-    const auto &targetFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
     const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.xml");
-
     const auto &lutFile = ProcessorHandlerHelper::GetMapValue(configParameters, "processor.l3b.lai.lut_path");
-
     WriteExecutionInfosFile(executionInfosPath, prdTilesInfosList);
 
-    QStringList productFormatterArgs = { "ProductFormatter",
-                            "-destroot", targetFolder,
-                            "-fileclass", "OPER",
-                            "-level", "L3B",
-                            "-baseline", "01.00",
-                            "-siteid", QString::number(event.siteId),
-                            "-processor", "vegetation",
-                            "-compress", "1",
-                            "-gipp", executionInfosPath,
-                            "-outprops", outPropsPath};
-    productFormatterArgs += "-il";
+    QStringList additionalArgs = {"-il"};
     for(const TileInfos &tileInfo: prdTilesInfosList) {
-        productFormatterArgs.append(tileInfo.tileFile);
+        additionalArgs.append(tileInfo.tileFile);
     }
 
     if(lutFile.size() > 0) {
-        productFormatterArgs += "-lut";
-        productFormatterArgs += lutFile;
+        additionalArgs += "-lut";
+        additionalArgs += lutFile;
     }
 
-    productFormatterArgs += "-processor.vegetation.laindvi";
+    additionalArgs += "-processor.vegetation.laindvi";
     for(int i = 0; i<tileIdsList.size(); i++) {
-        productFormatterArgs += GetProductFormatterTile(tileIdsList[i]);
-        productFormatterArgs += ndviList[i];
+        additionalArgs += GetProductFormatterTile(tileIdsList[i]);
+        additionalArgs += ndviList[i];
     }
 
-    productFormatterArgs += "-processor.vegetation.laistatusflgs";
+    additionalArgs += "-processor.vegetation.laistatusflgs";
     for(int i = 0; i<tileIdsList.size(); i++) {
-        productFormatterArgs += GetProductFormatterTile(tileIdsList[i]);
-        productFormatterArgs += laiFlgsList[i];
+        additionalArgs += GetProductFormatterTile(tileIdsList[i]);
+        additionalArgs += laiFlgsList[i];
     }
 
     if (IsCloudOptimizedGeotiff(configParameters)) {
-        productFormatterArgs += "-cog";
-        productFormatterArgs += "1";
+        additionalArgs += "-cog";
+        additionalArgs += "1";
     }
 
-    return productFormatterArgs;
+    return GetDefaultProductFormatterArgs(ctx, productFormatterTask, event.jobId, event.siteId, "L3B", "",
+                                         "vegetation", additionalArgs, false, executionInfosPath);
 }
 
 const QString& NdviHandler::GetDefaultCfgVal(std::map<QString, QString> &configParameters, const QString &key, const QString &defVal) {
@@ -442,8 +429,6 @@ ProcessorJobDefinitionParams NdviHandler::GetProcessingDefinitionImpl(Scheduling
                                                           const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;

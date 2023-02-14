@@ -99,15 +99,15 @@ QStringList S4CCropTypeHandler::GetExtractParcelsTaskArgs(const CropTypeJobConfi
                                  cfg.startDate.toString("yyyy-MM-dd"),
                                  "--season-end",
                                  cfg.endDate.toString("yyyy-MM-dd")};
-    if (cfg.tileIds.size() > 0) {
-        extractParcelsArgs += "--tiles";
-        extractParcelsArgs.append(cfg.tileIds);
-    }
+//    if (cfg.tileIds.size() > 0) {
+//        extractParcelsArgs += "--tiles";
+//        extractParcelsArgs.append(cfg.tileIds);
+//    }
 
-    if (cfg.filterProductNames.size() > 0) {
-        extractParcelsArgs += "--products";
-        extractParcelsArgs.append(cfg.filterProductNames);
-    }
+//    if (cfg.filterProductNames.size() > 0) {
+//        extractParcelsArgs += "--products";
+//        extractParcelsArgs.append(cfg.filterProductNames);
+//    }
 
     extractParcelsArgs.append("--");
     extractParcelsArgs.append(parcelsPath);
@@ -176,42 +176,10 @@ QStringList S4CCropTypeHandler::GetProductFormatterArgs(TaskToSubmit &productFor
                                                         const QDateTime &minDate,
                                                         const QDateTime &maxDate)
 {
-    // ProductFormatter /home/cudroiu/sen2agri-processors-build
-    //    -vectprd 1 -destroot
-    //    /mnt/archive_new/test/Sen4CAP_L4C_Tests/NLD_Validation_TSA/OutPrdFormatter -fileclass OPER
-    //    -level S4C_L4C -baseline 01.00 -siteid 4 -timeperiod 20180101_20181231 -processor generic
-    //    -processor.generic.files <dir_with_list>
-
-    const auto &targetFolder = GetFinalProductFolder(ctx, event.jobId, event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.txt");
-    QString strTimePeriod =
-        minDate.toString("yyyyMMddTHHmmss").append("_").append(maxDate.toString("yyyyMMddTHHmmss"));
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot",
-                                         targetFolder,
-                                         "-fileclass",
-                                         "OPER",
-                                         "-level",
-                                         "S4C_L4A",
-                                         "-vectprd",
-                                         "1",
-                                         "-baseline",
-                                         "01.00",
-                                         "-siteid",
-                                         QString::number(event.siteId),
-                                         "-timeperiod",
-                                         strTimePeriod,
-                                         "-processor",
-                                         "generic",
-                                         "-outprops",
-                                         outPropsPath,
-                                         "-gipp",
-                                         executionInfosPath };
-    productFormatterArgs += "-processor.generic.files";
-    productFormatterArgs += tmpPrdDir;
-
-    return productFormatterArgs;
+    QString strTimePeriod = minDate.toString("yyyyMMddTHHmmss").append("_").append(maxDate.toString("yyyyMMddTHHmmss"));
+    QStringList additionalArgs = {"-processor.generic.files", tmpPrdDir};
+    return GetDefaultProductFormatterArgs(ctx, productFormatterTask, event.jobId, event.siteId, "S4C_L4A", strTimePeriod,
+                                         "generic", additionalArgs, true);
 }
 
 bool S4CCropTypeHandler::GetStartEndDatesFromProducts(EventProcessingContext &ctx,
@@ -290,8 +258,6 @@ ProcessorJobDefinitionParams S4CCropTypeHandler::GetProcessingDefinitionImpl(
     const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -333,28 +299,20 @@ ProcessorJobDefinitionParams S4CCropTypeHandler::GetProcessingDefinitionImpl(
                                  "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
                                  "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}");
 
-    // Normally, we need at least 1 product available, the crop mask and the shapefile in order to
-    // be able to create a S4C L4A product but if we do not return here, the schedule block waiting
-    // for products (that might never happen)
-    bool waitForAvailProcInputs =
-        (cfgValues["processor.s4c_l4a.sched_wait_proc_inputs"].value.toInt() != 0);
-    if ((waitForAvailProcInputs == false) || ((params.productList.size() > 0))) {
-        params.isValid = true;
-        Logger::debug(
-            QStringLiteral("Executing scheduled job. Scheduler extracted for S4C L4A a number "
-                           "of %1 products for site ID %2 with start date %3 and end date %4!")
-                .arg(params.productList.size())
-                .arg(siteId)
-                .arg(startDate.toString())
-                .arg(endDate.toString()));
+    params.isValid = true;
+    if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CL4AProductTypeId, startDate, endDate)) {
+        // do not trigger yet the schedule.
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::debug(QStringLiteral("Scheduled job for S4C_L4A and site ID %1 with start date %2 and end date %3 will "
+                                     "not be executed (retried later) ")
+                      .arg(siteId)
+                      .arg(startDate.toString())
+                      .arg(endDate.toString()));
     } else {
-        Logger::debug(QStringLiteral("Scheduled job for S4C L4A and site ID %1 with start date %2 "
-                                     "and end date %3 will not be executed "
-                                     "(productsNo = %4)!")
-                          .arg(siteId)
-                          .arg(startDate.toString())
-                          .arg(endDate.toString())
-                          .arg(params.productList.size()));
+        Logger::debug(QStringLiteral("Executing scheduled S4C_L4A job for site ID %1 with start date %2 and end date %3!")
+                      .arg(siteId)
+                      .arg(startDate.toString())
+                      .arg(endDate.toString()));
     }
 
     return params;
@@ -398,7 +356,7 @@ QStringList S4CCropTypeHandler::GetTileIdsFromProducts(EventProcessingContext &c
                                                        const QList<ProductDetails> &productDetails)
 {
 
-    const TilesTimeSeries &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, productDetails, ProductType::L2AProductTypeId);
+    const TilesTimeSeries &mapTiles = GroupL2ATiles(ctx, productDetails);
 
     // normally, we can use only one list by we want (not necessary) to have the
     // secondary satellite tiles after the main satellite tiles

@@ -244,7 +244,8 @@ enum class ProductType {
     S4SYieldFeatProductTypeId    = 28,
     ERA5WeatherProductTypeId     = 29,
     S1CompositeProductTypeId     = 30,
-    L3IndicatorsCompositeProductTypeId     = 31
+    L3IndicatorsCompositeProductTypeId     = 31,
+    S4SCropTypeMappingProductTypeId     = 32
 };
 
 QDBusArgument &operator<<(QDBusArgument &argument, const ProductType &productType);
@@ -336,6 +337,7 @@ enum class Satellite
     Sentinel2 = 1,
     Landsat8 = 2,
     Sentinel1 = 3,
+    Landsat9 = 4,
 };
 
 class Tile
@@ -1047,10 +1049,15 @@ Q_DECLARE_METATYPE(ProcessingRequest)
 QDBusArgument &operator<<(QDBusArgument &argument, const ProcessingRequest &request);
 const QDBusArgument &operator>>(const QDBusArgument &argument, ProcessingRequest &request);
 
+enum SchedulingFlags {
+    SCH_FLG_SCHEDULE_NEXT = 0,
+    SCH_FLG_RETRY_LATER = 1,
+    SCH_FLG_NOOP_AND_SCHEDULE_NEXT = 2,
+    SCH_FLG_EXEC_AND_NO_SCHEDULE_NEXT = 3
+};
+
 struct JobDefinition
 {
-    bool isValid;
-    bool retryLater;
     int processorId;
     int siteId;
     QString jobDefinitionJson;
@@ -1058,7 +1065,6 @@ struct JobDefinition
     QString toJson() const;
 
     static JobDefinition fromJson(const QString &json);
-
 };
 Q_DECLARE_METATYPE(JobDefinition)
 QDBusArgument &operator<<(QDBusArgument &argument, const JobDefinition &job);
@@ -1067,9 +1073,13 @@ const QDBusArgument &operator>>(const QDBusArgument &argument, JobDefinition &jo
 struct ProcessorJobDefinitionParams
 {
     bool isValid;
-    bool retryLater;
+    int schedulingFlags;
     ProductList productList;
     QString jsonParameters;
+    ProcessorJobDefinitionParams() : isValid(false), schedulingFlags(SCH_FLG_SCHEDULE_NEXT)
+    {
+
+    }
 };
 Q_DECLARE_METATYPE(ProcessorJobDefinitionParams)
 QDBusArgument &operator<<(QDBusArgument &argument, const ProcessorJobDefinitionParams &job);

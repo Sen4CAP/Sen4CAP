@@ -16,6 +16,7 @@
 StepExecutionDecorator::StepExecutionDecorator()
     : dbProvider(Settings::readSettings(getConfigurationFile(*QCoreApplication::instance())))
 {
+    m_configPath = getConfigurationFile(*QCoreApplication::instance());
     m_orchestratorConfig = dbProvider.GetConfigurationParameters(ORCHESTRATOR_CFG_KEYS_ROOT);
     m_archiverPath = GetArchiverRootPath();
     m_ScratchPathConfig = dbProvider.GetConfigurationParameters(QStringLiteral(ORCHESTRATOR_TMP_PATH));
@@ -94,7 +95,9 @@ StepExecutionDecorator::UpdateCommandForDocker(const QString &taskName, const QS
     // docker run --rm -u 1003:1003 -v /mnt/archive:/mnt/archive -v /mnt/scratch:/mnt/scratch sen4cap/processors:2.0.0 crop-type-wrapper.py
     QStringList dockerStepList = {"docker", "run", "--rm", "-u",
                                   QString::number(getuid()) + ":" + QString::number(getgid()),
-                                 "--group-add", QString::number(QFileInfo("/var/run/docker.sock").groupId())};
+                                 "--group-add", QString::number(QFileInfo("/var/run/docker.sock").groupId()),
+                                  "-v", "/var/run/docker.sock:/var/run/docker.sock"
+                                 };
     // add also the additional mounts
     for (const QString &mount: dockerMounts) {
         dockerStepList.append("-v");
@@ -207,6 +210,8 @@ QStringList StepExecutionDecorator::GetDockerMounts(const QString &procName, con
     mounts.append("/mnt/archive/:/mnt/archive/");
     mounts.append(",");
     mounts.append("/etc/sen2agri/:/etc/sen2agri/");
+    mounts.append(",");
+    mounts.append(m_configPath + ":" + m_configPath);
     mounts.append(",");
     mounts.append(m_archiverPath + ":" + m_archiverPath);
     mounts.append(",");

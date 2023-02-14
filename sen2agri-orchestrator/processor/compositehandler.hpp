@@ -77,6 +77,7 @@ private:
     QString DeductBandsMappingFile(const QList<ProductDetails> &prdDetails, const QString &bandsMappingFile, int &resolution);
 
     void GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event,CompositeJobConfig &cfg);
+    QString GetL2AExternalMask(const ProductDetails &prdDetails);
 };
 
 #endif // COMPOSITEHANDLER_HPP

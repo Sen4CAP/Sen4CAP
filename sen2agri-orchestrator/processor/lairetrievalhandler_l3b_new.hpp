@@ -57,15 +57,18 @@ public:
                 // siteShortName = pContext->GetSiteShortName(evt.siteId);
                 laiCfgFile = configParameters[procPrefix + "lai.laibandscfgfile"];
                 for (const QString &index: spectralIndicators.keys()) {
-                    mapIndexGenFlags[index] = IsParamOrConfigKeySet(parameters, configParameters, "produce_" + index, procPrefix + "filter.produce_" + index);
+                    mapIndexGenFlags[index] = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "filter.produce_" + index, procPrefix);
                 }
                 for (const QString &index: biophysicalIndicatorNames) {
-                    bool genIdx = IsParamOrConfigKeySet(parameters, configParameters, "produce_" + index, procPrefix + "filter.produce_" + index);
+                    bool genIdx = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "filter.produce_" + index, procPrefix);
                     mapIndexGenFlags[index] = genIdx;
                     hasBiophysicalIndex |= genIdx;
                 }
-                bGenInDomainFlags = IsParamOrConfigKeySet(parameters, configParameters, "indomflags", procPrefix + "filter.produce_in_domain_flags");
-                parallelizeProducts = IsParamOrConfigKeySet(parameters, configParameters, "parallelize_products", procPrefix + "filter.parallelize_products");
+                bGenInDomainFlags = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "filter.produce_in_domain_flags", procPrefix);
+// TODO: See if is needed such limitation
+//                bGenOutDomainFlags = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "filter.produce_out_domain_flags", procPrefix, true);
+                bGenMosaic = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "produce_mosaic", procPrefix, true);
+                bChainInputsSteps = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "filter.chain_inputs_steps", procPrefix);
 
                 int resolution = 0;
                 if(!ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "resolution", resolution) ||
@@ -77,25 +80,7 @@ public:
                 bRemoveTempFiles = parent->NeedRemoveJobFolder(*pCtx, event.jobId, parent->processorDescr.shortName);
 
                 lutFile = ProcessorHandlerHelper::GetMapValue(configParameters, procPrefix + "lai.lut_path");
-
-            }
-
-            bool IsParamOrConfigKeySet(const QJsonObject &parameters, std::map<QString, QString> &configParameters,
-                                       const QString &cmdLineParamName, const QString &cfgParamKey, bool defVal = true) {
-                bool bIsConfigKeySet = defVal;
-                if(parameters.contains(cmdLineParamName)) {
-                    const auto &value = parameters[cmdLineParamName];
-                    if(value.isDouble())
-                        bIsConfigKeySet = (value.toInt() != 0);
-                    else if(value.isString()) {
-                        bIsConfigKeySet = (value.toString() == "1");
-                    }
-                } else {
-                    if (cfgParamKey != "") {
-                        bIsConfigKeySet = ((configParameters[cfgParamKey]).toInt() != 0);
-                    }
-                }
-                return bIsConfigKeySet;
+                bExtractVegStats = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "vegetation.produce_stats", procPrefix);
             }
 
             EventProcessingContext *pCtx;
@@ -108,10 +93,16 @@ public:
             bool hasBiophysicalIndex;
             QString laiCfgFile;
             bool bGenInDomainFlags;
+// TODO: See if is needed such limitation
+//            bool bGenOutDomainFlags;
+            bool bGenMosaic;
             QString resolutionStr;
             bool bRemoveTempFiles;
             QString lutFile;
-            bool parallelizeProducts;
+            bool bChainInputsSteps;
+
+            // EarthSearch VQA needed
+            bool bExtractVegStats;
 
             static QMap<QString, SpectralIndexDescr> spectralIndicators;
             static QStringList biophysicalIndicatorNames;
@@ -131,6 +122,9 @@ private:
     int CreateSpectralIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
                                          QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
                                          int nCurTaskIdx);
+    int CreateNdviVegStatsTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
+                                QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
+                                int nCurTaskIdx);
     int CreateBiophysicalIndicatorTasks(int parentTaskId, QList<TaskToSubmit> &outAllTasksList,
                                          QList<std::reference_wrapper<const TaskToSubmit>> &productFormatterParentsRefs,
                                          int nCurTaskIdx);
@@ -162,6 +156,8 @@ private:
                                 TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
     int GetStepsForSpectralIndicator(QList<TaskToSubmit> &allTasksList, const QString &indexName, int curTaskIdx,
                                 TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
+    int GetStepsForNdviVegStats(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, const QString &indexName, int curTaskIdx, const TileInfos &prdInfo,
+                                TileResultFiles &tileResultFileInfo,  NewStepList &steps);
     int GetStepsForAnglesCreation(QList<TaskToSubmit> &allTasksList, int curTaskIdx, TileResultFiles &tileResultFileInfo, NewStepList &steps, QStringList &cleanupTemporaryFilesList);
     int GetStepsForMonoDateBI(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList,
                                const QString &indexName, int curTaskIdx, TileResultFiles &tileResultFileInfo,

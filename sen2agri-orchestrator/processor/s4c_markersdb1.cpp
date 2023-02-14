@@ -176,8 +176,6 @@ ProcessorJobDefinitionParams S4CMarkersDB1Handler::GetProcessingDefinitionImpl(S
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -195,16 +193,24 @@ ProcessorJobDefinitionParams S4CMarkersDB1Handler::GetProcessingDefinitionImpl(S
     for (const auto &p : mapCfg) {
         configParams.emplace(p.key, p.value);
     }
+
     // we might have an offset in days from starting the downloading products to start the S4C_L4C production
     // TODO: Is this really needed
     int startSeasonOffset = mapCfg["processor.s4c_l4c.start_season_offset"].value.toInt();
     QDateTime startDate = seasonStartDate.addDays(startSeasonOffset);
-    params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
-                                 "\"end_date\": \"" + qScheduledDate.toString("yyyyMMdd") + "\", " +
-                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
-                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"");
-    params.jsonParameters.append(", \"execution_operation\": \"all\"}");
-
+    if ((qScheduledDate > seasonStartDate.addDays(20)) &&
+        (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L3BProductTypeId, seasonStartDate, qScheduledDate) ||
+        !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2AmpProductTypeId, seasonStartDate, qScheduledDate) ||
+        !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2CoheProductTypeId, seasonStartDate, qScheduledDate))) {
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::error("MDB1 Scheduled job execution will be retried later: Not all input products were yet produced");
+    } else {
+        params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
+                                     "\"end_date\": \"" + qScheduledDate.toString("yyyyMMdd") + "\", " +
+                                     "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                     "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"");
+        params.jsonParameters.append(", \"execution_operation\": \"all\"}");
+    }
     params.isValid = true;
 
     return params;

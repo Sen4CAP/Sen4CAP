@@ -19,7 +19,7 @@ using namespace orchestrator::products;
 #define ANNUAL_PERMANENT_CROP_EXP     "im1b1 + im2b1 + im3b1"
 
 // TODO: These defines shoule be extracted from config
-#define FIELD_NAME          "pr_61_nb"
+#define FIELD_NAME          "code_n1"
 #define SAMPLES_VECTOR_VAL_TO_REPLACE 0
 #define SAMPLES_VECTOR_REPLACING_VAL  3
 
@@ -28,9 +28,12 @@ S4SPermanentCropHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList)
 {
     int curIdx = 0;
     outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-extract-inputs", {} });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-build-refl-stack-tif", { outAllTasksList[curIdx++] } });
+    int inputsExtrTaskIdx = curIdx++;
+    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-extract-parcels", {} });
+    int parcelsExtrTaskIdx = curIdx++;
+    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-build-refl-stack-tif", { outAllTasksList[inputsExtrTaskIdx] } });
 
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-polygon-class-statistics", {outAllTasksList[curIdx++]} });
+    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-polygon-class-statistics", {outAllTasksList[parcelsExtrTaskIdx], outAllTasksList[curIdx++]} });
     outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-selection", {outAllTasksList[curIdx++]} });
     outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-extraction", {outAllTasksList[curIdx++]} });
     outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-rasterization", {outAllTasksList[curIdx++]} });
@@ -72,6 +75,7 @@ NewStepList S4SPermanentCropHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
     int curTaskIdx = 0;
     NewStepList allSteps;
     TaskToSubmit &extractInputsTask = allTasksList[curTaskIdx++];
+    TaskToSubmit &extractParcelsTask = allTasksList[curTaskIdx++];
     TaskToSubmit &buildReflStackTifTask = allTasksList[curTaskIdx++];
     TaskToSubmit &polyClassStatsTask = allTasksList[curTaskIdx++];
     TaskToSubmit &samplesSelectionTask = allTasksList[curTaskIdx++];
@@ -92,6 +96,7 @@ NewStepList S4SPermanentCropHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
 
     // Resulting files from tasks
     const QString &extractedInputsListPath = extractInputsTask.GetFilePath("input_rasters_list.csv");
+    const QString &extractedParcelsPath = extractInputsTask.GetFilePath("parcels.gpkg");
     const QString &stackBuildWorkingDirPath = buildReflStackTifTask.GetFilePath("");
     const QString &fullStackTifPath = buildReflStackTifTask.GetFilePath("reflectance_full_stack.tif");
     const QString &sampleStats = polyClassStatsTask.GetFilePath("sample_stats.xml");
@@ -114,9 +119,13 @@ NewStepList S4SPermanentCropHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
 
     const QString &annualPermCropExtrResult = annualPermCropExtractionTask.GetFilePath("annual_permanent_crop.tif");
 
-    // Inputs extraction and reflectances stack tif creation
+    // Inputs extraction, parcels extraction and reflectances stack tif creation
     const QStringList &extractInputsArgs = GetExtractInputsTaskArgs(cfg, extractedInputsListPath);
     allSteps.append(CreateTaskStep(extractInputsTask, "ExtractInputs", extractInputsArgs));
+
+    const QStringList &extractParcelsArgs = GetExtractParcelsTaskArgs(cfg.event.siteId, cfg.year, extractedParcelsPath);
+    allSteps.append(CreateTaskStep(extractParcelsTask, "ExtractParcels", extractParcelsArgs));
+
     const QStringList &buildReflStackTifArgs = GetBuildFullStackTifTaskArgs(extractedInputsListPath, fullStackTifPath, stackBuildWorkingDirPath);
     allSteps.append(CreateTaskStep(buildReflStackTifTask, "BuildReflStackTif", buildReflStackTifArgs));
 
@@ -126,10 +135,10 @@ NewStepList S4SPermanentCropHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
     }
 
     // Sample section
-    const QStringList &polygonClassStatisticsArgs = GetPolygonClassStatisticsTaskArgs(fullStackTifPath, cfg.samplesShapePath, fieldName, sampleStats);
+    const QStringList &polygonClassStatisticsArgs = GetPolygonClassStatisticsTaskArgs(fullStackTifPath, extractedParcelsPath, fieldName, sampleStats);
     allSteps.append(CreateTaskStep(polyClassStatsTask, "PolygonClassStatistics", polygonClassStatisticsArgs));
 
-    const QStringList &sampleSelectionArgs = GetSampleSelectionTaskArgs(fullStackTifPath, cfg.samplesShapePath, fieldName, sampleStats, outRates, selectedUpdateSamples);
+    const QStringList &sampleSelectionArgs = GetSampleSelectionTaskArgs(fullStackTifPath, extractedParcelsPath, fieldName, sampleStats, outRates, selectedUpdateSamples);
     allSteps.append(CreateTaskStep(samplesSelectionTask, "SampleSelection", sampleSelectionArgs));
 
     const QStringList &sampleExtractionArgs = GetSampleExtractionTaskArgs(fullStackTifPath, selectedUpdateSamples, fieldName, finalUpdateSamples);
@@ -194,6 +203,11 @@ QStringList S4SPermanentCropHandler::GetExtractInputsTaskArgs(const S4SPermanent
     extractParcelsArgs.append(outFile);
 
     return extractParcelsArgs;
+}
+
+QStringList S4SPermanentCropHandler::GetExtractParcelsTaskArgs(int siteId, int year, const QString &outFile)
+{
+    return { "-s", QString::number(siteId), "-y", QString::number(year), "-o", outFile};
 }
 
 QStringList S4SPermanentCropHandler::GetBuildVrtTaskArgs(const QString &inputsListFile,
@@ -395,8 +409,6 @@ ProcessorJobDefinitionParams S4SPermanentCropHandler::GetProcessingDefinitionImp
     const ConfigurationParameterValueMap &requestOverrideCfgValues)
 {
     ProcessorJobDefinitionParams params;
-    params.isValid = false;
-    params.retryLater = false;
 
     QDateTime seasonStartDate;
     QDateTime seasonEndDate;
@@ -492,65 +504,65 @@ void S4SPermanentCropHandler::UpdateJobConfigParameters(S4SPermanentCropJobConfi
                     .toStdString());
         }
 
-        cfgToUpdate.tileIds = GetTileIdsFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, productDetails);
+        cfgToUpdate.tileIds = GetTileIdsFromProducts(*(cfgToUpdate.pCtx), productDetails);
     }
     cfgToUpdate.year = cfgToUpdate.endDate.date().year();           // TODO: see if this is valid
-    const QString &samplesFile = ExtractSamplesInfos(cfgToUpdate);
-    if (samplesFile.size() == 0) {
-        // try to get the start and end date if they are given
-        cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
-        throw std::runtime_error(
-            QStringLiteral(
-                "Cannot extract the gpkg file for the samples infos")
-                .toStdString());
-    }
 
-    cfgToUpdate.SetSamplesInfosProducts(samplesFile);
+//    const QString &samplesFile = ExtractSamplesInfos(cfgToUpdate);
+//    if (samplesFile.size() == 0) {
+//        // try to get the start and end date if they are given
+//        cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
+//        throw std::runtime_error(
+//            QStringLiteral(
+//                "Cannot extract the gpkg file for the samples infos")
+//                .toStdString());
+//    }
+
+//    cfgToUpdate.SetSamplesInfosProducts(samplesFile);
 }
 
 //TODO: We should return here only one LPIS product according to the year
-QString S4SPermanentCropHandler::ExtractSamplesInfos(const S4SPermanentCropJobConfig &cfg) {
-    // We take it the last LPIS product for this site.
-    const ProductList &samplesPrds = S4CUtils::GetLpisProduct(cfg.pCtx, cfg.event.siteId);
-    if (samplesPrds.size() == 0) {
-        cfg.pCtx->MarkJobFailed(cfg.event.jobId);
-        throw std::runtime_error(QStringLiteral("No LPIS product found in database for the permanent crops execution for site %1.").
-                                 arg(cfg.siteShortName).toStdString());
-    }
+//QString S4SPermanentCropHandler::ExtractSamplesInfos(const S4SPermanentCropJobConfig &cfg) {
+//    // We take it the last LPIS product for this site.
+//    const ProductList &samplesPrds = S4CUtils::GetLpisProduct(cfg.pCtx, cfg.event.siteId);
+//    if (samplesPrds.size() == 0) {
+//        cfg.pCtx->MarkJobFailed(cfg.event.jobId);
+//        throw std::runtime_error(QStringLiteral("No LPIS product found in database for the permanent crops execution for site %1.").
+//                                 arg(cfg.siteShortName).toStdString());
+//    }
 
-    QDateTime lastPrdInsertedDate;
-    QString retSampleFile;
-    for(const Product &samplesPrd: samplesPrds) {
-        int insituPrdYear = samplesPrd.created.date().year();
-        if (insituPrdYear != cfg.year) {
-            continue;
-        }
-        // ignore LPIS products from a year where we already added an LPIS product newer
-        if (lastPrdInsertedDate.isValid() && samplesPrd.inserted < lastPrdInsertedDate) {
-            continue;
-        }
+//    QDateTime lastPrdInsertedDate;
+//    QString retSampleFile;
+//    for(const Product &samplesPrd: samplesPrds) {
+//        int insituPrdYear = samplesPrd.created.date().year();
+//        if (insituPrdYear != cfg.year) {
+//            continue;
+//        }
+//        // ignore LPIS products from a year where we already added an LPIS product newer
+//        if (lastPrdInsertedDate.isValid() && samplesPrd.inserted < lastPrdInsertedDate) {
+//            continue;
+//        }
 
-        QDir directory(samplesPrd.fullPath);
-        QRegularExpression reGpkg("in_?situ_.*_\\d{4}.gpkg");
-        const QStringList &dirFiles = directory.entryList(QStringList() << "*.gpkg",QDir::Files);
-        foreach(const QString &fileName, dirFiles) {
-            if (reGpkg.match(fileName).hasMatch())  {
-                retSampleFile = directory.filePath(fileName);
-                break;
-            }
-        }
-    }
+//        QDir directory(samplesPrd.fullPath);
+//        QRegularExpression reGpkg("in_?situ_.*_\\d{4}.gpkg");
+//        const QStringList &dirFiles = directory.entryList(QStringList() << "*.gpkg",QDir::Files);
+//        foreach(const QString &fileName, dirFiles) {
+//            if (reGpkg.match(fileName).hasMatch())  {
+//                retSampleFile = directory.filePath(fileName);
+//                break;
+//            }
+//        }
+//    }
 
-    return retSampleFile;
-}
+//    return retSampleFile;
+//}
 
 
 QStringList S4SPermanentCropHandler::GetTileIdsFromProducts(EventProcessingContext &ctx,
-                                                       const JobSubmittedEvent &event,
                                                        const QList<ProductDetails> &productDetails)
 {
 
-    const TilesTimeSeries &mapTiles = ProcessorHandlerHelper::GroupTiles(ctx, event.siteId, productDetails, ProductType::L2AProductTypeId);
+    const TilesTimeSeries &mapTiles = GroupL2ATiles(ctx, productDetails);
 
     // normally, we can use only one list by we want (not necessary) to have the
     // secondary satellite tiles after the main satellite tiles
@@ -568,30 +580,10 @@ bool S4SPermanentCropHandler::IsScheduledJobRequest(const QJsonObject &parameter
 
 QStringList S4SPermanentCropHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask,
                                                             const S4SPermanentCropJobConfig &cfg, const QStringList &listFiles) {
-    // ProductFormatter /home/cudroiu/sen2agri-processors-build
-    //    -vectprd 1 -destroot /mnt/archive_new/test/Sen4CAP_L4B_Tests/NLD_Validation_TSA/OutPrdFormatter
-    //    -fileclass OPER -level S4C_L4B -baseline 01.00 -siteid 4 -timeperiod 20180101_20181231 -processor generic
-    //    -processor.generic.files <files_list>
-
-    const auto &targetFolder = GetFinalProductFolder(*(cfg.pCtx), cfg.event.jobId, cfg.event.siteId);
-    const auto &outPropsPath = productFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
-    const auto &executionInfosPath = productFormatterTask.GetFilePath("executionInfos.txt");
     QString strTimePeriod = cfg.startDate.toString("yyyyMMddTHHmmss").append("_").append(cfg.endDate.toString("yyyyMMddTHHmmss"));
-    QStringList productFormatterArgs = { "ProductFormatter",
-                                         "-destroot", targetFolder,
-                                         "-fileclass", "OPER",
-                                         "-level", "S4S_PERMC",
-                                         "-vectprd", "0",
-                                         "-baseline", "01.00",
-                                         "-siteid", QString::number(cfg.event.siteId),
-                                         "-timeperiod", strTimePeriod,
-                                         "-processor", "generic",
-                                         "-outprops", outPropsPath,
-                                         "-gipp", executionInfosPath
-                                       };
-    productFormatterArgs += "-processor.generic.files";
-    productFormatterArgs += listFiles;
-
-    return productFormatterArgs;
+    QStringList additionalArgs = {"-processor.generic.files"};
+    additionalArgs += listFiles;
+    return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.event.jobId, cfg.event.siteId, "S4S_PERMC", strTimePeriod,
+                                         "generic", additionalArgs);
 }
 

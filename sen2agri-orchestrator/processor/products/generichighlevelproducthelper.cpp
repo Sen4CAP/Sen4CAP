@@ -19,6 +19,8 @@ QMap<QString, ProductType> GenericHighLevelProductHelper::m_mapHighLevelProductT
     {"_S4C_L4A_", ProductType::S4CL4AProductTypeId},
     {"_S4C_L4B_", ProductType::S4CL4BProductTypeId},
     {"_S4C_L4C_", ProductType::S4CL4CProductTypeId},
+    {"S4S_L4A_", ProductType::S4SCropTypeMappingProductTypeId},
+    {"_S4S_YIELDFEAT_", ProductType::S4SYieldFeatProductTypeId}
 };
 
 GenericHighLevelProductHelper::GenericHighLevelProductHelper()
@@ -40,14 +42,19 @@ GenericHighLevelProductHelper::GenericHighLevelProductHelper(const QString &prod
 
 void GenericHighLevelProductHelper::SetProduct(const QString &product)
 {
-    ProductHelper::SetProduct(product);
+    QString prodName = product.trimmed();
+    // remove any / at the end of the product name
+    if(prodName.endsWith('/')) {
+        prodName.chop( 1 );
+    }
+    ProductHelper::SetProduct(prodName);
     m_tileDirs.clear();
 
     // invalid product
-    if (product.size() == 0) {
+    if (prodName.size() == 0) {
         return;
     }
-    QFileInfo info(product);
+    QFileInfo info(prodName);
     const QString &name = info.baseName();
 
     QMap<QString, ProductType>::const_iterator i;
@@ -69,6 +76,8 @@ void GenericHighLevelProductHelper::SetProduct(const QString &product)
     }
     m_prdDetails.GetProductRef().created = endDate;
     m_prdDetails.GetProductRef().name = name;
+    m_startDate = startDate;
+    m_endDate = endDate;
 
     m_bValid = true;
 }
