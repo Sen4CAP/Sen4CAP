@@ -14,7 +14,12 @@
 // 2017 naming format for coherence and amplitude
 #define S1_REGEX_OLD        R"((\d{8})(-(\d{8}))?_.*(cohe|amp).*_(\d{3})_(VH|VV)_.*\.tiff)"
 // 2018 naming format for coherence and amplitude
-#define S1_REGEX        R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)\.tif)"
+#define S1_REGEX            R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)\.tif)"
+
+// S1 cut by S2 regexes (V1 and V2)
+#define S1_CUT_S2_REGEX_V1  R"(SEN4CAP_L2A_.*_V(\d{8})T\d{6}_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)_(\d{2}[A-Z]{3})\.tif)"
+#define S1_CUT_S2_BCK_REGEX_V2  R"(S1[A-D]_L2_(BCK)_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(\d{2}[A-Z]{3})\.tif)"
+#define S1_CUT_S2_COH_REGEX_V2  R"(S1[A-D]_L2_(COH)_(\d{8})T\d{6}_(\d{8})T\d{6}_(VH|VV)_(\d{3})_(\d{2}[A-Z]{3})\.tif)"
 
 #define L3B_REGEX_TYPE_IDX          1
 #define L3B_REGEX_DATE_IDX          2
@@ -24,6 +29,15 @@
 #define S1_REGEX_POLARISATION_IDX 3           // 2018
 #define S1_REGEX_ORBIT_IDX        4           // 2018
 #define S1_REGEX_TYPE_IDX         5           // 2018
+
+#define S1_CUT_S2_V1_REGEX_TILE_IDX     6
+
+#define S1_V2_REGEX_TYPE_IDX            1
+#define S1_V2_REGEX_DATE_IDX            2
+#define S1_V2_REGEX_DATE2_IDX           3
+#define S1_V2_REGEX_POLARISATION_IDX    4
+#define S1_V2_REGEX_ORBIT_IDX           5
+#define S1_V2_REGEX_TILE_IDX            6
 
 #define S1_REGEX_DATE2_OLD_IDX    3           // this is different for 2017
 #define S1_REGEX_TYPE_OLD_IDX     4           // this is different for 2017
@@ -65,6 +79,11 @@ static FileNameRegexInfoType fileNameRegexInfos[] = {
     {Satellite::Sentinel1, S1_REGEX, S1_REGEX_TYPE_IDX, S1_REGEX_DATE_IDX, S1_REGEX_DATE2_IDX, S1_REGEX_POLARISATION_IDX, S1_REGEX_ORBIT_IDX, TILE_UNAVAILABLE, BAND_UNAVAILABLE, ""},
     {Satellite::Sentinel1,S1_REGEX_OLD, S1_REGEX_TYPE_IDX, S1_REGEX_DATE_IDX, S1_REGEX_DATE2_OLD_IDX, S1_REGEX_POLAR_OLD_IDX, S1_REGEX_ORBIT_OLD_IDX, TILE_UNAVAILABLE, BAND_UNAVAILABLE, ""},
 
+    // S1 cut by S2, V1 and V2
+    {Satellite::Sentinel1,S1_CUT_S2_REGEX_V1, S1_REGEX_TYPE_IDX, S1_REGEX_DATE_IDX, S1_REGEX_DATE2_IDX, S1_REGEX_POLARISATION_IDX, S1_REGEX_ORBIT_IDX, S1_CUT_S2_V1_REGEX_TILE_IDX, BAND_UNAVAILABLE, ""},
+    {Satellite::Sentinel1,S1_CUT_S2_BCK_REGEX_V2, S1_V2_REGEX_TYPE_IDX, S1_V2_REGEX_DATE_IDX, DATE2_UNAVAILABLE, S1_V2_REGEX_POLARISATION_IDX-1, S1_V2_REGEX_ORBIT_IDX-1, S1_V2_REGEX_TILE_IDX-1, BAND_UNAVAILABLE, ""},
+    {Satellite::Sentinel1,S1_CUT_S2_COH_REGEX_V2, S1_V2_REGEX_TYPE_IDX, S1_V2_REGEX_DATE_IDX, S1_V2_REGEX_DATE2_IDX, S1_V2_REGEX_POLARISATION_IDX, S1_V2_REGEX_ORBIT_IDX, S1_V2_REGEX_TILE_IDX, BAND_UNAVAILABLE, ""},
+
     // S2 MAJA raster
     {Satellite::Sentinel2, R"(SENTINEL2[A-D]_(\d{8})-.*_(L2A)_T(\d{2}[A-Z]{3})_.*_FRE_(B.*).tif)", 2, 1, DATE2_UNAVAILABLE, POLAR_UNAVAILABLE, ORBIT_UNAVAILABLE, 3, 4, L2A_FT},
     // S2 Sen2Cor raster
@@ -87,6 +106,10 @@ inline std::vector<std::string> split (const std::string &s, char delim) {
 
     while (std::getline (ss, item, delim)) {
         result.push_back (item);
+    }
+    // add an empty element if the string ends with the delimiter
+    if (s[s.length() - 1] == delim) {
+        result.push_back ("");
     }
 
     return result;
