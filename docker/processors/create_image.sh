@@ -1,6 +1,6 @@
 #!/bin/bash
 
-DOCKER_IMG_NAME="sen4cap/processors:3.0.0"
+DOCKER_IMG_NAME="sen4cap/processors:3.2.0"
 
 if [ $# -eq 1 ]; then
 	echo "Provided docker image $1"
