@@ -34,6 +34,7 @@ SEN2COR_2_5_5_HOME = "/sen2cor/2.5"
 SEN2COR_2_8_HOME = "/sen2cor/2.8"
 SEN2COR_2_9_HOME = "/sen2cor/2.9"
 SEN2COR_2_10_HOME = "/sen2cor/2.10"
+SEN2COR_2_11_HOME = "/sen2cor/2.11"
 
 
 def CheckInput():
@@ -1177,7 +1178,9 @@ if (l1c_baseline_number >= 400):
 #match sen2cor version with home folder
 sen2cor_home = None
 if (sen2cor_major_nb == 2):
-    if sen2cor_medium_nb == 10:
+    if sen2cor_medium_nb == 11:
+        sen2cor_home = SEN2COR_2_11_HOME
+    elif sen2cor_medium_nb == 10:
         sen2cor_home = SEN2COR_2_10_HOME
     elif sen2cor_medium_nb == 9:
         sen2cor_home = SEN2COR_2_9_HOME
