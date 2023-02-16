@@ -134,7 +134,7 @@ class FeatureSet(object):
         feature_set = FeatureSet()
         if features:
             feature_set.s2_reflectance_10m = "sr10" in features
-            feature_set.s2_reflectance_10m = "sr20" in features
+            feature_set.s2_reflectance_20m = "sr20" in features
             feature_set.vegetation_indices = "vi" in features
             feature_set.vegetation_indices_statistics = "vis" in features
             feature_set.s1_features = "sar" in features
