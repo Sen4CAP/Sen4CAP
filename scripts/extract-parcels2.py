@@ -278,7 +278,7 @@ def extract_radar_products(
                 where product.product_type_id in (10, 11) -- s1_l2a_amp, s1_l2a_cohe
                   and product.site_id = {}
                   and site_tiles.tile_id = any(product.tiles)
-                  and (product.name like '%_L2_BCK_%' or product.name like '%_L2_COH_%')
+                  -- and (product.name like '%_L2_BCK_%' or product.name like '%_L2_COH_%')
                   {}
                   {}
             ) products
