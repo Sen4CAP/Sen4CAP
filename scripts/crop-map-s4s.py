@@ -1316,25 +1316,26 @@ def main():
     smote_outputs = []
     for (crop_code, target) in smote_targets.items():
         output = f"smote_{crop_code}.sqlite"
-        command = [
-            "otbcli_SampleAugmentation",
-            "-in",
-            training_samples,
-            "-out",
-            output,
-            "-label",
-            crop_code,
-            "-samples",
-            str(target),
-            "-field",
-            "crop_code",
-            "-exclude",
-            "id",
-            "originfid",
-            "-strategy",
-            "smote",
-        ]
-        commands.append(command)
+        if not os.path.exists(output):
+            command = [
+                "otbcli_SampleAugmentation",
+                "-in",
+                training_samples,
+                "-out",
+                output,
+                "-label",
+                crop_code,
+                "-samples",
+                str(target),
+                "-field",
+                "crop_code",
+                "-exclude",
+                "id",
+                "originfid",
+                "-strategy",
+                "smote",
+            ]
+            commands.append(command)
         smote_outputs.append(output)
 
     containers = []
