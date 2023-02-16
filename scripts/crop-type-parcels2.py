@@ -1277,9 +1277,11 @@ def process_radar(args, volumes, pool):
 
     ref_extent_map = {}
     ref_gt_map = {}
+    ref_size_map = {}
     if args.lpis_path:
         for (tile_id, path) in ref_map.items():
             ds = gdal.Open(path, gdalconst.GA_ReadOnly)
+            ref_size_map[tile_id] = (ds.RasterXSize, ds.RasterYSize)
             ref_extent_map[tile_id] = get_extent(ds)
             ref_gt_map[tile_id] = ds.GetGeoTransform()
             del ds
@@ -1287,6 +1289,7 @@ def process_radar(args, volumes, pool):
         for (group, products) in groups:
             if group.tile_id not in ref_extent_map:
                 ds = gdal.Open(products[0].path, gdalconst.GA_ReadOnly)
+                ref_size_map[group.tile_id] = (ds.RasterXSize, ds.RasterYSize)
                 ref_extent_map[group.tile_id] = get_extent(ds)
                 ref_gt_map[group.tile_id] = ds.GetGeoTransform()
                 del ds
@@ -1357,8 +1360,8 @@ def process_radar(args, volumes, pool):
             {
                 "dataType": "UInt16",
                 "band": str(len(tile_vrt_bands) + 1),
-                # "blockXSize": str(1024),
-                # "blockYSize": str(1024),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
             },
             E.Description(group.band_description()),
             E.SimpleSource(
@@ -1366,11 +1369,11 @@ def process_radar(args, volumes, pool):
                 E.SourceBand("1"),
                 E.SourceProperties(
                     {
-                        "RasterXSize": str(10980),
-                        "RasterYSize": str(10980),
+                        "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                        "RasterYSize": str(ref_size_map[group.tile_id][1]),
                         "DataType": "UInt16",
-                        # "BlockXSize": str(1024),
-                        # "BlockYSize": str(1024),
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
                     }
                 ),
             ),
@@ -1443,8 +1446,8 @@ def process_radar(args, volumes, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                # "blockXSize": str(1024),
-                # "blockYSize": str(1024),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
             },
             E.Description(group.band_description(1)),
             E.SimpleSource(
@@ -1452,11 +1455,11 @@ def process_radar(args, volumes, pool):
                 E.SourceBand("1"),
                 E.SourceProperties(
                     {
-                        "RasterXSize": str(10980),
-                        "RasterYSize": str(10980),
+                        "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                        "RasterYSize": str(ref_size_map[group.tile_id][1]),
                         "DataType": "Float32",
-                        # "BlockXSize": str(1024),
-                        # "BlockYSize": str(1024),
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
                     }
                 ),
             ),
@@ -1466,8 +1469,8 @@ def process_radar(args, volumes, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                # "blockXSize": str(1024),
-                # "blockYSize": str(1024),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
             },
             E.Description(group.band_description(2)),
             E.SimpleSource(
@@ -1475,11 +1478,11 @@ def process_radar(args, volumes, pool):
                 E.SourceBand("2"),
                 E.SourceProperties(
                     {
-                        "RasterXSize": str(10980),
-                        "RasterYSize": str(10980),
+                        "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                        "RasterYSize": str(ref_size_map[group.tile_id][1]),
                         "DataType": "Float32",
-                        # "BlockXSize": str(1024),
-                        # "BlockYSize": str(1024),
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
                     }
                 ),
             ),
@@ -1538,8 +1541,8 @@ def process_radar(args, volumes, pool):
                 {
                     "dataType": "Float32",
                     "band": str(len(tile_vrt_bands) + 1),
-                    # "blockXSize": str(1024),
-                    # "blockYSize": str(1024),
+                    "blockXSize": str(1024),
+                    "blockYSize": str(1024),
                 },
                 E.Description(group.band_description(1)),
                 E.SimpleSource(
@@ -1547,11 +1550,11 @@ def process_radar(args, volumes, pool):
                     E.SourceBand("1"),
                     E.SourceProperties(
                         {
-                            "RasterXSize": str(10980),
-                            "RasterYSize": str(10980),
+                            "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                            "RasterYSize": str(ref_size_map[group.tile_id][1]),
                             "DataType": "Float32",
-                            # "BlockXSize": str(1024),
-                            # "BlockYSize": str(1024),
+                            "BlockXSize": str(1024),
+                            "BlockYSize": str(1024),
                         }
                     ),
                 ),
@@ -1561,8 +1564,8 @@ def process_radar(args, volumes, pool):
                 {
                     "dataType": "Float32",
                     "band": str(len(tile_vrt_bands) + 1),
-                    # "blockXSize": str(1024),
-                    # "blockYSize": str(1024),
+                    "blockXSize": str(1024),
+                    "blockYSize": str(1024),
                 },
                 E.Description(group.band_description(2)),
                 E.SimpleSource(
@@ -1570,11 +1573,11 @@ def process_radar(args, volumes, pool):
                     E.SourceBand("2"),
                     E.SourceProperties(
                         {
-                            "RasterXSize": str(10980),
-                            "RasterYSize": str(10980),
+                            "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                            "RasterYSize": str(ref_size_map[group.tile_id][1]),
                             "DataType": "Float32",
-                            # "BlockXSize": str(1024),
-                            # "BlockYSize": str(1024),
+                            "BlockXSize": str(1024),
+                            "BlockYSize": str(1024),
                         }
                     ),
                 ),
@@ -1604,8 +1607,8 @@ def process_radar(args, volumes, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                # "blockXSize": str(1024),
-                # "blockYSize": str(1024),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
             },
             E.Description(group.band_description(1)),
             E.SimpleSource(
@@ -1613,11 +1616,11 @@ def process_radar(args, volumes, pool):
                 E.SourceBand("1"),
                 E.SourceProperties(
                     {
-                        "RasterXSize": str(10980),
-                        "RasterYSize": str(10980),
+                        "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                        "RasterYSize": str(ref_size_map[group.tile_id][1]),
                         "DataType": "Float32",
-                        # "BlockXSize": str(1024),
-                        # "BlockYSize": str(1024),
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
                     }
                 ),
             ),
@@ -1627,8 +1630,8 @@ def process_radar(args, volumes, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                # "blockXSize": str(1024),
-                # "blockYSize": str(1024),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
             },
             E.Description(group.band_description(2)),
             E.SimpleSource(
@@ -1636,11 +1639,11 @@ def process_radar(args, volumes, pool):
                 E.SourceBand("2"),
                 E.SourceProperties(
                     {
-                        "RasterXSize": str(10980),
-                        "RasterYSize": str(10980),
+                        "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                        "RasterYSize": str(ref_size_map[group.tile_id][1]),
                         "DataType": "Float32",
-                        # "BlockXSize": str(1024),
-                        # "BlockYSize": str(1024),
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
                     }
                 ),
             ),
@@ -1670,8 +1673,8 @@ def process_radar(args, volumes, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                # "blockXSize": str(1024),
-                # "blockYSize": str(1024),
+                "blockXSize": str(1024),
+                "blockYSize": str(1024),
             },
             E.Description(group.band_description()),
             E.SimpleSource(
@@ -1679,11 +1682,11 @@ def process_radar(args, volumes, pool):
                 E.SourceBand("1"),
                 E.SourceProperties(
                     {
-                        "RasterXSize": str(10980),
-                        "RasterYSize": str(10980),
+                        "RasterXSize": str(ref_size_map[group.tile_id][0]),
+                        "RasterYSize": str(ref_size_map[group.tile_id][1]),
                         "DataType": "Float32",
-                        # "BlockXSize": str(1024),
-                        # "BlockYSize": str(1024),
+                        "BlockXSize": str(1024),
+                        "BlockYSize": str(1024),
                     }
                 ),
             ),
@@ -1701,8 +1704,8 @@ def process_radar(args, volumes, pool):
         srs.ImportFromEPSG(tiles[tile_id][1])
         vrt_dataset = E.VRTDataset(
             {
-                "rasterXSize": str(10980),
-                "rasterYSize": str(10980),
+                "rasterXSize": str(ref_size_map[tile_id][0]),
+                "rasterYSize": str(ref_size_map[tile_id][1]),
             },
             E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, srs.ExportToWkt()),
             E.GeoTransform(
@@ -1710,8 +1713,8 @@ def process_radar(args, volumes, pool):
                     gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]
                 )
             ),
-            # E.BlockXSize(str(1024)),
-            # E.BlockYSize(str(1024)),
+            E.BlockXSize(str(1024)),
+            E.BlockYSize(str(1024)),
         )
         for vrt_band in vrt_bands:
             vrt_dataset.append(vrt_band)
