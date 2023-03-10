@@ -475,14 +475,14 @@ def main():
         },
         output_dir: {"bind": output_dir, "mode": "rw"},
     }
-    for (s, t) in processor_config.additional_mounts:
+    for s, t in processor_config.additional_mounts:
         volumes[s] = {"bind": t, "mode": "ro"}
     if args.mounts:
         for mount in args.mounts:
             volumes[mount] = {"bind": mount, "mode": "ro"}
 
     extra_mounts = ["/mnt/archive"]
-    for (s, t) in processor_config.additional_mounts:
+    for s, t in processor_config.additional_mounts:
         extra_mounts.append(s)
     if args.mounts:
         extra_mounts += args.mounts
@@ -566,7 +566,7 @@ def main():
 
         first_date = season_end
         last_date = season_start
-        for (tile, products) in products_by_tile.items():
+        for tile, products in products_by_tile.items():
             for p in products:
                 if p.date < first_date:
                     first_date = p.date
@@ -611,7 +611,7 @@ def main():
             s1_features = set()
 
         band_names = get_band_names(feature_set, output_dates, s1_features)
-        for (tile, products) in products_by_tile.items():
+        for tile, products in products_by_tile.items():
             b3s = [p.b3 for p in products]
             b4s = [p.b4 for p in products]
             b8s = [p.b8 for p in products]
@@ -1038,7 +1038,7 @@ def main():
             )
             out_band = 1
             if feature_set.want_s2_reflectance_10m():
-                for (p, name) in zip(
+                for p, name in zip(
                     [b3_tif, b4_tif, b8_tif],
                     ["S2_B03", "S2_B04", "S2_B08"],
                 ):
@@ -1072,7 +1072,7 @@ def main():
                         out_band += 1
 
             if feature_set.want_s2_reflectance_20m():
-                for (p, name) in zip(
+                for p, name in zip(
                     [b5_10m_vrt, b6_10m_vrt, b7_10m_vrt, b11_10m_vrt, b12_10m_vrt],
                     ["S2_B05", "S2_B06", "S2_B07", "S2_B11", "S2_B12"],
                 ):
@@ -1123,7 +1123,7 @@ def main():
                         out_band += 1
 
             if feature_set.want_vegetation_indices():
-                for (p, name) in zip(
+                for p, name in zip(
                     [ndvi, ndwi, brightness],
                     ["NDVI", "NDWI", "BRIGHTNESS"],
                 ):
@@ -1157,12 +1157,12 @@ def main():
                         out_band += 1
 
             if feature_set.want_vegetation_indices_statistics():
-                for (p, fname) in zip(
+                for p, fname in zip(
                     [ndvi_statistics, ndwi_statistics, brightness_statistics],
                     ["NDVI", "NDWI", "BRIGHTNESS"],
                 ):
                     ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                    for (b, name) in enumerate(
+                    for b, name in enumerate(
                         ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"], start=1
                     ):
                         band = ds.GetRasterBand(b)
@@ -1234,7 +1234,7 @@ def main():
             root.write(bands_vrt, pretty_print=True, encoding="utf-8")
 
         band_names_lower = list(map(lambda x: x.lower(), band_names))
-        for (tile, products) in products_by_tile.items():
+        for tile, products in products_by_tile.items():
             training_points = f"training_points_{tile}.shp"
             validation_points = f"validation_points_{tile}.shp"
             training_samples = f"training_samples_{tile}.sqlite"
@@ -1327,7 +1327,7 @@ def main():
         smote_targets = json.load(file)
 
     smote_outputs = []
-    for (crop_code, target) in smote_targets.items():
+    for crop_code, target in smote_targets.items():
         output = f"smote_{crop_code}.sqlite"
         if not os.path.exists(output):
             command = [
