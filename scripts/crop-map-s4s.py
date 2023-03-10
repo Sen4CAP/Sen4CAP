@@ -703,7 +703,7 @@ def main():
             interpolation_max_distance = 30
             interpolation_window_radius = 15
 
-            tiling_suffix = "?&gdal:co:TILED=YES&gdal:co:BLOCKXSIZE=1024&gdal:co:BLOCKYSIZE=1024&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=1024"
+            tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
             commands = []
             if feature_set.need_s2_reflectance_10m() and not os.path.exists(b3_tif):
                 command = [
