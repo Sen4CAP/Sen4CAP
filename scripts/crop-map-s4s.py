@@ -30,6 +30,10 @@ GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.4.1"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
 
 
+def parse_date(str):
+    return datetime.strptime(str, "%Y-%m-%d").date()
+
+
 class Config(object):
     def __init__(self, args):
         parser = ConfigParser()
@@ -47,6 +51,11 @@ class Config(object):
         self.password = parser.get("Database", "Password")
 
         self.site_id = args.site_id
+
+        if args.date_filter:
+            self.date_filter = list(map(parse_date, args.date_filter))
+        else:
+            self.date_filter = None
 
 
 def get_connection(config):
@@ -76,10 +85,6 @@ def run_command(args, env=None, retry=False):
             print("Exit code: {}".format(result))
         else:
             break
-
-
-def parse_date(str):
-    return datetime.strptime(str, "%Y-%m-%d").date()
 
 
 def get_season_dates(start_date, end_date):
@@ -433,6 +438,7 @@ def main():
     parser.add_argument("--mounts", help="paths to mount in containers", nargs="*")
     parser.add_argument("--tiles", help="tile filter", nargs="*")
     parser.add_argument("--features", help="feature filter", nargs="*")
+    parser.add_argument("--date-filter", help="date filter", nargs="*")
 
     args = parser.parse_args()
 
@@ -568,14 +574,21 @@ def main():
                     last_date = p.date
 
         step = 10
-        output_dates = []
-        d = first_date
-        last_output_date = d
-        while d <= last_date:
+
+        if config.date_filter:
+            first_date = config.date_filter[0]
+            last_date = config.date_filter[0]
+            # TODO support multiple dates
+            output_dates = [first_date.strftime("%Y_%m_%d")]
+        else:
+            output_dates = []
+            d = first_date
             last_output_date = d
-            output_dates.append(d.strftime("%Y_%m_%d"))
-            d += timedelta(days=step)
-        last_date = last_output_date
+            while d <= last_date:
+                last_output_date = d
+                output_dates.append(d.strftime("%Y_%m_%d"))
+                d += timedelta(days=step)
+            last_date = last_output_date
 
         if feature_set.need_s1_features():
             s1_features_by_tile = {}
