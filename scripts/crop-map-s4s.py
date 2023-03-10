@@ -835,13 +835,81 @@ def main():
                     print(container.logs())
                 container.remove()
 
-            b5_10m_vrt = f"b5_10m_{tile}.vrt"
-            b6_10m_vrt = f"b6_10m_{tile}.vrt"
-            b7_10m_vrt = f"b7_10m_{tile}.vrt"
-            b11_10m_vrt = f"b11_10m_{tile}.vrt"
-            b12_10m_vrt = f"b12_10m_{tile}.vrt"
+            b5_nodata_vrt = f"S2_B05_{tile}_nodata.vrt"
+            b6_nodata_vrt = f"S2_B06_{tile}_nodata.vrt"
+            b7_nodata_vrt = f"S2_B07_{tile}_nodata.vrt"
+            b11_nodata_vrt = f"S2_B11_{tile}_nodata.vrt"
+            b12_nodata_vrt = f"S2_B12_{tile}_nodata.vrt"
+
+            b5_10m_vrt = f"S2_B05_10m_{tile}.vrt"
+            b6_10m_vrt = f"S2_B06_10m_{tile}.vrt"
+            b7_10m_vrt = f"S2_B07_10m_{tile}.vrt"
+            b11_10m_vrt = f"S2_B11_10m_{tile}.vrt"
+            b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
 
             if feature_set.need_s2_reflectance_20m():
+                command_b5_nodata_vrt = [
+                    "gdal_translate",
+                    "-a_nodata",
+                    "-10000",
+                    b5_tif,
+                    b5_nodata_vrt,
+                ]
+                command_b6_nodata_vrt = [
+                    "gdal_translate",
+                    "-a_nodata",
+                    "-10000",
+                    b6_tif,
+                    b6_nodata_vrt,
+                ]
+                command_b7_nodata_vrt = [
+                    "gdal_translate",
+                    "-a_nodata",
+                    "-10000",
+                    b7_tif,
+                    b7_nodata_vrt,
+                ]
+                command_b11_nodata_vrt = [
+                    "gdal_translate",
+                    "-a_nodata",
+                    "-10000",
+                    b11_tif,
+                    b11_nodata_vrt,
+                ]
+                command_b12_nodata_vrt = [
+                    "gdal_translate",
+                    "-a_nodata",
+                    "-10000",
+                    b12_tif,
+                    b12_nodata_vrt,
+                ]
+
+                commands = [
+                    command_b5_nodata_vrt,
+                    command_b6_nodata_vrt,
+                    command_b7_nodata_vrt,
+                    command_b11_nodata_vrt,
+                    command_b12_nodata_vrt,
+                ]
+
+                containers = []
+                for command in commands:
+                    container = client.containers.run(
+                        image=GDAL_IMAGE_NAME,
+                        detach=True,
+                        user=f"{os.getuid()}:{os.getgid()}",
+                        volumes=volumes,
+                        working_dir=output_dir,
+                        command=command,
+                    )
+                    print(command)
+                    containers.append(container)
+                for container in containers:
+                    res = container.wait()
+                    if res["StatusCode"] != 0:
+                        print(container.logs())
+                    container.remove()
+
                 command_b5_10m_vrt = [
                     "gdal_translate",
                     "-tr",
@@ -849,7 +917,7 @@ def main():
                     "10",
                     "-r",
                     "cubic",
-                    b5_tif,
+                    b5_nodata_vrt,
                     b5_10m_vrt,
                 ]
                 command_b6_10m_vrt = [
@@ -859,7 +927,7 @@ def main():
                     "10",
                     "-r",
                     "cubic",
-                    b6_tif,
+                    b6_nodata_vrt,
                     b6_10m_vrt,
                 ]
                 command_b7_10m_vrt = [
@@ -869,7 +937,7 @@ def main():
                     "10",
                     "-r",
                     "cubic",
-                    b7_tif,
+                    b7_nodata_vrt,
                     b7_10m_vrt,
                 ]
                 command_b11_10m_vrt = [
@@ -879,7 +947,7 @@ def main():
                     "10",
                     "-r",
                     "cubic",
-                    b11_tif,
+                    b11_nodata_vrt,
                     b11_10m_vrt,
                 ]
                 command_b12_10m_vrt = [
@@ -889,7 +957,7 @@ def main():
                     "10",
                     "-r",
                     "cubic",
-                    b12_tif,
+                    b12_nodata_vrt,
                     b12_10m_vrt,
                 ]
 
