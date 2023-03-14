@@ -279,7 +279,7 @@ def process_optical(args, pool, satellite_id):
     with open(args.optical_products, "rb") as file:
         reader = csv.reader(file)
         next(reader)
-        for (site_id, name, full_path, tile, created_timestamp) in reader:
+        for site_id, name, full_path, tile, created_timestamp in reader:
             site_id = int(site_id)
             # created_timestamp = datetime.fromisoformat(created_timestamp)
             created_timestamp = dateutil.parser.parse(created_timestamp)
@@ -723,7 +723,7 @@ def get_tile_footprints(file):
     with open(file, "rb") as file:
         reader = csv.reader(file)
         next(reader)
-        for (tile_id, epsg_code, geog) in reader:
+        for tile_id, epsg_code, geog in reader:
             epsg_code = int(epsg_code)
             geog = ogr.CreateGeometryFromWkt(geog)
 
@@ -765,11 +765,9 @@ def get_radar_products(file):
 def get_otb_extended_filename_with_tiling(file):
     output_extended = file + "?"
     output_extended += "&gdal:co:TILED=YES"
-    output_extended += "&gdal:co:BLOCKXSIZE=1024"
-    output_extended += "&gdal:co:BLOCKYSIZE=1024"
     output_extended += "&streaming:type=tiled"
     output_extended += "&streaming:sizemode=height"
-    output_extended += "&streaming:sizevalue=1024"
+    output_extended += "&streaming:sizevalue=256"
     return output_extended
 
 
@@ -1195,7 +1193,7 @@ def process_radar(args, pool):
 
     transform = osr.CoordinateTransformation(wgs84_srs, input_srs)
     tiles_input_srs = {}
-    for (tile_id, (geog, epsg_code)) in tiles.items():
+    for tile_id, (geog, epsg_code) in tiles.items():
         geom = geog.Clone()
         geom.Transform(transform)
         tiles_input_srs[tile_id] = geom
@@ -1232,7 +1230,7 @@ def process_radar(args, pool):
     backscatter_ratio_bi_monthly_groups = defaultdict(BackscatterPairs)
     coherence_monthly_groups = defaultdict(list)
     coherence_season_groups = defaultdict(list)
-    for (group, products) in groups:
+    for group, products in groups:
         hdrs = []
         for product in products:
             hdrs.append(product.path)
@@ -1294,8 +1292,8 @@ def process_radar(args, pool):
             {
                 "dataType": "Int16",
                 "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(1024),
-                "blockYSize": str(1024),
+                "blockXSize": str(256),
+                "blockYSize": str(256),
             },
             E.Description(group.band_description()),
             E.SimpleSource(
@@ -1306,8 +1304,8 @@ def process_radar(args, pool):
                         "RasterXSize": str(5490),
                         "RasterYSize": str(5490),
                         "DataType": "Int16",
-                        "BlockXSize": str(1024),
-                        "BlockYSize": str(1024),
+                        "BlockXSize": str(256),
+                        "BlockYSize": str(256),
                     }
                 ),
             ),
@@ -1363,7 +1361,7 @@ def process_radar(args, pool):
 
     backscatter_composites = []
     backscatter_groups = sorted(list(backscatter_groups.items()))
-    for (group, products) in backscatter_groups:
+    for group, products in backscatter_groups:
         if args.lpis_path:
             if ref_map_10m and tile_spacing[group.tile_id] == 10:
                 tile_ref = ref_map_10m.get(group.tile_id)
@@ -1387,8 +1385,8 @@ def process_radar(args, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(1024),
-                "blockYSize": str(1024),
+                "blockXSize": str(256),
+                "blockYSize": str(256),
             },
             E.Description(group.band_description(1)),
             E.SimpleSource(
@@ -1399,8 +1397,8 @@ def process_radar(args, pool):
                         "RasterXSize": str(5490),
                         "RasterYSize": str(5490),
                         "DataType": "Float32",
-                        "BlockXSize": str(1024),
-                        "BlockYSize": str(1024),
+                        "BlockXSize": str(256),
+                        "BlockYSize": str(256),
                     }
                 ),
             ),
@@ -1410,8 +1408,8 @@ def process_radar(args, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(1024),
-                "blockYSize": str(1024),
+                "blockXSize": str(256),
+                "blockYSize": str(256),
             },
             E.Description(group.band_description(2)),
             E.SimpleSource(
@@ -1422,8 +1420,8 @@ def process_radar(args, pool):
                         "RasterXSize": str(5490),
                         "RasterYSize": str(5490),
                         "DataType": "Float32",
-                        "BlockXSize": str(1024),
-                        "BlockYSize": str(1024),
+                        "BlockXSize": str(256),
+                        "BlockYSize": str(256),
                     }
                 ),
             ),
@@ -1434,7 +1432,7 @@ def process_radar(args, pool):
     backscatter_ratio_weekly_groups = sorted(
         list(backscatter_ratio_weekly_groups.items())
     )
-    for (group, pair) in backscatter_ratio_weekly_groups:
+    for group, pair in backscatter_ratio_weekly_groups:
         if args.lpis_path:
             if ref_map_10m and tile_spacing[group.tile_id] == 10:
                 tile_ref = ref_map_10m.get(group.tile_id)
@@ -1456,7 +1454,7 @@ def process_radar(args, pool):
     backscatter_ratio_bi_monthly_groups = sorted(
         list(backscatter_ratio_bi_monthly_groups.items())
     )
-    for (group, pair) in backscatter_ratio_bi_monthly_groups:
+    for group, pair in backscatter_ratio_bi_monthly_groups:
         if args.lpis_path:
             if ref_map_10m and tile_spacing[group.tile_id] == 10:
                 tile_ref = ref_map_10m.get(group.tile_id)
@@ -1476,7 +1474,7 @@ def process_radar(args, pool):
         pair.vh.sort()
 
         products = []
-        for (vv, vh) in zip(pair.vv, pair.vh):
+        for vv, vh in zip(pair.vv, pair.vh):
             products += [vv, vh]
 
         if products:
@@ -1490,8 +1488,8 @@ def process_radar(args, pool):
                 {
                     "dataType": "Float32",
                     "band": str(len(tile_vrt_bands) + 1),
-                    "blockXSize": str(1024),
-                    "blockYSize": str(1024),
+                    "blockXSize": str(256),
+                    "blockYSize": str(256),
                 },
                 E.Description(group.band_description(1)),
                 E.SimpleSource(
@@ -1502,8 +1500,8 @@ def process_radar(args, pool):
                             "RasterXSize": str(5490),
                             "RasterYSize": str(5490),
                             "DataType": "Float32",
-                            "BlockXSize": str(1024),
-                            "BlockYSize": str(1024),
+                            "BlockXSize": str(256),
+                            "BlockYSize": str(256),
                         }
                     ),
                 ),
@@ -1513,8 +1511,8 @@ def process_radar(args, pool):
                 {
                     "dataType": "Float32",
                     "band": str(len(tile_vrt_bands) + 1),
-                    "blockXSize": str(1024),
-                    "blockYSize": str(1024),
+                    "blockXSize": str(256),
+                    "blockYSize": str(256),
                 },
                 E.Description(group.band_description(2)),
                 E.SimpleSource(
@@ -1525,8 +1523,8 @@ def process_radar(args, pool):
                             "RasterXSize": str(5490),
                             "RasterYSize": str(5490),
                             "DataType": "Float32",
-                            "BlockXSize": str(1024),
-                            "BlockYSize": str(1024),
+                            "BlockXSize": str(256),
+                            "BlockYSize": str(256),
                         }
                     ),
                 ),
@@ -1535,7 +1533,7 @@ def process_radar(args, pool):
 
     coherence_monthly_composites = []
     coherence_monthly_groups = sorted(list(coherence_monthly_groups.items()))
-    for (group, products) in coherence_monthly_groups:
+    for group, products in coherence_monthly_groups:
         if args.lpis_path:
             if ref_map_10m and tile_spacing[group.tile_id] == 10:
                 tile_ref = ref_map_10m.get(group.tile_id)
@@ -1561,8 +1559,8 @@ def process_radar(args, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(1024),
-                "blockYSize": str(1024),
+                "blockXSize": str(256),
+                "blockYSize": str(256),
             },
             E.Description(group.band_description(1)),
             E.SimpleSource(
@@ -1573,8 +1571,8 @@ def process_radar(args, pool):
                         "RasterXSize": str(5490),
                         "RasterYSize": str(5490),
                         "DataType": "Float32",
-                        "BlockXSize": str(1024),
-                        "BlockYSize": str(1024),
+                        "BlockXSize": str(256),
+                        "BlockYSize": str(256),
                     }
                 ),
             ),
@@ -1584,8 +1582,8 @@ def process_radar(args, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(1024),
-                "blockYSize": str(1024),
+                "blockXSize": str(256),
+                "blockYSize": str(256),
             },
             E.Description(group.band_description(2)),
             E.SimpleSource(
@@ -1596,8 +1594,8 @@ def process_radar(args, pool):
                         "RasterXSize": str(5490),
                         "RasterYSize": str(5490),
                         "DataType": "Float32",
-                        "BlockXSize": str(1024),
-                        "BlockYSize": str(1024),
+                        "BlockXSize": str(256),
+                        "BlockYSize": str(256),
                     }
                 ),
             ),
@@ -1606,7 +1604,7 @@ def process_radar(args, pool):
 
     coherence_season_composites = []
     coherence_season_groups = sorted(list(coherence_season_groups.items()))
-    for (group, products) in coherence_season_groups:
+    for group, products in coherence_season_groups:
         if args.lpis_path:
             if ref_map_10m and tile_spacing[group.tile_id] == 10:
                 tile_ref = ref_map_10m.get(group.tile_id)
@@ -1630,8 +1628,8 @@ def process_radar(args, pool):
             {
                 "dataType": "Float32",
                 "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(1024),
-                "blockYSize": str(1024),
+                "blockXSize": str(256),
+                "blockYSize": str(256),
             },
             E.Description(group.band_description()),
             E.SimpleSource(
@@ -1642,8 +1640,8 @@ def process_radar(args, pool):
                         "RasterXSize": str(5490),
                         "RasterYSize": str(5490),
                         "DataType": "Float32",
-                        "BlockXSize": str(1024),
-                        "BlockYSize": str(1024),
+                        "BlockXSize": str(256),
+                        "BlockYSize": str(256),
                     }
                 ),
             ),
@@ -1655,7 +1653,7 @@ def process_radar(args, pool):
     pool.map(lambda c: c.run(), coherence_monthly_composites)
     pool.map(lambda c: c.run(), coherence_season_composites)
 
-    for (tile_id, vrt_bands) in vrt_bands.items():
+    for tile_id, vrt_bands in vrt_bands.items():
         gt = ref_gt_map[tile_id]
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(tiles[tile_id][1])
@@ -1670,8 +1668,8 @@ def process_radar(args, pool):
                     gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]
                 )
             ),
-            E.BlockXSize(str(1024)),
-            E.BlockYSize(str(1024)),
+            E.BlockXSize(str(256)),
+            E.BlockYSize(str(256)),
         )
         for vrt_band in vrt_bands:
             vrt_dataset.append(vrt_band)
