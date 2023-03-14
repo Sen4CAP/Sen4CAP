@@ -1010,11 +1010,11 @@ def main():
                     "-b11",
                     b11_10m_vrt,
                     "-outndvi",
-                    ndvi,
+                    ndvi + tiling_suffix,
                     "-outndwi",
-                    ndwi,
+                    ndwi + tiling_suffix,
                     "-outbrightness",
-                    brightness,
+                    brightness + tiling_suffix,
                 ]
 
                 container = client.containers.run(
@@ -1044,7 +1044,7 @@ def main():
                         "-in",
                         ndvi,
                         "-out",
-                        ndvi_statistics,
+                        ndvi_statistics + tiling_suffix,
                     ]
                     commands.append(command)
                 if not os.path.exists(ndwi_statistics):
@@ -1054,7 +1054,7 @@ def main():
                         "-in",
                         ndwi,
                         "-out",
-                        ndwi_statistics,
+                        ndwi_statistics + tiling_suffix,
                     ]
                     commands.append(command)
                 if not os.path.exists(brightness_statistics):
@@ -1064,7 +1064,7 @@ def main():
                         "-in",
                         brightness,
                         "-out",
-                        brightness_statistics,
+                        brightness_statistics + tiling_suffix,
                     ]
                     commands.append(command)
 
