@@ -24,11 +24,9 @@ import sys
 import tempfile
 
 
-OTB_IMAGE_NAME = "sen4x/otb:7.4.0"
 SEN4CAP_PROCESSORS_IMAGE_NAME = "sen4cap/processors:3.0.0"
 INTERPOLATION_IMAGE_NAME = "sen4x/interpolation:0.1.0"
 GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.4.1"
-MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
 
 
 SATELLITE_ID_SENTINEL2 = 1
