@@ -24,7 +24,7 @@ import shutil
 from configparser import ConfigParser
 
 
-OTB_IMAGE_NAME = "sen4x/otb:7.4.0"
+OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 INTERPOLATION_IMAGE_NAME = "sen4x/interpolation:0.1.0"
 GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.4.1"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"

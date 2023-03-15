@@ -27,7 +27,7 @@ import subprocess
 from configparser import ConfigParser
 
 
-OTB_IMAGE_NAME = "sen4x/otb:7.4.0"
+OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 
 
 class Config(object):
