@@ -27,7 +27,6 @@ PROCESSOR_LPIS = 8
 STRATUM_TYPE_CLASSIFICATION = 1
 STRATUM_TYPE_YIELD = 2
 
-GDAL_IMAGE_NAME = "osgeo/gdal:ubuntu-full-3.3.1"
 OTB_IMAGE_NAME = "sen4cap/processors:2.0.0"
 
 
