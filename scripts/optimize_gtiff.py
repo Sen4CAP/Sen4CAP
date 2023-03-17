@@ -21,8 +21,8 @@ def run_command(args, env=None):
 def parse_args():
     parser = argparse.ArgumentParser(description='Create cloud-optimized GeoTIFFs')
     parser.add_argument('input', help='Input image')
-    parser.add_argument('-b', '--block-size', help='GeoTIFF block size', type=int, default=1024)
-    parser.add_argument('-s', '--min-size', help='Smallest overview size', type=int, default=1024)
+    parser.add_argument('-b', '--block-size', help='GeoTIFF block size', type=int, default=256)
+    parser.add_argument('-s', '--min-size', help='Smallest overview size', type=int, default=256)
     parser.add_argument('-r', '--resampler', help='Overview resampling method', default='average')
     parser.add_argument('-i', '--interleave', help='Interleaving type', choices=['BAND', 'PIXEL'], default='BAND')
     parser.add_argument('--no-data', help='No data value', default=-10000)
