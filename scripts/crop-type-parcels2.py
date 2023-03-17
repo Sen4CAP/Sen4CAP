@@ -26,7 +26,6 @@ import tempfile
 
 SEN4CAP_PROCESSORS_IMAGE_NAME = "sen4cap/processors:3.0.0"
 INTERPOLATION_IMAGE_NAME = "sen4x/interpolation:0.1.0"
-GDAL_IMAGE_NAME = "ghcr.io/osgeo/gdal:ubuntu-full-3.6.3"
 
 
 SATELLITE_ID_SENTINEL2 = 1
