@@ -26,7 +26,6 @@ from configparser import ConfigParser
 
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 INTERPOLATION_IMAGE_NAME = "sen4x/interpolation:0.1.0"
-GDAL_IMAGE_NAME = "ghcr.io/osgeo/gdal:ubuntu-full-3.6.3"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
 
 
@@ -891,24 +890,7 @@ def main():
                     command_b11_nodata_vrt,
                     command_b12_nodata_vrt,
                 ]
-
-                containers = []
-                for command in commands:
-                    container = client.containers.run(
-                        image=GDAL_IMAGE_NAME,
-                        detach=True,
-                        user=f"{os.getuid()}:{os.getgid()}",
-                        volumes=volumes,
-                        working_dir=output_dir,
-                        command=command,
-                    )
-                    print(command)
-                    containers.append(container)
-                for container in containers:
-                    res = container.wait()
-                    if res["StatusCode"] != 0:
-                        print(container.logs())
-                    container.remove()
+                pool.map(run_command, commands)
 
                 command_b5_10m_vrt = [
                     "gdal_translate",
@@ -968,24 +950,7 @@ def main():
                     command_b11_10m_vrt,
                     command_b12_10m_vrt,
                 ]
-
-                containers = []
-                for command in commands:
-                    container = client.containers.run(
-                        image=GDAL_IMAGE_NAME,
-                        detach=True,
-                        user=f"{os.getuid()}:{os.getgid()}",
-                        volumes=volumes,
-                        working_dir=output_dir,
-                        command=command,
-                    )
-                    print(command)
-                    containers.append(container)
-                for container in containers:
-                    res = container.wait()
-                    if res["StatusCode"] != 0:
-                        print(container.logs())
-                    container.remove()
+                pool.map(run_command, commands)
 
             ndvi = f"S2_NDVI_{tile}.tif"
             ndwi = f"S2_NDWI_{tile}.tif"
