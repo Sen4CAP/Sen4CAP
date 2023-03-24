@@ -456,7 +456,8 @@ QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters
 
 QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters, const ProductType &prdType) {
     QString prdTypeStr;
-    if (prdType != ProductType::InvalidProductTypeId || prdType != ProductType::L2AProductTypeId) {
+    if (prdType != ProductType::InvalidProductTypeId && prdType != ProductType::L2AProductTypeId &&
+            prdType != ProductType::MaskedL2AProductTypeId) {
         // Try to extract the products from the key specific for this product type
         prdTypeStr = ProductHelper::GetProductTypeShortName(prdType);
     }
@@ -672,7 +673,7 @@ bool ProcessorHandler::CheckAllAncestorProductCreation(ExecutionContextBase &ctx
             if (ancPrdType == ProductType::L2AProductTypeId) {
                 satIds = {(int)Satellite::Sentinel2, (int)Satellite::Landsat8};
             } else if (ancPrdType == ProductType::S4CS1L2AmpProductTypeId ||
-                       ancPrdType == ProductType::S4CS1L2AmpProductTypeId) {
+                       ancPrdType == ProductType::S4CS1L2CoheProductTypeId) {
                 satIds = {(int)Satellite::Sentinel1};
             }
             if (!ctx.IsProcessingDone(ancPrdType, siteId, startDate, endDate, satIds)) {

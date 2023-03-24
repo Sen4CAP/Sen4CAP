@@ -15,24 +15,22 @@ class S4CCropTypeHandler : public ProcessorHandler
             siteShortName = pContext->GetSiteShortName(evt.siteId);
             configParameters = pCtx->GetJobConfigurationParameters(evt.jobId, L4A_CT_CFG_PREFIX);
             parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
+            startDate = ProcessorHandlerHelper::GetDateTimeFromString(
+                        ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "start_date", L4A_CT_CFG_PREFIX));
+            endDate = ProcessorHandlerHelper::GetDateTimeFromString(
+                        ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "end_date", L4A_CT_CFG_PREFIX));
             for (QString cfgKey : cfgKeys) {
                 mapCfgValues.insert(
                     cfgKey, ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
                                                                          cfgKey, L4A_CT_CFG_PREFIX));
             }
         }
-        void SetFilteringProducts(const QStringList &filterPrds) {
-            filterProductNames = filterPrds;
-        }
-
         EventProcessingContext *pCtx;
         JobSubmittedEvent event;
 
         QString siteShortName;
         QDateTime startDate;
         QDateTime endDate;
-        QStringList tileIds;
-        QStringList filterProductNames;
 
         QMap<QString, QString> mapCfgValues;
         std::map<QString, QString> configParameters;
@@ -66,8 +64,8 @@ private:
                                         const JobSubmittedEvent &event, const QString &tmpPrdDir,
                                         const QDateTime &minDate, const QDateTime &maxDate);
 
-    bool GetStartEndDatesFromProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                      QDateTime &startDate, QDateTime &endDate, QList<ProductDetails> &productDetails);
+//    bool GetStartEndDatesFromProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+//                                      QDateTime &startDate, QDateTime &endDate, QList<ProductDetails> &productDetails);
     void UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdate);
     QStringList GetTileIdsFromProducts(EventProcessingContext &ctx,
                                         const JobSubmittedEvent &event, const QList<ProductDetails> &productDetails);

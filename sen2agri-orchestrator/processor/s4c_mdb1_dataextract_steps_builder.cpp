@@ -52,6 +52,8 @@ QList<MarkerType> S4CMarkersDB1DataExtractStepsBuilder::allMarkerFileTypes =
     {"LAI", ProductType::L3BProductTypeId, "SLAIMONO", ""},
     {"FAPAR", ProductType::L3BProductTypeId, "SFAPARMONO", ""},
     {"FCOVER", ProductType::L3BProductTypeId, "SFCOVERMONO", ""},
+    {"NDWI", ProductType::L3BProductTypeId, "SNDWI", ""},
+    {"BRIGHTNESS", ProductType::L3BProductTypeId, "SBRIGHT", ""},
 
     // S1 markers
     {"AMP", ProductType::S4CS1L2AmpProductTypeId, "AMP", ""},

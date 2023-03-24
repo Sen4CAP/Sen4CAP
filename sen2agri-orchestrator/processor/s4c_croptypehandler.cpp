@@ -99,16 +99,6 @@ QStringList S4CCropTypeHandler::GetExtractParcelsTaskArgs(const CropTypeJobConfi
                                  cfg.startDate.toString("yyyy-MM-dd"),
                                  "--season-end",
                                  cfg.endDate.toString("yyyy-MM-dd")};
-//    if (cfg.tileIds.size() > 0) {
-//        extractParcelsArgs += "--tiles";
-//        extractParcelsArgs.append(cfg.tileIds);
-//    }
-
-//    if (cfg.filterProductNames.size() > 0) {
-//        extractParcelsArgs += "--products";
-//        extractParcelsArgs.append(cfg.filterProductNames);
-//    }
-
     extractParcelsArgs.append("--");
     extractParcelsArgs.append(parcelsPath);
     extractParcelsArgs.append(lutPath);
@@ -182,25 +172,10 @@ QStringList S4CCropTypeHandler::GetProductFormatterArgs(TaskToSubmit &productFor
                                          "generic", additionalArgs, true);
 }
 
-bool S4CCropTypeHandler::GetStartEndDatesFromProducts(EventProcessingContext &ctx,
-                                                      const JobSubmittedEvent &event,
-                                                      QDateTime &startDate,
-                                                      QDateTime &endDate,
-                                                      QList<ProductDetails> &productDetails)
-{
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
-    productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
-
-    return ProcessorHandlerHelper::GetIntevalFromProducts(prds, startDate, endDate);
-}
-
 void S4CCropTypeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                                 const JobSubmittedEvent &event)
 {
     CropTypeJobConfig cfg(&ctx, event, m_cfgKeys);
-    UpdateJobConfigParameters(cfg);
-
     QList<TaskToSubmit> allTasksList;
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList);
     SubmitTasks(ctx, cfg.event.jobId, allTasksListRef);
@@ -318,41 +293,8 @@ ProcessorJobDefinitionParams S4CCropTypeHandler::GetProcessingDefinitionImpl(
     return params;
 }
 
-
-void S4CCropTypeHandler::UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdate)
-{
-    if(IsScheduledJobRequest(cfgToUpdate.parameters)) {
-        QString strStartDate, strEndDate;
-        if (ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "start_date", strStartDate) &&
-            ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "end_date", strEndDate) &&
-            cfgToUpdate.parameters.contains("input_products") && cfgToUpdate.parameters["input_products"].toArray().size() == 0) {
-            cfgToUpdate.isScheduled = true;
-            cfgToUpdate.startDate = ProcessorHandlerHelper::GetDateTimeFromString(strStartDate);
-            cfgToUpdate.endDate = ProcessorHandlerHelper::GetDateTimeFromString(strEndDate);
-        }
-    } else {
-        const QStringList &filterProductNames = GetInputProductNames(cfgToUpdate.parameters);
-        cfgToUpdate.SetFilteringProducts(filterProductNames);
-
-        QList<ProductDetails> productDetails;
-        bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, productDetails);
-        if (!ret || productDetails.size() == 0) {
-            // try to get the start and end date if they are given
-            cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
-            throw std::runtime_error(
-                QStringLiteral(
-                    "No products provided at input or no products available in the specified interval")
-                    .toStdString());
-        }
-
-        cfgToUpdate.tileIds = GetTileIdsFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, productDetails);
-
-    }
-}
-
-
 QStringList S4CCropTypeHandler::GetTileIdsFromProducts(EventProcessingContext &ctx,
-                                                       const JobSubmittedEvent &event,
+                                                       const JobSubmittedEvent &,
                                                        const QList<ProductDetails> &productDetails)
 {
 
