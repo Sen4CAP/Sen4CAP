@@ -174,7 +174,7 @@ QStringList CropMaskHandler::GetEarthSignatureTaskArgs(const CropMaskJobConfig &
     return esArgs;
 }
 
-QStringList CropMaskHandler::GetCropMaskTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &event,
+QStringList CropMaskHandler::GetCropMaskTaskArgs(EventProcessingContext &ctx, const JobSubmittedEvent &,
                           const CropMaskJobConfig &cfg, TaskToSubmit &cropMaskTask) {
 
     const TilesTimeSeries  &mapTiles = GroupL2ATiles(ctx, cfg.productDetails);
@@ -393,7 +393,11 @@ ProcessorJobDefinitionParams CropMaskHandler::GetProcessingDefinitionImpl(Schedu
                       .arg(startDate.toString())
                       .arg(endDate.toString()));
     } else {
-        params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
+        params.jsonParameters = QStringLiteral("{ \"scheduled_job\": \"1\"") +
+                                 ", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
+                                 "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}";
         params.isValid = true;
         Logger::debug(QStringLiteral("Executing scheduled job. Scheduler extracted for L4A a number "
                                      "of %1 products for site ID %2 with start date %3 and end date %4!")

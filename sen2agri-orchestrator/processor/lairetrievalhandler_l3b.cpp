@@ -417,7 +417,7 @@ void LaiRetrievalHandlerL3B::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     }
 
     // create and submit the tasks for the received products
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
     const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);

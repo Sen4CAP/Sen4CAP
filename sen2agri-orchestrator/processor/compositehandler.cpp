@@ -362,7 +362,7 @@ void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
     const QList<ProductDetails> &prdDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(prdDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);
@@ -370,6 +370,11 @@ void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
             QStringLiteral("No products provided at input or no products available in the specified interval").
                     toStdString());
     }
+
+    Logger::debug(QStringLiteral("A number of %1 input L2A products will be used for composite L3A job %2 for site ID %3!")
+                  .arg(prdDetails.size())
+                  .arg(event.jobId)
+                  .arg(event.siteId));
 
     CompositeJobConfig cfg;
     GetJobConfig(ctx, event, cfg);
@@ -694,14 +699,17 @@ ProcessorJobDefinitionParams CompositeHandler::GetProcessingDefinitionImpl(Sched
                               .arg(startDate.toString())
                               .arg(endDate.toString()));
     } else {
-        params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
-        params.jsonParameters = "{ \"synthesis_date\": \"" + halfSynthesisDate.toString("yyyyMMdd") + "\"}";
-        Logger::debug(QStringLiteral("Executing scheduled job. Scheduler extracted for L3A a number "
-                                     "of %1 products for site ID %2 with start date %3 and end date %4!")
-                      .arg(params.productList.size())
+        // params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
+        params.jsonParameters = "{ \"scheduled_job\": \"1\", \"synthesis_date\": \"" + halfSynthesisDate.toString("yyyyMMdd") + "\"" +
+                                 ", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
+                                 "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}";
+        Logger::debug(QStringLiteral("Executing scheduled job for site ID %1 with start date %2 and end date %3 and synthesis date %4!")
                       .arg(siteId)
                       .arg(startDate.toString())
-                      .arg(endDate.toString()));
+                      .arg(endDate.toString())
+                      .arg(halfSynthesisDate.toString()));
     }
     return params;
 }

@@ -344,7 +344,7 @@ bool S4SPermanentCropHandler::GetStartEndDatesFromProducts(EventProcessingContex
                                                       QList<ProductDetails> &productDetails)
 {
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId);
+    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
     productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
 
     return ProcessorHandlerHelper::GetIntevalFromProducts(prds, startDate, endDate);

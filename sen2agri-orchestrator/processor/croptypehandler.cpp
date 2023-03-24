@@ -354,7 +354,13 @@ ProcessorJobDefinitionParams CropTypeHandler::GetProcessingDefinitionImpl(Schedu
                       .arg(cropMaskFolder)
                       .arg(shapeFile));
     } else {
-        params.jsonParameters = "{ \"crop_mask\": \"" + cropMaskFolder + "\", " + refStr + "}";
+        params.jsonParameters = "{ \"scheduled_job\": \"1\", \"crop_mask\": \"" + cropMaskFolder + "\", " + refStr +
+                                 ", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
+                                 "\"end_date\": \"" + endDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}";
+
+
         params.productList = ctx.GetProducts(siteId, (int)ProductType::L2AProductTypeId, startDate, endDate);
         Logger::debug(QStringLiteral("Executing scheduled job. Scheduler extracted for L4B a number "
                                      "of %1 products for site ID %2 with start date %3 and end date %4!")
