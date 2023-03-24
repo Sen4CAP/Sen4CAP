@@ -69,7 +69,6 @@ bool ResourceManagerItf_SLURM::HandleStartSteps(RequestParamsSubmitSteps *pReqPa
     // Get the path to the processor wrapper and pass to it the name of
     // the processor to be executed
     QString strProcWrpExecStr;
-    QString str;
     QString strIpVal;
     QString strPortVal;
     QString strWrpSendRetriesNoVal;
@@ -267,8 +266,16 @@ void ResourceManagerItf_SLURM::FillEndStepAddExecInfos(const QString &strJobName
                       .arg(SACCT_CMD)
                       .arg(args.join(' ')));
 
+    QString strVal;
+    ConfigurationMgr::GetInstance()->GetValue(EXECUTOR_SACCT_RETRY_CNT, strVal);
+    bool ok = false;
+    // if set to 0 or less, the sacct is disabled but we do not allow more than the default value
+    int maxRetries = strVal.toInt(&ok);
+    if (!ok || maxRetries > SACCT_RETRY_CNT) {
+        maxRetries = SACCT_RETRY_CNT;
+    }
     int retryCnt = 0;
-    while(retryCnt < SACCT_RETRY_CNT) {
+    while(retryCnt < maxRetries) {
         if (cmdInvoker.InvokeCommand(SACCT_CMD, args, false)) {
             const QString &strLog = cmdInvoker.GetExecutionLog();
             SlurmSacctResultParser slurmSacctParser;

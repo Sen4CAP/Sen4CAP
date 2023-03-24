@@ -48,13 +48,10 @@ int SlurmSacctResultParser::ParseResults(const QString &strLog, QList<ProcessorE
 {
     /* The expected log is similar with the one below:
 
-                JobID|JobName|AveCPU|AveVMSize|MaxVMSize
-                2|ls|00:00:00|0|0
-                3|ls|00:00:00|0|0
-                4|find|00:00:00|0|0
-                5|hostname|00:00:00|0|0
-                6|find|00:00:00|0|0
-                7|20150604144546391_CROP_TYPE|00:00:00|0|0
+        JobID|JobName|NodeList|AveCPU|UserCPU|SystemCPU|ExitCode|AveVMSize|MaxRSS|MaxVMSize|MaxDiskRead|MaxDiskWrite
+        191380|TSKID_259161_STEPNAME_Markers1Extractor_0|localhost||00:00.024|00:00.028|0:0|||||
+        191380.batch|batch|localhost|00:00:00|00:00.007|00:00.008|0:0|418104K|6884K|418104K|0.03M|0.00M
+
     */
     QRegExp rx("(\\n)"); //RegEx for '\n'
     QStringList strList = strLog.split(rx);

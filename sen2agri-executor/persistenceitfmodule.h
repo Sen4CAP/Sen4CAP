@@ -14,6 +14,7 @@
 
 #define SRV_IP_ADDR                 "executor.listen-ip"
 #define SRV_PORT_NO                 "executor.listen-port"
+#define EXECUTOR_SACCT_RETRY_CNT    "executor.sacct-max-retries"
 #define PROCESSOR_WRAPPER_PATH      "executor.wrapper-path"
 #define WRP_SEND_RETRIES_NO         "executor.wrp-send-retries-no"
 #define WRP_TIMEOUT_BETWEEN_RETRIES "executor.wrp-timeout-between-retries"
