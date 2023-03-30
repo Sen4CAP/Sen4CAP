@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-import gdal
+from osgeo import gdal
 
 parser = argparse.ArgumentParser(description="Copies the geotransform from one file to another")
 parser.add_argument('source', help="Source dataset")
