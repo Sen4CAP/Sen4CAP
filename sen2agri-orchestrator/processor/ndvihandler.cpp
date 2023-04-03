@@ -24,7 +24,7 @@ void NdviHandler::CreateTasksForNewProduct(QList<TaskToSubmit> &outAllTasksList,
         outAllTasksList.append(TaskToSubmit{"ndvi-mask-flags", {}});
         outAllTasksList.append(TaskToSubmit{"ndvi-extractor", {}});
     }
-    outAllTasksList.append({"ndvi-product-formatter", {}});
+    outAllTasksList.append(TaskToSubmit{"ndvi-product-formatter", {}});
     if(bRemoveTempFiles) {
         outAllTasksList.append(TaskToSubmit{ "files-remover", {} });
     }

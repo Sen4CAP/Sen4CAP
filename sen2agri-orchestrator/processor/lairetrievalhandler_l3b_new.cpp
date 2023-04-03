@@ -94,7 +94,7 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
             outAllTasksList.append(TaskToSubmit{"gen-domain-flags", {}});
         }
     }
-    outAllTasksList.append({"product-formatter", {}});
+    outAllTasksList.append(TaskToSubmit{"product-formatter", {}});
     if(jobCtx.bRemoveTempFiles) {
         outAllTasksList.append(TaskToSubmit{ "files-remover", {} });
     }

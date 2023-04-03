@@ -564,7 +564,7 @@ void LaiRetrievalHandlerMultiDateBase::SubmitL3BMapTiles(EventProcessingContext 
     // submit only if we had something to execute but do not give an error
     if (realL2AMetaFiles.size() > 0) {
         // Create the product formatter tasks for the Reprocessed and/or Fitted Products (if needed)
-        allTasksList.append({"product-formatter", {}});
+        allTasksList.append(TaskToSubmit{"product-formatter", {}});
         TaskToSubmit &productFormatterTask = allTasksList[allTasksList.size()-1];
         for(LAIProductFormatterParams params: listParams) {
             productFormatterTask.parentTasks.append(params.laiReprocParams.parentsTasksRef);

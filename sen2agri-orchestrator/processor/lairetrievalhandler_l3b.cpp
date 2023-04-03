@@ -54,7 +54,7 @@ void LaiRetrievalHandlerL3B::CreateTasksForNewProduct(QList<TaskToSubmit> &outAl
         outAllTasksList.append(TaskToSubmit{"lai-quantify-image", {}});
         outAllTasksList.append(TaskToSubmit{"lai-quantify-err-image", {}});
     }
-    outAllTasksList.append({"lai-mono-date-product-formatter", {}});
+    outAllTasksList.append(TaskToSubmit{ "lai-mono-date-product-formatter", {} });
     if(bRemoveTempFiles) {
         outAllTasksList.append(TaskToSubmit{ "files-remover", {} });
     }

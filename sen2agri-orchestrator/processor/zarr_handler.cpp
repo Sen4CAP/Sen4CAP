@@ -50,7 +50,7 @@ void ZarrHandler::CreateTasksAndSteps(EventProcessingContext &ctx, const JobSubm
         endOfJobParentsRefs.append(allTasksList[cnt]);
         allTasksListRef.append(allTasksList[cnt]);
     }
-    allTasksList.append({"end-of-job", {}});
+    allTasksList.append(TaskToSubmit{ "end-of-job", {} });
     allTasksList[cnt].parentTasks.append(endOfJobParentsRefs);
     allTasksListRef.append(allTasksList[cnt]);
 
