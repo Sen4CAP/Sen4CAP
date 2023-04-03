@@ -36,9 +36,8 @@ function show_menu(){
     echo -e "${MENU}**${NUMBER} 2)${MENU} BUILD Sen2AgriPlatform : OTB ${NORMAL}"
     echo -e "${MENU}**${NUMBER} 3)${MENU} BUILD Sen2AgriProcessors, Downloaders and Demmaccs ${NORMAL}"
     echo -e "${MENU}**${NUMBER} 4)${MENU} BUILD Sen2AgriApplication ${NORMAL}"
-    echo -e "${MENU}**${NUMBER} 5)${MENU} BUILD Sen2AgriWebsite ${NORMAL}"
-    echo -e "${MENU}**${NUMBER} 6)${MENU} BUILD Selective: Enter list of options (ex: platform, processors, website, app)  ${NORMAL}"
-    echo -e "${MENU}**${NUMBER} 7)${MENU} BUILD Sen2Agri All Components (no OTB)  ${NORMAL}"
+    echo -e "${MENU}**${NUMBER} 5)${MENU} BUILD Selective: Enter list of options (ex: platform, processors, app)  ${NORMAL}"
+    echo -e "${MENU}**${NUMBER} 6)${MENU} BUILD Sen2Agri All Components (no OTB)  ${NORMAL}"
     echo -e "${MENU}*********************************************${NORMAL}"
     echo -e "${ENTER_LINE}Please enter a menu option and enter or ${RED_TEXT}enter to exit. ${NORMAL}"
     read opt
@@ -126,23 +125,7 @@ while [ opt != '' ]
            ;;
         5) clear;
            option_picked "Option 5 Picked";
-           echo "====BUILD Sen2AgriWebsite====";
-           #get script path
-           script_path=$(dirname $0);
-
-           #execute all the scripts
-           sh ./$script_path/Sen2AgriWebSiteBuild.sh;
-           wait;
-
-	   #copy generated RMPs
-           cp -f ${DEFAULT_PATH}/Sen2AgriWebSite/rpm_binaries/*.rpm ${DEFAULT_PATH}/${DEFAULT_RPM_DIR};
-           echo "====Generated RPM file moved to ${DEFAULT_RPM_DIR}====";
-           rm -rf ${DEFAULT_PATH}/Sen2AgriWebSite;
-           show_menu;
-           ;;
-        6) clear;
-           option_picked "Option 6 Picked";
-           echo "====BUILD Selective: Enter list of options.(ex: platform, processors, website, app)====";
+           echo "====BUILD Selective: Enter list of options.(ex: platform, processors, app)====";
            echo "Type components name to be build and hit [ENTER]:";
            read components_list;
 
@@ -174,19 +157,6 @@ while [ opt != '' ]
               rm -rf ${DEFAULT_PATH}/Sen2AgriPlatform;
            fi
 
-           if [[ "$components_list" =~ "website" ]];
-           then
-              echo "====WEBSITE BUILD====";
-              #execute all the scripts
-              sh ./$script_path/Sen2AgriWebSiteBuild.sh;
-              wait;
-
-              #copy generated RMPs
-              cp -f ${DEFAULT_PATH}/Sen2AgriWebSite/rpm_binaries/*.rpm ${DEFAULT_PATH}/${DEFAULT_RPM_DIR};
-              echo "====Generated RPM file moved to ${DEFAULT_RPM_DIR}====";
-              rm -rf ${DEFAULT_PATH}/Sen2AgriWebSite;
-           fi
-
            if [[ "$components_list" =~ "app" ]];
            then
               echo "====SERVICES BUILD====";
@@ -202,8 +172,8 @@ while [ opt != '' ]
            show_menu;
            ;;
 
-        7) clear;
-           option_picked "Option 7 Picked";
+        6) clear;
+           option_picked "Option 6 Picked";
            echo "====BUILD Sen2Agri ALL COMPONENTS (no OTB)====";
 
            #get script path
@@ -212,17 +182,13 @@ while [ opt != '' ]
            #execute all the scripts
            sh ./$script_path/Sen2AgriProcessorsBuild.sh;
            wait;
-           sh ./$script_path/Sen2AgriWebSiteBuild.sh;
-           wait;
            sh ./$script_path/Sen2AgriAppBuild.sh;
            wait;
            #copy generated RMPs
            cp -f ${DEFAULT_PATH}/Sen2AgriProcessors/rpm_binaries/*.rpm ${DEFAULT_PATH}/${DEFAULT_RPM_DIR};
-           cp -f ${DEFAULT_PATH}/Sen2AgriWebSite/rpm_binaries/*.rpm ${DEFAULT_PATH}/${DEFAULT_RPM_DIR};
            cp -f ${DEFAULT_PATH}/Sen2AgriApp/rpm_binaries/*.rpm ${DEFAULT_PATH}/${DEFAULT_RPM_DIR};
            echo "====Generated RPMs files moved to ${DEFAULT_RPM_DIR}====";
            rm -rf ${DEFAULT_PATH}/Sen2AgriProcessors;
-           rm -rf ${DEFAULT_PATH}/Sen2AgriWebSite;
            rm -rf ${DEFAULT_PATH}/Sen2AgriApp;
            show_menu;
            ;;

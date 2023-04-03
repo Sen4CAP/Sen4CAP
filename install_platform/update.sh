@@ -371,7 +371,6 @@ migrate_to_docker
 yum -y install python-dateutil libcurl-devel openssl-devel libxml2-devel php-pgsql
 yum -y install ../rpm_binaries/*.rpm
 rm -rf /usr/local/bin/gdal_edit.py
-yum -y remove sen2agri-website
 
 DB_NAME=$(get_install_config_property "DB_NAME")
 if [ -z "$DB_NAME" ]; then

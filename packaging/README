@@ -33,8 +33,6 @@ $ /path/to/sources/sen2agri/packaging/Sen2AgriPlatformBuild.sh
 $ /path/to/sources/sen2agri/packaging/Sen2AgriProcessorsBuild.sh
 ##builds SEN2AGRI Services
 $ /path/to/sources/sen2agri/packaging/Sen2AgriAppBuild.sh
-##builds SEN2AGRI website
-$ /path/to/sources/sen2agri/packaging/Sen2AgriWebSiteBuild.sh
 
 NOTE: see NOTE1 and NOTE2 from point a)
 

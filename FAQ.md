@@ -94,7 +94,7 @@ There is no need to.
 1. Uninstall the Sen2-Agri packages
     ```bash
     sudo yum remove \
-        sen2agri-processors sen2agri-website sen2agri-downloaders-demmaccs \
+        sen2agri-processors sen2agri-downloaders-demmaccs \
         sen2agri-app
     ```
 1. Uninstall `SLURM`, `MariaDB` and `PostgreSQL`
