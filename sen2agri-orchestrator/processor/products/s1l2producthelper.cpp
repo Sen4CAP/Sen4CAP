@@ -107,7 +107,7 @@ void S1L2ProductHelper::SetProduct(const QString &productPath)
 
 bool S1L2ProductHelper::IsIntendedFor(const QString &productPath)
 {
-    for(const FileNameInfosExtractor fnExt: fnInfoExtractors) {
+    for(const FileNameInfosExtractor &fnExt: fnInfoExtractors) {
         if (fnExt.IsIntended(productPath)) {
             return true;
         }
@@ -131,7 +131,7 @@ QMap<QString, QString> S1L2ProductHelper::GetProductFilesByTile(const QString &s
 }
 
 bool S1L2ProductHelper::GetFileNameInfosExtractor(const QString &productPath, FileNameInfosExtractor &extractor) {
-    for(const FileNameInfosExtractor fnExt: fnInfoExtractors) {
+    for(const FileNameInfosExtractor &fnExt: fnInfoExtractors) {
         if (fnExt.IsIntended(productPath)) {
             extractor = fnExt;
             return true;
