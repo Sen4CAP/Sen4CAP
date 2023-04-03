@@ -1,6 +1,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+
+#include <algorithm>
 #include <fstream>
 
 #include "lairetrhandler_multidt_base.hpp"
@@ -506,7 +508,7 @@ bool LaiRetrievalHandlerMultiDateBase::AddTileFileInfo(TileTimeSeriesInfo &tempo
             if (!temporalTileInfo.temporalTilesFileInfos.contains(l3bTileInfo)) {
                 temporalTileInfo.temporalTilesFileInfos.prepend(l3bTileInfo);
                 // sort also the list ascending just to be sure
-                qSort(temporalTileInfo.temporalTilesFileInfos.begin(), temporalTileInfo.temporalTilesFileInfos.end(), compareInfoTileFiles);
+                std::sort(temporalTileInfo.temporalTilesFileInfos.begin(), temporalTileInfo.temporalTilesFileInfos.end(), compareInfoTileFiles);
                 return true;
             }
         }

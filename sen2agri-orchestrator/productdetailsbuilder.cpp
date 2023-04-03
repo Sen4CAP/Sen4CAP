@@ -1,5 +1,7 @@
 #include "productdetailsbuilder.h"
 
+#include <algorithm>
+
 ProductDetailsBuilder::ProductDetailsBuilder()
 {
 
@@ -47,7 +49,7 @@ QList<ProductDetails> ProductDetailsBuilder::CreateDetails(const ProductList &pr
     }
 
     // sort the input products according to their dates
-    qSort(prdDetailsList.begin(), prdDetailsList.end(), CompareProductDates);
+    std::sort(prdDetailsList.begin(), prdDetailsList.end(), CompareProductDates);
 
     return prdDetailsList;
 }

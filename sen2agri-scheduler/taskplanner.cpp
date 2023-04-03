@@ -1,5 +1,7 @@
 #include "taskplanner.hpp"
 
+#include <algorithm>
+
 TaskPlanner::TaskPlanner()
 {
 
@@ -93,7 +95,7 @@ bool lessPriority( const ScheduledTask & e1, const ScheduledTask & e2 )
 void TaskPlanner::orderByPriority(std::vector<ScheduledTask>& tasks)
 {
     // lower value is higher priority
-    qSort(tasks.begin(), tasks.end(), lessPriority);
+    std::sort(tasks.begin(), tasks.end(), lessPriority);
 }
 
 

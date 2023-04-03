@@ -1,6 +1,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+
+#include <algorithm>
 #include <fstream>
 
 #include "lairetrievalhandler_l3c.hpp"
@@ -164,7 +166,7 @@ QStringList LaiRetrievalHandlerL3C::GetL3BProductsSinceStartOfSeason(EventProces
     }
 
     // sort ascending the list according to the acquisition time and the name if dates equal
-    qSort(retList.begin(), retList.end(), compareL3BProductDates);
+    std::sort(retList.begin(), retList.end(), compareL3BProductDates);
 
     return retList;
 }

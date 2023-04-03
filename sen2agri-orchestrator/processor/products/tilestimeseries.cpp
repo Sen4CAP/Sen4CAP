@@ -2,6 +2,8 @@
 
 #include "producthelperfactory.h"
 
+#include <algorithm>
+
 using namespace orchestrator::tiletimeseries;
 using namespace orchestrator::products;
 
@@ -151,7 +153,7 @@ void TilesTimeSeries::InitializeFrom(const TilesTimeSeries &timeSeries, const QM
             // at this stage we know that the infos have only one unique satellite id
             // we keep in the returning map only the tiles from the primary satellite
             // Sort the products by date as maybe we added secondary products at the end
-            qSort(info.temporalTilesFileInfos.begin(), info.temporalTilesFileInfos.end(), compareTileInfoFilesDates);
+            std::sort(info.temporalTilesFileInfos.begin(), info.temporalTilesFileInfos.end(), compareTileInfoFilesDates);
 
             // add the tile info
             m_mapTiles[info.tileId] = info;

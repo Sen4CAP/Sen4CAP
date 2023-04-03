@@ -1,6 +1,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+
+#include <algorithm>
 #include <fstream>
 
 #include "agricpracticeshandler.hpp"
@@ -733,7 +735,7 @@ bool AgricPracticesHandler::GetPrevL4CProduct(const AgricPracticesJobPayload &jo
         l4cPrdsFiltered.append(prd);
     }
     if (l4cPrdsFiltered.size() > 0) {
-        qSort(l4cPrdsFiltered.begin(), l4cPrdsFiltered.end(), compareL4CProductDates);
+        std::sort(l4cPrdsFiltered.begin(), l4cPrdsFiltered.end(), compareL4CProductDates);
         // remove products that have the same day as the current one
         prevL4cProd = l4cPrdsFiltered[l4cPrdsFiltered.size()-1].fullPath;
         return true;
