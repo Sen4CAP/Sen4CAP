@@ -25,10 +25,10 @@ ConfigurationParameterValueList PersistenceManager::GetConfigurationParameters(Q
     QString strPort = settings.value("PORT_NO", "7777").toString();
     QString strWrapperPath = settings.value("WRAPPER_PATH", "./sen2agri-processor-wrapper").toString();
 
-    cout << "----------------------------------------------------" << endl;
-    cout << "PersistenceManagerSimulator: GetConfigurationParameters called!" << endl;
-    cout << "PREFIX : " << prefix.toStdString().c_str() << endl;
-    cout << "----------------------------------------------------" << endl;
+    cout << "----------------------------------------------------\n";
+    cout << "PersistenceManagerSimulator: GetConfigurationParameters called!\n";
+    cout << "PREFIX : " << prefix.toStdString().c_str() << '\n';
+    cout << "----------------------------------------------------\n";
     ConfigurationParameterValueList retList(
         {ConfigurationParameterValue("executor.listen-ip", 0, strIp),
          ConfigurationParameterValue("executor.listen-port", 0, strPort),
@@ -91,35 +91,35 @@ void PersistenceManager::SubmitSteps(int taskId, NewStepList steps)
 
 void PersistenceManager::MarkStepPendingStart(int taskId, QString name)
 {
-    cout << "----------------------------------------------------" << endl;
-    cout << "PersistenceManager: MarkStepPendingStart called with task id " << taskId << endl;
-    cout << "STEP NAME : " << name.toStdString().c_str() << endl;
-    cout << "----------------------------------------------------" << endl;
+    cout << "----------------------------------------------------\n";
+    cout << "PersistenceManager: MarkStepPendingStart called with task id " << taskId << '\n';
+    cout << "STEP NAME : " << name.toStdString().c_str() << '\n';
+    cout << "----------------------------------------------------\n";
 }
 
 void PersistenceManager::MarkStepStarted(int taskId, QString name)
 {
-    cout << "----------------------------------------------------" << endl;
-    cout << "PersistenceManager: MarkStepStarted called with task id " << taskId << endl;
-    cout << "STEP NAME : " << name.toStdString().c_str() << endl;
-    cout << "----------------------------------------------------" << endl;
+    cout << "----------------------------------------------------\n";
+    cout << "PersistenceManager: MarkStepStarted called with task id " << taskId << '\n';
+    cout << "STEP NAME : " << name.toStdString().c_str() << '\n';
+    cout << "----------------------------------------------------\n";
 }
 
 bool PersistenceManager::MarkStepFinished(int taskId, QString name, ExecutionStatistics statistics)
 {
-    cout << "----------------------------------------------------" << endl;
-    cout << "PersistenceManager: MarkStepFinished called with task id " << taskId << endl;
-    cout << "STEP NAME : " << name.toStdString().c_str() << endl;
-    cout << "diskReadBytes: " << statistics.diskReadBytes << endl;
-    cout << "diskWriteBytes: " << statistics.diskWriteBytes << endl;
-    cout << "durationMs: " << statistics.durationMs << endl;
-    cout << "exitCode: " << statistics.exitCode << endl;
-    cout << "maxRssKb: " << statistics.maxRssKb << endl;
-    cout << "maxVmSizeKb: " << statistics.maxVmSizeKb << endl;
-    cout << "node: " << statistics.node.toStdString().c_str() << endl;
-    cout << "systemCpuMs: " << statistics.systemCpuMs << endl;
-    cout << "userCpuMs: " << statistics.userCpuMs << endl;
-    cout << "----------------------------------------------------" << endl;
+    cout << "----------------------------------------------------\n";
+    cout << "PersistenceManager: MarkStepFinished called with task id " << taskId << '\n';
+    cout << "STEP NAME : " << name.toStdString().c_str() << '\n';
+    cout << "diskReadBytes: " << statistics.diskReadBytes << '\n';
+    cout << "diskWriteBytes: " << statistics.diskWriteBytes << '\n';
+    cout << "durationMs: " << statistics.durationMs << '\n';
+    cout << "exitCode: " << statistics.exitCode << '\n';
+    cout << "maxRssKb: " << statistics.maxRssKb << '\n';
+    cout << "maxVmSizeKb: " << statistics.maxVmSizeKb << '\n';
+    cout << "node: " << statistics.node.toStdString().c_str() << '\n';
+    cout << "systemCpuMs: " << statistics.systemCpuMs << '\n';
+    cout << "userCpuMs: " << statistics.userCpuMs << '\n';
+    cout << "----------------------------------------------------\n";
 
     return {};
 }

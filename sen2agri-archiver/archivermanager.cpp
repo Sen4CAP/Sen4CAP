@@ -43,7 +43,7 @@ void ArchiverManager::productsToBeArchived(const ProductToArchiveList &products)
             qDebug() << "The archive path for product ID " << QString::number(product.productId)
                      << " is empty ";
             QTextStream(stdout) << "The archive path for product ID "
-                                << QString::number(product.productId) << " is empty " << endl;
+                                << QString::number(product.productId) << " is empty\n";
             continue;
         }
         if (product.currentPath.isEmpty()) {
@@ -51,7 +51,7 @@ void ArchiverManager::productsToBeArchived(const ProductToArchiveList &products)
             qDebug() << "The current path for product ID " << QString::number(product.productId)
                      << " is empty ";
             QTextStream(stdout) << "The current path for product ID "
-                                << QString::number(product.productId) << " is empty " << endl;
+                                << QString::number(product.productId) << " is empty\n";
             continue;
         }
         QString archivePathBase(product.archivePath);
@@ -64,7 +64,7 @@ void ArchiverManager::productsToBeArchived(const ProductToArchiveList &products)
             qDebug() << "Error in creating path for archiving "
                      << "/" + archivePathBase;
             QTextStream(stdout) << "Error in creating path for archiving "
-                                << "/" + archivePathBase << endl;
+                                << "/" + archivePathBase << '\n';
             continue;
         }
         archiveRootPath.setPath("/" + archivePathBase);
@@ -74,7 +74,7 @@ void ArchiverManager::productsToBeArchived(const ProductToArchiveList &products)
             qDebug() << "Error in setting path for archiving "
                      << "/" + archivePathBase;
             QTextStream(stdout) << "Error in setting path for archiving "
-                                << "/" + archivePathBase << endl;
+                                << "/" + archivePathBase << '\n';
             continue;
         }
 
@@ -102,7 +102,7 @@ void ArchiverManager::productsToBeArchived(const ProductToArchiveList &products)
                              << archiveRootPath.absolutePath() + intermediaryPath;
                     QTextStream(stdout) << "Error in creating path for archiving "
                                         << archiveRootPath.absolutePath() + intermediaryPath
-                                        << endl;
+                                        << '\n';
                     bDeleteCurrentPath = false;
                     continue;
                 }
@@ -115,7 +115,7 @@ void ArchiverManager::productsToBeArchived(const ProductToArchiveList &products)
                              << archivedFileName;
                     QTextStream(stdout)
                         << "Error in deleting the already existing file in archive path "
-                        << archivedFileName << endl;
+                        << archivedFileName << '\n';
                     bDeleteCurrentPath = false;
                     continue;
                 }
@@ -124,7 +124,7 @@ void ArchiverManager::productsToBeArchived(const ProductToArchiveList &products)
                     qDebug() << "Error in copying file " << fileToBeCopied.fileName() << " to "
                              << archivedFileName;
                     QTextStream(stdout) << "Error in copying file " << fileToBeCopied.fileName()
-                                        << " to " << archivedFileName << endl;
+                                        << " to " << archivedFileName << '\n';
                     bDeleteCurrentPath = false;
                 } else
                     archivedProducts.append(
@@ -157,7 +157,7 @@ void ArchiverManager::deleteFiles()
         if (!dirDel.removeRecursively()) {
             // TODO: add error in log
             qDebug() << "Error in recursively deleting path " << pathToBeDeleted;
-            QTextStream(stdout) << "Error in recursively deleting path " << pathToBeDeleted << endl;
+            QTextStream(stdout) << "Error in recursively deleting path " << pathToBeDeleted << '\n';
         }
     }
     emit exitLocal();

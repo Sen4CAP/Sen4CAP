@@ -356,7 +356,7 @@ QStringList ProcessorHandlerHelper::EnsureMonoDateProductUniqueProc(const QStrin
         if (curProcPrds.size() > 0) {
             QTextStream stream( &file );
             for(auto prdInfo : curProcPrds.keys()) {
-                stream << prdInfo << ";" << curProcPrds.value(prdInfo) << endl;
+                stream << prdInfo << ";" << curProcPrds.value(prdInfo) << '\n';
             }
         }
     }
@@ -388,7 +388,7 @@ void ProcessorHandlerHelper::CleanupCurrentProductIdsForJob(const QString &fileP
     {
         QTextStream stream( &file );
         for(auto prdInfo : curProcPrds.keys()) {
-            stream << prdInfo << ";" << curProcPrds.value(prdInfo) << endl;
+            stream << prdInfo << ";" << curProcPrds.value(prdInfo) << '\n';
         }
     }
 }

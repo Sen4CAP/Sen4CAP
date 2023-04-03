@@ -1032,7 +1032,7 @@ ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessedProductProvenan
     {
         QTextStream stream( &file );
         for(auto prdInfo : curProcPrds.keys()) {
-            stream << prdInfo << ";" << curProcPrds.value(prdInfo) << endl;
+            stream << prdInfo << ";" << curProcPrds.value(prdInfo) << '\n';
         }
     }
 
@@ -1131,7 +1131,7 @@ ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessed(const L3BJobCo
     {
         QTextStream stream( &file );
         for (const QString &prdPath: curProcPrds) {
-            stream << prdPath << endl;
+            stream << prdPath << '\n';
         }
     }
 

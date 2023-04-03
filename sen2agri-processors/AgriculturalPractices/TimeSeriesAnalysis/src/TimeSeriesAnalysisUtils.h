@@ -129,10 +129,10 @@ bool ComputePValue(const std::vector<T>& xData, const std::vector<T>& yData, dou
     }
     //double sct=pow(yData1[0]-ym,2)+pow(yData1[1]-ym,2)+pow(yData1[2]-ym,2)+pow(yData1[3]-ym,2); // sct = sum of total squares
     double R2=1-sumsq/sct;
-    //std::cout<<"Multiple R-squared: "<<R2<<",    Adjusted R-squared: "<<1-double(n-1)/dl*(1-R2)<<std::endl;
+    //std::cout<<"Multiple R-squared: "<<R2<<",    Adjusted R-squared: "<<1-double(n-1)/dl*(1-R2)<<'\n';
     double F=R2*dl/(1-R2);
     double p_value=1-gsl_cdf_fdist_P(F,1,dl);
-    //std::cout<<"F-statistic:  "<<F<<" on 1 and "<<n-2<<" DF,  p-value: "<<p_value<<std::endl;
+    //std::cout<<"F-statistic:  "<<F<<" on 1 and "<<n-2<<" DF,  p-value: "<<p_value<<'\n';
     pValue = p_value;
     return true;
 }
@@ -172,7 +172,7 @@ inline bool ComputeMeanAndStandardDeviation (const std::vector<double> &inVect,
 //        for (int i = 0; i<inVect.size(); i++) {
 //            acc(inVect[i]);
 //        }
-//        //cout << mean(acc) << endl;
+//        //cout << mean(acc) << '\n';
 //        stdDevVal = sqrt(boost::accumulators::variance(acc));
 
     // Non boost implementation

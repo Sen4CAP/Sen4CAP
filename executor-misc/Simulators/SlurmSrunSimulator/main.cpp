@@ -21,15 +21,15 @@ int main(int argc, char *argv[])
     myfile1 << "\n==================================================================" << "\n";
     myfile1 << "SlurmSimulator: Executed SLURM with the following parameters :" << "\n";
     for(int i = 1; i < argc; i++) {
-        myfile1 << "SlurmSimulator:\t" << argv[i] << endl;
+        myfile1 << "SlurmSimulator:\t" << argv[i] << '\n';
     }
-    myfile1 << endl;
+    myfile1 << '\n';
 
 /*
-    cout << "Executed SLURM with the following parameters :" << endl;
+    cout << "Executed SLURM with the following parameters :" << '\n';
 
     for(int i = 1; i < argc; i++) {
-        cout << "\t" << argv[i] << endl;
+        cout << "\t" << argv[i] << '\n';
     }
 */
     if(argc >= 2)
@@ -47,8 +47,8 @@ int main(int argc, char *argv[])
 
             CommandInvoker cmdInvoker;
             bool bRet = cmdInvoker.InvokeCommand(strCmd, false);
-            myfile1 << "SlurmSimulator:\t InvokeCommand " << strCmd.toStdString().c_str() << " AND returned " << bRet << endl;
-            myfile1 << "SlurmSimulator:\t returned " << cmdInvoker.GetExecutionLog().toStdString().c_str() << endl;
+            myfile1 << "SlurmSimulator:\t InvokeCommand " << strCmd.toStdString().c_str() << " AND returned " << bRet << '\n';
+            myfile1 << "SlurmSimulator:\t returned " << cmdInvoker.GetExecutionLog().toStdString().c_str() << '\n';
 
         } else if(strstr(argv[1], "--format=") != NULL)
         {
@@ -83,13 +83,13 @@ int main(int argc, char *argv[])
                 const char szMaxVmSizeStr[] = "maxvmsize";
             */
 
-            cout << "JobID|JobName|NodeList|AveCPU|UserCPU|SystemCPU|ExitCode|AveVMSize|MaxRSS|MaxVMSize|MaxDiskRead|MaxDiskWrite" << endl;
-            cout << "3|ls|sen2agri-dev|01:02:03|04:05:06.007|00:00.002|0:0|0|0|0|0|0" << endl;
-            cout << "4|find|sen2agri-dev|22-11:12:13|22-14:15:16.297|00:00.413|1:0|0|0|0|0|0" << endl;
-            cout << "5|hostname|sen2agri-dev|00:00|00.005|00:00.008|0:0|0|0|0|0|0" << endl;
-            cout << "6|find|sen2agri-dev|00:00:00|00:00.299|00:00.344|1:0|0|0|0|0|0" << endl;
-            cout << "7|20150604144546391_CROP_TYPE|sen2agri-dev|00:00:00|00:00.004|00:00.003|0:0|0|0|0|0|0" << endl;
-            cout << "20|An_Unique_Step_ID|sen2agri-dev|00:00:00|00:00:00|00:00.001|2:0|0|0|0|0|0" << endl;
+            cout << "JobID|JobName|NodeList|AveCPU|UserCPU|SystemCPU|ExitCode|AveVMSize|MaxRSS|MaxVMSize|MaxDiskRead|MaxDiskWrite\n";
+            cout << "3|ls|sen2agri-dev|01:02:03|04:05:06.007|00:00.002|0:0|0|0|0|0|0\n";
+            cout << "4|find|sen2agri-dev|22-11:12:13|22-14:15:16.297|00:00.413|1:0|0|0|0|0|0\n";
+            cout << "5|hostname|sen2agri-dev|00:00|00.005|00:00.008|0:0|0|0|0|0|0\n";
+            cout << "6|find|sen2agri-dev|00:00:00|00:00.299|00:00.344|1:0|0|0|0|0|0\n";
+            cout << "7|20150604144546391_CROP_TYPE|sen2agri-dev|00:00:00|00:00.004|00:00.003|0:0|0|0|0|0|0\n";
+            cout << "20|An_Unique_Step_ID|sen2agri-dev|00:00:00|00:00:00|00:00.001|2:0|0|0|0|0|0\n";
 
             string line;
             ifstream myfile ("./slurm_last_job_name.txt");
@@ -99,11 +99,11 @@ int main(int argc, char *argv[])
                 int nLineCnt = 0;
                 while(getline(myfile,line))
                 {
-                  cout << "3|ls|sen2agri-dev|00:00:00|00:00:00|00:00.002|0:0|0|0|0|0|0" << endl;
+                  cout << "3|ls|sen2agri-dev|00:00:00|00:00:00|00:00.002|0:0|0|0|0|0|0\n";
                   cout << nLineCnt + 21 << "|" << line << "|sen2agri-dev|02-01:02:03.004|04:00:00|00:04.002|0:0|0|0"
                        << "|"<< 80 + nLineCnt << "|"  << 600 + nLineCnt
                        << "|" << 120 + nLineCnt
-                       << endl;
+                       << '\n';
 
                   nLineCnt++;
                 }

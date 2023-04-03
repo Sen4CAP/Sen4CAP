@@ -210,7 +210,7 @@ void S4CCropTypeHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
             QFile file(prodFolderOutPath);
             if (file.open(QIODevice::ReadWrite)) {
                 QTextStream stream(&file);
-                stream << prdId << ";" << productFolder << endl;
+                stream << prdId << ';' << productFolder << '\n';
             }
         } else {
             ctx.MarkJobFailed(event.jobId);

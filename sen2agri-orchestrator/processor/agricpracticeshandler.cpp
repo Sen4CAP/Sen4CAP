@@ -210,7 +210,7 @@ void AgricPracticesHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
             if ( file.open(QIODevice::ReadWrite) )
             {
                 QTextStream stream( &file );
-                stream << prdId << ";" << productFolder << endl;
+                stream << prdId << ";" << productFolder << '\n';
             }
         } else {
             Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and folder %2").arg(prodName).arg(productFolder));

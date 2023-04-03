@@ -6,13 +6,13 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-    cout << "========== DUMMY PROCESSOR called ==============" << endl;
-    cout << "DUMMY PROCESSOR called with a number of " << argc << " arguments" << endl;
-    cout << "The arguments are :" << endl;
+    cout << "========== DUMMY PROCESSOR called ==============\n";
+    cout << "DUMMY PROCESSOR called with a number of " << argc << " arguments\n";
+    cout << "The arguments are:\n";
     for(int i = 1; i < argc; i++) {
-        cout << "\t" << argv[i] << endl;
+        cout << '\t' << argv[i] << '\n';
     }
-    cout << "========== DUMMY PROCESSOR end ==============" << endl;
+    cout << "========== DUMMY PROCESSOR end ==============\n";
 
     ofstream myfile;
     time_t ttTime;

@@ -466,7 +466,7 @@ void S4SYieldHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
             QFile file(prodFolderOutPath);
             if (file.open(QIODevice::ReadWrite)) {
                 QTextStream stream(&file);
-                stream << prdId << ";" << productFolder << endl;
+                stream << prdId << ';' << productFolder << '\n';
             }
             ctx.MarkJobFinished(event.jobId);
             // Now remove the job folder containing temporary files
