@@ -12,7 +12,7 @@
 ################################################################################################
 ###########################CONFIG PART###########################################################
 ### DEPENDENCIES FOR GENERATED RPM PACKAGES
-: ${PLATFORM_INSTALL_DEP:="-d "qt5-qtbase" -d "qt5-qtbase-gui" -d "qt5-qtbase-postgresql" -d "qt-x11""}
+: ${PLATFORM_INSTALL_DEP:="-d "qt5-qtbase" -d "qt5-qtbase-postgresql""}
 
 ### CONFIG PATHS FOR SCRIPT
 : ${DEFAULT_DIR:=$(pwd)}
