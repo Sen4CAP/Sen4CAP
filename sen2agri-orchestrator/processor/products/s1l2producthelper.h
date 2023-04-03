@@ -27,7 +27,7 @@ public:
     {
     }
     bool IsIntended(const QString &productPath) const;
-    virtual FileNameInfosType ExtractInfos(const QString &productPath);
+    FileNameInfosType ExtractInfos(const QString &productPath);
 
 private:
     QString regex;
