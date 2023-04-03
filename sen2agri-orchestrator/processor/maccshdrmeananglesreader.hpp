@@ -1,8 +1,10 @@
 #ifndef MACCS_HDR_MEAN_ANGLES_READER_H
 #define MACCS_HDR_MEAN_ANGLES_READER_H
 
-#include <QXmlStreamReader>
 #include <QString>
+#include <QXmlStreamReader>
+
+#include <cmath>
 
 class MeanAngles
 {
