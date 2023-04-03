@@ -20,11 +20,9 @@ DBUS_INTERFACES += orchestrator_interface
 
 SOURCES += main.cpp \
     requestmapper.cpp \
-    controller/dashboardcontroller.cpp \
     controller/statisticscontroller.cpp
 
 HEADERS += \
-    controller/dashboardcontroller.hpp \
     controller/statisticscontroller.hpp \
     requestmapper.hpp \
     pch.hpp

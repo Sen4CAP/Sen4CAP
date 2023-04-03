@@ -1,7 +1,6 @@
 #include <QCoreApplication>
 
 #include <httpserver/httplistener.h>
-#include <httpserver/staticfilecontroller.h>
 
 #include "logger.hpp"
 #include "requestmapper.hpp"
@@ -25,22 +24,14 @@ int main(int argc, char *argv[])
         const auto &params =
             persistenceManager.GetConfigurationParameters(QStringLiteral("http-listener."));
 
-        std::experimental::optional<QString> root;
         std::experimental::optional<int> port;
 
         for (const auto &p : params) {
             if (!p.siteId) {
-                if (p.key == "http-listener.root-path") {
-                    root = p.value;
-                } else if (p.key == "http-listener.listen-port") {
+                if (p.key == "http-listener.listen-port") {
                     port = p.value.toInt();
                 }
             }
-        }
-
-        if (!root) {
-            throw std::runtime_error("Please configure the \"http-listener.root-path\" parameter "
-                                     "with the dashboard document root path");
         }
 
         if (!port) {
@@ -48,11 +39,7 @@ int main(int argc, char *argv[])
                                      "with the listening port");
         }
 
-        QSettings fileSettings;
-        fileSettings.setValue(QStringLiteral("path"), *root);
-        StaticFileController staticFileController(&fileSettings);
-
-        RequestMapper mapper(staticFileController, persistenceManager);
+        RequestMapper mapper(persistenceManager);
 
         QSettings listenerSettings;
         listenerSettings.setValue(QStringLiteral("port"), *port);
