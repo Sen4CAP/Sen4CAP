@@ -20,6 +20,7 @@
 #include "processor/products/producthelperfactory.h"
 using namespace orchestrator::products;
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 // For unordered map and QString as key
 namespace std {
   template<> struct hash<QString> {
@@ -28,6 +29,7 @@ namespace std {
     }
   };
 }
+#endif
 
 #define CURRENT_PROC_PRDS_FILE_NAME     "current_processing_l3b_new.txt"
 

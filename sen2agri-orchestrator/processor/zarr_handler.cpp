@@ -24,6 +24,7 @@ static ProductType ZARR_PRODUCT_TYPES[] = {ProductType::L3AProductTypeId,
                                            ProductType::S4CS1L2CoheProductTypeId
                                           };
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 // For unordered map and QString as key
 namespace std {
   template<> struct hash<QString> {
@@ -32,6 +33,7 @@ namespace std {
     }
   };
 }
+#endif
 
 ZarrHandler::ZarrHandler()
 {

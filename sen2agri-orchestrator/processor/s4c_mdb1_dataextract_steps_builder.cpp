@@ -20,7 +20,7 @@ using namespace orchestrator::products;
 #define MDB1_DEF_DATA_EXTR_ROOT   "/mnt/archive/marker_database_files/mdb1/{site}/{year}/data_extraction/"
 #define SECS_TILL_EOD               86399   // 24 hour x 3600 + 59 minutes x 60 + 59 seconds
 
-
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 // For unordered map and QString as key
 namespace std {
   template<> struct hash<QString> {
@@ -29,6 +29,7 @@ namespace std {
     }
   };
 }
+#endif
 
 QList<MarkerType> S4CMarkersDB1DataExtractStepsBuilder::allMarkerFileTypes =
 {

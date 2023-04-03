@@ -16,6 +16,7 @@ using namespace orchestrator::products;
 #include <unistd.h>
 #include <sys/types.h>
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
 // For unordered map and QString as key
 namespace std {
   template<> struct hash<QString> {
@@ -24,6 +25,7 @@ namespace std {
     }
   };
 }
+#endif
 
 TRexHandler::TRexHandler()
 {
