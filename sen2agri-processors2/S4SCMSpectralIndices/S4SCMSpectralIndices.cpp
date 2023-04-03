@@ -77,9 +77,7 @@ private:
         SetMultiWriting(true);
     }
 
-    void DoUpdateParameters() override
-    {
-    }
+    void DoUpdateParameters() override {}
 
     void DoExecute() override
     {
@@ -132,6 +130,11 @@ private:
 
                 auto brightnessFloat = sqrt(green * green + red * red + nir * nir + swir * swir);
                 brightnessFloat = round(brightnessFloat);
+                if (brightnessFloat > std::numeric_limits<int16_t>::max()) {
+                    brightnessFloat = std::numeric_limits<int16_t>::max();
+                } else if (brightnessFloat < std::numeric_limits<int16_t>::min()) {
+                    brightnessFloat = std::numeric_limits<int16_t>::min();
+                }
 
                 return static_cast<int16_t>(brightnessFloat);
             }
