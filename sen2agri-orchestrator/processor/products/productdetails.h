@@ -8,7 +8,6 @@ class ProductDetails {
 public:
     ProductDetails();
     ProductDetails(const Product &prd);
-    ProductDetails(const ProductDetails &other);
 
     void SetProduct(const Product &prd) {this->prd = prd;}
     void SetAdditionalComposingProducts(const ProductList &prds) { additionalComposingProducts = prds;}

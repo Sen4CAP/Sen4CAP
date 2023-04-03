@@ -8,12 +8,6 @@ ProductDetails::ProductDetails()
 ProductDetails::ProductDetails(const Product &prd)
     : prd(prd), additionalComposingProducts()
 {
-
-}
-
-ProductDetails::ProductDetails(const ProductDetails &other)
-    : prd(other.prd), additionalComposingProducts(other.additionalComposingProducts)
-{
 }
 
 bool ProductDetails::operator==(const ProductDetails& rhs) {
