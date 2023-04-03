@@ -5,7 +5,6 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('archiver.archive_
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('archiver.max_age.l2a', NULL, '5', '2015-07-20 16:31:33.655476+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.scratch-path', NULL, '/mnt/archive/orchestrator_temp/{job_id}/{task_id}-{module}', '2015-07-10 17:54:17.288095+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('http-listener.listen-port', NULL, '8082', '2015-07-03 13:59:21.338392+03');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('http-listener.root-path', NULL, '/srv/sen2agri-dashboard', '2015-07-03 13:58:57.734852+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('mail.message.batch.limit', NULL, '0','2020-07-22 19:52:23.560587+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('monitor-agent.disk-path', NULL, '/mnt/archive/', '2015-07-20 10:27:29.301355+03');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('monitor-agent.scan-interval', NULL, '60', '2015-07-20 10:28:08.27395+03');
