@@ -22,6 +22,7 @@
 #include <QTextStream>
 #include <QThread>
 #include <QXmlStreamReader>
+#include <cmath>
 #include <fstream>
 #include <functional>
 #include <map>
