@@ -11,10 +11,8 @@ RUN mkdir /build && \
     cd /build && \
     cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/install /src && \
     cmake --build . --parallel $(nproc) && \
-    cmake --install . && \
-    ls -lR /install && \
-    true
+    cmake --install .
 
 FROM build
-COPY --from=build /install/bin/* /opt/otb/bin
-COPY --from=build /install/usr/lib/otb/applications/* /opt/otb/lib/otb/applications
+COPY --from=build /install/bin/* /opt/otb/bin/
+COPY --from=build /install/usr/lib/otb/applications/* /opt/otb/lib/otb/applications/
