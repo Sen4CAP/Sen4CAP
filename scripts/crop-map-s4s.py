@@ -25,7 +25,7 @@ from configparser import ConfigParser
 
 
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
-INTERPOLATION_IMAGE_NAME = "sen4x/interpolation:0.1.0"
+PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.1.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
 
 
@@ -621,10 +621,15 @@ def main():
             b12s = [p.b12 for p in products]
 
             days = [(p.date - season_start).days for p in products]
-            days_string = "#".join(map(str, days))
+            input_dates = list(map(str, days))
+
             begin = first_date - season_start
             end = last_date - season_start
-            interval_string = "{}#{}#{}".format(begin.days, step, end.days)
+            output_dates_param = []
+            d = first_date
+            while d <= last_date:
+                output_dates_param.append(str((d - season_start).days))
+                d += timedelta(days=step)
 
             masks_10m = [p.mask_10m for p in products]
             mask_10m_vrt = f"mask_10m_{tile}.vrt"
@@ -706,113 +711,185 @@ def main():
             commands = []
             if feature_set.need_s2_reflectance_10m() and not os.path.exists(b3_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b3_vrt,
+                    "-mask",
                     mask_10m_vrt,
+                    "-out",
                     b3_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
             if feature_set.need_s2_reflectance_10m() and not os.path.exists(b4_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b4_vrt,
+                    "-mask",
                     mask_10m_vrt,
+                    "-out",
                     b4_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
             if feature_set.need_s2_reflectance_10m() and not os.path.exists(b8_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b8_vrt,
+                    "-mask",
                     mask_10m_vrt,
+                    "-out",
                     b8_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
             if feature_set.need_s2_reflectance_20m() and not os.path.exists(b5_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b5_vrt,
+                    "-mask",
                     mask_20m_vrt,
+                    "-out",
                     b5_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
             if feature_set.need_s2_reflectance_20m() and not os.path.exists(b6_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b6_vrt,
+                    "-mask",
                     mask_20m_vrt,
+                    "-out",
                     b6_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
             if feature_set.need_s2_reflectance_20m() and not os.path.exists(b7_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b7_vrt,
+                    "-mask",
                     mask_20m_vrt,
+                    "-out",
                     b7_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
             if feature_set.need_s2_reflectance_20m() and not os.path.exists(b11_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b11_vrt,
+                    "-mask",
                     mask_20m_vrt,
+                    "-out",
                     b11_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
             if feature_set.need_s2_reflectance_20m() and not os.path.exists(b12_tif):
                 command = [
-                    "constant_step_interpolation_masked",
+                    "otbcli_TemporalResampling",
+                    "-in",
                     b12_vrt,
+                    "-mask",
                     mask_20m_vrt,
+                    "-out",
                     b12_tif + tiling_suffix,
-                    days_string,
-                    interval_string,
-                    "0",
+                    "-indates",
+                ] + input_dates + [
+                    "-outdates",
+                ] + output_dates_param + [
+                    "-bv",
                     str(interpolation_no_data),
+                    "-nan",
+                    str(interpolation_no_data),
+                    "-maxdist",
                     str(interpolation_max_distance),
+                    "-winradius",
                     str(interpolation_window_radius),
                 ]
                 commands.append(command)
@@ -820,7 +897,7 @@ def main():
             containers = []
             for command in commands:
                 container = client.containers.run(
-                    image=INTERPOLATION_IMAGE_NAME,
+                    image=PROCESSORS_NEW_IMAGE_NAME,
                     detach=True,
                     user=f"{os.getuid()}:{os.getgid()}",
                     volumes=volumes,
@@ -983,7 +1060,7 @@ def main():
                 ]
 
                 container = client.containers.run(
-                    image=INTERPOLATION_IMAGE_NAME,
+                    image=PROCESSORS_NEW_IMAGE_NAME,
                     detach=True,
                     user=f"{os.getuid()}:{os.getgid()}",
                     volumes=volumes,
@@ -1036,7 +1113,7 @@ def main():
                 containers = []
                 for command in commands:
                     container = client.containers.run(
-                        image=INTERPOLATION_IMAGE_NAME,
+                        image=PROCESSORS_NEW_IMAGE_NAME,
                         detach=True,
                         user=f"{os.getuid()}:{os.getgid()}",
                         volumes=volumes,
@@ -1527,7 +1604,7 @@ def main():
         containers = []
         for command in commands:
             container = client.containers.run(
-                image=INTERPOLATION_IMAGE_NAME,
+                image=PROCESSORS_NEW_IMAGE_NAME,
                 detach=True,
                 user=f"{os.getuid()}:{os.getgid()}",
                 volumes=volumes,
