@@ -694,6 +694,17 @@ def main():
                     commands_20m.append(command_b12_vrt)
                 pool.map(run_command, commands_20m)
 
+            mask_10m_tif = f"mask_10m_{tile}.tif"
+            mask_20m_tif = f"mask_20m_{tile}.tif"
+            commands = []
+            if feature_set.need_s2_reflectance_10m() and not os.path.exists(mask_10m_tif):
+                command_10m = ["gdal_translate", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_10m_vrt, mask_10m_tif]
+                commands.append(command_10m)
+            if feature_set.need_s2_reflectance_20m() and not os.path.exists(mask_20m_tif):
+                command_20m = ["gdal_translate", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
+                commands.append(command_20m)
+            pool.map(run_command, commands)
+
             b3_tif = f"S2_B03_{tile}.tif"
             b4_tif = f"S2_B04_{tile}.tif"
             b8_tif = f"S2_B08_{tile}.tif"
@@ -715,7 +726,7 @@ def main():
                     "-in",
                     b3_vrt,
                     "-mask",
-                    mask_10m_vrt,
+                    mask_10m_tif,
                     "-out",
                     b3_tif + tiling_suffix,
                     "-indates",
@@ -738,7 +749,7 @@ def main():
                     "-in",
                     b4_vrt,
                     "-mask",
-                    mask_10m_vrt,
+                    mask_10m_tif,
                     "-out",
                     b4_tif + tiling_suffix,
                     "-indates",
@@ -761,7 +772,7 @@ def main():
                     "-in",
                     b8_vrt,
                     "-mask",
-                    mask_10m_vrt,
+                    mask_10m_tif,
                     "-out",
                     b8_tif + tiling_suffix,
                     "-indates",
@@ -784,7 +795,7 @@ def main():
                     "-in",
                     b5_vrt,
                     "-mask",
-                    mask_20m_vrt,
+                    mask_20m_tif,
                     "-out",
                     b5_tif + tiling_suffix,
                     "-indates",
@@ -807,7 +818,7 @@ def main():
                     "-in",
                     b6_vrt,
                     "-mask",
-                    mask_20m_vrt,
+                    mask_20m_tif,
                     "-out",
                     b6_tif + tiling_suffix,
                     "-indates",
@@ -830,7 +841,7 @@ def main():
                     "-in",
                     b7_vrt,
                     "-mask",
-                    mask_20m_vrt,
+                    mask_20m_tif,
                     "-out",
                     b7_tif + tiling_suffix,
                     "-indates",
@@ -853,7 +864,7 @@ def main():
                     "-in",
                     b11_vrt,
                     "-mask",
-                    mask_20m_vrt,
+                    mask_20m_tif,
                     "-out",
                     b11_tif + tiling_suffix,
                     "-indates",
@@ -876,7 +887,7 @@ def main():
                     "-in",
                     b12_vrt,
                     "-mask",
-                    mask_20m_vrt,
+                    mask_20m_tif,
                     "-out",
                     b12_tif + tiling_suffix,
                     "-indates",
