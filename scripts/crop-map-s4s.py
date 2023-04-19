@@ -1355,6 +1355,7 @@ def main():
             root.write(bands_vrt, pretty_print=True, encoding="utf-8")
 
         band_names_lower = list(map(lambda x: x.lower(), band_names))
+        commands = []
         for tile, products in products_by_tile.items():
             training_points = f"training_points_{tile}.shp"
             validation_points = f"validation_points_{tile}.shp"
@@ -1363,7 +1364,6 @@ def main():
 
             bands_vrt = f"bands_{tile}.vrt"
 
-            commands = []
             if not os.path.exists(training_samples) and os.path.exists(training_points):
                 command = [
                     "otbcli_SampleExtraction",
@@ -1400,22 +1400,26 @@ def main():
                 ] + band_names_lower
                 commands.append(command)
 
-            containers = []
-            for command in commands:
-                container = client.containers.run(
-                    image=OTB_IMAGE_NAME,
-                    detach=True,
-                    user=f"{os.getuid()}:{os.getgid()}",
-                    volumes=volumes,
-                    working_dir=output_dir,
-                    command=command,
-                )
-                containers.append(container)
-            for container in containers:
-                res = container.wait()
-                if res["StatusCode"] != 0:
-                    print(container.logs())
-                container.remove()
+        containers = []
+        for command in commands:
+            container = client.containers.run(
+                image=OTB_IMAGE_NAME,
+                detach=True,
+                user=f"{os.getuid()}:{os.getgid()}",
+                volumes=volumes,
+                working_dir=output_dir,
+                command=command,
+            )
+            containers.append(container)
+        for container in containers:
+            res = container.wait()
+            if res["StatusCode"] != 0:
+                print(container.logs())
+            container.remove()
+
+        for tile in products_by_tile.keys():
+            training_samples = f"training_samples_{tile}.sqlite"
+            validation_samples = f"validation_samples_{tile}.sqlite"
 
             if os.path.exists(training_samples):
                 training_files.append(training_samples)
