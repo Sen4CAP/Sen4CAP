@@ -113,7 +113,7 @@ private:
             maxDist = GetParameterDouble("maxdist");
         }
         if (HasValue("winradius")) {
-            windowRadius = GetParameterDouble("winRadius");
+            windowRadius = GetParameterDouble("winradius");
         }
 
         const auto inImage = GetParameterInt16VectorImage("in");
