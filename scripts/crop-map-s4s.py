@@ -734,7 +734,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
@@ -757,7 +757,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
@@ -780,7 +780,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
@@ -803,7 +803,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
@@ -826,7 +826,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
@@ -849,7 +849,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
@@ -872,7 +872,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
@@ -895,7 +895,7 @@ def main():
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
-                str(interpolation_no_data),
+                str(0),
                 "-nan",
                 str(interpolation_no_data),
                 "-maxdist",
