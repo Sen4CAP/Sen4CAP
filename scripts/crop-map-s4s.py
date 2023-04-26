@@ -1139,7 +1139,13 @@ def main():
                     print(container.logs())
                 container.remove()
 
-        ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
+        if feature_set.need_s2_reflectance_10m():
+            ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
+        elif feature_set.want_s1_features:
+            ds = gdal.Open(f"S1_{tile}.vrt", gdal.gdalconst.GA_ReadOnly)
+        else:
+            raise NotImplementedError("feature combination")
+
         gt = ds.GetGeoTransform()
         band = ds.GetRasterBand(1)
         block_size = band.GetBlockSize()
