@@ -145,6 +145,33 @@ class FeatureSet(object):
         return feature_set
 
 
+class ContainerInfo:
+    def __init__(self, image, command, working_dir, volumes):
+        self.image = image
+        self.command = command
+        self.working_dir = working_dir
+        self.volumes = volumes
+
+    def run(self, client):
+        try:
+            client.containers.run(
+                image=self.image,
+                command=self.command,
+                working_dir=self.working_dir,
+                volumes=self.volumes,
+                user=f"{os.getuid()}:{os.getgid()}",
+                auto_remove=True,
+            )
+            return None
+        except Exception as exc:
+            return exc
+
+def run_containers_concurrently(client, pool, containers):
+    res = pool.map(lambda c: c.run(client), containers)
+    for exc in res:
+        if exc is not None:
+            print(exc)
+
 class L2AProduct(object):
     def __init__(
         self, date, b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12, mask_10m, mask_20m
@@ -523,18 +550,15 @@ def main():
         "lpis.txt",
     ]
 
-    container = client.containers.run(
+    container = ContainerInfo(
         image=MISC_IMAGE_NAME,
-        detach=True,
-        user=f"{os.getuid()}:{os.getgid()}",
-        volumes=volumes,
-        working_dir=output_dir,
         command=command,
+        working_dir=output_dir,
+        volumes=volumes,
     )
-    res = container.wait()
-    if res["StatusCode"] != 0:
-        print(container.logs())
-    container.remove()
+    exc = container.run(client)
+    if exc is not None:
+        print(exc)
 
     feature_set = FeatureSet.parse(args.features)
 
@@ -907,20 +931,14 @@ def main():
 
         containers = []
         for command in commands:
-            container = client.containers.run(
+            container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
-                detach=True,
-                user=f"{os.getuid()}:{os.getgid()}",
-                volumes=volumes,
-                working_dir=output_dir,
                 command=command,
+                working_dir=output_dir,
+                volumes=volumes,
             )
             containers.append(container)
-        for container in containers:
-            res = container.wait()
-            if res["StatusCode"] != 0:
-                print(container.logs())
-            container.remove()
+        run_containers_concurrently(client, pool, containers)
 
         b5_nodata_vrt = f"S2_B05_{tile}_nodata.vrt"
         b6_nodata_vrt = f"S2_B06_{tile}_nodata.vrt"
@@ -1070,19 +1088,15 @@ def main():
                 brightness + tiling_suffix,
             ]
 
-            container = client.containers.run(
+            container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
-                detach=True,
-                user=f"{os.getuid()}:{os.getgid()}",
-                volumes=volumes,
-                working_dir=output_dir,
                 command=command,
+                working_dir=output_dir,
+                volumes=volumes,
             )
-            print(command)
-            res = container.wait()
-            if res["StatusCode"] != 0:
-                print(container.logs())
-            container.remove()
+            exc = container.run(client)
+            if exc is not None:
+                print(exc)
 
         if feature_set.need_vegetation_indices_statistics():
             ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
@@ -1123,21 +1137,14 @@ def main():
 
             containers = []
             for command in commands:
-                container = client.containers.run(
+                container = ContainerInfo(
                     image=PROCESSORS_NEW_IMAGE_NAME,
-                    detach=True,
-                    user=f"{os.getuid()}:{os.getgid()}",
-                    volumes=volumes,
-                    working_dir=output_dir,
                     command=command,
+                    working_dir=output_dir,
+                    volumes=volumes,
                 )
-                print(command)
                 containers.append(container)
-            for container in containers:
-                res = container.wait()
-                if res["StatusCode"] != 0:
-                    print(container.logs())
-                container.remove()
+            run_containers_concurrently(client, pool, containers)
 
         if feature_set.need_s2_reflectance_10m():
             ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
@@ -1408,20 +1415,14 @@ def main():
 
     containers = []
     for command in commands:
-        container = client.containers.run(
+        container = ContainerInfo(
             image=OTB_IMAGE_NAME,
-            detach=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            working_dir=output_dir,
             command=command,
+            working_dir=output_dir,
+            volumes=volumes,
         )
         containers.append(container)
-    for container in containers:
-        res = container.wait()
-        if res["StatusCode"] != 0:
-            print(container.logs())
-        container.remove()
+    run_containers_concurrently(client, pool, containers)
 
     for tile in products_by_tile.keys():
         training_samples = f"training_samples_{tile}.sqlite"
@@ -1484,20 +1485,14 @@ def main():
 
     containers = []
     for command in commands:
-        container = client.containers.run(
+        container = ContainerInfo(
             image=OTB_IMAGE_NAME,
-            detach=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            working_dir=output_dir,
             command=command,
+            working_dir=output_dir,
+            volumes=volumes,
         )
         containers.append(container)
-    for container in containers:
-        res = container.wait()
-        if res["StatusCode"] != 0:
-            print(container.logs())
-        container.remove()
+    run_containers_concurrently(client, pool, containers)
 
     training_samples_agumented = "training_samples_agumented.vrt"
     command = [
@@ -1544,13 +1539,15 @@ def main():
     ] + band_names_lower
     print(" ".join(command))
 
-    client.containers.run(
+    container = ContainerInfo(
         image=OTB_IMAGE_NAME,
-        user=f"{os.getuid()}:{os.getgid()}",
-        volumes=volumes,
-        working_dir=output_dir,
         command=command,
+        working_dir=output_dir,
+        volumes=volumes,
     )
+    exc = container.run(client)
+    if exc is not None:
+        print(exc)
 
     with open(confusion_matrix, "rt", encoding="utf-8") as file:
         line = file.readline()
@@ -1589,22 +1586,17 @@ def main():
             str(num_classes),
         ]
         commands.append(command)
+
     containers = []
     for command in commands:
-        container = client.containers.run(
+        container = ContainerInfo(
             image=OTB_IMAGE_NAME,
-            detach=True,
-            user=f"{os.getuid()}:{os.getgid()}",
-            volumes=volumes,
-            working_dir=output_dir,
             command=command,
+            working_dir=output_dir,
+            volumes=volumes,
         )
         containers.append(container)
-    for container in containers:
-        res = container.wait()
-        if res["StatusCode"] != 0:
-            print(container.logs())
-        container.remove()
+    run_containers_concurrently(client, pool, containers)
 
     if remapping_table:
         commands = []
@@ -1622,22 +1614,17 @@ def main():
                 classified_tif,
             ]
             commands.append(command)
+
         containers = []
         for command in commands:
-            container = client.containers.run(
+            container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
-                detach=True,
-                user=f"{os.getuid()}:{os.getgid()}",
-                volumes=volumes,
-                working_dir=output_dir,
                 command=command,
+                working_dir=output_dir,
+                volumes=volumes,
             )
             containers.append(container)
-        for container in containers:
-            res = container.wait()
-            if res["StatusCode"] != 0:
-                print(container.logs())
-            container.remove()
+        run_containers_concurrently(client, pool, containers)
 
     if args.output_path:
         for tile in tiles:
