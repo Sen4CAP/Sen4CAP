@@ -178,7 +178,7 @@ class ContainerInfo:
             return exc
 
 def run_containers_concurrently(client, pool, containers):
-    res = pool.map(lambda c: c.run(client), containers)
+    res = pool.map(lambda c: c.run(client), containers, chunksize=1)
     for exc in res:
         if exc is not None:
             print(exc)
@@ -402,7 +402,7 @@ order by product_l2a.created_timestamp;
             )
             result = cursor.fetchall()
 
-            products = [p for p in pool.map(lambda r: get_product(*r), result) if p]
+            products = [p for p in pool.map(lambda r: get_product(*r), result, chunksize=1) if p]
             products = sorted(products, key=lambda p: p.date)
             products_by_tile[tile] = products
 
@@ -741,7 +741,7 @@ def main():
                 commands.append(command_b11_vrt)
             if not os.path.exists(b12_vrt):
                 commands.append(command_b12_vrt)
-    pool.map(run_command, commands)
+    pool.map(run_command, commands, chunksize=1)
 
     # work around mask layout
     commands = []
@@ -758,7 +758,7 @@ def main():
         if feature_set.need_s2_reflectance_20m() and not os.path.exists(mask_20m_tif):
             command_20m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
             commands.append(command_20m)
-    pool.map(run_command, commands)
+    pool.map(run_command, commands, chunksize=1)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1070,7 +1070,7 @@ def main():
             commands.append(command_b7_nodata_vrt)
             commands.append(command_b11_nodata_vrt)
             commands.append(command_b12_nodata_vrt)
-    pool.map(run_command, commands)
+    pool.map(run_command, commands, chunksize=1)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1148,7 +1148,7 @@ def main():
             commands.append(command_b7_10m_vrt)
             commands.append(command_b11_10m_vrt)
             commands.append(command_b12_10m_vrt)
-    pool.map(run_command, commands)
+    pool.map(run_command, commands, chunksize=1)
 
     containers = []
     for tile in products_by_tile.keys():
@@ -1679,6 +1679,7 @@ def main():
     pool.map(
         run_command,
         [command_merge_training_samples, command_merge_validation_samples],
+        chunksize=1,
     )
 
     commands = []
