@@ -437,6 +437,15 @@ def get_band_names(feature_set, output_dates, s1_features):
         ]:
             for d in output_dates:
                 band_names.append(f"{b}_{d}")
+    if feature_set.want_red_edge_features():
+        for b in [
+            "NDRE",
+            "REPI",
+            "PSRI",
+            "CIRE",
+        ]:
+            for d in output_dates:
+                band_names.append(f"{b}_{d}")
     if feature_set.want_vegetation_indices_statistics():
         for indicator in ["NDVI", "NDWI", "BRIGHTNESS"]:
             for statistic in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
@@ -1483,6 +1492,40 @@ def main():
                     vrt_dataset.append(vrt_raster_band)
                     out_band += 1
 
+        if feature_set.want_red_edge_features():
+            for p, name in zip(
+                [ndre, repi, psri, cire],
+                ["NDRE", "REPI", "PSRI", "CIRE"],
+            ):
+                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
+                for b in range(1, ds.RasterCount + 1):
+                    band = ds.GetRasterBand(b)
+                    block_size = band.GetBlockSize()
+                    vrt_raster_band = E.VRTRasterBand(
+                        {
+                            "dataType": "Int16",
+                            "band": str(out_band),
+                            "blockXSize": str(block_size[0]),
+                            "blockYSize": str(block_size[1]),
+                        },
+                        E.Description(name),
+                        E.SimpleSource(
+                            E.SourceFileName({"relativeToVRT": "1"}, p),
+                            E.SourceBand(str(b)),
+                            E.SourceProperties(
+                                {
+                                    "RasterXSize": str(ds.RasterXSize),
+                                    "RasterYSize": str(ds.RasterYSize),
+                                    "DataType": "Int16",
+                                    "BlockXSize": str(block_size[0]),
+                                    "BlockYSize": str(block_size[1]),
+                                }
+                            ),
+                        ),
+                    )
+                    vrt_dataset.append(vrt_raster_band)
+                    out_band += 1
+
         if feature_set.want_vegetation_indices_statistics():
             for p, fname in zip(
                 [ndvi_statistics, ndwi_statistics, brightness_statistics],
@@ -1503,40 +1546,6 @@ def main():
                             "blockYSize": str(block_size[1]),
                         },
                         E.Description(band_name),
-                        E.SimpleSource(
-                            E.SourceFileName({"relativeToVRT": "1"}, p),
-                            E.SourceBand(str(b)),
-                            E.SourceProperties(
-                                {
-                                    "RasterXSize": str(ds.RasterXSize),
-                                    "RasterYSize": str(ds.RasterYSize),
-                                    "DataType": "Int16",
-                                    "BlockXSize": str(block_size[0]),
-                                    "BlockYSize": str(block_size[1]),
-                                }
-                            ),
-                        ),
-                    )
-                    vrt_dataset.append(vrt_raster_band)
-                    out_band += 1
-
-        if feature_set.want_red_edge_features():
-            for p, name in zip(
-                [ndre, repi, psri, cire],
-                ["NDRE", "REPI", "PSRI", "CIRE"],
-            ):
-                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                for b in range(1, ds.RasterCount + 1):
-                    band = ds.GetRasterBand(b)
-                    block_size = band.GetBlockSize()
-                    vrt_raster_band = E.VRTRasterBand(
-                        {
-                            "dataType": "Int16",
-                            "band": str(out_band),
-                            "blockXSize": str(block_size[0]),
-                            "blockYSize": str(block_size[1]),
-                        },
-                        E.Description(name),
                         E.SimpleSource(
                             E.SourceFileName({"relativeToVRT": "1"}, p),
                             E.SourceBand(str(b)),
