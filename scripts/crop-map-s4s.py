@@ -100,6 +100,7 @@ class FeatureSet(object):
         self.s2_reflectance_20m = True
         self.vegetation_indices = True
         self.vegetation_indices_statistics = True
+        self.red_edge_features = False
 
         self.s1_features = True
 
@@ -115,20 +116,29 @@ class FeatureSet(object):
     def want_vegetation_indices_statistics(self):
         return self.vegetation_indices_statistics
 
+    def want_red_edge_features(self):
+        return self.red_edge_features
+
     def want_s1_features(self):
         return self.s1_features
+
+    def need_s2_reflectance_b2(self):
+        return self.need_red_edge_features()
 
     def need_s2_reflectance_10m(self):
         return self.s2_reflectance_10m or self.need_vegetation_indices()
 
     def need_s2_reflectance_20m(self):
-        return self.s2_reflectance_20m or self.need_vegetation_indices()
+        return self.s2_reflectance_20m or self.need_vegetation_indices() or self.need_red_edge_features()
 
     def need_vegetation_indices(self):
         return self.vegetation_indices or self.vegetation_indices_statistics
 
     def need_vegetation_indices_statistics(self):
         return self.vegetation_indices_statistics
+
+    def need_red_edge_features(self):
+        return self.red_edge_features
 
     def need_s1_features(self):
         return self.s1_features
@@ -141,6 +151,7 @@ class FeatureSet(object):
             feature_set.s2_reflectance_20m = "sr20" in features
             feature_set.vegetation_indices = "vi" in features
             feature_set.vegetation_indices_statistics = "vis" in features
+            feature_set.red_edge_features = "re" in features
             feature_set.s1_features = "sar" in features
         return feature_set
 
@@ -633,8 +644,23 @@ def main():
     else:
         s1_features = set()
 
-    band_names = get_band_names(feature_set, output_dates, s1_features)
+    begin = first_date - season_start
+    end = last_date - season_start
+    output_dates_param = []
+    d = first_date
+    while d <= last_date:
+        output_dates_param.append(str((d - season_start).days))
+        d += timedelta(days=step)
+
+    input_dates = {}
     for tile, products in products_by_tile.items():
+        days = [(p.date - season_start).days for p in products]
+        input_dates[tile] = list(map(str, days))
+
+    band_names = get_band_names(feature_set, output_dates, s1_features)
+    commands = []
+    for tile, products in products_by_tile.items():
+        b2s = [p.b2 for p in products]
         b3s = [p.b3 for p in products]
         b4s = [p.b4 for p in products]
         b8s = [p.b8 for p in products]
@@ -644,33 +670,26 @@ def main():
         b11s = [p.b11 for p in products]
         b12s = [p.b12 for p in products]
 
-        days = [(p.date - season_start).days for p in products]
-        input_dates = list(map(str, days))
-
-        begin = first_date - season_start
-        end = last_date - season_start
-        output_dates_param = []
-        d = first_date
-        while d <= last_date:
-            output_dates_param.append(str((d - season_start).days))
-            d += timedelta(days=step)
+        mask_10m_vrt = f"mask_10m_{tile}.vrt"
+        mask_20m_vrt = f"mask_20m_{tile}.vrt"
 
         masks_10m = [p.mask_10m for p in products]
-        mask_10m_vrt = f"mask_10m_{tile}.vrt"
         command_mask_10m_vrt = [
             "gdalbuildvrt",
+            "-q",
             "-separate",
             mask_10m_vrt,
         ] + masks_10m
 
         masks_20m = [p.mask_20m for p in products]
-        mask_20m_vrt = f"mask_20m_{tile}.vrt"
         command_mask_20m_vrt = [
             "gdalbuildvrt",
+            "-q",
             "-separate",
             mask_20m_vrt,
         ] + masks_20m
 
+        b2_vrt = f"S2_B02_{tile}.vrt"
         b3_vrt = f"S2_B03_{tile}.vrt"
         b4_vrt = f"S2_B04_{tile}.vrt"
         b8_vrt = f"S2_B08_{tile}.vrt"
@@ -680,55 +699,80 @@ def main():
         b11_vrt = f"S2_B11_{tile}.vrt"
         b12_vrt = f"S2_B12_{tile}.vrt"
 
-        command_b3_vrt = ["gdalbuildvrt", "-separate", b3_vrt] + b3s
-        command_b4_vrt = ["gdalbuildvrt", "-separate", b4_vrt] + b4s
-        command_b8_vrt = ["gdalbuildvrt", "-separate", b8_vrt] + b8s
+        command_b2_vrt = ["gdalbuildvrt", "-q", "-separate", b2_vrt] + b2s
+        command_b3_vrt = ["gdalbuildvrt", "-q", "-separate", b3_vrt] + b3s
+        command_b4_vrt = ["gdalbuildvrt", "-q", "-separate", b4_vrt] + b4s
+        command_b8_vrt = ["gdalbuildvrt", "-q", "-separate", b8_vrt] + b8s
 
-        command_b5_vrt = ["gdalbuildvrt", "-separate", b5_vrt] + b5s
-        command_b6_vrt = ["gdalbuildvrt", "-separate", b6_vrt] + b6s
-        command_b7_vrt = ["gdalbuildvrt", "-separate", b7_vrt] + b7s
-        command_b11_vrt = ["gdalbuildvrt", "-separate", b11_vrt] + b11s
-        command_b12_vrt = ["gdalbuildvrt", "-separate", b12_vrt] + b12s
+        command_b5_vrt = ["gdalbuildvrt", "-q", "-separate", b5_vrt] + b5s
+        command_b6_vrt = ["gdalbuildvrt", "-q", "-separate", b6_vrt] + b6s
+        command_b7_vrt = ["gdalbuildvrt", "-q", "-separate", b7_vrt] + b7s
+        command_b11_vrt = ["gdalbuildvrt", "-q", "-separate", b11_vrt] + b11s
+        command_b12_vrt = ["gdalbuildvrt", "-q", "-separate", b12_vrt] + b12s
+
+        if feature_set.need_s2_reflectance_10m() or feature_set.need_s2_reflectance_b2():
+            if not os.path.exists(mask_10m_vrt):
+                commands.append(command_mask_10m_vrt)
 
         if feature_set.need_s2_reflectance_10m():
-            commands_10m = []
             if not os.path.exists(mask_10m_vrt):
-                commands_10m.append(command_mask_10m_vrt)
+                commands.append(command_mask_10m_vrt)
             if not os.path.exists(b3_vrt):
-                commands_10m.append(command_b3_vrt)
+                commands.append(command_b3_vrt)
             if not os.path.exists(b4_vrt):
-                commands_10m.append(command_b4_vrt)
+                commands.append(command_b4_vrt)
             if not os.path.exists(b8_vrt):
-                commands_10m.append(command_b8_vrt)
-            pool.map(run_command, commands_10m)
+                commands.append(command_b8_vrt)
+
+        if feature_set.need_s2_reflectance_b2():
+            if not os.path.exists(b2_vrt):
+                commands.append(command_b2_vrt)
 
         if feature_set.need_s2_reflectance_20m():
-            commands_20m = []
             if not os.path.exists(mask_20m_vrt):
-                commands_20m.append(command_mask_20m_vrt)
+                commands.append(command_mask_20m_vrt)
             if not os.path.exists(b5_vrt):
-                commands_20m.append(command_b5_vrt)
+                commands.append(command_b5_vrt)
             if not os.path.exists(b6_vrt):
-                commands_20m.append(command_b6_vrt)
+                commands.append(command_b6_vrt)
             if not os.path.exists(b7_vrt):
-                commands_20m.append(command_b7_vrt)
+                commands.append(command_b7_vrt)
             if not os.path.exists(b11_vrt):
-                commands_20m.append(command_b11_vrt)
+                commands.append(command_b11_vrt)
             if not os.path.exists(b12_vrt):
-                commands_20m.append(command_b12_vrt)
-            pool.map(run_command, commands_20m)
+                commands.append(command_b12_vrt)
+    pool.map(run_command, commands)
+
+    # work around mask layout
+    commands = []
+    for tile in products_by_tile.keys():
+        mask_10m_vrt = f"mask_10m_{tile}.vrt"
+        mask_20m_vrt = f"mask_20m_{tile}.vrt"
 
         mask_10m_tif = f"mask_10m_{tile}.tif"
         mask_20m_tif = f"mask_20m_{tile}.tif"
-        commands = []
+
         if feature_set.need_s2_reflectance_10m() and not os.path.exists(mask_10m_tif):
-            command_10m = ["gdal_translate", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_10m_vrt, mask_10m_tif]
+            command_10m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_10m_vrt, mask_10m_tif]
             commands.append(command_10m)
         if feature_set.need_s2_reflectance_20m() and not os.path.exists(mask_20m_tif):
-            command_20m = ["gdal_translate", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
+            command_20m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
             commands.append(command_20m)
-        pool.map(run_command, commands)
+    pool.map(run_command, commands)
 
+    commands = []
+    for tile in products_by_tile.keys():
+        b2_vrt = f"S2_B02_{tile}.vrt"
+        b3_vrt = f"S2_B03_{tile}.vrt"
+        b4_vrt = f"S2_B04_{tile}.vrt"
+        b8_vrt = f"S2_B08_{tile}.vrt"
+        b5_vrt = f"S2_B05_{tile}.vrt"
+        b6_vrt = f"S2_B06_{tile}.vrt"
+        b7_vrt = f"S2_B07_{tile}.vrt"
+        b11_vrt = f"S2_B11_{tile}.vrt"
+        b12_vrt = f"S2_B12_{tile}.vrt"
+
+        b2_tif = f"S2_B02_{tile}.tif"
         b3_tif = f"S2_B03_{tile}.tif"
         b4_tif = f"S2_B04_{tile}.tif"
         b8_tif = f"S2_B08_{tile}.tif"
@@ -738,12 +782,37 @@ def main():
         b11_tif = f"S2_B11_{tile}.tif"
         b12_tif = f"S2_B12_{tile}.tif"
 
+        mask_10m_tif = f"mask_10m_{tile}.tif"
+        mask_20m_tif = f"mask_20m_{tile}.tif"
+
         interpolation_no_data = -10000
         interpolation_max_distance = 30
         interpolation_window_radius = 15
 
         tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
-        commands = []
+        if feature_set.need_s2_reflectance_b2() and not os.path.exists(b2_tif):
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b2_vrt,
+                "-mask",
+                mask_10m_tif,
+                "-out",
+                b2_tif + tiling_suffix,
+                "-indates",
+            ] + input_dates[tile] + [
+                "-outdates",
+            ] + output_dates_param + [
+                "-bv",
+                str(0),
+                "-nan",
+                str(interpolation_no_data),
+                "-maxdist",
+                str(interpolation_max_distance),
+                "-winradius",
+                str(interpolation_window_radius),
+            ]
+            commands.append(command)
         if feature_set.need_s2_reflectance_10m() and not os.path.exists(b3_tif):
             command = [
                 "otbcli_TemporalResampling",
@@ -754,7 +823,7 @@ def main():
                 "-out",
                 b3_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -777,7 +846,7 @@ def main():
                 "-out",
                 b4_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -800,7 +869,7 @@ def main():
                 "-out",
                 b8_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -823,7 +892,7 @@ def main():
                 "-out",
                 b5_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -846,7 +915,7 @@ def main():
                 "-out",
                 b6_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -869,7 +938,7 @@ def main():
                 "-out",
                 b7_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -892,7 +961,7 @@ def main():
                 "-out",
                 b11_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -915,7 +984,7 @@ def main():
                 "-out",
                 b12_tif + tiling_suffix,
                 "-indates",
-            ] + input_dates + [
+            ] + input_dates[tile] + [
                 "-outdates",
             ] + output_dates_param + [
                 "-bv",
@@ -929,17 +998,82 @@ def main():
             ]
             commands.append(command)
 
-        containers = []
-        for command in commands:
-            container = ContainerInfo(
-                image=PROCESSORS_NEW_IMAGE_NAME,
-                command=command,
-                working_dir=output_dir,
-                volumes=volumes,
-            )
-            containers.append(container)
-        run_containers_concurrently(client, pool, containers)
+    containers = []
+    for command in commands:
+        container = ContainerInfo(
+            image=PROCESSORS_NEW_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+        )
+        containers.append(container)
+    run_containers_concurrently(client, pool, containers)
 
+    commands = []
+    for tile in products_by_tile.keys():
+        b5_tif = f"S2_B05_{tile}.tif"
+        b6_tif = f"S2_B06_{tile}.tif"
+        b7_tif = f"S2_B07_{tile}.tif"
+        b11_tif = f"S2_B11_{tile}.tif"
+        b12_tif = f"S2_B12_{tile}.tif"
+
+        b5_nodata_vrt = f"S2_B05_{tile}_nodata.vrt"
+        b6_nodata_vrt = f"S2_B06_{tile}_nodata.vrt"
+        b7_nodata_vrt = f"S2_B07_{tile}_nodata.vrt"
+        b11_nodata_vrt = f"S2_B11_{tile}_nodata.vrt"
+        b12_nodata_vrt = f"S2_B12_{tile}_nodata.vrt"
+
+        if feature_set.need_s2_reflectance_20m():
+            command_b5_nodata_vrt = [
+                "gdal_translate",
+                "-q",
+                "-a_nodata",
+                "-10000",
+                b5_tif,
+                b5_nodata_vrt,
+            ]
+            command_b6_nodata_vrt = [
+                "gdal_translate",
+                "-q",
+                "-a_nodata",
+                "-10000",
+                b6_tif,
+                b6_nodata_vrt,
+            ]
+            command_b7_nodata_vrt = [
+                "gdal_translate",
+                "-q",
+                "-a_nodata",
+                "-10000",
+                b7_tif,
+                b7_nodata_vrt,
+            ]
+            command_b11_nodata_vrt = [
+                "gdal_translate",
+                "-q",
+                "-a_nodata",
+                "-10000",
+                b11_tif,
+                b11_nodata_vrt,
+            ]
+            command_b12_nodata_vrt = [
+                "gdal_translate",
+                "-q",
+                "-a_nodata",
+                "-10000",
+                b12_tif,
+                b12_nodata_vrt,
+            ]
+
+            commands.append(command_b5_nodata_vrt)
+            commands.append(command_b6_nodata_vrt)
+            commands.append(command_b7_nodata_vrt)
+            commands.append(command_b11_nodata_vrt)
+            commands.append(command_b12_nodata_vrt)
+    pool.map(run_command, commands)
+
+    commands = []
+    for tile in products_by_tile.keys():
         b5_nodata_vrt = f"S2_B05_{tile}_nodata.vrt"
         b6_nodata_vrt = f"S2_B06_{tile}_nodata.vrt"
         b7_nodata_vrt = f"S2_B07_{tile}_nodata.vrt"
@@ -953,53 +1087,9 @@ def main():
         b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
 
         if feature_set.need_s2_reflectance_20m():
-            command_b5_nodata_vrt = [
-                "gdal_translate",
-                "-a_nodata",
-                "-10000",
-                b5_tif,
-                b5_nodata_vrt,
-            ]
-            command_b6_nodata_vrt = [
-                "gdal_translate",
-                "-a_nodata",
-                "-10000",
-                b6_tif,
-                b6_nodata_vrt,
-            ]
-            command_b7_nodata_vrt = [
-                "gdal_translate",
-                "-a_nodata",
-                "-10000",
-                b7_tif,
-                b7_nodata_vrt,
-            ]
-            command_b11_nodata_vrt = [
-                "gdal_translate",
-                "-a_nodata",
-                "-10000",
-                b11_tif,
-                b11_nodata_vrt,
-            ]
-            command_b12_nodata_vrt = [
-                "gdal_translate",
-                "-a_nodata",
-                "-10000",
-                b12_tif,
-                b12_nodata_vrt,
-            ]
-
-            commands = [
-                command_b5_nodata_vrt,
-                command_b6_nodata_vrt,
-                command_b7_nodata_vrt,
-                command_b11_nodata_vrt,
-                command_b12_nodata_vrt,
-            ]
-            pool.map(run_command, commands)
-
             command_b5_10m_vrt = [
                 "gdal_translate",
+                "-q",
                 "-tr",
                 "10",
                 "10",
@@ -1010,6 +1100,7 @@ def main():
             ]
             command_b6_10m_vrt = [
                 "gdal_translate",
+                "-q",
                 "-tr",
                 "10",
                 "10",
@@ -1020,6 +1111,7 @@ def main():
             ]
             command_b7_10m_vrt = [
                 "gdal_translate",
+                "-q",
                 "-tr",
                 "10",
                 "10",
@@ -1030,6 +1122,7 @@ def main():
             ]
             command_b11_10m_vrt = [
                 "gdal_translate",
+                "-q",
                 "-tr",
                 "10",
                 "10",
@@ -1040,6 +1133,7 @@ def main():
             ]
             command_b12_10m_vrt = [
                 "gdal_translate",
+                "-q",
                 "-tr",
                 "10",
                 "10",
@@ -1049,18 +1143,44 @@ def main():
                 b12_10m_vrt,
             ]
 
-            commands = [
-                command_b5_10m_vrt,
-                command_b6_10m_vrt,
-                command_b7_10m_vrt,
-                command_b11_10m_vrt,
-                command_b12_10m_vrt,
-            ]
-            pool.map(run_command, commands)
+            commands.append(command_b5_10m_vrt)
+            commands.append(command_b6_10m_vrt)
+            commands.append(command_b7_10m_vrt)
+            commands.append(command_b11_10m_vrt)
+            commands.append(command_b12_10m_vrt)
+    pool.map(run_command, commands)
+
+    containers = []
+    for tile in products_by_tile.keys():
+        b2_tif = f"S2_B02_{tile}.tif"
+        b3_tif = f"S2_B03_{tile}.tif"
+        b4_tif = f"S2_B04_{tile}.tif"
+        b8_tif = f"S2_B08_{tile}.tif"
+
+        b5_tif = f"S2_B05_{tile}.tif"
+        b6_tif = f"S2_B06_{tile}.tif"
+        b7_tif = f"S2_B07_{tile}.tif"
+        b11_tif = f"S2_B11_{tile}.tif"
+        b12_tif = f"S2_B12_{tile}.tif"
+
+        b5_10m_vrt = f"S2_B05_10m_{tile}.vrt"
+        b6_10m_vrt = f"S2_B06_10m_{tile}.vrt"
+        b7_10m_vrt = f"S2_B07_10m_{tile}.vrt"
+        b11_10m_vrt = f"S2_B11_10m_{tile}.vrt"
+        b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
 
         ndvi = f"S2_NDVI_{tile}.tif"
         ndwi = f"S2_NDWI_{tile}.tif"
         brightness = f"S2_BRIGHTNESS_{tile}.tif"
+
+        ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
+        ndwi_statistics = f"S2_NDWI_STATISTICS_{tile}.tif"
+        brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile}.tif"
+
+        ndre = f"S2_NDRE_{tile}.tif"
+        repi = f"S2_REPI_{tile}.tif"
+        psri = f"S2_PSRI_{tile}.tif"
+        cire = f"S2_CIRE_{tile}.tif"
 
         if feature_set.need_vegetation_indices() and (
             not os.path.exists(ndvi)
@@ -1094,16 +1214,65 @@ def main():
                 working_dir=output_dir,
                 volumes=volumes,
             )
-            exc = container.run(client)
-            if exc is not None:
-                print(exc)
+            containers.append(container)
+
+        if feature_set.need_red_edge_features() and (
+            not os.path.exists(ndre)
+            or not os.path.exists(repi)
+            or not os.path.exists(psri)
+            or not os.path.exists(cire)
+        ):
+            command = [
+                "otbcli",
+                "S4SCMRedEdgeFeatures",
+                "-bv",
+                "-10000",
+                "-b2",
+                b2_tif,
+                "-b4",
+                b4_tif,
+                "-b5",
+                b5_10m_vrt,
+                "-b6",
+                b6_10m_vrt,
+                "-b7",
+                b7_10m_vrt,
+                "-b8",
+                b8_tif,
+                "-outndre",
+                ndre + tiling_suffix,
+                "-outrepi",
+                repi + tiling_suffix,
+                "-outpsri",
+                psri + tiling_suffix,
+                "-outcire",
+                cire + tiling_suffix,
+            ]
+
+            container = ContainerInfo(
+                image=PROCESSORS_NEW_IMAGE_NAME,
+                command=command,
+                working_dir=output_dir,
+                volumes=volumes,
+            )
+            containers.append(container)
+    run_containers_concurrently(client, pool, containers)
+
+    commands = []
+    for tile in products_by_tile.keys():
+        ndvi = f"S2_NDVI_{tile}.tif"
+        ndwi = f"S2_NDWI_{tile}.tif"
+        brightness = f"S2_BRIGHTNESS_{tile}.tif"
+
+        ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
+        ndwi_statistics = f"S2_NDWI_STATISTICS_{tile}.tif"
+        brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile}.tif"
 
         if feature_set.need_vegetation_indices_statistics():
             ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
             ndwi_statistics = f"S2_NDWI_STATISTICS_{tile}.tif"
             brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile}.tif"
 
-            commands = []
             if not os.path.exists(ndvi_statistics):
                 command = [
                     "otbcli",
@@ -1135,16 +1304,40 @@ def main():
                 ]
                 commands.append(command)
 
-            containers = []
-            for command in commands:
-                container = ContainerInfo(
-                    image=PROCESSORS_NEW_IMAGE_NAME,
-                    command=command,
-                    working_dir=output_dir,
-                    volumes=volumes,
-                )
-                containers.append(container)
-            run_containers_concurrently(client, pool, containers)
+    containers = []
+    for command in commands:
+        container = ContainerInfo(
+            image=PROCESSORS_NEW_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+        )
+        containers.append(container)
+    run_containers_concurrently(client, pool, containers)
+
+    for tile in products_by_tile.keys():
+        b2_tif = f"S2_B02_{tile}.tif"
+        b3_tif = f"S2_B03_{tile}.tif"
+        b4_tif = f"S2_B04_{tile}.tif"
+        b8_tif = f"S2_B08_{tile}.tif"
+        b5_tif = f"S2_B05_{tile}.tif"
+        b6_tif = f"S2_B06_{tile}.tif"
+        b7_tif = f"S2_B07_{tile}.tif"
+        b11_tif = f"S2_B11_{tile}.tif"
+        b12_tif = f"S2_B12_{tile}.tif"
+
+        ndvi = f"S2_NDVI_{tile}.tif"
+        ndwi = f"S2_NDWI_{tile}.tif"
+        brightness = f"S2_BRIGHTNESS_{tile}.tif"
+
+        ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
+        ndwi_statistics = f"S2_NDWI_STATISTICS_{tile}.tif"
+        brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile}.tif"
+
+        ndre = f"S2_NDRE_{tile}.tif"
+        repi = f"S2_REPI_{tile}.tif"
+        psri = f"S2_PSRI_{tile}.tif"
+        cire = f"S2_CIRE_{tile}.tif"
 
         if feature_set.need_s2_reflectance_10m():
             ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
@@ -1310,6 +1503,40 @@ def main():
                             "blockYSize": str(block_size[1]),
                         },
                         E.Description(band_name),
+                        E.SimpleSource(
+                            E.SourceFileName({"relativeToVRT": "1"}, p),
+                            E.SourceBand(str(b)),
+                            E.SourceProperties(
+                                {
+                                    "RasterXSize": str(ds.RasterXSize),
+                                    "RasterYSize": str(ds.RasterYSize),
+                                    "DataType": "Int16",
+                                    "BlockXSize": str(block_size[0]),
+                                    "BlockYSize": str(block_size[1]),
+                                }
+                            ),
+                        ),
+                    )
+                    vrt_dataset.append(vrt_raster_band)
+                    out_band += 1
+
+        if feature_set.want_red_edge_features():
+            for p, name in zip(
+                [ndre, repi, psri, cire],
+                ["NDRE", "REPI", "PSRI", "CIRE"],
+            ):
+                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
+                for b in range(1, ds.RasterCount + 1):
+                    band = ds.GetRasterBand(b)
+                    block_size = band.GetBlockSize()
+                    vrt_raster_band = E.VRTRasterBand(
+                        {
+                            "dataType": "Int16",
+                            "band": str(out_band),
+                            "blockXSize": str(block_size[0]),
+                            "blockYSize": str(block_size[1]),
+                        },
+                        E.Description(name),
                         E.SimpleSource(
                             E.SourceFileName({"relativeToVRT": "1"}, p),
                             E.SourceBand(str(b)),
