@@ -101,18 +101,18 @@ private:
                 return 0;
             } else {
                 auto ndreFloat = static_cast<float>(b8 - b6) / (b8 + b6);
-                if (ndreFloat < -5) {
-                    ndreFloat = -5;
-                } else if (ndreFloat > 5) {
-                    ndreFloat = 5;
+                if (ndreFloat < -5.0f) {
+                    ndreFloat = -5.0f;
+                } else if (ndreFloat > 5.0f) {
+                    ndreFloat = 5.0f;
                 }
-                ndreFloat = round(ndreFloat * 10000);
+                ndreFloat = round(ndreFloat * 10000.0f);
                 return static_cast<int16_t>(ndreFloat);
             }
         };
 
         const auto repiFunc = [bv](int16_t b4, int16_t b5, int16_t b6, int16_t b7) -> int16_t {
-            if (b4 == bv || b5 == bv || b6 == bv || b7 == bv || b6 - b5 == 0) {
+            if (b4 == bv || b5 == bv || b6 == bv || b7 == bv || b6 == b5) {
                 return 0;
             } else {
                 auto repiFloat = 705.0f + 35.0f * ((b7 + b4) * 0.5f - b5) / (b6 + b5);
@@ -125,13 +125,13 @@ private:
             if (b2 == bv || b4 == bv || b5 == bv || b5 == 0) {
                 return 0;
             } else {
-                auto psriFloat = (b4 - b2) / b5;
-                if (psriFloat < -5) {
-                    psriFloat = -5;
-                } else if (psriFloat > 5) {
-                    psriFloat = 5;
+                auto psriFloat = static_cast<float>(b4 - b2) / b5;
+                if (psriFloat < -5.0f) {
+                    psriFloat = -5.0f;
+                } else if (psriFloat > 5.0f) {
+                    psriFloat = 5.0f;
                 }
-                psriFloat = round(psriFloat * 10000);
+                psriFloat = round(psriFloat * 10000.0f);
                 return static_cast<int16_t>(psriFloat);
             }
         };
@@ -140,13 +140,13 @@ private:
             if (b5 == bv || b8 == bv || b8 == 0) {
                 return 0;
             } else {
-                auto cireFloat = b5 / b8;
-                if (cireFloat < -5) {
-                    cireFloat = -5;
-                } else if (cireFloat > 5) {
-                    cireFloat = 5;
+                auto cireFloat = static_cast<float>(b5) / b8;
+                if (cireFloat < -5.0f) {
+                    cireFloat = -5.0f;
+                } else if (cireFloat > 5.0f) {
+                    cireFloat = 5.0f;
                 }
-                cireFloat = round(cireFloat * 10000);
+                cireFloat = round(cireFloat * 10000.0f);
                 return static_cast<int16_t>(cireFloat);
             }
         };
