@@ -392,6 +392,15 @@ order by site_id;"""
              , ST_Multi(ST_Buffer(polygons.wkb_geometry, -10)) as wkb_geometry
              , attributes.pix_10m
              , {} as crop_code
+             , crop_list_n4.code_n4
+             , crop_list_n3.code_n3
+             , crop_list_n2.code_n2
+             , crop_list_n2.code_n1
+             , case crop_list_n2.code_n1
+                   when 1 then 1
+                   when 2 then 2
+                   else 3
+               end as land_cover_class
              , sum(pix_10m) over (partition by {}) as crop_pixels
              , sum(pix_10m) over () as total_pixels
              , count(*) over (partition by {}) as polygon_num
