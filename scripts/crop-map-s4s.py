@@ -505,8 +505,8 @@ def main():
         os.chdir(args.working_path)
     output_dir = os.path.abspath(".")
 
-    client = docker.from_env()
     pool = multiprocessing.dummy.Pool()
+    client = docker.from_env(timeout=600)
 
     config = Config(args)
 

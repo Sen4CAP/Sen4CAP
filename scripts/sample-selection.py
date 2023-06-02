@@ -637,7 +637,7 @@ order by random();
                 tile.validation_points,
             ]
 
-            client = docker.from_env()
+            client = docker.from_env(timeout=600)
             commands = [
                 command_training_statistics,
                 command_validation_statistics,
