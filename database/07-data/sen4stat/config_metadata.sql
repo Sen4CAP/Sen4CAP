@@ -8,6 +8,7 @@ insert into config_metadata values ('processor.s4s_crop_mapping.pix-ratio-hi', '
 insert into config_metadata values ('processor.s4s_crop_mapping.pix-ratio-lo', 'Minimum crop to total pixel ratio for strategy 2', 'float', false, 30, true, 'Minimum crop to total pixel ratio for strategy 2', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.monitored-land-covers', 'Land cover class filter', 'string', false, 30, true, 'Land cover class filter', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.monitored-crops', 'Crop class filter', 'string', false, 30, true, 'Crop class filter', null);
+insert into config_metadata values ('processor.s4s_crop_mapping.excluded-crops-remapped-pre', 'Excluded pre-remapping classes', 'string', false, 30, true, 'Excluded pre-remapping classes', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.smote-ratio', 'Synthetic sample ratio', 'float', false, 30, true, 'Synthetic sample ratio', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.sample-ratio-hi', 'Training pixel ratio for strategy 1', 'float', false, 30, true, 'Training pixel ratio for strategy 1', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.sample-ratio-lo', 'Training pixel ratio for strategies 2 and 3', 'float', false, 30, true, 'Training pixel ratio for strategies 2 and 3', null);
