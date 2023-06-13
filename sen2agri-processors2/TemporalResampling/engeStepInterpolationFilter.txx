@@ -36,7 +36,7 @@ void engeStepInterpolationFilter<TI, TO>::ThreadedGenerateData(
         ordered_idx.clear();
         for (int i = 0; i < nbInput; ++i) {
             if (pixelI[i] != m_NaN && pixelI == pixelI)
-                ordered_idx[m_input_times[i]] = pixelI[i];
+                ordered_idx[m_input_times[i]] = pixelI[i] - m_input_offsets[i];
         }
 
         // init output to all-no-data

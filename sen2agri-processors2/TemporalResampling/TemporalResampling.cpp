@@ -60,6 +60,10 @@ private:
         AddParameter(ParameterType_StringList, "outdates", "Output dates");
         SetParameterDescription("outdates", "Output dates.");
 
+        AddParameter(ParameterType_StringList, "inoffsets", "Input offsets");
+        SetParameterDescription("inoffsets", "Input offsets.");
+        MandatoryOff("inoffsets");
+
         AddParameter(ParameterType_Int, "bv", "Masked value");
         SetParameterDescription("bv", "Masked value.");
 
@@ -121,6 +125,16 @@ private:
 
         std::vector<int16_t> replacingValues = { nan };
 
+        std::vector<int16_t> inputOffsets;
+        if (HasValue("inoffsets")) {
+            const auto inOffsetsStr = GetParameterStringList("inoffsets");
+            for (const auto &s : inOffsetsStr) {
+                inputOffsets.emplace_back(std::stoi(s));
+            }
+        } else {
+            inputOffsets.resize(inDates.size(), 0);
+        }
+
         auto maskFilter = engeMaskSerieFilter<Int16VectorImageType, Int16VectorImageType,
                                               Int16VectorImageType>::New();
         maskFilter->SetInput(0, inImage);
@@ -133,6 +147,7 @@ private:
 
         interpolationFilter->SetInput(maskFilter->GetOutput());
         interpolationFilter->setInputTimes(inDates);
+        interpolationFilter->setInputOffsets(inputOffsets);
         interpolationFilter->setOutputTimes(outDates);
         interpolationFilter->setMaxDist(maxDist);
         interpolationFilter->setWindowRadius(windowRadius);

@@ -34,6 +34,10 @@ public:
     {
         m_input_times = input_times;
     }
+    void setInputOffsets(std::vector<int16_t> input_offsets)
+    {
+        m_input_offsets = input_offsets;
+    }
     void setNaN(typename TI::InternalPixelType NaN)
     {
         m_NaN = NaN;
@@ -59,6 +63,7 @@ private:
     bool m_round;
     double m_max_dist, m_window_radius;
     std::vector<double> m_input_times, m_output_times;
+    std::vector<int16_t> m_input_offsets;
     typename TI::InternalPixelType m_NaN;
 };
 
