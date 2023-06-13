@@ -267,6 +267,14 @@ order by site_id;"""
             remapping_set_join = SQL(
                 "inner join crop_remapping_set_detail on (crop_remapping_set_detail.crop_remapping_set_id, crop_remapping_set_detail.original_code) = ({}, statistical_data.crop_code)"
             ).format(Literal(args.remapping_set_id))
+            remapped_code_filter = SQL(
+                """
+                and (monitored_crops_remapped_pre is null
+                  or crop_remapping_set_detail.remapped_code_pre = any (monitored_crops_remapped_pre))
+                and (excluded_crops_remapped_pre is null
+                  or crop_remapping_set_detail.remapped_code_pre <> all (excluded_crops_remapped_pre))
+                """
+            )
 
             query = SQL(
                 """
@@ -290,6 +298,7 @@ order by site_id;"""
         else:
             crop_code_column = SQL("statistical_data.crop_code")
             remapping_set_join = SQL("")
+            remapped_code_filter = SQL("")
 
             try:
                 os.remove("remapping-table.csv")
@@ -313,6 +322,8 @@ order by site_id;"""
         pix_ratio_lo,
         monitored_land_covers,
         monitored_crops,
+        monitored_crops_remapped_pre,
+        excluded_crops_remapped_pre,
         smote_ratio,
         sample_ratio_hi,
         sample_ratio_lo
@@ -357,6 +368,16 @@ order by site_id;"""
                     select nullif(value, '') :: int[] as monitored_crops
                     from site_config
                     where key = 'processor.s4s_crop_mapping.monitored-crops'
+                ),
+                (
+                    select nullif(value, '') :: int[] as monitored_crops_remapped_pre
+                    from site_config
+                    where key = 'processor.s4s_crop_mapping.monitored-crops-remapped-pre'
+                ),
+                (
+                    select nullif(value, '') :: int[] as excluded_crops_remapped_pre
+                    from site_config
+                    where key = 'processor.s4s_crop_mapping.excluded-crops-remapped-pre'
                 ),
                 (
                     select value :: float as smote_ratio
@@ -423,6 +444,7 @@ order by site_id;"""
             or code_n1 = any (monitored_land_covers))
           and (monitored_crops is null
             or crop_code = any (monitored_crops))
+          {}
     ),
     eligible_polygons_with_attr as (
         select *,
@@ -465,6 +487,7 @@ order by random();
             attributes_table_id,
             statistical_data_id,
             remapping_set_join,
+            remapped_code_filter,
         )
         logging.debug(query.as_string(conn))
 
