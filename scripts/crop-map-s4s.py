@@ -165,23 +165,28 @@ class ContainerInfo:
 
     def run(self, client):
         try:
-            client.containers.run(
+            container = client.containers.run(
                 image=self.image,
                 command=self.command,
                 working_dir=self.working_dir,
                 volumes=self.volumes,
                 user=f"{os.getuid()}:{os.getgid()}",
                 auto_remove=True,
+                stderr=True,
+                detach=True,
+                tty=True,
             )
-            return None
+            return container.wait()
         except Exception as exc:
-            return exc
+            print(exc)
+            return None
 
 def run_containers_concurrently(client, pool, containers):
-    res = pool.map(lambda c: c.run(client), containers, chunksize=1)
-    for exc in res:
-        if exc is not None:
-            print(exc)
+    results = pool.map(lambda c: c.run(client), containers, chunksize=1)
+    for res in results:
+        if res is not None:
+            if res["StatusCode"] != 0:
+                print(res)
 
 class L2AProduct(object):
     def __init__(
