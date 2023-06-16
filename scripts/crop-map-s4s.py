@@ -75,7 +75,6 @@ def run_command(args, env=None, retry=False):
     retries = 5 if retry else 1
     while retries > 0:
         retries -= 1
-        print(cmd_line)
         if env:
             result = subprocess.call(args, env=env)
         else:
