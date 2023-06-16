@@ -142,3 +142,4 @@ if __name__ == "__main__":
 
 # docker run --rm -it -v $PWD:$PWD -w $PWD -u $(id -u):$(id -g) docker.io/sen4x/gdal-py:3.3.2
 # ./prepare-broceliande.py . --tiles 29TPE 29TPF 29TPG 29TPH 29TQH 30TTK 30TTL 30TTM 30TUK 30TUL 30TUM 30TUN 30TVL 30TVM 30TVN 30TWL 30TWM 30TWN
+# ./prepare-broceliande.py . --tiles 29SPA 29SPB 29SPC 29SQA 29SQB 29SQC 30STE 30STF 30STG 30STH 30SUF 30SUG 30SUH 30SVF 30SVG 30SVH 30SWF 30SWG 30SWH 30SXG
