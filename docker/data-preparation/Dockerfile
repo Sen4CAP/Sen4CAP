@@ -1,6 +1,5 @@
 FROM sen4x/gdal-py:3.3.2
 
-COPY check_shp.py /usr/bin
 COPY data-preparation.py /usr/bin
 COPY data-preparation-s4s.py /usr/bin
 COPY read_shp_cols.py /usr/bin
