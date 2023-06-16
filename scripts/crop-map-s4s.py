@@ -337,7 +337,11 @@ def get_product(name, l2a_path, created_timestamp, mask_path):
         mask_name_20m,
     )
 
-    (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12) = get_band_files(l2a_path)
+    res = get_band_files(l2a_path)
+    if not res:
+        print("Missing files for", l2a_path)
+        return None
+    (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12) = res
 
     if (
         not b2
