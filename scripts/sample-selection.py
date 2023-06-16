@@ -143,6 +143,11 @@ def main():
         driver = ogr.GetDriverByName("ESRI Shapefile")
 
         parcel_id_field = ogr.FieldDefn("id", ogr.OFTInteger)
+        code_n1_field = ogr.FieldDefn("code_n1", ogr.OFTInteger)
+        code_n2_field = ogr.FieldDefn("code_n2", ogr.OFTInteger)
+        code_n3_field = ogr.FieldDefn("code_n3", ogr.OFTInteger)
+        code_n4_field = ogr.FieldDefn("code_n4", ogr.OFTInteger)
+        code_lc_field = ogr.FieldDefn("code_lc", ogr.OFTInteger)
         crop_code_field = ogr.FieldDefn("crop_code", ogr.OFTInteger)
         pix_10m_field = ogr.FieldDefn("pix_10m", ogr.OFTInteger)
         strategy_field = ogr.FieldDefn("strategy", ogr.OFTInteger)
@@ -152,12 +157,22 @@ def main():
         training_feature_defn.AddFieldDefn(crop_code_field)
         training_feature_defn.AddFieldDefn(pix_10m_field)
         training_feature_defn.AddFieldDefn(strategy_field)
+        training_feature_defn.AddFieldDefn(code_n1_field)
+        training_feature_defn.AddFieldDefn(code_n2_field)
+        training_feature_defn.AddFieldDefn(code_n3_field)
+        training_feature_defn.AddFieldDefn(code_n4_field)
+        training_feature_defn.AddFieldDefn(code_lc_field)
 
         validation_feature_defn = ogr.FeatureDefn()
         validation_feature_defn.AddFieldDefn(parcel_id_field)
         validation_feature_defn.AddFieldDefn(crop_code_field)
         validation_feature_defn.AddFieldDefn(pix_10m_field)
         validation_feature_defn.AddFieldDefn(strategy_field)
+        training_feature_defn.AddFieldDefn(code_n1_field)
+        training_feature_defn.AddFieldDefn(code_n2_field)
+        training_feature_defn.AddFieldDefn(code_n3_field)
+        training_feature_defn.AddFieldDefn(code_n4_field)
+        training_feature_defn.AddFieldDefn(code_lc_field)
 
         # feature_defn = None
 
@@ -468,6 +483,11 @@ select selected_polygons.parcel_id,
        ST_AsBinary(selected_polygons.wkb_geometry),
        selected_polygons.pix_10m,
        selected_polygons.crop_code,
+       selected_polygons.code_n4,
+       selected_polygons.code_n3,
+       selected_polygons.code_n2,
+       selected_polygons.code_n1,
+       selected_polygons.land_cover_class,
        selected_polygons.crop_pixels,
        selected_polygons.total_pixels,
        selected_polygons.polygon_num,
@@ -510,6 +530,11 @@ order by random();
                 geometry,
                 pix_10m,
                 crop_code,
+                code_n4,
+                code_n3,
+                code_n2,
+                code_n1,
+                code_lc,
                 crop_pixels,
                 total_pixels,
                 polygon_num,
@@ -566,6 +591,11 @@ order by random();
                     feature = ogr.Feature(training_feature_defn)
                     feature.SetFID(parcel_id)
                     feature.SetField("id", parcel_id)
+                    feature.SetField("code_n1", code_n1)
+                    feature.SetField("code_n2", code_n2)
+                    feature.SetField("code_n3", code_n3)
+                    feature.SetField("code_n4", code_n4)
+                    feature.SetField("code_lc", code_lc)
                     feature.SetField("crop_code", crop_code)
                     feature.SetField("pix_10m", pix_10m)
                     feature.SetField("strategy", strategy)
@@ -576,6 +606,11 @@ order by random();
                     feature = ogr.Feature(validation_feature_defn)
                     feature.SetFID(parcel_id)
                     feature.SetField("id", parcel_id)
+                    feature.SetField("code_n1", code_n1)
+                    feature.SetField("code_n2", code_n2)
+                    feature.SetField("code_n3", code_n3)
+                    feature.SetField("code_n4", code_n4)
+                    feature.SetField("code_lc", code_lc)
                     feature.SetField("crop_code", crop_code)
                     feature.SetField("pix_10m", pix_10m)
                     feature.SetField("strategy", strategy)
