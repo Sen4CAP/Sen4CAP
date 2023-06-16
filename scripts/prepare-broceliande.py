@@ -104,7 +104,7 @@ def main():
         join 'classes.csv'.classes on parcels.id = classes.parcel_id
         """
 
-        training_broceliande_sql = f"""
+        validation_broceliande_sql = f"""
         select classes.land_cover_class as crop_code
         from validation_polygons_{tile} parcels
         join 'classes.csv'.classes on parcels.id = classes.parcel_id
@@ -124,7 +124,7 @@ def main():
 
         command = []
         command += ["gdal_rasterize", "-q"]
-        command += ["-sql", training_broceliande_sql]
+        command += ["-sql", validation_broceliande_sql]
         command += ["-a", "crop_code"]
         command += ["-a_nodata", "0"]
         command += ["-a_srs", projection]
