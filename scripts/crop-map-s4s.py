@@ -263,8 +263,6 @@ from config;
         else:
             additional_mounts = []
 
-        print(additional_mounts)
-
         return ProcessorConfig(additional_mounts, max_depth, min_samples, num_trees)
 
 
@@ -1790,9 +1788,9 @@ def main():
         working_dir=output_dir,
         volumes=volumes,
     )
-    exc = container.run(client)
-    if exc is not None:
-        print(exc)
+    res = container.run(client)
+    if res and res["StatusCode"] != 0:
+        print(res)
 
     with open(confusion_matrix, "rt", encoding="utf-8") as file:
         line = file.readline()
