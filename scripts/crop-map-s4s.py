@@ -156,11 +156,12 @@ class FeatureSet(object):
 
 
 class ContainerInfo:
-    def __init__(self, image, command, working_dir, volumes):
+    def __init__(self, image, command, working_dir, volumes, environment=None):
         self.image = image
         self.command = command
         self.working_dir = working_dir
         self.volumes = volumes
+        self.environment = environment
 
     def run(self, client):
         try:
@@ -169,6 +170,7 @@ class ContainerInfo:
                 command=self.command,
                 working_dir=self.working_dir,
                 volumes=self.volumes,
+                environment=self.environment,
                 user=f"{os.getuid()}:{os.getgid()}",
                 auto_remove=True,
                 stderr=True,
@@ -1020,6 +1022,7 @@ def main():
             command=command,
             working_dir=output_dir,
             volumes=volumes,
+            environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
         )
         containers.append(container)
     run_containers_concurrently(client, pool, containers)
@@ -1662,6 +1665,7 @@ def main():
             command=command,
             working_dir=output_dir,
             volumes=volumes,
+            environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
         )
         containers.append(container)
     run_containers_concurrently(client, pool, containers)
@@ -1787,6 +1791,7 @@ def main():
         command=command,
         working_dir=output_dir,
         volumes=volumes,
+        environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
     )
     res = container.run(client)
     if res and res["StatusCode"] != 0:
@@ -1837,6 +1842,7 @@ def main():
             command=command,
             working_dir=output_dir,
             volumes=volumes,
+            environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
         )
         containers.append(container)
     run_containers_concurrently(client, pool, containers)
