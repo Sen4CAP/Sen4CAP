@@ -131,10 +131,10 @@ def compute_daily_data(hourly_data_file_path):
         hourly_data = nc4.Dataset(hourly_data_file_path,'r')
         tp = hourly_data.variables['tp'][:]
         tp[tp == -32767] = np.nan
-        daily_data['evap'] = np.nan_to_num(np.nanmax(tp, axis=0) * 1000, nan = -32767)
+        daily_data['prec'] = np.nan_to_num(np.nanmax(tp, axis=0) * 1000, nan = -32767)
         pev = hourly_data.variables['pev'][:]
         pev[pev == -32767] = np.nan
-        daily_data['prec'] = np.nan_to_num(np.nanmin(pev, axis=0) * -1000, nan = -32767)
+        daily_data['evap'] = np.nan_to_num(np.nanmin(pev, axis=0) * -1000, nan = -32767)
         t2m = hourly_data.variables['t2m'][:] 
         t2m[t2m == -32767] = np.nan
         daily_data['tmin'] = np.nan_to_num(np.nanmin(t2m ,axis=0)-273.15, nan = -32767)
