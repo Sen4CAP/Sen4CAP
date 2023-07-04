@@ -10,14 +10,19 @@ ARG gid
 
 RUN yum -y install epel-release && \
     yum -y update && \
-    yum -y install boost-devel \
+    yum -y install \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-libs-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-devel-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-python-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/armadillo/8.600.1/2.el7/x86_64/armadillo-8.600.1-2.el7.x86_64.rpm \
+    boost-devel \
     cmake \
     curl-devel \
     expat-devel \
     fftw-devel \
     gcc \
     gcc-c++ \
-    gdal-devel \
     geos-devel \
     gsl-devel \
     libgeotiff-devel \

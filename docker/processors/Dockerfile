@@ -11,7 +11,11 @@ RUN yum -y install \
     yum-config-manager --disable pgdg95 && \
     yum -y update && \
     yum -y install \
-    gdal \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-libs-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-devel-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-python-1.11.4-3.el7.x86_64.rpm \
+    https://kojipkgs.fedoraproject.org/packages/armadillo/8.600.1/2.el7/x86_64/armadillo-8.600.1-2.el7.x86_64.rpm \
     file \
     postgresql12 \
     python-psycopg2 \
@@ -32,7 +36,7 @@ RUN yum -y install \
     arrow-python-libs-3.0.0 \
     arrow-devel-3.0.0 \
     arrow-python-devel-3.0.0 \
-    boost fftw gsl gstreamer opencv qt5-qtbase qt5-qtbase-postgresql swig tinyxml libmng libsvm muParser openjpeg2-tools proj-epsg qt-x11 gdal-python && \
+    boost fftw gsl gstreamer opencv qt5-qtbase qt5-qtbase-postgresql swig tinyxml libmng libsvm muParser openjpeg2-tools proj-epsg qt-x11 && \
     ln -s /usr/bin/cmake3 /usr/local/bin/cmake
 
 RUN echo -e "packages <- c('arrow', 'e1071', 'caret', 'dplyr', 'gsubfn', 'ranger', 'readr', 'smotefamily', 'caTools', 'tidyverse', 'data.table')\n\
