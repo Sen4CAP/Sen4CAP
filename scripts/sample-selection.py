@@ -168,11 +168,11 @@ def main():
         validation_feature_defn.AddFieldDefn(crop_code_field)
         validation_feature_defn.AddFieldDefn(pix_10m_field)
         validation_feature_defn.AddFieldDefn(strategy_field)
-        training_feature_defn.AddFieldDefn(code_n1_field)
-        training_feature_defn.AddFieldDefn(code_n2_field)
-        training_feature_defn.AddFieldDefn(code_n3_field)
-        training_feature_defn.AddFieldDefn(code_n4_field)
-        training_feature_defn.AddFieldDefn(code_lc_field)
+        validation_feature_defn.AddFieldDefn(code_n1_field)
+        validation_feature_defn.AddFieldDefn(code_n2_field)
+        validation_feature_defn.AddFieldDefn(code_n3_field)
+        validation_feature_defn.AddFieldDefn(code_n4_field)
+        validation_feature_defn.AddFieldDefn(code_lc_field)
 
         # feature_defn = None
 
