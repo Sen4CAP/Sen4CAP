@@ -12,6 +12,7 @@ import multiprocessing.dummy
 import os
 import os.path
 from osgeo import gdal
+import pickle
 import pipes
 import psycopg2
 from psycopg2.sql import SQL
@@ -514,7 +515,8 @@ def main():
     output_dir = os.path.abspath(".")
 
     client = docker.from_env(timeout=600)
-    pool = multiprocessing.dummy.Pool(max((os.cpu_count() or 1) // 2, 1))
+    pool_hi_conc = multiprocessing.dummy.Pool()
+    pool_lo_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 4))
 
     config = Config(args)
 
@@ -584,9 +586,9 @@ def main():
         working_dir=output_dir,
         volumes=volumes,
     )
-    exc = container.run(client)
-    if exc is not None:
-        print(exc)
+    res = container.run(client)
+    if res and res["StatusCode"] != 0:
+        print(res)
 
     feature_set = FeatureSet.parse(args.features)
 
@@ -611,9 +613,16 @@ def main():
 
     with get_connection(config) as conn:
         tiles = load_tiles(conn, config.site_id, args.tiles)
-        products_by_tile = load_products(
-            conn, pool, config.site_id, season_start, season_end, tiles
-        )
+
+        if os.path.exists("s2-products.pickle"):
+            with open("s2-products.pickle", "rb") as file:
+                products_by_tile = pickle.load(file)
+        else:
+            products_by_tile = load_products(
+                conn, pool_lo_conc, config.site_id, season_start, season_end, tiles
+            )
+            with open("s2-products.pickle", "wb") as file:
+                pickle.dump(products_by_tile, file, protocol=pickle.HIGHEST_PROTOCOL)
 
     first_date = season_end
     last_date = season_start
@@ -674,9 +683,14 @@ def main():
         days = [(p.date - season_start).days for p in products]
         input_dates[tile] = list(map(str, days))
 
+    env = {"GDAL_MAX_DATASET_POOL_SIZE": "1000", "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "GDAL_PAM_ENABLED": "NO"}
     band_names = get_band_names(feature_set, output_dates, s1_features)
     commands = []
     for tile, products in products_by_tile.items():
+        if len(products) == 0:
+            print("No products for tile", tile)
+            continue
+
         b2s = [p.b2 for p in products]
         b3s = [p.b3 for p in products]
         b4s = [p.b4 for p in products]
@@ -758,7 +772,7 @@ def main():
                 commands.append(command_b11_vrt)
             if not os.path.exists(b12_vrt):
                 commands.append(command_b12_vrt)
-    pool.map(run_command, commands, chunksize=1)
+    pool_lo_conc.map(lambda cmd: run_command(cmd, env=env), commands, chunksize=1)
 
     # work around mask layout
     commands = []
@@ -775,7 +789,7 @@ def main():
         if feature_set.need_s2_reflectance_20m() and not os.path.exists(mask_20m_tif):
             command_20m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
             commands.append(command_20m)
-    pool.map(run_command, commands, chunksize=1)
+    pool_lo_conc.map(run_command, commands, chunksize=1)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1022,10 +1036,10 @@ def main():
             command=command,
             working_dir=output_dir,
             volumes=volumes,
-            environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
+            environment=env,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool, containers)
+    run_containers_concurrently(client, pool_lo_conc, containers)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1088,7 +1102,7 @@ def main():
             commands.append(command_b7_nodata_vrt)
             commands.append(command_b11_nodata_vrt)
             commands.append(command_b12_nodata_vrt)
-    pool.map(run_command, commands, chunksize=1)
+    pool_hi_conc.map(run_command, commands, chunksize=1)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1166,7 +1180,7 @@ def main():
             commands.append(command_b7_10m_vrt)
             commands.append(command_b11_10m_vrt)
             commands.append(command_b12_10m_vrt)
-    pool.map(run_command, commands, chunksize=1)
+    pool_hi_conc.map(run_command, commands, chunksize=1)
 
     containers = []
     for tile in products_by_tile.keys():
@@ -1274,7 +1288,7 @@ def main():
                 volumes=volumes,
             )
             containers.append(container)
-    run_containers_concurrently(client, pool, containers)
+    run_containers_concurrently(client, pool_hi_conc, containers)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1331,7 +1345,7 @@ def main():
             volumes=volumes,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool, containers)
+    run_containers_concurrently(client, pool_hi_conc, containers)
 
     for tile in products_by_tile.keys():
         b2_tif = f"S2_B02_{tile}.tif"
@@ -1665,10 +1679,10 @@ def main():
             command=command,
             working_dir=output_dir,
             volumes=volumes,
-            environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
+            environment=env,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool, containers)
+    run_containers_concurrently(client, pool_hi_conc, containers)
 
     for tile in products_by_tile.keys():
         training_samples = f"training_samples_{tile}.sqlite"
@@ -1695,7 +1709,7 @@ def main():
         "-o",
         validation_samples,
     ] + validation_files
-    pool.map(
+    pool_hi_conc.map(
         run_command,
         [command_merge_training_samples, command_merge_validation_samples],
         chunksize=1,
@@ -1739,7 +1753,7 @@ def main():
             volumes=volumes,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool, containers)
+    run_containers_concurrently(client, pool_hi_conc, containers)
 
     training_samples_agumented = "training_samples_agumented.vrt"
     command = [
@@ -1791,7 +1805,7 @@ def main():
         command=command,
         working_dir=output_dir,
         volumes=volumes,
-        environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
+        environment=env,
     )
     res = container.run(client)
     if res and res["StatusCode"] != 0:
@@ -1842,10 +1856,10 @@ def main():
             command=command,
             working_dir=output_dir,
             volumes=volumes,
-            environment=["GDAL_MAX_DATASET_POOL_SIZE=4096", "GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR"],
+            environment=env,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool, containers)
+    run_containers_concurrently(client, pool_hi_conc, containers)
 
     if remapping_table:
         commands = []
@@ -1873,7 +1887,7 @@ def main():
                 volumes=volumes,
             )
             containers.append(container)
-        run_containers_concurrently(client, pool, containers)
+        run_containers_concurrently(client, pool_hi_conc, containers)
 
     if args.output_path:
         for tile in tiles:
