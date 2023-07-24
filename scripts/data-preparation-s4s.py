@@ -659,7 +659,8 @@ multipart boolean not null,
 municipality_code text,
 stratum_crop_id smallint not null,
 stratum_yield_id smallint not null,
-pix_10m int not null default 0
+pix_10m int not null default 0,
+tile_id text
 );"""
                 ).format(parcel_attributes_table_id, parcels_table_staging_id)
                 logging.debug(query.as_string(conn))
@@ -790,6 +791,45 @@ from {} polygons;"""
                 cursor.execute(query)
 
                 conn.commit()
+                print("Computing polygon-tile membership")
+                query = SQL(
+                    """
+with site_tiles as (select tile_id
+                    from sp_get_site_tiles(%s :: smallint, 1 :: smallint)),
+     srid as (select Find_SRID('public', %s, 'wkb_geometry') as epsg_code),
+     site_tile_geom as (select site_tiles.tile_id,
+                               ST_Transform(geom, srid.epsg_code) as geom
+                        from site_tiles
+                                 inner join srid on true
+                                 inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id),
+     intersection_area as (select polygons.parcel_id,
+                                  site_tile_geom.tile_id,
+                                  ST_Area(ST_Intersection(polygons.wkb_geometry, site_tile_geom.geom)) as area
+                           from site_tile_geom
+                                    inner join {} polygons
+                                               on ST_Intersects(polygons.wkb_geometry, site_tile_geom.geom)
+                                    inner join {} attributes
+                                               on attributes.parcel_id = polygons.parcel_id
+                           where attributes.geom_valid),
+     ranked_intersections as (select intersection_area.parcel_id,
+                                     intersection_area.tile_id,
+                                     row_number() over (partition by parcel_id order by area desc, tile_id asc) as rn
+                              from intersection_area),
+     polygon_tiles as (select ranked_intersections.parcel_id, ranked_intersections.tile_id
+                       from ranked_intersections
+                       where ranked_intersections.rn = 1)
+update {} attributes
+set tile_id = polygon_tiles.tile_id
+from polygon_tiles
+where polygon_tiles.parcel_id = attributes.parcel_id;
+"""
+                ).format(
+                    parcels_table_id,
+                    parcel_attributes_table_id,
+                    parcel_attributes_table_id
+                )
+                logging.debug(query.as_string(conn))
+                cursor.execute(query, (self.config.site_id, self.parcels_table))
 
                 print("Cleaning up")
                 query = SQL("drop table {};").format(parcels_table_staging_id)
@@ -800,6 +840,7 @@ from {} polygons;"""
                 create_spatial_index(conn, self.parcels_table, "wkb_geometry")
                 create_primary_key(conn, self.parcels_table, ["parcel_id"])
                 create_primary_key(conn, self.parcel_attributes_table, ["parcel_id"])
+                create_index(conn, self.parcel_attributes_table, ["tile_id"])
 
     def prepare_statistical_data(
         self,
@@ -971,21 +1012,18 @@ create table {} (
 
                 sql = SQL(
                     """
-with transformed as (
-    select epsg_code, ST_Transform(shape_tiles_s2.geom, {}) as geom
-    from shape_tiles_s2
-    where tile_id = {}
-)
-select parcel_id, ST_Buffer(ST_Transform(wkb_geometry, epsg_code), -10)
-from {}, transformed
-where ST_IsValid(wkb_geometry)
-  and ST_Intersects(wkb_geometry, transformed.geom);
+select polygons.parcel_id, ST_Buffer(ST_Transform(wkb_geometry, {}), -10)
+from {} polygons
+inner join {} attributes on attributes.parcel_id = polygons.parcel_id
+where attributes.geom_valid
+  and attributes.tile_id = {};
 """
                 )
                 sql = sql.format(
-                    Literal(srid),
-                    Literal(tile.tile_id),
+                    Literal(tile.epsg_code),
                     Identifier(self.parcels_table),
+                    Identifier(self.parcel_attributes_table),
+                    Literal(tile.tile_id),
                 )
                 sql = sql.as_string(conn)
 
