@@ -713,6 +713,9 @@ where ST_Intersects(municipality.geom, polygons_extent_4326.geog);
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
 
+                print("Creating spatial index on staging parcels table")
+                create_spatial_index(conn, self.parcels_table_staging, "wkb_geometry")
+
                 print("Computing polygon attributes")
                 if is_projected:
                     area_expr = SQL("coalesce(ST_Area(ST_MakeValid(wkb_geometry)), 0)")
