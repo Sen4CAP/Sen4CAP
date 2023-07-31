@@ -481,6 +481,7 @@ def main():
     )
     parser.add_argument("--season-start", help="season start date")
     parser.add_argument("--season-end", help="season end date")
+    parser.add_argument("--year", help="in-situ data or classification year", type=int)
     parser.add_argument("--remapping-set-id", help="remapping set id", type=int)
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true")
     parser.add_argument(
@@ -506,6 +507,7 @@ def main():
 
     season_start = parse_date(args.season_start)
     season_end = parse_date(args.season_end)
+    classification_year = args.year or season_start.year
 
     training_files = []
     validation_files = []
@@ -549,7 +551,7 @@ def main():
             "-s",
             str(args.site_id),
             "--year",
-            str(season_start.year),  # TODO
+            str(classification_year),
         ]
         if args.tiles:
             command += ["--tiles"] + args.tiles
