@@ -518,6 +518,7 @@ def main():
 
     client = docker.from_env(timeout=600)
     pool_hi_conc = multiprocessing.dummy.Pool()
+    pool_med_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 16))
     pool_lo_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 4))
 
     config = Config(args)
@@ -1290,7 +1291,7 @@ def main():
                 volumes=volumes,
             )
             containers.append(container)
-    run_containers_concurrently(client, pool_hi_conc, containers)
+    run_containers_concurrently(client, pool_med_conc, containers)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1347,7 +1348,7 @@ def main():
             volumes=volumes,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool_hi_conc, containers)
+    run_containers_concurrently(client, pool_med_conc, containers)
 
     for tile in products_by_tile.keys():
         b2_tif = f"S2_B02_{tile}.tif"
@@ -1685,7 +1686,7 @@ def main():
             environment=env,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool_hi_conc, containers)
+    run_containers_concurrently(client, pool_med_conc, containers)
 
     for tile in products_by_tile.keys():
         training_samples = f"training_samples_{tile}.sqlite"
@@ -1862,7 +1863,7 @@ def main():
             environment=env,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool_hi_conc, containers)
+    run_containers_concurrently(client, pool_med_conc, containers)
 
     if remapping_table:
         commands = []
