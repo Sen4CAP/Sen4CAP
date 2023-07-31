@@ -1770,16 +1770,17 @@ def main():
     ] + band_names_lower
     print(" ".join(command))
 
-    container = ContainerInfo(
-        image=OTB_IMAGE_NAME,
-        command=command,
-        working_dir=output_dir,
-        volumes=volumes,
-        environment=env,
-    )
-    res = container.run(client)
-    if res and res["StatusCode"] != 0:
-        print(res)
+    if not os.path.exists(model):
+        container = ContainerInfo(
+            image=OTB_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+            environment=env,
+        )
+        res = container.run(client)
+        if res and res["StatusCode"] != 0:
+            print(res)
 
     with open(confusion_matrix, "rt", encoding="utf-8") as file:
         line = file.readline()
