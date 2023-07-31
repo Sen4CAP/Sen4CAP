@@ -1354,11 +1354,12 @@ def main():
         b3_tif = f"S2_B03_{tile}.tif"
         b4_tif = f"S2_B04_{tile}.tif"
         b8_tif = f"S2_B08_{tile}.tif"
-        b5_tif = f"S2_B05_{tile}.tif"
-        b6_tif = f"S2_B06_{tile}.tif"
-        b7_tif = f"S2_B07_{tile}.tif"
-        b11_tif = f"S2_B11_{tile}.tif"
-        b12_tif = f"S2_B12_{tile}.tif"
+
+        b5_10m_vrt = f"S2_B05_10m_{tile}.vrt"
+        b6_10m_vrt = f"S2_B06_10m_{tile}.vrt"
+        b7_10m_vrt = f"S2_B07_10m_{tile}.vrt"
+        b11_10m_vrt = f"S2_B11_10m_{tile}.vrt"
+        b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
 
         ndvi = f"S2_NDVI_{tile}.tif"
         ndwi = f"S2_NDWI_{tile}.tif"
