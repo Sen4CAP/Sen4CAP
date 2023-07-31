@@ -795,6 +795,7 @@ def main():
     pool_lo_conc.map(run_command, commands, chunksize=1)
 
     commands = []
+    tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
     for tile in products_by_tile.keys():
         b2_vrt = f"S2_B02_{tile}.vrt"
         b3_vrt = f"S2_B03_{tile}.vrt"
@@ -823,7 +824,6 @@ def main():
         interpolation_max_distance = 30
         interpolation_window_radius = 15
 
-        tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
         if feature_set.need_s2_reflectance_b2() and not os.path.exists(b2_tif):
             command = [
                 "otbcli_TemporalResampling",
