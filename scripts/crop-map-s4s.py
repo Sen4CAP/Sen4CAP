@@ -1802,23 +1802,24 @@ def main():
 
         confidence_map_tif = f"confidence_map_{tile}.tif"
         probability_map_tif = f"probability_map_{tile}.tif"
-        command = [
-            "otbcli_ImageClassifier",
-            "-in",
-            bands_vrt,
-            "-out",
-            classified_pre_tif,
-            "int16",
-            "-model",
-            model,
-            "-confmap",
-            confidence_map_tif,
-            "-probamap",
-            probability_map_tif,
-            "-nbclasses",
-            str(num_classes),
-        ]
-        commands.append(command)
+        if not os.path.exists(classified_pre_tif) or (not os.path.exists(confidence_map_tif) and not os.path.exists(probability_map_tif)):
+            command = [
+                "otbcli_ImageClassifier",
+                "-in",
+                bands_vrt,
+                "-out",
+                classified_pre_tif,
+                "int16",
+                "-model",
+                model,
+                "-confmap",
+                confidence_map_tif,
+                "-probamap",
+                probability_map_tif,
+                "-nbclasses",
+                str(num_classes),
+            ]
+            commands.append(command)
 
     containers = []
     for command in commands:
