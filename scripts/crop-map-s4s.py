@@ -1431,11 +1431,10 @@ def main():
                             "dataType": "Int16",
                             "band": str(out_band),
                             "blockXSize": str(block_size[0] * 2),
-                            "blockYSize": str(block_size[1]),
+                            "blockYSize": str(block_size[1] * 2),
                         },
                         E.Description(name),
                         E.SimpleSource(
-                            {"resampling": "cubic"},
                             E.SourceFileName({"relativeToVRT": "1"}, p),
                             E.SourceBand(str(b)),
                             E.SourceProperties(
@@ -1445,22 +1444,6 @@ def main():
                                     "DataType": "Int16",
                                     "BlockXSize": str(block_size[0]),
                                     "BlockYSize": str(block_size[1]),
-                                }
-                            ),
-                            E.SrcRect(
-                                {
-                                    "xOff": "0",
-                                    "yOff": "0",
-                                    "xSize": str(ds.RasterXSize),
-                                    "ySize": str(ds.RasterYSize),
-                                }
-                            ),
-                            E.DstRect(
-                                {
-                                    "xOff": "0",
-                                    "yOff": "0",
-                                    "xSize": str(ds.RasterXSize * 2),
-                                    "ySize": str(ds.RasterYSize * 2),
                                 }
                             ),
                         ),
