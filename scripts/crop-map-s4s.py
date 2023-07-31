@@ -518,8 +518,8 @@ def main():
 
     client = docker.from_env(timeout=600)
     pool_hi_conc = multiprocessing.dummy.Pool()
-    pool_med_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 16))
-    pool_lo_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 4))
+    pool_med_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 4))
+    pool_lo_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 2))
 
     config = Config(args)
 
@@ -622,7 +622,7 @@ def main():
                 products_by_tile = pickle.load(file)
         else:
             products_by_tile = load_products(
-                conn, pool_lo_conc, config.site_id, season_start, season_end, tiles
+                conn, pool_med_conc, config.site_id, season_start, season_end, tiles
             )
             with open("s2-products.pickle", "wb") as file:
                 pickle.dump(products_by_tile, file, protocol=pickle.HIGHEST_PROTOCOL)
@@ -775,7 +775,7 @@ def main():
                 commands.append(command_b11_vrt)
             if not os.path.exists(b12_vrt):
                 commands.append(command_b12_vrt)
-    pool_lo_conc.map(lambda cmd: run_command(cmd, env=env), commands, chunksize=1)
+    pool_med_conc.map(lambda cmd: run_command(cmd, env=env), commands, chunksize=1)
 
     commands = []
     tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
@@ -1025,7 +1025,7 @@ def main():
             environment=env,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool_lo_conc, containers)
+    run_containers_concurrently(client, pool_med_conc, containers)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1088,7 +1088,7 @@ def main():
             commands.append(command_b7_nodata_vrt)
             commands.append(command_b11_nodata_vrt)
             commands.append(command_b12_nodata_vrt)
-    pool_hi_conc.map(run_command, commands, chunksize=1)
+    pool_med_conc.map(run_command, commands, chunksize=1)
 
     commands = []
     for tile in products_by_tile.keys():
@@ -1166,7 +1166,7 @@ def main():
             commands.append(command_b7_10m_vrt)
             commands.append(command_b11_10m_vrt)
             commands.append(command_b12_10m_vrt)
-    pool_hi_conc.map(run_command, commands, chunksize=1)
+    pool_med_conc.map(run_command, commands, chunksize=1)
 
     containers = []
     for tile in products_by_tile.keys():
@@ -1679,7 +1679,7 @@ def main():
         "-o",
         validation_samples,
     ] + validation_files
-    pool_hi_conc.map(
+    pool_lo_conc.map(
         run_command,
         [command_merge_training_samples, command_merge_validation_samples],
         chunksize=1,
@@ -1859,7 +1859,7 @@ def main():
                 volumes=volumes,
             )
             containers.append(container)
-        run_containers_concurrently(client, pool_hi_conc, containers)
+        run_containers_concurrently(client, pool_med_conc, containers)
 
     if args.output_path:
         for tile in tiles:
