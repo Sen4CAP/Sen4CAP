@@ -28,6 +28,7 @@ from configparser import ConfigParser
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.1.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
+GEO_TOOLS_IMAGE_NAME = "lnicola/geo-tools:0.1.0"
 
 
 def parse_date(str):
@@ -1606,53 +1607,36 @@ def main():
 
         bands_vrt = f"bands_{tile}.vrt"
 
-        if not os.path.exists(training_samples) and os.path.exists(training_points):
+        if (not os.path.exists(training_samples) or not os.path.exists(validation_samples)) and os.path.exists(training_points) and os.path.exists(validation_points):
             command = [
-                "otbcli_SampleExtraction",
-                "-in",
+                "geo-tools",
+                "sample-extraction",
                 bands_vrt,
-                "-vec",
+                "--points",
                 training_points,
-                "-out",
-                training_samples,
-                "-field",
-                "crop_code",
-                "-outfield",
-                "list",
-                "-outfield.list.names",
-            ] + band_names_lower
-            commands.append(command)
-
-        if not os.path.exists(validation_samples) and os.path.exists(
-            validation_points
-        ):
-            command = [
-                "otbcli_SampleExtraction",
-                "-in",
-                bands_vrt,
-                "-vec",
                 validation_points,
-                "-out",
+                "--outputs",
+                training_samples,
                 validation_samples,
-                "-field",
-                "crop_code",
-                "-outfield",
-                "list",
-                "-outfield.list.names",
+                "--num-threads",
+                "4",
+                "-f",
+                "SQLite",
+                "--fields",
             ] + band_names_lower
             commands.append(command)
 
     containers = []
     for command in commands:
         container = ContainerInfo(
-            image=OTB_IMAGE_NAME,
+            image=GEO_TOOLS_IMAGE_NAME,
             command=command,
             working_dir=output_dir,
             volumes=volumes,
             environment=env,
         )
         containers.append(container)
-    run_containers_concurrently(client, pool_med_conc, containers)
+    run_containers_concurrently(client, pool_lo_conc, containers)
 
     for tile in products_by_tile.keys():
         training_samples = f"training_samples_{tile}.sqlite"
