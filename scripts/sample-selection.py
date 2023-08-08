@@ -5,7 +5,7 @@ import argparse
 from collections import defaultdict
 import csv
 from datetime import date
-from typing import List, Optional
+from typing import Dict, List, Optional
 import docker
 import glob
 import json
@@ -94,6 +94,15 @@ class Tile(object):
         id,
         raster,
         spatial_ref,
+    ):
+        self.id = id
+        self.raster = raster
+        self.spatial_ref = spatial_ref
+
+
+class TileOutput(object):
+    def __init__(
+        self,
         training_polygons,
         validation_polygons,
         training_dataset,
@@ -101,9 +110,6 @@ class Tile(object):
         training_layer,
         validation_layer,
     ):
-        self.id = id
-        self.raster = raster
-        self.spatial_ref = spatial_ref
         self.training_polygons = training_polygons
         self.validation_polygons = validation_polygons
         self.training_dataset = training_dataset
@@ -111,8 +117,8 @@ class Tile(object):
         self.training_layer = training_layer
         self.validation_layer = validation_layer
 
-        self.training_points = None
-        self.validation_points = None
+        self.training_points: Optional[str] = None
+        self.validation_points: Optional[str] = None
 
 
 def main():
@@ -225,7 +231,8 @@ order by site_id;"""
             insitu_path = insitu_path.replace("{year}", str(args.year))
 
         tile_rasters = glob.glob(os.path.join(insitu_path, "*_10m.tif"))
-        tiles = {}
+        tiles: Dict[str, Tile] = {}
+        tile_outputs: Dict[str, TileOutput] = {}
         transforms = {}
         output_dir = os.path.abspath(".")  # TODO
         for path in tile_rasters:
@@ -245,8 +252,16 @@ order by site_id;"""
                 transform = osr.CoordinateTransformation(site_srs, projection)
                 transforms[tile_id] = transform
 
-            training_polygons = "training_polygons_{}.shp".format(tile_id)
-            validation_polygons = "validation_polygons_{}.shp".format(tile_id)
+            tile = Tile(
+                tile_id,
+                path,
+                projection,
+            )
+            tiles[tile_id] = tile
+
+        for tile in tiles.values():
+            training_polygons = "training_polygons_{}.shp".format(tile.id)
+            validation_polygons = "validation_polygons_{}.shp".format(tile.id)
             if os.path.exists(training_polygons):
                 driver.DeleteDataSource(training_polygons)
             if os.path.exists(validation_polygons):
@@ -256,12 +271,12 @@ order by site_id;"""
 
             training_layer = training_dataset.CreateLayer(
                 "polygons",
-                projection,
+                tile.spatial_ref,
                 ogr.wkbMultiPolygon,
             )
             validation_layer = validation_dataset.CreateLayer(
                 "polygons",
-                projection,
+                tile.spatial_ref,
                 ogr.wkbMultiPolygon,
             )
 
@@ -275,10 +290,7 @@ order by site_id;"""
             validation_layer.CreateField(pix_10m_field)
             validation_layer.CreateField(strategy_field)
 
-            tile = Tile(
-                tile_id,
-                path,
-                projection,
+            tile_output = TileOutput(
                 training_polygons,
                 validation_polygons,
                 training_dataset,
@@ -286,7 +298,7 @@ order by site_id;"""
                 training_layer,
                 validation_layer,
             )
-            tiles[tile_id] = tile
+            tile_outputs[tile.id] = tile_output
 
         if args.remapping_set_id:
             crop_code_column = SQL("crop_remapping_set_detail.remapped_code_pre")
@@ -333,7 +345,7 @@ order by site_id;"""
 
         strata = get_site_strata(conn, config.site_id)
         if not strata:
-            stratum = Stratum(None, tiles.keys())
+            stratum = Stratum(None, list(tiles.keys()))
             strata.append(stratum)
 
         query = SQL(
@@ -584,6 +596,7 @@ order by random();
                     purpose = 1  # validation
 
                 tile = tiles[tile_id]
+                tile_output = tile_outputs[tile_id]
                 if purpose == 0:
                     feature = ogr.Feature(training_feature_defn)
                     feature.SetFID(parcel_id)
@@ -598,7 +611,7 @@ order by random();
                     feature.SetField("strategy", strategy)
                     feature.SetGeometry(geom)
 
-                    tile.training_layer.CreateFeature(feature)
+                    tile_output.training_layer.CreateFeature(feature)
                 else:
                     feature = ogr.Feature(validation_feature_defn)
                     feature.SetFID(parcel_id)
@@ -613,28 +626,30 @@ order by random();
                     feature.SetField("strategy", strategy)
                     feature.SetGeometry(geom)
 
-                    tile.validation_layer.CreateFeature(feature)
+                    tile_output.validation_layer.CreateFeature(feature)
 
         with open("smote-targets.json", "wt") as file:
             json.dump(smote_targets, file)
 
         for tile in tiles.values():
-            # HACK
-            tile.training_layer.SyncToDisk()
-            tile.training_dataset.SyncToDisk()
-            tile.validation_layer.SyncToDisk()
-            tile.validation_dataset.SyncToDisk()
+            tile_output = tile_outputs[tile.id]
 
-            tile.training_layer = None
-            tile.validation_layer = None
-            tile.training_dataset = None
-            tile.validation_dataset = None
+            # HACK
+            tile_output.training_layer.SyncToDisk()
+            tile_output.training_dataset.SyncToDisk()
+            tile_output.validation_layer.SyncToDisk()
+            tile_output.validation_dataset.SyncToDisk()
+
+            tile_output.training_layer = None
+            tile_output.validation_layer = None
+            tile_output.training_dataset = None
+            tile_output.validation_dataset = None
 
             training_stats = "training_statistics_{}.xml".format(tile.id)
             validation_stats = "validation_statistics_{}.xml".format(tile.id)
 
-            tile.training_points = "training_points_{}.shp".format(tile.id)
-            tile.validation_points = "validation_points_{}.shp".format(tile.id)
+            tile_output.training_points = "training_points_{}.shp".format(tile.id)
+            tile_output.validation_points = "validation_points_{}.shp".format(tile.id)
 
             command_training_statistics = [
                 "otbcli_PolygonClassStatistics",
@@ -643,7 +658,7 @@ order by random();
                 "-in",
                 tile.raster,
                 "-vec",
-                tile.training_polygons,
+                tile_output.training_polygons,
                 "-out",
                 training_stats,
             ]
@@ -655,7 +670,7 @@ order by random();
                 "-in",
                 tile.raster,
                 "-vec",
-                tile.validation_polygons,
+                tile_output.validation_polygons,
                 "-out",
                 validation_stats,
             ]
@@ -669,11 +684,11 @@ order by random();
                 "-in",
                 tile.raster,
                 "-vec",
-                tile.training_polygons,
+                tile_output.training_polygons,
                 "-instats",
                 training_stats,
                 "-out",
-                tile.training_points,
+                tile_output.training_points,
             ]
 
             command_validation_samples = [
@@ -685,11 +700,11 @@ order by random();
                 "-in",
                 tile.raster,
                 "-vec",
-                tile.validation_polygons,
+                tile_output.validation_polygons,
                 "-instats",
                 validation_stats,
                 "-out",
-                tile.validation_points,
+                tile_output.validation_points,
             ]
 
             client = docker.from_env(timeout=600)
