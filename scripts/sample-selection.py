@@ -124,8 +124,47 @@ def main():
     logging.basicConfig(level=level)
 
     config = Config(args)
+
+    driver = ogr.GetDriverByName("ESRI Shapefile")
+
+    parcel_id_field = ogr.FieldDefn("id", ogr.OFTInteger)
+    code_n1_field = ogr.FieldDefn("code_n1", ogr.OFTInteger)
+    code_n2_field = ogr.FieldDefn("code_n2", ogr.OFTInteger)
+    code_n3_field = ogr.FieldDefn("code_n3", ogr.OFTInteger)
+    code_n4_field = ogr.FieldDefn("code_n4", ogr.OFTInteger)
+    code_lc_field = ogr.FieldDefn("code_lc", ogr.OFTInteger)
+    crop_code_field = ogr.FieldDefn("crop_code", ogr.OFTInteger)
+    pix_10m_field = ogr.FieldDefn("pix_10m", ogr.OFTInteger)
+    strategy_field = ogr.FieldDefn("strategy", ogr.OFTInteger)
+
+    training_feature_defn = ogr.FeatureDefn()
+    training_feature_defn.AddFieldDefn(parcel_id_field)
+    training_feature_defn.AddFieldDefn(crop_code_field)
+    training_feature_defn.AddFieldDefn(pix_10m_field)
+    training_feature_defn.AddFieldDefn(strategy_field)
+    training_feature_defn.AddFieldDefn(code_n1_field)
+    training_feature_defn.AddFieldDefn(code_n2_field)
+    training_feature_defn.AddFieldDefn(code_n3_field)
+    training_feature_defn.AddFieldDefn(code_n4_field)
+    training_feature_defn.AddFieldDefn(code_lc_field)
+
+    validation_feature_defn = ogr.FeatureDefn()
+    validation_feature_defn.AddFieldDefn(parcel_id_field)
+    validation_feature_defn.AddFieldDefn(crop_code_field)
+    validation_feature_defn.AddFieldDefn(pix_10m_field)
+    validation_feature_defn.AddFieldDefn(strategy_field)
+    validation_feature_defn.AddFieldDefn(code_n1_field)
+    validation_feature_defn.AddFieldDefn(code_n2_field)
+    validation_feature_defn.AddFieldDefn(code_n3_field)
+    validation_feature_defn.AddFieldDefn(code_n4_field)
+    validation_feature_defn.AddFieldDefn(code_lc_field)
+
     with get_connection(config) as conn:
         site_name = get_site_name(conn, config.site_id)
+
+        sample_ratio_hi = 0.25
+        sample_ratio_lo = 0.75
+        smote_ratio = 0.0075
 
         parcels_table = "in_situ_polygons_{}_{}".format(site_name, args.year)
         attributes_table = "polygon_attributes_{}_{}".format(site_name, args.year)
@@ -134,46 +173,6 @@ def main():
         parcels_table_id = Identifier(parcels_table)
         attributes_table_id = Identifier(attributes_table)
         statistical_data_id = Identifier(statistical_data_table)
-
-        sample_ratio_hi = 0.25
-        sample_ratio_lo = 0.75
-        smote_ratio = 0.0075
-
-        driver = ogr.GetDriverByName("ESRI Shapefile")
-
-        parcel_id_field = ogr.FieldDefn("id", ogr.OFTInteger)
-        code_n1_field = ogr.FieldDefn("code_n1", ogr.OFTInteger)
-        code_n2_field = ogr.FieldDefn("code_n2", ogr.OFTInteger)
-        code_n3_field = ogr.FieldDefn("code_n3", ogr.OFTInteger)
-        code_n4_field = ogr.FieldDefn("code_n4", ogr.OFTInteger)
-        code_lc_field = ogr.FieldDefn("code_lc", ogr.OFTInteger)
-        crop_code_field = ogr.FieldDefn("crop_code", ogr.OFTInteger)
-        pix_10m_field = ogr.FieldDefn("pix_10m", ogr.OFTInteger)
-        strategy_field = ogr.FieldDefn("strategy", ogr.OFTInteger)
-
-        training_feature_defn = ogr.FeatureDefn()
-        training_feature_defn.AddFieldDefn(parcel_id_field)
-        training_feature_defn.AddFieldDefn(crop_code_field)
-        training_feature_defn.AddFieldDefn(pix_10m_field)
-        training_feature_defn.AddFieldDefn(strategy_field)
-        training_feature_defn.AddFieldDefn(code_n1_field)
-        training_feature_defn.AddFieldDefn(code_n2_field)
-        training_feature_defn.AddFieldDefn(code_n3_field)
-        training_feature_defn.AddFieldDefn(code_n4_field)
-        training_feature_defn.AddFieldDefn(code_lc_field)
-
-        validation_feature_defn = ogr.FeatureDefn()
-        validation_feature_defn.AddFieldDefn(parcel_id_field)
-        validation_feature_defn.AddFieldDefn(crop_code_field)
-        validation_feature_defn.AddFieldDefn(pix_10m_field)
-        validation_feature_defn.AddFieldDefn(strategy_field)
-        validation_feature_defn.AddFieldDefn(code_n1_field)
-        validation_feature_defn.AddFieldDefn(code_n2_field)
-        validation_feature_defn.AddFieldDefn(code_n3_field)
-        validation_feature_defn.AddFieldDefn(code_n4_field)
-        validation_feature_defn.AddFieldDefn(code_lc_field)
-
-        # feature_defn = None
 
         query = SQL("select Find_SRID('public', {}, 'wkb_geometry')").format(
             Literal(parcels_table)
