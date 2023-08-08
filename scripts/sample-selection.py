@@ -182,6 +182,8 @@ def main():
     validation_feature_defn.AddFieldDefn(code_n4_field)
     validation_feature_defn.AddFieldDefn(code_lc_field)
 
+    client = docker.from_env(timeout=600)
+
     with get_connection(config) as conn:
         site_name = get_site_name(conn, config.site_id)
 
@@ -255,47 +257,6 @@ order by site_id;"""
                 projection,
             )
             tiles[tile_id] = tile
-
-        for tile in tiles.values():
-            training_polygons = "training_polygons_{}.shp".format(tile.id)
-            validation_polygons = "validation_polygons_{}.shp".format(tile.id)
-            if os.path.exists(training_polygons):
-                driver.DeleteDataSource(training_polygons)
-            if os.path.exists(validation_polygons):
-                driver.DeleteDataSource(validation_polygons)
-            training_dataset = driver.CreateDataSource(training_polygons)
-            validation_dataset = driver.CreateDataSource(validation_polygons)
-
-            training_layer = training_dataset.CreateLayer(
-                "polygons",
-                tile.spatial_ref,
-                ogr.wkbMultiPolygon,
-            )
-            validation_layer = validation_dataset.CreateLayer(
-                "polygons",
-                tile.spatial_ref,
-                ogr.wkbMultiPolygon,
-            )
-
-            training_layer.CreateField(parcel_id_field)
-            training_layer.CreateField(crop_code_field)
-            training_layer.CreateField(pix_10m_field)
-            training_layer.CreateField(strategy_field)
-
-            validation_layer.CreateField(parcel_id_field)
-            validation_layer.CreateField(crop_code_field)
-            validation_layer.CreateField(pix_10m_field)
-            validation_layer.CreateField(strategy_field)
-
-            tile_output = TileOutput(
-                training_polygons,
-                validation_polygons,
-                training_dataset,
-                validation_dataset,
-                training_layer,
-                validation_layer,
-            )
-            tile_outputs[tile.id] = tile_output
 
         if args.remapping_set_id:
             crop_code_column = SQL("crop_remapping_set_detail.remapped_code_pre")
@@ -520,6 +481,47 @@ order by random();
         )
         logging.debug(query.as_string(conn))
 
+        for tile in tiles.values():
+            training_polygons = "training_polygons_{}.shp".format(tile.id)
+            validation_polygons = "validation_polygons_{}.shp".format(tile.id)
+            if os.path.exists(training_polygons):
+                driver.DeleteDataSource(training_polygons)
+            if os.path.exists(validation_polygons):
+                driver.DeleteDataSource(validation_polygons)
+            training_dataset = driver.CreateDataSource(training_polygons)
+            validation_dataset = driver.CreateDataSource(validation_polygons)
+
+            training_layer = training_dataset.CreateLayer(
+                "polygons",
+                tile.spatial_ref,
+                ogr.wkbMultiPolygon,
+            )
+            validation_layer = validation_dataset.CreateLayer(
+                "polygons",
+                tile.spatial_ref,
+                ogr.wkbMultiPolygon,
+            )
+
+            training_layer.CreateField(parcel_id_field)
+            training_layer.CreateField(crop_code_field)
+            training_layer.CreateField(pix_10m_field)
+            training_layer.CreateField(strategy_field)
+
+            validation_layer.CreateField(parcel_id_field)
+            validation_layer.CreateField(crop_code_field)
+            validation_layer.CreateField(pix_10m_field)
+            validation_layer.CreateField(strategy_field)
+
+            tile_output = TileOutput(
+                training_polygons,
+                validation_polygons,
+                training_dataset,
+                validation_dataset,
+                training_layer,
+                validation_layer,
+            )
+            tile_outputs[tile.id] = tile_output
+
         training_pixels = defaultdict(lambda: 0)
         training_target = {}
 
@@ -554,6 +556,7 @@ order by random();
                 geom.Transform(transform)
 
                 if strategy != 4:
+                    crop_target = None
                     if strategy == 1:
                         crop_target = sample_ratio_hi * crop_pixels
                         if crop_code not in training_target:
@@ -583,6 +586,7 @@ order by random();
                         if crop_code not in smote_targets:
                             smote_targets[crop_code] = smote_target
 
+                    assert(crop_target)
                     pixels = training_pixels[crop_code]
                     if pixels + pix_10m <= crop_target:
                         training_pixels[crop_code] = pixels + pix_10m
@@ -592,7 +596,6 @@ order by random();
                 else:
                     purpose = 1  # validation
 
-                tile = tiles[tile_id]
                 tile_output = tile_outputs[tile_id]
                 if purpose == 0:
                     feature = ogr.Feature(training_feature_defn)
@@ -704,7 +707,6 @@ order by random();
                 tile_output.validation_points,
             ]
 
-            client = docker.from_env(timeout=600)
             commands = [
                 command_training_statistics,
                 command_validation_statistics,
