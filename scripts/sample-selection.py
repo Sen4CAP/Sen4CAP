@@ -110,7 +110,6 @@ def main():
     required_args.add_argument(
         "-s", "--site-id", type=int, required=True, help="site ID to filter by"
     )
-    parser.add_argument("--tiles", help="tile filter", nargs="*")
     parser.add_argument("--remapping-set-id", help="remapping set id", type=int)
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true")
     parser.add_argument("--working-path", help="working path")
@@ -214,8 +213,6 @@ order by site_id;"""
             name = os.path.splitext(os.path.basename(path))[0]
             parts = name.split("_")
             tile_id = parts[len(parts) - 2]
-            if args.tiles is not None and tile_id not in args.tiles:
-                continue
 
             ds = gdal.Open(path, gdal.gdalconst.GA_ReadOnly)
             projection = ds.GetSpatialRef()
@@ -271,11 +268,6 @@ order by site_id;"""
                 validation_layer,
             )
             tiles[tile_id] = tile
-
-        if args.tiles is not None:
-            tile_filter = SQL("and polygons.tile_id = any(%s)")
-        else:
-            tile_filter = SQL("")
 
         if args.remapping_set_id:
             crop_code_column = SQL("crop_remapping_set_detail.remapped_code_pre")
@@ -441,7 +433,6 @@ order by site_id;"""
           and not overlap
           --  and quality_control
           and pix_10m >= pix_min
-          {}
           and (monitored_land_covers is null
             or code_n1 = any (monitored_land_covers))
           and (monitored_crops is null
@@ -492,7 +483,6 @@ order by random();
             attributes_table_id,
             statistical_data_id,
             remapping_set_join,
-            tile_filter,
             remapped_code_filter,
         )
         logging.debug(query.as_string(conn))
@@ -502,10 +492,7 @@ order by random();
 
         smote_targets = {}
         with conn.cursor() as cursor:
-            if args.tiles is not None:
-                query_args = (config.site_id, config.site_id, site_srid, args.tiles)
-            else:
-                query_args = (config.site_id, config.site_id, site_srid)
+            query_args = (config.site_id, config.site_id, site_srid)
 
             cursor.execute(query, query_args)
             print("smote_ratio", smote_ratio)
