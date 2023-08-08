@@ -481,284 +481,306 @@ order by random();
         )
         logging.debug(query.as_string(conn))
 
-        for tile in tiles.values():
-            training_polygons = "training_polygons_{}.shp".format(tile.id)
-            validation_polygons = "validation_polygons_{}.shp".format(tile.id)
-            if os.path.exists(training_polygons):
-                driver.DeleteDataSource(training_polygons)
-            if os.path.exists(validation_polygons):
-                driver.DeleteDataSource(validation_polygons)
-            training_dataset = driver.CreateDataSource(training_polygons)
-            validation_dataset = driver.CreateDataSource(validation_polygons)
+        for stratum in strata:
+            for tile_id in stratum.tiles:
+                tile = tiles[tile_id]
 
-            training_layer = training_dataset.CreateLayer(
-                "polygons",
-                tile.spatial_ref,
-                ogr.wkbMultiPolygon,
-            )
-            validation_layer = validation_dataset.CreateLayer(
-                "polygons",
-                tile.spatial_ref,
-                ogr.wkbMultiPolygon,
-            )
+                if stratum.stratum_id:
+                    training_polygons = f"training_polygons_{stratum.stratum_id}_{tile_id}.shp"
+                    validation_polygons = f"validation_polygons_{stratum.stratum_id}_{tile_id}.shp"
+                else:
+                    training_polygons = f"training_polygons_{tile_id}.shp"
+                    validation_polygons = f"validation_polygons_{tile_id}.shp"
 
-            training_layer.CreateField(parcel_id_field)
-            training_layer.CreateField(crop_code_field)
-            training_layer.CreateField(pix_10m_field)
-            training_layer.CreateField(strategy_field)
+                if os.path.exists(training_polygons):
+                    driver.DeleteDataSource(training_polygons)
+                if os.path.exists(validation_polygons):
+                    driver.DeleteDataSource(validation_polygons)
+                training_dataset = driver.CreateDataSource(training_polygons)
+                validation_dataset = driver.CreateDataSource(validation_polygons)
 
-            validation_layer.CreateField(parcel_id_field)
-            validation_layer.CreateField(crop_code_field)
-            validation_layer.CreateField(pix_10m_field)
-            validation_layer.CreateField(strategy_field)
+                training_layer = training_dataset.CreateLayer(
+                    "polygons",
+                    tile.spatial_ref,
+                    ogr.wkbMultiPolygon,
+                )
+                validation_layer = validation_dataset.CreateLayer(
+                    "polygons",
+                    tile.spatial_ref,
+                    ogr.wkbMultiPolygon,
+                )
 
-            tile_output = TileOutput(
-                training_polygons,
-                validation_polygons,
-                training_dataset,
-                validation_dataset,
-                training_layer,
-                validation_layer,
-            )
-            tile_outputs[tile.id] = tile_output
+                training_layer.CreateField(parcel_id_field)
+                training_layer.CreateField(crop_code_field)
+                training_layer.CreateField(pix_10m_field)
+                training_layer.CreateField(strategy_field)
 
-        training_pixels = defaultdict(lambda: 0)
-        training_target = {}
+                validation_layer.CreateField(parcel_id_field)
+                validation_layer.CreateField(crop_code_field)
+                validation_layer.CreateField(pix_10m_field)
+                validation_layer.CreateField(strategy_field)
 
-        smote_targets = {}
-        with conn.cursor() as cursor:
-            query_args = (config.site_id, config.site_id, site_srid)
+                tile_output = TileOutput(
+                    training_polygons,
+                    validation_polygons,
+                    training_dataset,
+                    validation_dataset,
+                    training_layer,
+                    validation_layer,
+                )
+                tile_outputs[tile.id] = tile_output
 
-            cursor.execute(query, query_args)
-            print("smote_ratio", smote_ratio)
-            print("sample_ratio_lo", sample_ratio_lo)
-            print("sample_ratio_hi", sample_ratio_hi)
-            for (
-                parcel_id,
-                geometry,
-                pix_10m,
-                crop_code,
-                code_n4,
-                code_n3,
-                code_n2,
-                code_n1,
-                code_lc,
-                crop_pixels,
-                total_pixels,
-                polygon_num,
-                pixel_ratio,
-                strategy,
-                tile_id,
-            ) in cursor:
-                geom = ogr.CreateGeometryFromWkb(bytes(geometry))
-                geom.AssignSpatialReference(site_srs)
-                transform = transforms[tile_id]
-                geom.Transform(transform)
+            training_pixels = defaultdict(lambda: 0)
+            training_target = {}
 
-                if strategy != 4:
-                    crop_target = None
-                    if strategy == 1:
-                        crop_target = sample_ratio_hi * crop_pixels
-                        if crop_code not in training_target:
-                            print(
-                                "Target pixels for crop {}: {}".format(
-                                    crop_code, crop_target
+            smote_targets = {}
+            with conn.cursor() as cursor:
+                query_args = (config.site_id, config.site_id, site_srid)
+
+                cursor.execute(query, query_args)
+                print("smote_ratio", smote_ratio)
+                print("sample_ratio_lo", sample_ratio_lo)
+                print("sample_ratio_hi", sample_ratio_hi)
+                for (
+                    parcel_id,
+                    geometry,
+                    pix_10m,
+                    crop_code,
+                    code_n4,
+                    code_n3,
+                    code_n2,
+                    code_n1,
+                    code_lc,
+                    crop_pixels,
+                    total_pixels,
+                    polygon_num,
+                    pixel_ratio,
+                    strategy,
+                    tile_id,
+                ) in cursor:
+                    geom = ogr.CreateGeometryFromWkb(bytes(geometry))
+                    geom.AssignSpatialReference(site_srs)
+                    transform = transforms[tile_id]
+                    geom.Transform(transform)
+
+                    if strategy != 4:
+                        crop_target = None
+                        if strategy == 1:
+                            crop_target = sample_ratio_hi * crop_pixels
+                            if crop_code not in training_target:
+                                print(
+                                    "Target pixels for crop {}: {}".format(
+                                        crop_code, crop_target
+                                    )
+                                )
+                            training_target[crop_code] = crop_target
+                        elif strategy == 2 or strategy == 3:
+                            crop_target = sample_ratio_lo * crop_pixels
+                            if crop_code not in training_target:
+                                print(
+                                    "Target pixels for crop {}: {}".format(
+                                        crop_code, crop_target
+                                    )
+                                )
+                            training_target[crop_code] = crop_target
+
+                        if strategy == 3:
+                            smote_target = int(
+                                round(
+                                    smote_ratio * total_pixels
+                                    - sample_ratio_lo * crop_pixels
                                 )
                             )
-                        training_target[crop_code] = crop_target
-                    elif strategy == 2 or strategy == 3:
-                        crop_target = sample_ratio_lo * crop_pixels
-                        if crop_code not in training_target:
-                            print(
-                                "Target pixels for crop {}: {}".format(
-                                    crop_code, crop_target
-                                )
-                            )
-                        training_target[crop_code] = crop_target
+                            if crop_code not in smote_targets:
+                                smote_targets[crop_code] = smote_target
 
-                    if strategy == 3:
-                        smote_target = int(
-                            round(
-                                smote_ratio * total_pixels
-                                - sample_ratio_lo * crop_pixels
-                            )
-                        )
-                        if crop_code not in smote_targets:
-                            smote_targets[crop_code] = smote_target
-
-                    assert(crop_target)
-                    pixels = training_pixels[crop_code]
-                    if pixels + pix_10m <= crop_target:
-                        training_pixels[crop_code] = pixels + pix_10m
-                        purpose = 0  # training
+                        assert(crop_target)
+                        pixels = training_pixels[crop_code]
+                        if pixels + pix_10m <= crop_target:
+                            training_pixels[crop_code] = pixels + pix_10m
+                            purpose = 0  # training
+                        else:
+                            purpose = 1  # validation
                     else:
                         purpose = 1  # validation
-                else:
-                    purpose = 1  # validation
 
+                    tile_output = tile_outputs[tile_id]
+                    if purpose == 0:
+                        feature = ogr.Feature(training_feature_defn)
+                        feature.SetFID(parcel_id)
+                        feature.SetField("id", parcel_id)
+                        feature.SetField("code_n1", code_n1)
+                        feature.SetField("code_n2", code_n2)
+                        feature.SetField("code_n3", code_n3)
+                        feature.SetField("code_n4", code_n4)
+                        feature.SetField("code_lc", code_lc)
+                        feature.SetField("crop_code", crop_code)
+                        feature.SetField("pix_10m", pix_10m)
+                        feature.SetField("strategy", strategy)
+                        feature.SetGeometry(geom)
+
+                        tile_output.training_layer.CreateFeature(feature)
+                    else:
+                        feature = ogr.Feature(validation_feature_defn)
+                        feature.SetFID(parcel_id)
+                        feature.SetField("id", parcel_id)
+                        feature.SetField("code_n1", code_n1)
+                        feature.SetField("code_n2", code_n2)
+                        feature.SetField("code_n3", code_n3)
+                        feature.SetField("code_n4", code_n4)
+                        feature.SetField("code_lc", code_lc)
+                        feature.SetField("crop_code", crop_code)
+                        feature.SetField("pix_10m", pix_10m)
+                        feature.SetField("strategy", strategy)
+                        feature.SetGeometry(geom)
+
+                        tile_output.validation_layer.CreateFeature(feature)
+
+            if stratum.stratum_id:
+                smote_targets_json = f"smote_targets_{stratum.stratum_id}.json"
+            else:
+                smote_targets_json = "smote_targets.json"
+
+            with open(smote_targets_json, "wt") as file:
+                json.dump(smote_targets, file)
+
+            for tile_id in stratum.tiles:
+                tile = tiles[tile_id]
                 tile_output = tile_outputs[tile_id]
-                if purpose == 0:
-                    feature = ogr.Feature(training_feature_defn)
-                    feature.SetFID(parcel_id)
-                    feature.SetField("id", parcel_id)
-                    feature.SetField("code_n1", code_n1)
-                    feature.SetField("code_n2", code_n2)
-                    feature.SetField("code_n3", code_n3)
-                    feature.SetField("code_n4", code_n4)
-                    feature.SetField("code_lc", code_lc)
-                    feature.SetField("crop_code", crop_code)
-                    feature.SetField("pix_10m", pix_10m)
-                    feature.SetField("strategy", strategy)
-                    feature.SetGeometry(geom)
 
-                    tile_output.training_layer.CreateFeature(feature)
+                # HACK
+                tile_output.training_layer.SyncToDisk()
+                tile_output.training_dataset.SyncToDisk()
+                tile_output.validation_layer.SyncToDisk()
+                tile_output.validation_dataset.SyncToDisk()
+
+                tile_output.training_layer = None
+                tile_output.validation_layer = None
+                tile_output.training_dataset = None
+                tile_output.validation_dataset = None
+
+                if stratum.stratum_id:
+                    training_stats = f"training_statistics_{stratum.stratum_id}_{tile_id}.xml"
+                    validation_stats = f"validation_statistics_{stratum.stratum_id}_{tile_id}.xml"
+
+                    tile_output.training_points = f"training_points_{stratum.stratum_id}_{tile_id}.shp"
+                    tile_output.validation_points = f"validation_points_{stratum.stratum_id}_{tile_id}.shp"
                 else:
-                    feature = ogr.Feature(validation_feature_defn)
-                    feature.SetFID(parcel_id)
-                    feature.SetField("id", parcel_id)
-                    feature.SetField("code_n1", code_n1)
-                    feature.SetField("code_n2", code_n2)
-                    feature.SetField("code_n3", code_n3)
-                    feature.SetField("code_n4", code_n4)
-                    feature.SetField("code_lc", code_lc)
-                    feature.SetField("crop_code", crop_code)
-                    feature.SetField("pix_10m", pix_10m)
-                    feature.SetField("strategy", strategy)
-                    feature.SetGeometry(geom)
+                    training_stats = f"training_statistics_{tile_id}.xml"
+                    validation_stats = f"validation_statistics_{tile_id}.xml"
 
-                    tile_output.validation_layer.CreateFeature(feature)
+                    tile_output.training_points = f"training_points_{tile_id}.shp"
+                    tile_output.validation_points = f"validation_points_{tile_id}.shp"
 
-        with open("smote-targets.json", "wt") as file:
-            json.dump(smote_targets, file)
+                command_training_statistics = [
+                    "otbcli_PolygonClassStatistics",
+                    "-field",
+                    "crop_code",
+                    "-in",
+                    tile.raster,
+                    "-vec",
+                    tile_output.training_polygons,
+                    "-out",
+                    training_stats,
+                ]
 
-        for tile in tiles.values():
-            tile_output = tile_outputs[tile.id]
+                command_validation_statistics = [
+                    "otbcli_PolygonClassStatistics",
+                    "-field",
+                    "crop_code",
+                    "-in",
+                    tile.raster,
+                    "-vec",
+                    tile_output.validation_polygons,
+                    "-out",
+                    validation_stats,
+                ]
 
-            # HACK
-            tile_output.training_layer.SyncToDisk()
-            tile_output.training_dataset.SyncToDisk()
-            tile_output.validation_layer.SyncToDisk()
-            tile_output.validation_dataset.SyncToDisk()
+                command_training_samples = [
+                    "otbcli_SampleSelection",
+                    "-field",
+                    "crop_code",
+                    "-strategy",
+                    "all",
+                    "-in",
+                    tile.raster,
+                    "-vec",
+                    tile_output.training_polygons,
+                    "-instats",
+                    training_stats,
+                    "-out",
+                    tile_output.training_points,
+                ]
 
-            tile_output.training_layer = None
-            tile_output.validation_layer = None
-            tile_output.training_dataset = None
-            tile_output.validation_dataset = None
+                command_validation_samples = [
+                    "otbcli_SampleSelection",
+                    "-field",
+                    "crop_code",
+                    "-strategy",
+                    "all",
+                    "-in",
+                    tile.raster,
+                    "-vec",
+                    tile_output.validation_polygons,
+                    "-instats",
+                    validation_stats,
+                    "-out",
+                    tile_output.validation_points,
+                ]
 
-            training_stats = "training_statistics_{}.xml".format(tile.id)
-            validation_stats = "validation_statistics_{}.xml".format(tile.id)
+                commands = [
+                    command_training_statistics,
+                    command_validation_statistics,
+                ]
+                volumes = {
+                    output_dir: {"bind": output_dir, "mode": "rw"},
+                    insitu_path: {"bind": insitu_path, "mode": "ro"},
+                }
 
-            tile_output.training_points = "training_points_{}.shp".format(tile.id)
-            tile_output.validation_points = "validation_points_{}.shp".format(tile.id)
+                if args.mounts:
+                    for mount in args.mounts:
+                        volumes[mount] = {"bind": mount, "mode": "ro"}
 
-            command_training_statistics = [
-                "otbcli_PolygonClassStatistics",
-                "-field",
-                "crop_code",
-                "-in",
-                tile.raster,
-                "-vec",
-                tile_output.training_polygons,
-                "-out",
-                training_stats,
-            ]
+                containers = []
+                for command in commands:
+                    container = client.containers.run(
+                        image=OTB_IMAGE_NAME,
+                        detach=True,
+                        user=f"{os.getuid()}:{os.getgid()}",
+                        volumes=volumes,
+                        working_dir=output_dir,
+                        command=command,
+                    )
+                    containers.append(container)
+                for container in containers:
+                    res = container.wait()
+                    if res["StatusCode"] != 0:
+                        print(container.logs())
+                    container.remove()
 
-            command_validation_statistics = [
-                "otbcli_PolygonClassStatistics",
-                "-field",
-                "crop_code",
-                "-in",
-                tile.raster,
-                "-vec",
-                tile_output.validation_polygons,
-                "-out",
-                validation_stats,
-            ]
+                commands = [
+                    command_training_samples,
+                    command_validation_samples,
+                ]
 
-            command_training_samples = [
-                "otbcli_SampleSelection",
-                "-field",
-                "crop_code",
-                "-strategy",
-                "all",
-                "-in",
-                tile.raster,
-                "-vec",
-                tile_output.training_polygons,
-                "-instats",
-                training_stats,
-                "-out",
-                tile_output.training_points,
-            ]
+                containers = []
+                for command in commands:
+                    container = client.containers.run(
+                        image=OTB_IMAGE_NAME,
+                        detach=True,
+                        user=f"{os.getuid()}:{os.getgid()}",
+                        volumes=volumes,
+                        working_dir=output_dir,
+                        command=command,
+                    )
+                    containers.append(container)
+                for container in containers:
+                    res = container.wait()
+                    if res["StatusCode"] != 0:
+                        print(container.logs())
+                    container.remove()
 
-            command_validation_samples = [
-                "otbcli_SampleSelection",
-                "-field",
-                "crop_code",
-                "-strategy",
-                "all",
-                "-in",
-                tile.raster,
-                "-vec",
-                tile_output.validation_polygons,
-                "-instats",
-                validation_stats,
-                "-out",
-                tile_output.validation_points,
-            ]
-
-            commands = [
-                command_training_statistics,
-                command_validation_statistics,
-            ]
-            volumes = {
-                output_dir: {"bind": output_dir, "mode": "rw"},
-                insitu_path: {"bind": insitu_path, "mode": "ro"},
-            }
-
-            if args.mounts:
-                for mount in args.mounts:
-                    volumes[mount] = {"bind": mount, "mode": "ro"}
-
-            containers = []
-            for command in commands:
-                container = client.containers.run(
-                    image=OTB_IMAGE_NAME,
-                    detach=True,
-                    user=f"{os.getuid()}:{os.getgid()}",
-                    volumes=volumes,
-                    working_dir=output_dir,
-                    command=command,
-                )
-                containers.append(container)
-            for container in containers:
-                res = container.wait()
-                if res["StatusCode"] != 0:
-                    print(container.logs())
-                container.remove()
-
-            commands = [
-                command_training_samples,
-                command_validation_samples,
-            ]
-
-            containers = []
-            for command in commands:
-                container = client.containers.run(
-                    image=OTB_IMAGE_NAME,
-                    detach=True,
-                    user=f"{os.getuid()}:{os.getgid()}",
-                    volumes=volumes,
-                    working_dir=output_dir,
-                    command=command,
-                )
-                containers.append(container)
-            for container in containers:
-                res = container.wait()
-                if res["StatusCode"] != 0:
-                    print(container.logs())
-                container.remove()
-            client.close()
+    client.close()
 
 
 if __name__ == "__main__":
