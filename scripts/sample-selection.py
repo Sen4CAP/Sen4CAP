@@ -5,6 +5,7 @@ import argparse
 from collections import defaultdict
 import csv
 from datetime import date
+from typing import List, Optional
 import docker
 import glob
 import json
@@ -20,10 +21,7 @@ from osgeo import osr
 import pipes
 import psycopg2
 from psycopg2.sql import SQL, Literal, Identifier
-import psycopg2.extras
-import psycopg2.extensions
-import subprocess
-
+from psycopg2.extensions import connection
 from configparser import ConfigParser
 
 
@@ -67,6 +65,28 @@ def get_connection(config):
         password=config.password,
     )
 
+
+class Stratum(object):
+    def __init__(self, stratum_id: Optional[int], tiles: list[str]) -> None:
+        self.stratum_id = stratum_id
+        self.tiles = tiles
+
+
+def get_site_strata(conn: connection, site_id: int) -> List[Stratum]:
+    query = SQL("select * from sp_get_site_strata(%s)")
+    logging.debug(query.as_string(conn))
+
+    strata = []
+    with conn.cursor() as cursor:
+        cursor.execute(
+            query,
+            (site_id, )
+        )
+        for (stratum_id, tiles) in cursor:
+            stratum = Stratum(stratum_id, tiles)
+            strata.append(stratum)
+
+    return strata
 
 class Tile(object):
     def __init__(
@@ -310,6 +330,11 @@ order by site_id;"""
                 os.remove("remapping-table.csv")
             except OSError:
                 pass
+
+        strata = get_site_strata(conn, config.site_id)
+        if not strata:
+            stratum = Stratum(None, tiles.keys())
+            strata.append(stratum)
 
         query = SQL(
             """
