@@ -10,15 +10,12 @@ import docker
 import glob
 import json
 import logging
-from lxml import etree
 from lxml.builder import E
-import multiprocessing.dummy
 import os
 import os.path
 from osgeo import gdal
 from osgeo import ogr
 from osgeo import osr
-import pipes
 import psycopg2
 from psycopg2.sql import SQL, Literal, Identifier
 from psycopg2.extensions import connection
