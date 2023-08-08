@@ -273,7 +273,7 @@ order by site_id;"""
             tiles[tile_id] = tile
 
         if args.tiles is not None:
-            tile_filter = SQL("where site_tiles.tile_id = any(%s)")
+            tile_filter = SQL("and polygons.tile_id = any(%s)")
         else:
             tile_filter = SQL("")
 
@@ -410,19 +410,6 @@ order by site_id;"""
                     where key = 'processor.s4s_crop_mapping.sample-ratio-lo'
                 )
     ),
-    site_tiles as (
-        select unnest(tiles) as tile_id
-        from site_tiles
-        where site_id = %s
-          and satellite_id = 1
-    ),
-    site_tile_geom as (
-        select site_tiles.tile_id,
-               ST_Transform(geom, %s) as geom
-        from site_tiles
-        inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id
-        {}
-    ),
     eligible_polygons as (
         select polygons.parcel_id
              , ST_Multi(ST_Buffer(polygons.wkb_geometry, -10)) as wkb_geometry
@@ -440,10 +427,9 @@ order by site_id;"""
              , sum(pix_10m) over (partition by {}) as crop_pixels
              , sum(pix_10m) over () as total_pixels
              , count(*) over (partition by {}) as polygon_num
-             , site_tile_geom.tile_id as tile_id
+             , attributes.tile_id as tile_id
         from config,
              {} polygons
-                 inner join site_tile_geom on ST_Intersects(polygons.wkb_geometry, site_tile_geom.geom)
                  inner join {} attributes using (parcel_id)
                  inner join {} statistical_data using (parcel_id)
                  inner join crop_list_n4 on crop_list_n4.code_n4 = statistical_data.crop_code
@@ -455,6 +441,7 @@ order by site_id;"""
           and not overlap
           --  and quality_control
           and pix_10m >= pix_min
+          {}
           and (monitored_land_covers is null
             or code_n1 = any (monitored_land_covers))
           and (monitored_crops is null
@@ -495,11 +482,9 @@ select selected_polygons.parcel_id,
        selected_polygons.strategy,
        selected_polygons.tile_id
 from selected_polygons
--- inner join site_tile_geom on ST_Intersects(selected_polygons.wkb_geometry, site_tile_geom.geom)
 order by random();
             """
         ).format(
-            tile_filter,
             crop_code_column,
             crop_code_column,
             crop_code_column,
@@ -507,6 +492,7 @@ order by random();
             attributes_table_id,
             statistical_data_id,
             remapping_set_join,
+            tile_filter,
             remapped_code_filter,
         )
         logging.debug(query.as_string(conn))
