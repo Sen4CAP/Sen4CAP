@@ -206,7 +206,7 @@ order by site_id;"""
             insitu_path = insitu_path.replace("{site}", site_short_name)
             insitu_path = insitu_path.replace("{year}", str(args.year))
 
-        tile_rasters = glob.glob(os.path.join(insitu_path, "*.tif"))
+        tile_rasters = glob.glob(os.path.join(insitu_path, "*_10m.tif"))
         tiles = {}
         transforms = {}
         output_dir = os.path.abspath(".")  # TODO
