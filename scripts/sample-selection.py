@@ -535,7 +535,7 @@ order by random();
 
             smote_targets = {}
             with conn.cursor() as cursor:
-                query_args = (config.site_id, config.site_id, site_srid)
+                query_args = (config.site_id, )
 
                 cursor.execute(query, query_args)
                 print("smote_ratio", smote_ratio)
