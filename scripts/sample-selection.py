@@ -5,6 +5,7 @@ import argparse
 from collections import defaultdict
 import csv
 from datetime import date
+from multiprocessing.dummy import Pool
 from typing import Dict, List, Optional
 import docker
 import glob
@@ -13,9 +14,7 @@ import logging
 from lxml.builder import E
 import os
 import os.path
-from osgeo import gdal
-from osgeo import ogr
-from osgeo import osr
+from osgeo import gdal, ogr, osr
 import psycopg2
 from psycopg2.sql import SQL, Literal, Identifier
 from psycopg2.extensions import connection
@@ -23,6 +22,41 @@ from configparser import ConfigParser
 
 
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
+
+
+class ContainerInfo:
+    def __init__(self, image, command, working_dir, volumes, environment=None):
+        self.image = image
+        self.command = command
+        self.working_dir = working_dir
+        self.volumes = volumes
+        self.environment = environment
+
+    def run(self, client):
+        try:
+            container = client.containers.run(
+                image=self.image,
+                command=self.command,
+                working_dir=self.working_dir,
+                volumes=self.volumes,
+                environment=self.environment,
+                user=f"{os.getuid()}:{os.getgid()}",
+                auto_remove=True,
+                stderr=True,
+                detach=True,
+                tty=True,
+            )
+            return container.wait()
+        except Exception as exc:
+            print(exc)
+            return None
+
+def run_containers_concurrently(client, pool, containers):
+    results = pool.map(lambda c: c.run(client), containers, chunksize=1)
+    for res in results:
+        if res is not None:
+            if res["StatusCode"] != 0:
+                print(res)
 
 
 class Config(object):
@@ -64,7 +98,7 @@ def get_connection(config):
 
 
 class Stratum(object):
-    def __init__(self, stratum_id: Optional[int], tiles: list[str]) -> None:
+    def __init__(self, stratum_id: Optional[int], tiles: List[str]) -> None:
         self.stratum_id = stratum_id
         self.tiles = tiles
 
@@ -100,6 +134,7 @@ class Tile(object):
 class TileOutput(object):
     def __init__(
         self,
+        tile_id,
         training_polygons,
         validation_polygons,
         training_dataset,
@@ -107,6 +142,7 @@ class TileOutput(object):
         training_layer,
         validation_layer,
     ):
+        self.tile_id = tile_id
         self.training_polygons = training_polygons
         self.validation_polygons = validation_polygons
         self.training_dataset = training_dataset
@@ -116,6 +152,55 @@ class TileOutput(object):
 
         self.training_points: Optional[str] = None
         self.validation_points: Optional[str] = None
+
+
+def create_tile_outputs(driver: ogr.Driver, stratum_id: Optional[int], tile: Tile, parcel_id_field: ogr.FieldDefn, crop_code_field: ogr.FieldDefn, pix_10m_field: ogr.FieldDefn, strategy_field: ogr.FieldDefn) -> TileOutput:
+    tile_id = tile.id
+    if stratum_id:
+        training_polygons = f"training_polygons_{stratum_id}_{tile_id}.shp"
+        validation_polygons = f"validation_polygons_{stratum_id}_{tile_id}.shp"
+    else:
+        training_polygons = f"training_polygons_{tile_id}.shp"
+        validation_polygons = f"validation_polygons_{tile_id}.shp"
+
+    if os.path.exists(training_polygons):
+        driver.DeleteDataSource(training_polygons)
+    if os.path.exists(validation_polygons):
+        driver.DeleteDataSource(validation_polygons)
+    training_dataset = driver.CreateDataSource(training_polygons)
+    validation_dataset = driver.CreateDataSource(validation_polygons)
+
+    training_layer = training_dataset.CreateLayer(
+        "polygons",
+        tile.spatial_ref,
+        ogr.wkbMultiPolygon,
+    )
+    validation_layer = validation_dataset.CreateLayer(
+        "polygons",
+        tile.spatial_ref,
+        ogr.wkbMultiPolygon,
+    )
+
+    training_layer.CreateField(parcel_id_field)
+    training_layer.CreateField(crop_code_field)
+    training_layer.CreateField(pix_10m_field)
+    training_layer.CreateField(strategy_field)
+
+    validation_layer.CreateField(parcel_id_field)
+    validation_layer.CreateField(crop_code_field)
+    validation_layer.CreateField(pix_10m_field)
+    validation_layer.CreateField(strategy_field)
+
+    tile_output = TileOutput(
+        tile_id,
+        training_polygons,
+        validation_polygons,
+        training_dataset,
+        validation_dataset,
+        training_layer,
+        validation_layer,
+    )
+    return tile_output
 
 
 def main():
@@ -182,7 +267,8 @@ def main():
     validation_feature_defn.AddFieldDefn(code_n4_field)
     validation_feature_defn.AddFieldDefn(code_lc_field)
 
-    client = docker.from_env(timeout=600)
+    polygon_class_statistics_commands = []
+    sample_selection_commands = []
 
     with get_connection(config) as conn:
         site_name = get_site_name(conn, config.site_id)
@@ -231,9 +317,18 @@ order by site_id;"""
 
         tile_rasters = glob.glob(os.path.join(insitu_path, "*_10m.tif"))
         tiles: Dict[str, Tile] = {}
-        tile_outputs: Dict[str, TileOutput] = {}
         transforms = {}
         output_dir = os.path.abspath(".")  # TODO
+
+        volumes = {
+            output_dir: {"bind": output_dir, "mode": "rw"},
+            insitu_path: {"bind": insitu_path, "mode": "ro"},
+        }
+
+        if args.mounts:
+            for mount in args.mounts:
+                volumes[mount] = {"bind": mount, "mode": "ro"}
+
         for path in tile_rasters:
             name = os.path.splitext(os.path.basename(path))[0]
             parts = name.split("_")
@@ -241,11 +336,6 @@ order by site_id;"""
 
             ds = gdal.Open(path, gdal.gdalconst.GA_ReadOnly)
             projection = ds.GetSpatialRef()
-            print(
-                "Tile id: {}\nSource SRS: {}\nDestination SRS: {}\n".format(
-                    tile_id, site_srs.ExportToWkt(), projection.ExportToWkt()
-                ),
-            )
 
             if tile_id not in transforms:
                 transform = osr.CoordinateTransformation(site_srs, projection)
@@ -431,6 +521,7 @@ order by site_id;"""
             or code_n1 = any (monitored_land_covers))
           and (monitored_crops is null
             or crop_code = any (monitored_crops))
+          and stratum_crop_id = %s
           {}
     ),
     eligible_polygons_with_attr as (
@@ -482,65 +573,17 @@ order by random();
         logging.debug(query.as_string(conn))
 
         for stratum in strata:
-            for tile_id in stratum.tiles:
-                tile = tiles[tile_id]
-
-                if stratum.stratum_id:
-                    training_polygons = f"training_polygons_{stratum.stratum_id}_{tile_id}.shp"
-                    validation_polygons = f"validation_polygons_{stratum.stratum_id}_{tile_id}.shp"
-                else:
-                    training_polygons = f"training_polygons_{tile_id}.shp"
-                    validation_polygons = f"validation_polygons_{tile_id}.shp"
-
-                if os.path.exists(training_polygons):
-                    driver.DeleteDataSource(training_polygons)
-                if os.path.exists(validation_polygons):
-                    driver.DeleteDataSource(validation_polygons)
-                training_dataset = driver.CreateDataSource(training_polygons)
-                validation_dataset = driver.CreateDataSource(validation_polygons)
-
-                training_layer = training_dataset.CreateLayer(
-                    "polygons",
-                    tile.spatial_ref,
-                    ogr.wkbMultiPolygon,
-                )
-                validation_layer = validation_dataset.CreateLayer(
-                    "polygons",
-                    tile.spatial_ref,
-                    ogr.wkbMultiPolygon,
-                )
-
-                training_layer.CreateField(parcel_id_field)
-                training_layer.CreateField(crop_code_field)
-                training_layer.CreateField(pix_10m_field)
-                training_layer.CreateField(strategy_field)
-
-                validation_layer.CreateField(parcel_id_field)
-                validation_layer.CreateField(crop_code_field)
-                validation_layer.CreateField(pix_10m_field)
-                validation_layer.CreateField(strategy_field)
-
-                tile_output = TileOutput(
-                    training_polygons,
-                    validation_polygons,
-                    training_dataset,
-                    validation_dataset,
-                    training_layer,
-                    validation_layer,
-                )
-                tile_outputs[tile.id] = tile_output
+            tile_outputs: Dict[str, TileOutput] = {}
+            print(f"Stratum {stratum.stratum_id or 0}: ", stratum.tiles)
 
             training_pixels = defaultdict(lambda: 0)
             training_target = {}
 
             smote_targets = {}
             with conn.cursor() as cursor:
-                query_args = (config.site_id, )
+                query_args = (config.site_id, stratum.stratum_id or 0)
 
                 cursor.execute(query, query_args)
-                print("smote_ratio", smote_ratio)
-                print("sample_ratio_lo", sample_ratio_lo)
-                print("sample_ratio_hi", sample_ratio_hi)
                 for (
                     parcel_id,
                     geometry,
@@ -604,7 +647,12 @@ order by random();
                     else:
                         purpose = 1  # validation
 
-                    tile_output = tile_outputs[tile_id]
+                    tile_output = tile_outputs.get(tile_id)
+                    if not tile_output:
+                        tile = tiles[tile_id]
+                        tile_output = create_tile_outputs(driver, stratum.stratum_id, tile, parcel_id_field, crop_code_field, pix_10m_field, strategy_field)
+                        tile_outputs[tile_id] = tile_output
+
                     if purpose == 0:
                         feature = ogr.Feature(training_feature_defn)
                         feature.SetFID(parcel_id)
@@ -644,9 +692,8 @@ order by random();
             with open(smote_targets_json, "wt") as file:
                 json.dump(smote_targets, file)
 
-            for tile_id in stratum.tiles:
+            for (tile_id, tile_output) in tile_outputs.items():
                 tile = tiles[tile_id]
-                tile_output = tile_outputs[tile_id]
 
                 # HACK
                 tile_output.training_layer.SyncToDisk()
@@ -672,7 +719,7 @@ order by random();
                     tile_output.training_points = f"training_points_{tile_id}.shp"
                     tile_output.validation_points = f"validation_points_{tile_id}.shp"
 
-                command_training_statistics = [
+                command = [
                     "otbcli_PolygonClassStatistics",
                     "-field",
                     "crop_code",
@@ -683,8 +730,9 @@ order by random();
                     "-out",
                     training_stats,
                 ]
+                polygon_class_statistics_commands.append(command)
 
-                command_validation_statistics = [
+                command = [
                     "otbcli_PolygonClassStatistics",
                     "-field",
                     "crop_code",
@@ -695,8 +743,9 @@ order by random();
                     "-out",
                     validation_stats,
                 ]
+                polygon_class_statistics_commands.append(command)
 
-                command_training_samples = [
+                command = [
                     "otbcli_SampleSelection",
                     "-field",
                     "crop_code",
@@ -711,8 +760,9 @@ order by random();
                     "-out",
                     tile_output.training_points,
                 ]
+                sample_selection_commands.append(command)
 
-                command_validation_samples = [
+                command = [
                     "otbcli_SampleSelection",
                     "-field",
                     "crop_code",
@@ -727,58 +777,32 @@ order by random();
                     "-out",
                     tile_output.validation_points,
                 ]
+                sample_selection_commands.append(command)
 
-                commands = [
-                    command_training_statistics,
-                    command_validation_statistics,
-                ]
-                volumes = {
-                    output_dir: {"bind": output_dir, "mode": "rw"},
-                    insitu_path: {"bind": insitu_path, "mode": "ro"},
-                }
+    pool = Pool()
+    client = docker.from_env(timeout=600)
 
-                if args.mounts:
-                    for mount in args.mounts:
-                        volumes[mount] = {"bind": mount, "mode": "ro"}
+    containers = []
+    for command in polygon_class_statistics_commands:
+        container = ContainerInfo(
+            image=OTB_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+        )
+        containers.append(container)
+    run_containers_concurrently(client, pool, containers)
 
-                containers = []
-                for command in commands:
-                    container = client.containers.run(
-                        image=OTB_IMAGE_NAME,
-                        detach=True,
-                        user=f"{os.getuid()}:{os.getgid()}",
-                        volumes=volumes,
-                        working_dir=output_dir,
-                        command=command,
-                    )
-                    containers.append(container)
-                for container in containers:
-                    res = container.wait()
-                    if res["StatusCode"] != 0:
-                        print(container.logs())
-                    container.remove()
-
-                commands = [
-                    command_training_samples,
-                    command_validation_samples,
-                ]
-
-                containers = []
-                for command in commands:
-                    container = client.containers.run(
-                        image=OTB_IMAGE_NAME,
-                        detach=True,
-                        user=f"{os.getuid()}:{os.getgid()}",
-                        volumes=volumes,
-                        working_dir=output_dir,
-                        command=command,
-                    )
-                    containers.append(container)
-                for container in containers:
-                    res = container.wait()
-                    if res["StatusCode"] != 0:
-                        print(container.logs())
-                    container.remove()
+    containers = []
+    for command in sample_selection_commands:
+        container = ContainerInfo(
+            image=OTB_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+        )
+        containers.append(container)
+    run_containers_concurrently(client, pool, containers)
 
     client.close()
 
