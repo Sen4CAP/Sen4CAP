@@ -2,13 +2,14 @@
 from __future__ import print_function
 
 import argparse
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import glob
 import json
 import logging
+from typing import Dict, List, Optional, Tuple
 from lxml import etree
 from lxml.builder import E
-import multiprocessing.dummy
+from multiprocessing.dummy import Pool
 import os
 import os.path
 from osgeo import gdal
@@ -17,7 +18,7 @@ import pipes
 import psycopg2
 from psycopg2.sql import SQL
 import psycopg2.extras
-import psycopg2.extensions
+from psycopg2.extensions import connection
 import subprocess
 import docker
 import shutil
@@ -28,7 +29,7 @@ from configparser import ConfigParser
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.1.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
-GEO_TOOLS_IMAGE_NAME = "lnicola/geo-tools:0.1.0"
+GEO_TOOLS_IMAGE_NAME = "docker.io/lnicola/geo-tools:0.1.0"
 
 
 def parse_date(str):
@@ -57,9 +58,17 @@ class Config(object):
             self.date_filter = list(map(parse_date, args.date_filter))
         else:
             self.date_filter = None
+        if args.stratum_start_dates:
+            self.stratum_start_dates = list(map(parse_date, args.stratum_start_dates))
+        else:
+            self.stratum_start_dates = None
+        if args.stratum_end_dates:
+            self.stratum_end_dates = list(map(parse_date, args.stratum_end_dates))
+        else:
+            self.stratum_end_dates = None
 
 
-def get_connection(config):
+def get_connection(config) -> connection:
     return psycopg2.connect(
         host=config.host,
         port=config.port,
@@ -270,7 +279,7 @@ from config;
         return ProcessorConfig(additional_mounts, max_depth, min_samples, num_trees)
 
 
-def load_tiles(conn, site_id, tile_filter):
+def load_tiles(conn: connection, site_id: int, tile_filter: Optional[List[str]]) -> List[str]:
     query = SQL(
         "select unnest(tiles) from site_tiles where site_id = %s and satellite_id = 1"
     )
@@ -419,7 +428,30 @@ order by product_l2a.created_timestamp;
     return products_by_tile
 
 
-def get_band_names(feature_set, output_dates, s1_features):
+class Stratum(object):
+    def __init__(self, stratum_id: Optional[int], tiles: List[str]) -> None:
+        self.stratum_id = stratum_id
+        self.tiles = tiles
+
+
+def get_site_strata(conn: connection, site_id: int) -> List[Stratum]:
+    query = SQL("select * from sp_get_site_strata(%s)")
+    logging.debug(query.as_string(conn))
+
+    strata = []
+    with conn.cursor() as cursor:
+        cursor.execute(
+            query,
+            (site_id, )
+        )
+        for (stratum_id, tiles) in cursor:
+            stratum = Stratum(stratum_id, tiles)
+            strata.append(stratum)
+
+    return strata
+
+
+def get_band_names(feature_set: FeatureSet, output_dates: List[date], s1_features: List[str]):
     band_names = []
     if feature_set.want_s2_reflectance_10m():
         for b in [
@@ -428,7 +460,8 @@ def get_band_names(feature_set, output_dates, s1_features):
             "S2_B08",
         ]:
             for d in output_dates:
-                band_names.append(f"{b}_{d}")
+                dstr = d.strftime("%Y_%m_%d")
+                band_names.append(f"{b}_{dstr}")
     if feature_set.want_s2_reflectance_20m():
         for b in [
             "S2_B05",
@@ -438,7 +471,8 @@ def get_band_names(feature_set, output_dates, s1_features):
             "S2_B12",
         ]:
             for d in output_dates:
-                band_names.append(f"{b}_{d}")
+                dstr = d.strftime("%Y_%m_%d")
+                band_names.append(f"{b}_{dstr}")
     if feature_set.want_vegetation_indices():
         for b in [
             "NDVI",
@@ -446,7 +480,8 @@ def get_band_names(feature_set, output_dates, s1_features):
             "BRIGHTNESS",
         ]:
             for d in output_dates:
-                band_names.append(f"{b}_{d}")
+                dstr = d.strftime("%Y_%m_%d")
+                band_names.append(f"{b}_{dstr}")
     if feature_set.want_red_edge_features():
         for b in [
             "NDRE",
@@ -455,7 +490,8 @@ def get_band_names(feature_set, output_dates, s1_features):
             "CIRE",
         ]:
             for d in output_dates:
-                band_names.append(f"{b}_{d}")
+                dstr = d.strftime("%Y_%m_%d")
+                band_names.append(f"{b}_{dstr}")
     if feature_set.want_vegetation_indices_statistics():
         for indicator in ["NDVI", "NDWI", "BRIGHTNESS"]:
             for statistic in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
@@ -464,6 +500,653 @@ def get_band_names(feature_set, output_dates, s1_features):
     band_names += s1_features
     return band_names
 
+
+def write_tile_vrts(strata: List[Stratum], feature_set: FeatureSet, s1_features: List[str], output_dates: List[date], stratum_date_filters: Optional[List[Tuple[date, date]]]) -> List[str]:
+    raster_size = 10980
+    block_size = 256
+
+    season_start = output_dates[0]
+    season_end = output_dates[-1]
+    stratum_date_filters = stratum_date_filters or [(season_start, season_end) for _ in strata]
+    stratum_band_names = []
+
+    for (stratum, stratum_date_filter) in zip(strata, stratum_date_filters):
+        stratum_start_date = stratum_date_filter[0]
+        stratum_end_date = stratum_date_filter[1]
+
+        stratum_start_date_idx = None
+        stratum_end_date_idx = None
+
+        for (idx, d) in enumerate(output_dates):
+            if d >= stratum_start_date:
+                stratum_start_date_idx = idx
+                break
+        for (idx, d) in enumerate(reversed(output_dates)):
+            if d <= stratum_end_date:
+                stratum_end_date_idx = len(output_dates) - idx
+                break
+
+        if not stratum_start_date_idx or not stratum_end_date_idx:
+            stratum_band_names.append([])
+            continue
+
+        print(f"Stratum {stratum.stratum_id}: start date {stratum_start_date}, end date {stratum_end_date}, start {stratum_start_date_idx}, end {stratum_end_date_idx}")
+        band_names = []
+        if feature_set.want_s2_reflectance_10m():
+            for name in ["S2_B03", "S2_B04", "S2_B08"]:
+                for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                    dstr = d.strftime("%Y_%m_%d")
+                    band_names.append(f"{name}_{dstr}")
+
+        if feature_set.want_s2_reflectance_20m():
+            for name in ["S2_B05", "S2_B06", "S2_B07", "S2_B11", "S2_B12"]:
+                for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                    dstr = d.strftime("%Y_%m_%d")
+                    band_names.append(f"{name}_{dstr}")
+
+        if feature_set.want_vegetation_indices():
+            for name in ["NDVI", "NDWI", "BRIGHTNESS"]:
+                for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                    dstr = d.strftime("%Y_%m_%d")
+                    band_names.append(f"{name}_{dstr}")
+
+        if feature_set.want_red_edge_features():
+            for name in ["NDRE", "REPI", "PSRI", "CIRE"]:
+                for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                    dstr = d.strftime("%Y_%m_%d")
+                    band_names.append(f"{name}_{dstr}")
+
+        if feature_set.want_vegetation_indices_statistics():
+            for fname in ["NDVI", "NDWI", "BRIGHTNESS"]:
+                for name in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
+                    band_names.append(f"{fname}_{name}")
+
+        if feature_set.want_s1_features():
+            for name in s1_features:
+                band_names.append(name)
+
+        for tile in stratum.tiles:
+            b3_tif = f"S2_B03_{tile}.tif"
+            b4_tif = f"S2_B04_{tile}.tif"
+            b8_tif = f"S2_B08_{tile}.tif"
+
+            b5_10m_vrt = f"S2_B05_10m_{tile}.vrt"
+            b6_10m_vrt = f"S2_B06_10m_{tile}.vrt"
+            b7_10m_vrt = f"S2_B07_10m_{tile}.vrt"
+            b11_10m_vrt = f"S2_B11_10m_{tile}.vrt"
+            b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
+
+            ndvi = f"S2_NDVI_{tile}.tif"
+            ndwi = f"S2_NDWI_{tile}.tif"
+            brightness = f"S2_BRIGHTNESS_{tile}.tif"
+
+            ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
+            ndwi_statistics = f"S2_NDWI_STATISTICS_{tile}.tif"
+            brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile}.tif"
+
+            ndre = f"S2_NDRE_{tile}.tif"
+            repi = f"S2_REPI_{tile}.tif"
+            psri = f"S2_PSRI_{tile}.tif"
+            cire = f"S2_CIRE_{tile}.tif"
+
+            if feature_set.need_s2_reflectance_10m():
+                ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
+            elif feature_set.want_s1_features:
+                ds = gdal.Open(f"S1_{tile}.vrt", gdal.gdalconst.GA_ReadOnly)
+            else:
+                raise NotImplementedError("feature combination")
+
+            gt = ds.GetGeoTransform()
+            vrt_dataset = E.VRTDataset(
+                {
+                    "rasterXSize": str(raster_size),
+                    "rasterYSize": str(raster_size),
+                },
+                E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, ds.GetProjectionRef()),
+                E.GeoTransform(
+                    "{}, {}, {}, {}, {}, {}".format(
+                        gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]
+                    )
+                ),
+                E.BlockXSize(str(block_size)),
+                E.BlockYSize(str(block_size)),
+            )
+
+            out_band = 1
+            if feature_set.want_s2_reflectance_10m():
+                for p, name in zip(
+                    [b3_tif, b4_tif, b8_tif],
+                    ["S2_B03", "S2_B04", "S2_B08"],
+                ):
+                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
+                    assert(ds.RasterCount == len(output_dates))
+                    for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                        dstr = d.strftime("%Y_%m_%d")
+                        description = f"{name}_{dstr}"
+                        assert(band_names[out_band - 1] == description)
+                        vrt_raster_band = E.VRTRasterBand(
+                            {
+                                "dataType": "Int16",
+                                "band": str(out_band),
+                                "blockXSize": str(block_size),
+                                "blockYSize": str(block_size),
+                            },
+                            E.Description(description),
+                            E.SimpleSource(
+                                E.SourceFileName({"relativeToVRT": "1"}, p),
+                                E.SourceBand(str(b)),
+                                E.SourceProperties(
+                                    {
+                                        "RasterXSize": str(raster_size),
+                                        "RasterYSize": str(raster_size),
+                                        "DataType": "Int16",
+                                        "BlockXSize": str(block_size),
+                                        "BlockYSize": str(block_size),
+                                    }
+                                ),
+                            ),
+                        )
+                        vrt_dataset.append(vrt_raster_band)
+                        out_band += 1
+
+            if feature_set.want_s2_reflectance_20m():
+                for p, name in zip(
+                    [b5_10m_vrt, b6_10m_vrt, b7_10m_vrt, b11_10m_vrt, b12_10m_vrt],
+                    ["S2_B05", "S2_B06", "S2_B07", "S2_B11", "S2_B12"],
+                ):
+                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
+                    assert(ds.RasterCount == len(output_dates))
+                    for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                        dstr = d.strftime("%Y_%m_%d")
+                        description = f"{name}_{dstr}"
+                        assert(band_names[out_band - 1] == description)
+                        vrt_raster_band = E.VRTRasterBand(
+                            {
+                                "dataType": "Int16",
+                                "band": str(out_band),
+                                "blockXSize": str(block_size),
+                                "blockYSize": str(block_size),
+                            },
+                            E.Description(description),
+                            E.SimpleSource(
+                                E.SourceFileName({"relativeToVRT": "1"}, p),
+                                E.SourceBand(str(b)),
+                                E.SourceProperties(
+                                    {
+                                        "RasterXSize": str(raster_size),
+                                        "RasterYSize": str(raster_size),
+                                        "DataType": "Int16",
+                                        "BlockXSize": str(block_size),
+                                        "BlockYSize": str(block_size),
+                                    }
+                                ),
+                            ),
+                        )
+                        vrt_dataset.append(vrt_raster_band)
+                        out_band += 1
+
+            if feature_set.want_vegetation_indices():
+                for p, name in zip(
+                    [ndvi, ndwi, brightness],
+                    ["NDVI", "NDWI", "BRIGHTNESS"],
+                ):
+                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
+                    assert(ds.RasterCount == len(output_dates))
+                    for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                        dstr = d.strftime("%Y_%m_%d")
+                        description = f"{name}_{dstr}"
+                        assert(band_names[out_band - 1] == description)
+                        vrt_raster_band = E.VRTRasterBand(
+                            {
+                                "dataType": "Int16",
+                                "band": str(out_band),
+                                "blockXSize": str(block_size),
+                                "blockYSize": str(block_size),
+                            },
+                            E.Description(description),
+                            E.SimpleSource(
+                                E.SourceFileName({"relativeToVRT": "1"}, p),
+                                E.SourceBand(str(b)),
+                                E.SourceProperties(
+                                    {
+                                        "RasterXSize": str(raster_size),
+                                        "RasterYSize": str(raster_size),
+                                        "DataType": "Int16",
+                                        "BlockXSize": str(block_size),
+                                        "BlockYSize": str(block_size),
+                                    }
+                                ),
+                            ),
+                        )
+                        vrt_dataset.append(vrt_raster_band)
+                        out_band += 1
+
+            if feature_set.want_red_edge_features():
+                for p, name in zip(
+                    [ndre, repi, psri, cire],
+                    ["NDRE", "REPI", "PSRI", "CIRE"],
+                ):
+                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
+                    assert(ds.RasterCount == len(output_dates))
+                    for (b, d) in enumerate(output_dates[stratum_start_date_idx:stratum_end_date_idx], start=stratum_start_date_idx + 1):
+                        dstr = d.strftime("%Y_%m_%d")
+                        description = f"{name}_{dstr}"
+                        assert(band_names[out_band - 1] == description)
+                        vrt_raster_band = E.VRTRasterBand(
+                            {
+                                "dataType": "Int16",
+                                "band": str(out_band),
+                                "blockXSize": str(block_size),
+                                "blockYSize": str(block_size),
+                            },
+                            E.Description(description),
+                            E.SimpleSource(
+                                E.SourceFileName({"relativeToVRT": "1"}, p),
+                                E.SourceBand(str(b)),
+                                E.SourceProperties(
+                                    {
+                                        "RasterXSize": str(raster_size),
+                                        "RasterYSize": str(raster_size),
+                                        "DataType": "Int16",
+                                        "BlockXSize": str(block_size),
+                                        "BlockYSize": str(block_size),
+                                    }
+                                ),
+                            ),
+                        )
+                        vrt_dataset.append(vrt_raster_band)
+                        out_band += 1
+
+            if feature_set.want_vegetation_indices_statistics():
+                for p, fname in zip(
+                    [ndvi_statistics, ndwi_statistics, brightness_statistics],
+                    ["NDVI", "NDWI", "BRIGHTNESS"],
+                ):
+                    for b, name in enumerate(
+                        ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"], start=1
+                    ):
+                        description = f"{fname}_{name}"
+                        assert(band_names[out_band - 1] == description)
+                        vrt_raster_band = E.VRTRasterBand(
+                            {
+                                "dataType": "Int16",
+                                "band": str(out_band),
+                                "blockXSize": str(block_size),
+                                "blockYSize": str(block_size),
+                            },
+                            E.Description(description),
+                            E.SimpleSource(
+                                E.SourceFileName({"relativeToVRT": "1"}, p),
+                                E.SourceBand(str(b)),
+                                E.SourceProperties(
+                                    {
+                                        "RasterXSize": str(raster_size),
+                                        "RasterYSize": str(raster_size),
+                                        "DataType": "Int16",
+                                        "BlockXSize": str(block_size),
+                                        "BlockYSize": str(block_size),
+                                    }
+                                ),
+                            ),
+                        )
+                        vrt_dataset.append(vrt_raster_band)
+                        out_band += 1
+
+            if feature_set.want_s1_features():
+                s1_vrt = f"S1_{tile}.vrt"
+                ds = gdal.Open(s1_vrt, gdal.gdalconst.GA_ReadOnly)
+                for b in range(1, ds.RasterCount + 1):
+                    band = ds.GetRasterBand(b)
+                    data_type = gdal.GetDataTypeName(band.DataType)
+                    band_name = band.GetDescription()
+                    if band_name not in s1_features:
+                        print(f"Dropping feature {band_name}")
+                        continue
+                    vrt_raster_band = E.VRTRasterBand(
+                        {
+                            "dataType": data_type,
+                            "band": str(out_band),
+                            "blockXSize": str(block_size),
+                            "blockYSize": str(block_size),
+                        },
+                        E.Description(band_name),
+                        E.SimpleSource(
+                            E.SourceFileName({"relativeToVRT": "1"}, s1_vrt),
+                            E.SourceBand(str(b)),
+                            E.SourceProperties(
+                                {
+                                    "RasterXSize": str(raster_size),
+                                    "RasterYSize": str(raster_size),
+                                    "DataType": data_type,
+                                    "BlockXSize": str(block_size),
+                                    "BlockYSize": str(block_size),
+                                }
+                            ),
+                        ),
+                    )
+                    vrt_dataset.append(vrt_raster_band)
+                    out_band += 1
+
+            root = etree.ElementTree(vrt_dataset)
+            if stratum.stratum_id:
+                bands_vrt = f"bands_{stratum.stratum_id}_{tile}.vrt"
+            else:
+                bands_vrt = f"bands_{tile}.vrt"
+            root.write(bands_vrt, pretty_print=True, encoding="utf-8")
+        stratum_band_names.append(band_names)
+
+    print(stratum_band_names)
+    return stratum_band_names
+
+def run_sample_extraction(client, pool, output_dir: str, volumes: Dict[str, Dict[str, str]], env: Dict[str, str], tiles: List[str], strata: List[Stratum], stratum_band_names: List[str]):
+    commands = []
+    for (stratum, band_names) in zip(strata, stratum_band_names):
+        band_names_lower = list(map(lambda x: x.lower(), band_names))
+        print(f"Stratum {stratum.stratum_id}, fields: {band_names_lower}")
+
+        for tile in tiles:
+            if stratum.stratum_id:
+                bands_vrt = f"bands_{stratum.stratum_id}_{tile}.vrt"
+                training_points = f"training_points_{stratum.stratum_id}_{tile}.shp"
+                validation_points = f"validation_points_{stratum.stratum_id}_{tile}.shp"
+
+                training_samples = f"training_samples_{stratum.stratum_id}_{tile}.sqlite"
+                validation_samples = f"validation_samples_{stratum.stratum_id}_{tile}.sqlite"
+            else:
+                bands_vrt = f"bands_{tile}.vrt"
+                training_points = f"training_points_{tile}.shp"
+                validation_points = f"validation_points_{tile}.shp"
+
+                training_samples = f"training_samples_{tile}.sqlite"
+                validation_samples = f"validation_samples_{tile}.sqlite"
+
+            if (not os.path.exists(training_samples) or not os.path.exists(validation_samples)) and os.path.exists(training_points) and os.path.exists(validation_points):
+                command = [
+                    "geo-tools",
+                    "sample-extraction",
+                    bands_vrt,
+                    "--points",
+                    training_points,
+                    validation_points,
+                    "--outputs",
+                    training_samples,
+                    validation_samples,
+                    "--num-threads",
+                    "4",
+                    "-f",
+                    "SQLite",
+                    "--fields",
+                ] + band_names_lower
+                commands.append(command)
+
+    containers = []
+    for command in commands:
+        container = ContainerInfo(
+            image=GEO_TOOLS_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+            environment=env,
+        )
+        containers.append(container)
+    run_containers_concurrently(client, pool, containers)
+
+    commands = []
+    for stratum in strata:
+        training_files = []
+        validation_files = []
+
+        for tile in tiles:
+            if stratum.stratum_id:
+                training_samples = f"training_samples_{stratum.stratum_id}_{tile}.sqlite"
+                validation_samples = f"validation_samples_{stratum.stratum_id}_{tile}.sqlite"
+            else:
+                training_samples = f"training_samples_{tile}.sqlite"
+                validation_samples = f"validation_samples_{tile}.sqlite"
+
+            if os.path.exists(training_samples):
+                training_files.append(training_samples)
+            if os.path.exists(validation_samples):
+                validation_files.append(validation_samples)
+
+        if stratum.stratum_id:
+            training_samples = f"training_samples_{stratum.stratum_id}.vrt"
+            validation_samples = f"validation_samples_{stratum.stratum_id}.vrt"
+        else:
+            training_samples = "training_samples.vrt"
+            validation_samples = "validation_samples.vrt"
+
+        command = [
+            "ogrmerge.py",
+            "-overwrite_ds",
+            "-single",
+            "-o",
+            training_samples,
+        ] + training_files
+        commands.append(command)
+
+        command = [
+            "ogrmerge.py",
+            "-overwrite_ds",
+            "-single",
+            "-o",
+            validation_samples,
+        ] + validation_files
+        commands.append(command)
+
+    pool.map(run_command, commands, chunksize=1)
+
+def run_sample_augmentation(client, pool, output_dir: str, volumes: Dict[str, Dict[str, str]], env: Dict[str, str], strata: List[Stratum]):
+    commands = []
+    stratum_smote_outputs = []
+    for stratum in strata:
+        if stratum.stratum_id:
+            training_samples = f"training_samples_{stratum.stratum_id}.vrt"
+            smote_targets_json = f"smote_targets_{stratum.stratum_id}.json"
+        else:
+            training_samples = "training_samples.vrt"
+            smote_targets_json = "smote_targets.json"
+
+        with open(smote_targets_json, "rt", encoding="utf-8") as file:
+            smote_targets: Dict[str, int] = json.load(file)
+
+        smote_outputs = []
+        for crop_code, target in smote_targets.items():
+            if stratum.stratum_id:
+                output = f"smote_{stratum.stratum_id}_{crop_code}.sqlite"
+            else:
+                output = f"smote_{crop_code}.sqlite"
+
+            if not os.path.exists(output):
+                command = [
+                    "otbcli_SampleAugmentation",
+                    "-in",
+                    training_samples,
+                    "-out",
+                    output,
+                    "-label",
+                    crop_code,
+                    "-samples",
+                    str(target),
+                    "-field",
+                    "crop_code",
+                    "-exclude",
+                    "id",
+                    "pix_10m",
+                    "strategy",
+                    "originfid",
+                    "-strategy",
+                    "smote",
+                ]
+                commands.append(command)
+            smote_outputs.append(output)
+
+        stratum_smote_outputs.append(smote_outputs)
+
+    containers = []
+    for command in commands:
+        container = ContainerInfo(
+            image=OTB_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+        )
+        containers.append(container)
+    run_containers_concurrently(client, pool, containers)
+
+    commands = []
+    for (stratum, smote_outputs) in zip(strata, stratum_smote_outputs):
+        if stratum.stratum_id:
+            training_samples_augmented = f"training_samples_augmented_{stratum.stratum_id}.vrt"
+            training_samples = f"training_samples_{stratum.stratum_id}.vrt"
+        else:
+            training_samples_augmented = "training_samples_augmented.vrt"
+            training_samples = "training_samples.vrt"
+
+        command = [
+            "ogrmerge.py",
+            "-overwrite_ds",
+            "-single",
+            "-o",
+            training_samples_augmented,
+            training_samples,
+        ] + smote_outputs
+        commands.append(command)
+
+    pool.map(run_command, commands, chunksize=1)
+
+def run_training(client, output_dir: str, volumes: Dict[str, Dict[str, str]], env: Dict[str, str], processor_config: ProcessorConfig, strata: List[Stratum], stratum_band_names: List[str]):
+    for (stratum, band_names) in zip(strata, stratum_band_names):
+        band_names_lower = list(map(lambda x: x.lower(), band_names))
+
+        if stratum.stratum_id:
+            training_samples_augmented = f"training_samples_augmented_{stratum.stratum_id}.vrt"
+            validation_samples = f"validation_samples_{stratum.stratum_id}.vrt"
+
+            model = f"model_{stratum.stratum_id}.yaml"
+            confusion_matrix = f"confusion_matrix_{stratum.stratum_id}.txt"
+        else:
+            training_samples_augmented = "training_samples_augmented.vrt"
+            validation_samples = "validation_samples.vrt"
+
+            model = "model.yaml"
+            confusion_matrix = "confusion_matrix.txt"
+
+        command = [
+            "otbcli_TrainVectorClassifier",
+            "-io.vd",
+            training_samples_augmented,
+            "-valid.vd",
+            validation_samples,
+            "-io.out",
+            model,
+            "-io.confmatout",
+            confusion_matrix,
+            "-cfield",
+            "crop_code",
+            "-classifier",
+            "rf",
+            "-classifier.rf.max",
+            str(processor_config.max_depth),
+            "-classifier.rf.min",
+            str(processor_config.min_samples),
+            "-classifier.rf.nbtrees",
+            str(processor_config.num_trees),
+            # "-classifier.rf.ra",
+            # "0",
+            # "-classifier.rf.cat",
+            # "10",
+            # "-classifier.rf.var",
+            # "0",
+            # "-classifier.rf.acc",
+            # "0.01",
+            "-feat",
+        ] + band_names_lower
+
+        if not os.path.exists(model):
+            print(" ".join(command))
+            container = ContainerInfo(
+                image=OTB_IMAGE_NAME,
+                command=command,
+                working_dir=output_dir,
+                volumes=volumes,
+                environment=env,
+            )
+            res = container.run(client)
+            if res and res["StatusCode"] != 0:
+                print(res)
+
+def run_classification(client, pool, output_dir: str, volumes: Dict[str, Dict[str, str]], env: Dict[str, str], strata: List[Stratum]):
+    commands = []
+    for stratum in strata:
+        if stratum.stratum_id:
+            model = f"model_{stratum.stratum_id}.yaml"
+            confusion_matrix = f"confusion_matrix_{stratum.stratum_id}.txt"
+        else:
+            model = "model.yaml"
+            confusion_matrix = "confusion_matrix.txt"
+
+        if not os.path.exists(model) or not os.path.exists(confusion_matrix):
+            continue
+
+        with open(confusion_matrix, "rt", encoding="utf-8") as file:
+            line = file.readline()
+            num_classes = line.count(",") + 1
+
+        remapping_table_name = "remapping-table.csv"
+        if os.path.exists(remapping_table_name):
+            remapping_table = remapping_table_name
+        else:
+            remapping_table = None
+
+        for tile in stratum.tiles:
+            if stratum.stratum_id:
+                bands_vrt = f"bands_{stratum.stratum_id}_{tile}.vrt"
+                confidence_map_tif = f"confidence_map_{stratum.stratum_id}_{tile}.tif"
+                probability_map_tif = f"probability_map_{stratum.stratum_id}_{tile}.tif"
+                if remapping_table:
+                    classified_pre_tif = f"classified_pre_{stratum.stratum_id}_{tile}.tif"
+                else:
+                    classified_pre_tif = f"classified_{stratum.stratum_id}_{tile}.tif"
+            else:
+                bands_vrt = f"bands_{tile}.vrt"
+                confidence_map_tif = f"confidence_map_{tile}.tif"
+                probability_map_tif = f"probability_map_{tile}.tif"
+                if remapping_table:
+                    classified_pre_tif = f"classified_pre_{tile}.tif"
+                else:
+                    classified_pre_tif = f"classified_{tile}.tif"
+
+            if os.path.exists(bands_vrt) and (not os.path.exists(classified_pre_tif) or (not os.path.exists(confidence_map_tif) and not os.path.exists(probability_map_tif))):
+                command = [
+                    "otbcli_ImageClassifier",
+                    "-in",
+                    bands_vrt,
+                    "-out",
+                    classified_pre_tif,
+                    "int16",
+                    "-model",
+                    model,
+                    "-confmap",
+                    confidence_map_tif,
+                    "-probamap",
+                    probability_map_tif,
+                    "-nbclasses",
+                    str(num_classes),
+                ]
+                commands.append(command)
+
+    containers = []
+    for command in commands:
+        container = ContainerInfo(
+            image=OTB_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+            environment=env,
+        )
+        containers.append(container)
+    run_containers_concurrently(client, pool, containers)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -496,6 +1179,8 @@ def main():
     parser.add_argument("--tiles", help="tile filter", nargs="*")
     parser.add_argument("--features", help="feature filter", nargs="*")
     parser.add_argument("--date-filter", help="date filter", nargs="*")
+    parser.add_argument("--stratum-start-dates", help="stratum start dates", nargs="*")
+    parser.add_argument("--stratum-end-dates", help="stratum end dates", nargs="*")
 
     args = parser.parse_args()
 
@@ -510,19 +1195,18 @@ def main():
     season_end = parse_date(args.season_end)
     classification_year = args.year or season_start.year
 
-    training_files = []
-    validation_files = []
-
     if args.working_path:
         os.chdir(args.working_path)
     output_dir = os.path.abspath(".")
 
     client = docker.from_env(timeout=600)
-    pool_hi_conc = multiprocessing.dummy.Pool()
-    pool_med_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 4))
-    pool_lo_conc = multiprocessing.dummy.Pool(min(os.cpu_count() or 1, 2))
+    pool_hi_conc = Pool()
+    pool_med_conc = Pool(min(os.cpu_count() or 1, 4))
+    pool_lo_conc = Pool(min(os.cpu_count() or 1, 2))
 
     config = Config(args)
+    if config.stratum_start_dates and config.stratum_end_dates:
+        assert(len(config.stratum_start_dates) == len(config.stratum_end_dates))
 
     with get_connection(config) as conn:
         processor_config = load_processor_config(conn, config.site_id)
@@ -628,6 +1312,16 @@ def main():
             with open("s2-products.pickle", "wb") as file:
                 pickle.dump(products_by_tile, file, protocol=pickle.HIGHEST_PROTOCOL)
 
+        strata = get_site_strata(conn, config.site_id)
+        if not strata:
+            stratum = Stratum(None, tiles)
+            strata.append(stratum)
+
+    if config.stratum_start_dates:
+        assert(len(strata) == len(config.stratum_start_dates))
+    if config.stratum_end_dates:
+        assert(len(strata) == len(config.stratum_end_dates))
+
     first_date = season_end
     last_date = season_start
     for tile, products in products_by_tile.items():
@@ -643,14 +1337,14 @@ def main():
         first_date = config.date_filter[0]
         last_date = config.date_filter[0]
         # TODO support multiple dates
-        output_dates = [first_date.strftime("%Y_%m_%d")]
+        output_dates = [first_date]
     else:
         output_dates = []
         d = first_date
         last_output_date = d
         while d <= last_date:
             last_output_date = d
-            output_dates.append(d.strftime("%Y_%m_%d"))
+            output_dates.append(d)
             d += timedelta(days=step)
         last_date = last_output_date
 
@@ -673,6 +1367,8 @@ def main():
             s1_features = set()
     else:
         s1_features = set()
+
+    s1_features = list(s1_features)
 
     begin = first_date - season_start
     end = last_date - season_start
@@ -778,22 +1474,22 @@ def main():
                 commands.append(command_b12_vrt)
     pool_med_conc.map(lambda cmd: run_command(cmd, env=env), commands, chunksize=1)
 
-    # work around mask layout
-    commands = []
-    for tile in products_by_tile.keys():
-        mask_10m_vrt = f"mask_10m_{tile}.vrt"
-        mask_20m_vrt = f"mask_20m_{tile}.vrt"
+    # # work around mask layout
+    # commands = []
+    # for tile in products_by_tile.keys():
+    #     mask_10m_vrt = f"mask_10m_{tile}.vrt"
+    #     mask_20m_vrt = f"mask_20m_{tile}.vrt"
 
-        mask_10m_tif = f"mask_10m_{tile}.tif"
-        mask_20m_tif = f"mask_20m_{tile}.tif"
+    #     mask_10m_tif = f"mask_10m_{tile}.tif"
+    #     mask_20m_tif = f"mask_20m_{tile}.tif"
 
-        if feature_set.need_s2_reflectance_10m() and not os.path.exists(mask_10m_tif):
-            command_10m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_10m_vrt, mask_10m_tif]
-            commands.append(command_10m)
-        if feature_set.need_s2_reflectance_20m() and not os.path.exists(mask_20m_tif):
-            command_20m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
-            commands.append(command_20m)
-    pool_lo_conc.map(run_command, commands, chunksize=1)
+    #     if feature_set.need_s2_reflectance_10m() and not os.path.exists(mask_10m_tif):
+    #         command_10m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_10m_vrt, mask_10m_tif]
+    #         commands.append(command_10m)
+    #     if feature_set.need_s2_reflectance_20m() and not os.path.exists(mask_20m_tif):
+    #         command_20m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
+    #         commands.append(command_20m)
+    # pool_lo_conc.map(run_command, commands, chunksize=1)
 
     commands = []
     tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
@@ -818,8 +1514,11 @@ def main():
         b11_tif = f"S2_B11_{tile}.tif"
         b12_tif = f"S2_B12_{tile}.tif"
 
-        mask_10m_tif = f"mask_10m_{tile}.tif"
-        mask_20m_tif = f"mask_20m_{tile}.tif"
+        # mask_10m_tif = f"mask_10m_{tile}.tif"
+        # mask_20m_tif = f"mask_20m_{tile}.tif"
+
+        mask_10m_vrt = f"mask_10m_{tile}.vrt"
+        mask_20m_vrt = f"mask_20m_{tile}.vrt"
 
         interpolation_no_data = -10000
         interpolation_max_distance = 30
@@ -831,7 +1530,7 @@ def main():
                 "-in",
                 b2_vrt,
                 "-mask",
-                mask_10m_tif,
+                mask_10m_vrt,
                 "-out",
                 b2_tif + tiling_suffix,
                 "-indates",
@@ -854,7 +1553,7 @@ def main():
                 "-in",
                 b3_vrt,
                 "-mask",
-                mask_10m_tif,
+                mask_10m_vrt,
                 "-out",
                 b3_tif + tiling_suffix,
                 "-indates",
@@ -877,7 +1576,7 @@ def main():
                 "-in",
                 b4_vrt,
                 "-mask",
-                mask_10m_tif,
+                mask_10m_vrt,
                 "-out",
                 b4_tif + tiling_suffix,
                 "-indates",
@@ -900,7 +1599,7 @@ def main():
                 "-in",
                 b8_vrt,
                 "-mask",
-                mask_10m_tif,
+                mask_10m_vrt,
                 "-out",
                 b8_tif + tiling_suffix,
                 "-indates",
@@ -923,7 +1622,7 @@ def main():
                 "-in",
                 b5_vrt,
                 "-mask",
-                mask_20m_tif,
+                mask_20m_vrt,
                 "-out",
                 b5_tif + tiling_suffix,
                 "-indates",
@@ -946,7 +1645,7 @@ def main():
                 "-in",
                 b6_vrt,
                 "-mask",
-                mask_20m_tif,
+                mask_20m_vrt,
                 "-out",
                 b6_tif + tiling_suffix,
                 "-indates",
@@ -969,7 +1668,7 @@ def main():
                 "-in",
                 b7_vrt,
                 "-mask",
-                mask_20m_tif,
+                mask_20m_vrt,
                 "-out",
                 b7_tif + tiling_suffix,
                 "-indates",
@@ -992,7 +1691,7 @@ def main():
                 "-in",
                 b11_vrt,
                 "-mask",
-                mask_20m_tif,
+                mask_20m_vrt,
                 "-out",
                 b11_tif + tiling_suffix,
                 "-indates",
@@ -1015,7 +1714,7 @@ def main():
                 "-in",
                 b12_vrt,
                 "-mask",
-                mask_20m_tif,
+                mask_20m_vrt,
                 "-out",
                 b12_tif + tiling_suffix,
                 "-indates",
@@ -1351,488 +2050,23 @@ def main():
         containers.append(container)
     run_containers_concurrently(client, pool_med_conc, containers)
 
-    for tile in products_by_tile.keys():
-        b2_tif = f"S2_B02_{tile}.tif"
-        b3_tif = f"S2_B03_{tile}.tif"
-        b4_tif = f"S2_B04_{tile}.tif"
-        b8_tif = f"S2_B08_{tile}.tif"
+    if config.stratum_start_dates and config.stratum_end_dates:
+        stratum_date_filters = list(zip(config.stratum_start_dates, config.stratum_end_dates))
+    else:
+        stratum_date_filters = None
 
-        b5_10m_vrt = f"S2_B05_10m_{tile}.vrt"
-        b6_10m_vrt = f"S2_B06_10m_{tile}.vrt"
-        b7_10m_vrt = f"S2_B07_10m_{tile}.vrt"
-        b11_10m_vrt = f"S2_B11_10m_{tile}.vrt"
-        b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
+    stratum_band_names = write_tile_vrts(strata, feature_set, s1_features, output_dates, stratum_date_filters)
 
-        ndvi = f"S2_NDVI_{tile}.tif"
-        ndwi = f"S2_NDWI_{tile}.tif"
-        brightness = f"S2_BRIGHTNESS_{tile}.tif"
-
-        ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
-        ndwi_statistics = f"S2_NDWI_STATISTICS_{tile}.tif"
-        brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile}.tif"
-
-        ndre = f"S2_NDRE_{tile}.tif"
-        repi = f"S2_REPI_{tile}.tif"
-        psri = f"S2_PSRI_{tile}.tif"
-        cire = f"S2_CIRE_{tile}.tif"
-
-        if feature_set.need_s2_reflectance_10m():
-            ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
-        elif feature_set.want_s1_features:
-            ds = gdal.Open(f"S1_{tile}.vrt", gdal.gdalconst.GA_ReadOnly)
-        else:
-            raise NotImplementedError("feature combination")
-
-        gt = ds.GetGeoTransform()
-        band = ds.GetRasterBand(1)
-        block_size = band.GetBlockSize()
-        vrt_dataset = E.VRTDataset(
-            {
-                "rasterXSize": str(ds.RasterXSize),
-                "rasterYSize": str(ds.RasterYSize),
-            },
-            E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, ds.GetProjectionRef()),
-            E.GeoTransform(
-                "{}, {}, {}, {}, {}, {}".format(
-                    gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]
-                )
-            ),
-            E.BlockXSize(str(block_size[0])),
-            E.BlockYSize(str(block_size[1])),
-        )
-        out_band = 1
-        if feature_set.want_s2_reflectance_10m():
-            for p, name in zip(
-                [b3_tif, b4_tif, b8_tif],
-                ["S2_B03", "S2_B04", "S2_B08"],
-            ):
-                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                for b in range(1, ds.RasterCount + 1):
-                    band = ds.GetRasterBand(b)
-                    block_size = band.GetBlockSize()
-                    vrt_raster_band = E.VRTRasterBand(
-                        {
-                            "dataType": "Int16",
-                            "band": str(out_band),
-                            "blockXSize": str(block_size[0]),
-                            "blockYSize": str(block_size[1]),
-                        },
-                        E.Description(name),
-                        E.SimpleSource(
-                            E.SourceFileName({"relativeToVRT": "1"}, p),
-                            E.SourceBand(str(b)),
-                            E.SourceProperties(
-                                {
-                                    "RasterXSize": str(ds.RasterXSize),
-                                    "RasterYSize": str(ds.RasterYSize),
-                                    "DataType": "Int16",
-                                    "BlockXSize": str(block_size[0]),
-                                    "BlockYSize": str(block_size[1]),
-                                }
-                            ),
-                        ),
-                    )
-                    vrt_dataset.append(vrt_raster_band)
-                    out_band += 1
-
-        if feature_set.want_s2_reflectance_20m():
-            for p, name in zip(
-                [b5_10m_vrt, b6_10m_vrt, b7_10m_vrt, b11_10m_vrt, b12_10m_vrt],
-                ["S2_B05", "S2_B06", "S2_B07", "S2_B11", "S2_B12"],
-            ):
-                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                for b in range(1, ds.RasterCount + 1):
-                    band = ds.GetRasterBand(b)
-                    block_size = band.GetBlockSize()
-                    vrt_raster_band = E.VRTRasterBand(
-                        {
-                            "dataType": "Int16",
-                            "band": str(out_band),
-                            "blockXSize": str(block_size[0] * 2),
-                            "blockYSize": str(block_size[1] * 2),
-                        },
-                        E.Description(name),
-                        E.SimpleSource(
-                            E.SourceFileName({"relativeToVRT": "1"}, p),
-                            E.SourceBand(str(b)),
-                            E.SourceProperties(
-                                {
-                                    "RasterXSize": str(ds.RasterXSize),
-                                    "RasterYSize": str(ds.RasterYSize),
-                                    "DataType": "Int16",
-                                    "BlockXSize": str(block_size[0]),
-                                    "BlockYSize": str(block_size[1]),
-                                }
-                            ),
-                        ),
-                    )
-                    vrt_dataset.append(vrt_raster_band)
-                    out_band += 1
-
-        if feature_set.want_vegetation_indices():
-            for p, name in zip(
-                [ndvi, ndwi, brightness],
-                ["NDVI", "NDWI", "BRIGHTNESS"],
-            ):
-                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                for b in range(1, ds.RasterCount + 1):
-                    band = ds.GetRasterBand(b)
-                    block_size = band.GetBlockSize()
-                    vrt_raster_band = E.VRTRasterBand(
-                        {
-                            "dataType": "Int16",
-                            "band": str(out_band),
-                            "blockXSize": str(block_size[0]),
-                            "blockYSize": str(block_size[1]),
-                        },
-                        E.Description(name),
-                        E.SimpleSource(
-                            E.SourceFileName({"relativeToVRT": "1"}, p),
-                            E.SourceBand(str(b)),
-                            E.SourceProperties(
-                                {
-                                    "RasterXSize": str(ds.RasterXSize),
-                                    "RasterYSize": str(ds.RasterYSize),
-                                    "DataType": "Int16",
-                                    "BlockXSize": str(block_size[0]),
-                                    "BlockYSize": str(block_size[1]),
-                                }
-                            ),
-                        ),
-                    )
-                    vrt_dataset.append(vrt_raster_band)
-                    out_band += 1
-
-        if feature_set.want_red_edge_features():
-            for p, name in zip(
-                [ndre, repi, psri, cire],
-                ["NDRE", "REPI", "PSRI", "CIRE"],
-            ):
-                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                for b in range(1, ds.RasterCount + 1):
-                    band = ds.GetRasterBand(b)
-                    block_size = band.GetBlockSize()
-                    vrt_raster_band = E.VRTRasterBand(
-                        {
-                            "dataType": "Int16",
-                            "band": str(out_band),
-                            "blockXSize": str(block_size[0]),
-                            "blockYSize": str(block_size[1]),
-                        },
-                        E.Description(name),
-                        E.SimpleSource(
-                            E.SourceFileName({"relativeToVRT": "1"}, p),
-                            E.SourceBand(str(b)),
-                            E.SourceProperties(
-                                {
-                                    "RasterXSize": str(ds.RasterXSize),
-                                    "RasterYSize": str(ds.RasterYSize),
-                                    "DataType": "Int16",
-                                    "BlockXSize": str(block_size[0]),
-                                    "BlockYSize": str(block_size[1]),
-                                }
-                            ),
-                        ),
-                    )
-                    vrt_dataset.append(vrt_raster_band)
-                    out_band += 1
-
-        if feature_set.want_vegetation_indices_statistics():
-            for p, fname in zip(
-                [ndvi_statistics, ndwi_statistics, brightness_statistics],
-                ["NDVI", "NDWI", "BRIGHTNESS"],
-            ):
-                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                for b, name in enumerate(
-                    ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"], start=1
-                ):
-                    band = ds.GetRasterBand(b)
-                    band_name = f"{fname}_{name}"
-                    block_size = band.GetBlockSize()
-                    vrt_raster_band = E.VRTRasterBand(
-                        {
-                            "dataType": "Int16",
-                            "band": str(out_band),
-                            "blockXSize": str(block_size[0]),
-                            "blockYSize": str(block_size[1]),
-                        },
-                        E.Description(band_name),
-                        E.SimpleSource(
-                            E.SourceFileName({"relativeToVRT": "1"}, p),
-                            E.SourceBand(str(b)),
-                            E.SourceProperties(
-                                {
-                                    "RasterXSize": str(ds.RasterXSize),
-                                    "RasterYSize": str(ds.RasterYSize),
-                                    "DataType": "Int16",
-                                    "BlockXSize": str(block_size[0]),
-                                    "BlockYSize": str(block_size[1]),
-                                }
-                            ),
-                        ),
-                    )
-                    vrt_dataset.append(vrt_raster_band)
-                    out_band += 1
-
-        if feature_set.want_s1_features():
-            s1_vrt = f"S1_{tile}.vrt"
-            ds = gdal.Open(s1_vrt, gdal.gdalconst.GA_ReadOnly)
-            for b in range(1, ds.RasterCount + 1):
-                band = ds.GetRasterBand(b)
-                data_type = gdal.GetDataTypeName(band.DataType)
-                block_size = band.GetBlockSize()
-                band_name = band.GetDescription()
-                if band_name not in s1_features:
-                    print(f"Dropping feature {band_name}")
-                    continue
-                vrt_raster_band = E.VRTRasterBand(
-                    {
-                        "dataType": data_type,
-                        "band": str(out_band),
-                        "blockXSize": str(block_size[0]),
-                        "blockYSize": str(block_size[1]),
-                    },
-                    E.Description(band_name),
-                    E.SimpleSource(
-                        E.SourceFileName({"relativeToVRT": "1"}, s1_vrt),
-                        E.SourceBand(str(b)),
-                        E.SourceProperties(
-                            {
-                                "RasterXSize": str(ds.RasterXSize),
-                                "RasterYSize": str(ds.RasterYSize),
-                                "DataType": data_type,
-                                "BlockXSize": str(block_size[0]),
-                                "BlockYSize": str(block_size[1]),
-                            }
-                        ),
-                    ),
-                )
-                vrt_dataset.append(vrt_raster_band)
-                out_band += 1
-
-        root = etree.ElementTree(vrt_dataset)
-        bands_vrt = f"bands_{tile}.vrt"
-        root.write(bands_vrt, pretty_print=True, encoding="utf-8")
-
-    band_names_lower = list(map(lambda x: x.lower(), band_names))
-    commands = []
-    for tile, products in products_by_tile.items():
-        training_points = f"training_points_{tile}.shp"
-        validation_points = f"validation_points_{tile}.shp"
-        training_samples = f"training_samples_{tile}.sqlite"
-        validation_samples = f"validation_samples_{tile}.sqlite"
-
-        bands_vrt = f"bands_{tile}.vrt"
-
-        if (not os.path.exists(training_samples) or not os.path.exists(validation_samples)) and os.path.exists(training_points) and os.path.exists(validation_points):
-            command = [
-                "geo-tools",
-                "sample-extraction",
-                bands_vrt,
-                "--points",
-                training_points,
-                validation_points,
-                "--outputs",
-                training_samples,
-                validation_samples,
-                "--num-threads",
-                "4",
-                "-f",
-                "SQLite",
-                "--fields",
-            ] + band_names_lower
-            commands.append(command)
-
-    containers = []
-    for command in commands:
-        container = ContainerInfo(
-            image=GEO_TOOLS_IMAGE_NAME,
-            command=command,
-            working_dir=output_dir,
-            volumes=volumes,
-            environment=env,
-        )
-        containers.append(container)
-    run_containers_concurrently(client, pool_lo_conc, containers)
-
-    for tile in products_by_tile.keys():
-        training_samples = f"training_samples_{tile}.sqlite"
-        validation_samples = f"validation_samples_{tile}.sqlite"
-
-        if os.path.exists(training_samples):
-            training_files.append(training_samples)
-        if os.path.exists(validation_samples):
-            validation_files.append(validation_samples)
-
-    training_samples = "training_samples.vrt"
-    validation_samples = "validation_samples.vrt"
-    command_merge_training_samples = [
-        "ogrmerge.py",
-        "-overwrite_ds",
-        "-single",
-        "-o",
-        training_samples,
-    ] + training_files
-    command_merge_validation_samples = [
-        "ogrmerge.py",
-        "-overwrite_ds",
-        "-single",
-        "-o",
-        validation_samples,
-    ] + validation_files
-    pool_lo_conc.map(
-        run_command,
-        [command_merge_training_samples, command_merge_validation_samples],
-        chunksize=1,
-    )
-
-    commands = []
-    with open("smote-targets.json", "rt", encoding="utf-8") as file:
-        smote_targets = json.load(file)
-
-    smote_outputs = []
-    for crop_code, target in smote_targets.items():
-        output = f"smote_{crop_code}.sqlite"
-        if not os.path.exists(output):
-            command = [
-                "otbcli_SampleAugmentation",
-                "-in",
-                training_samples,
-                "-out",
-                output,
-                "-label",
-                crop_code,
-                "-samples",
-                str(target),
-                "-field",
-                "crop_code",
-                "-exclude",
-                "id",
-                "originfid",
-                "-strategy",
-                "smote",
-            ]
-            commands.append(command)
-        smote_outputs.append(output)
-
-    containers = []
-    for command in commands:
-        container = ContainerInfo(
-            image=OTB_IMAGE_NAME,
-            command=command,
-            working_dir=output_dir,
-            volumes=volumes,
-        )
-        containers.append(container)
-    run_containers_concurrently(client, pool_hi_conc, containers)
-
-    training_samples_agumented = "training_samples_agumented.vrt"
-    command = [
-        "ogrmerge.py",
-        "-overwrite_ds",
-        "-single",
-        "-o",
-        training_samples_agumented,
-        training_samples,
-    ] + smote_outputs
-    run_command(command)
-
-    model = "model.yaml"
-    confusion_matrix = "confusion_matrix.txt"
-    command = [
-        "otbcli_TrainVectorClassifier",
-        "-io.vd",
-        training_samples_agumented,
-        "-valid.vd",
-        validation_samples,
-        "-io.out",
-        model,
-        "-io.confmatout",
-        confusion_matrix,
-        "-cfield",
-        "crop_code",
-        "-classifier",
-        "rf",
-        "-classifier.rf.max",
-        str(processor_config.max_depth),
-        "-classifier.rf.min",
-        str(processor_config.min_samples),
-        "-classifier.rf.nbtrees",
-        str(processor_config.num_trees),
-        # "-classifier.rf.ra",
-        # "0",
-        # "-classifier.rf.cat",
-        # "10",
-        # "-classifier.rf.var",
-        # "0",
-        # "-classifier.rf.acc",
-        # "0.01",
-        "-feat",
-    ] + band_names_lower
-    print(" ".join(command))
-
-    if not os.path.exists(model):
-        container = ContainerInfo(
-            image=OTB_IMAGE_NAME,
-            command=command,
-            working_dir=output_dir,
-            volumes=volumes,
-            environment=env,
-        )
-        res = container.run(client)
-        if res and res["StatusCode"] != 0:
-            print(res)
-
-    with open(confusion_matrix, "rt", encoding="utf-8") as file:
-        line = file.readline()
-        num_classes = line.count(",") + 1
+    run_sample_extraction(client, pool_lo_conc, output_dir, volumes, env, tiles, strata, stratum_band_names)
+    run_sample_augmentation(client, pool_hi_conc, output_dir, volumes, env, strata)
+    run_training(client, output_dir, volumes, env, processor_config, strata, stratum_band_names)
+    run_classification(client, pool_med_conc, output_dir, volumes, env, strata)
 
     remapping_table_name = "remapping-table.csv"
     if os.path.exists(remapping_table_name):
         remapping_table = remapping_table_name
     else:
         remapping_table = None
-
-    commands = []
-    for tile in tiles:
-        bands_vrt = f"bands_{tile}.vrt"
-        if remapping_table:
-            classified_pre_tif = f"classified_pre_{tile}.tif"
-        else:
-            classified_pre_tif = f"classified_{tile}.tif"
-
-        confidence_map_tif = f"confidence_map_{tile}.tif"
-        probability_map_tif = f"probability_map_{tile}.tif"
-        if not os.path.exists(classified_pre_tif) or (not os.path.exists(confidence_map_tif) and not os.path.exists(probability_map_tif)):
-            command = [
-                "otbcli_ImageClassifier",
-                "-in",
-                bands_vrt,
-                "-out",
-                classified_pre_tif,
-                "int16",
-                "-model",
-                model,
-                "-confmap",
-                confidence_map_tif,
-                "-probamap",
-                probability_map_tif,
-                "-nbclasses",
-                str(num_classes),
-            ]
-            commands.append(command)
-
-    containers = []
-    for command in commands:
-        container = ContainerInfo(
-            image=OTB_IMAGE_NAME,
-            command=command,
-            working_dir=output_dir,
-            volumes=volumes,
-            environment=env,
-        )
-        containers.append(container)
-    run_containers_concurrently(client, pool_med_conc, containers)
 
     if remapping_table:
         commands = []
