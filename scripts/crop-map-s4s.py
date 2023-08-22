@@ -279,7 +279,12 @@ from config;
         return ProcessorConfig(additional_mounts, max_depth, min_samples, num_trees)
 
 
-def load_tiles(conn: connection, site_id: int, tile_filter: Optional[List[str]]) -> List[str]:
+class Tile(object):
+    def __init__(self, tile_id: str):
+        self.tile_id = tile_id
+
+
+def load_tiles(conn: connection, site_id: int, tile_filter: Optional[List[str]]) -> List[Tile]:
     query = SQL(
         "select unnest(tiles) from site_tiles where site_id = %s and satellite_id = 1"
     )
@@ -290,7 +295,8 @@ def load_tiles(conn: connection, site_id: int, tile_filter: Optional[List[str]])
 
         for (tile_id,) in cursor:
             if not tile_filter or tile_id in tile_filter:
-                tiles.append(tile_id)
+                tile = Tile(tile_id)
+                tiles.append(tile)
     return tiles
 
 
@@ -386,7 +392,7 @@ def get_product(name, l2a_path, created_timestamp, mask_path):
     return product
 
 
-def load_products(conn, pool, site_id, season_start, season_end, tiles):
+def load_products(conn: connection, pool, site_id: int, season_start, season_end, tiles: List[Tile]):
     products_by_tile = {}
     for tile in tiles:
         query = SQL(
@@ -416,14 +422,14 @@ order by product_l2a.created_timestamp;
                     site_id,
                     season_start,
                     season_end,
-                    tile,
+                    tile.tile_id,
                 ),
             )
             result = cursor.fetchall()
 
             products = [p for p in pool.map(lambda r: get_product(*r), result, chunksize=1) if p]
             products = sorted(products, key=lambda p: p.date)
-            products_by_tile[tile] = products
+            products_by_tile[tile.tile_id] = products
 
     return products_by_tile
 
@@ -838,27 +844,28 @@ def write_tile_vrts(strata: List[Stratum], feature_set: FeatureSet, s1_features:
     print(stratum_band_names)
     return stratum_band_names
 
-def run_sample_extraction(client, pool, output_dir: str, volumes: Dict[str, Dict[str, str]], env: Dict[str, str], tiles: List[str], strata: List[Stratum], stratum_band_names: List[str]):
+def run_sample_extraction(client, pool, output_dir: str, volumes: Dict[str, Dict[str, str]], env: Dict[str, str], tiles: List[Tile], strata: List[Stratum], stratum_band_names: List[str]):
     commands = []
     for (stratum, band_names) in zip(strata, stratum_band_names):
         band_names_lower = list(map(lambda x: x.lower(), band_names))
         print(f"Stratum {stratum.stratum_id}, fields: {band_names_lower}")
 
         for tile in tiles:
+            tile_id = tile.tile_id
             if stratum.stratum_id:
-                bands_vrt = f"bands_{stratum.stratum_id}_{tile}.vrt"
-                training_points = f"training_points_{stratum.stratum_id}_{tile}.shp"
-                validation_points = f"validation_points_{stratum.stratum_id}_{tile}.shp"
+                bands_vrt = f"bands_{stratum.stratum_id}_{tile_id}.vrt"
+                training_points = f"training_points_{stratum.stratum_id}_{tile_id}.shp"
+                validation_points = f"validation_points_{stratum.stratum_id}_{tile_id}.shp"
 
-                training_samples = f"training_samples_{stratum.stratum_id}_{tile}.sqlite"
-                validation_samples = f"validation_samples_{stratum.stratum_id}_{tile}.sqlite"
+                training_samples = f"training_samples_{stratum.stratum_id}_{tile_id}.sqlite"
+                validation_samples = f"validation_samples_{stratum.stratum_id}_{tile_id}.sqlite"
             else:
-                bands_vrt = f"bands_{tile}.vrt"
-                training_points = f"training_points_{tile}.shp"
-                validation_points = f"validation_points_{tile}.shp"
+                bands_vrt = f"bands_{tile_id}.vrt"
+                training_points = f"training_points_{tile_id}.shp"
+                validation_points = f"validation_points_{tile_id}.shp"
 
-                training_samples = f"training_samples_{tile}.sqlite"
-                validation_samples = f"validation_samples_{tile}.sqlite"
+                training_samples = f"training_samples_{tile_id}.sqlite"
+                validation_samples = f"validation_samples_{tile_id}.sqlite"
 
             if (not os.path.exists(training_samples) or not os.path.exists(validation_samples)) and os.path.exists(training_points) and os.path.exists(validation_points):
                 command = [
@@ -897,12 +904,13 @@ def run_sample_extraction(client, pool, output_dir: str, volumes: Dict[str, Dict
         validation_files = []
 
         for tile in tiles:
+            tile_id = tile.tile_id
             if stratum.stratum_id:
-                training_samples = f"training_samples_{stratum.stratum_id}_{tile}.sqlite"
-                validation_samples = f"validation_samples_{stratum.stratum_id}_{tile}.sqlite"
+                training_samples = f"training_samples_{stratum.stratum_id}_{tile_id}.sqlite"
+                validation_samples = f"validation_samples_{stratum.stratum_id}_{tile_id}.sqlite"
             else:
-                training_samples = f"training_samples_{tile}.sqlite"
-                validation_samples = f"validation_samples_{tile}.sqlite"
+                training_samples = f"training_samples_{tile_id}.sqlite"
+                validation_samples = f"validation_samples_{tile_id}.sqlite"
 
             if os.path.exists(training_samples):
                 training_files.append(training_samples)
@@ -1314,7 +1322,7 @@ def main():
 
         strata = get_site_strata(conn, config.site_id)
         if not strata:
-            stratum = Stratum(None, tiles)
+            stratum = Stratum(None, [t.tile_id for t in tiles])
             strata.append(stratum)
 
     if config.stratum_start_dates:
@@ -2071,8 +2079,9 @@ def main():
     if remapping_table:
         commands = []
         for tile in tiles:
-            classified_pre_tif = f"classified_pre_{tile}.tif"
-            classified_tif = f"classified_{tile}.tif"
+            tile_id = tile.tile_id
+            classified_pre_tif = f"classified_pre_{tile_id}.tif"
+            classified_tif = f"classified_{tile_id}.tif"
             command = [
                 "otbcli",
                 "ClassRemapping",
@@ -2098,15 +2107,16 @@ def main():
 
     if args.output_path:
         for tile in tiles:
-            classified_tif = f"classified_{tile}.tif"
-            confidence_map_tif = f"confidence_map_{tile}.tif"
-            probability_map_tif = f"probability_map_{tile}.tif"
+            tile_id = tile.tile_id
+            classified_tif = f"classified_{tile_id}.tif"
+            confidence_map_tif = f"confidence_map_{tile_id}.tif"
+            probability_map_tif = f"probability_map_{tile_id}.tif"
             shutil.copy2(classified_tif, args.output_path)
             shutil.copy2(confidence_map_tif, args.output_path)
             # shutil.copy2(probability_map_tif, args.output_path)
 
             if remapping_table:
-                classified_pre_tif = f"classified_pre_{tile}.tif"
+                classified_pre_tif = f"classified_pre_{tile_id}.tif"
                 shutil.copy2(classified_pre_tif, args.output_path)
 
         shutil.copy2(confusion_matrix, args.output_path)
