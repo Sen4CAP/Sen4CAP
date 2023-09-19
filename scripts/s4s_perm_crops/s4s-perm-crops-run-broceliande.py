@@ -18,7 +18,7 @@ import sys
 import csv
 import errno
 
-def run_command(args, env=None):
+def run_command2(args, env=None):
     # args = list(map(str, args))
     # cmd_line = " ".join(map(pipes.quote, args))
     print(args)
@@ -26,6 +26,12 @@ def run_command(args, env=None):
     
     p6=subprocess.Popen(args, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return p6.communicate()[1]
+    
+def run_command(args, env=None):
+    args = list(map(str, args))
+    cmd_line = " ".join(map(pipes.quote, args))
+    print(cmd_line)
+    subprocess.call(args, env=env)
     
 # executes broceliande
 def broceliande (image, output, sample, mounts, docker_image):
@@ -35,27 +41,35 @@ def broceliande (image, output, sample, mounts, docker_image):
     nombre_ndvi =int(nbr_band_per_image / 2)
 
     # cmd = "docker run --rm --name SEN4STAT_Broceliande --cpuset-cpus=\"0-39\" --memory=\"100G\"" + " "
-    cmd = "docker run --rm --name SEN4STAT_Broceliande "
+    command = []
+    command += ["docker", "run", "--rm"]
+    # command += ["--name", "SEN4STAT_Broceliande"]
     for mount in mounts:
-        cmd += "-v {} ".format(mount)
-    cmd += docker_image + " "
-    cmd += "-i " + image + " "
-    cmd += "-o "+ output + " "
-    cmd += "-g " + sample + " "
-    cmd += "--timeFlag "
+        command += ["-v", mount]
+
+    command += [docker_image]
+    command += ["-i", image]
+    command += ["-o", output]
+    command += ["-g", sample]
+    command += ["--timeFlag"]
 
     for i,j in zip(range(0,nbr_band_per_image,2), range(1,nbr_band_per_image,2)):
-        cmd += " --ndviBands %s,%s"%(i,j)
+        command += ["--ndviBands", "%s,%s"%(i,j)]
 
     nbr_band_total = (nbr_band_per_image + int(nombre_ndvi))
-
     for k in range(nbr_band_per_image,nbr_band_total,1):
-        cmd += " -b %s -f AP -t Max -a area --thresholds 400,1000,10000,30000"%(k)
+        command += ["-b", k, "-f", "AP", "-t", "Max", "-a", "area", "--thresholds", "400,1000,10000,30000"]
+    
+    command += ["--autoThreadFlag"]
+    command += ["-c", "{}-{}".format(str(nbr_band_per_image), str(nbr_band_total-1))]
+    command += ["--bgRate", "100%"]
+    command += ["--bgTagRate", "100%"]
+    command += ["--showChannel"]
+    command += ["--tagValue", "1,2,3"]
+    command += ["--bgValue",  "0"]
 
-    cmd += " --autoThreadFlag -c {}-{} --bgRate \"100%\" --bgTagRate \"100%\" --showChannel --tagValue 1,2,3 --bgValue 100".format(str(nbr_band_per_image), str(nbr_band_total-1))
-
-    # print ("Executing command: {}".format(cmd))
-    run_command(cmd)
+    # print ("Executing command: {}".format(command))
+    run_command(command)
 
 def main():
     parser = argparse.ArgumentParser(

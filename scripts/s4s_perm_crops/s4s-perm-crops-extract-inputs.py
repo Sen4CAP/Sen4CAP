@@ -64,7 +64,7 @@ def save_to_csv(rows, path, headers):
             writer.writerow(row)
 
 def save_to_file(rows, path):
-    with open(path, "wb") as f:
+    with open(path, "w") as f:
         for row in rows:
             f.write("%s\n" % row)
         
