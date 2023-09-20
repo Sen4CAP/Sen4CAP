@@ -198,7 +198,7 @@ def get_weather(tair_grid_vals, rglb_grid_vals) :
     
 def get_updated_weather(weather, parameters) :
     weather['Rglb']=weather['Rglb']\
-           [parameters['Pgen_StrtSim']:parameters['Pgen_StopSim']]	
+           [parameters['Pgen_StrtSim']:parameters['Pgen_StopSim']]
     weather['Tair']=weather['Tair']\
            [parameters['Pgen_StrtSim']:parameters['Pgen_StopSim']]   
     
@@ -223,20 +223,20 @@ def get_safy_range_params(params_dir) :
         OutFilePar = os.path.join(params_dir, 'SAFYLUT.Parameters_Range_'+crop+'_New.npz')
         print("Extracting safy range params in/from file {}".format(OutFilePar))
         if crop=='wheat':
-            Pfen_MrgDrange  = np.arange(1,200,2)
-            Pgro_Luerange =  np.arange(0, 6, 0.1)
-            Pfen_SenArange  = np.arange(500,2000,200)
-            Pfen_SenBrange  = np.arange(1000,20000,2000)
+            Pfen_MrgDrange  = np.arange(1,200,6)    ### change
+            Pgro_Luerange =  np.arange(0, 6, 0.3)    ### change
+            Pfen_SenArange  = np.arange(500,2000,300)   ### change
+            Pfen_SenBrange  = np.arange(1000,20000,3000)   ### change
         elif crop=='maize':
-            Pfen_MrgDrange  = np.arange(90,180,2)
-            Pgro_Luerange =  np.arange(0, 6, 0.2)
-            Pfen_SenArange  = np.arange(500,2000,200)
-            Pfen_SenBrange  = np.arange(1000,20000,2000)
+            Pfen_MrgDrange  = np.arange(90,180,6)   ### change
+            Pgro_Luerange =  np.arange(0, 6, 0.4)   ### change
+            Pfen_SenArange  = np.arange(500,2000,300)   ### change
+            Pfen_SenBrange  = np.arange(1000,20000,3000)   ### change
         elif crop=='sunfl':
-            Pfen_MrgDrange  = np.arange(90,180,1)
-            Pgro_Luerange =  np.arange(0, 6, 0.1)
-            Pfen_SenArange  = np.arange(500,2000,200)
-            Pfen_SenBrange  = np.arange(1000,20000,2000)
+            Pfen_MrgDrange  = np.arange(90,180,6)   ### change
+            Pgro_Luerange =  np.arange(0, 6, 0.4)   ### change
+            Pfen_SenArange  = np.arange(500,2000,400)   ### change
+            Pfen_SenBrange  = np.arange(1000,20000,4000)   ### change
         MrgDv,LUEv,SenAv,SenBv=np.meshgrid(Pfen_MrgDrange,Pgro_Luerange,Pfen_SenArange,Pfen_SenBrange)
         MrgDv = MrgDv.flatten()
         LUEv  = LUEv.flatten()
@@ -309,3 +309,4 @@ def main():
     
 if __name__ == "__main__":
     main()
+
