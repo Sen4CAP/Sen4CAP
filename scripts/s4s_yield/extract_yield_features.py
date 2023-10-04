@@ -23,12 +23,13 @@ import subprocess
 import numpy as np
 
 ID_COL_NAME = "NewID"
+CT_COL_NAME = "crop_code"
 
 SAFY_YIELD_COL_NAME = "Yield"
 SAFY_D0OUT_COL_NAME = "d0out"
 SAFY_SENBOUT_COL_NAME = "SenBout"
 
-OUTPUT_FEATURE_NAMES = ['ColdT0', 'ColdT1', 'HotT2', 'SumT1', 'SumT2', 'SumT251', 'SumT252', 'SumP1', 'SumP2', 'SumR1', 'SumR2', 'SumE1', 'SumE2', 'MeanT1', 'MeanT2', 'MeanP1', 'MeanP2', 'MeanR1', 'MeanR2', 'MeanE1', 'MeanE2', 'MeanSW10', 'MeanSW11', 'MeanSW12', 'MeanSW20', 'MeanSW21', 'MeanSW22', 'MeanSW30', 'MeanSW31', 'MeanSW32', 'MeanSW40', 'MeanSW41', 'MeanSW42', SAFY_YIELD_COL_NAME, SAFY_D0OUT_COL_NAME, SAFY_SENBOUT_COL_NAME]
+OUTPUT_FEATURE_NAMES = ['ColdT0', 'ColdT1', 'HotT2', 'SumT1', 'SumT2', 'SumT251', 'SumT252', 'SumP1', 'SumP2', 'SumR1', 'SumR2', 'SumE1', 'SumE2', 'MeanT1', 'MeanT2', 'MeanP1', 'MeanP2', 'MeanR1', 'MeanR2', 'MeanE1', 'MeanE2', 'MeanSW10', 'MeanSW11', 'MeanSW12', 'MeanSW20', 'MeanSW21', 'MeanSW22', 'MeanSW30', 'MeanSW31', 'MeanSW32', 'MeanSW40', 'MeanSW41', 'MeanSW42', SAFY_YIELD_COL_NAME, SAFY_D0OUT_COL_NAME, SAFY_SENBOUT_COL_NAME, CT_COL_NAME]
 
 INDICES_COLUMN_SUFFIXES=["Ind_MaxLai", "Ind_HalfLai", "Ind_Emerg", "Ind_EndLai"]
 
@@ -36,6 +37,7 @@ class InputColumnsInfo(object) :
     def __init__(self, header):
         self.header = header
         self.id_pos = header.index(ID_COL_NAME)
+        self.ct_pos = header.index(CT_COL_NAME)
 
         # extract the crop partioning indices 
         self.crop_indices = self.get_column_indices(header, INDICES_COLUMN_SUFFIXES)
@@ -110,6 +112,7 @@ def handle_batch_record(rows, column_infos, writer):
     batch_results = []
     for row in rows:
         id = row[column_infos.id_pos]
+        crop_type = row[column_infos.ct_pos]
 
         try:
             IndMaxLai = int(row[column_infos.crop_indices[0]])
@@ -131,7 +134,7 @@ def handle_batch_record(rows, column_infos, writer):
         weather_tmean = np.array(filter_row_values(row, column_infos.weather_tmean_indices))
         weather_tmin = np.array(filter_row_values(row, column_infos.weather_tmin_indices))
         
-        result = [None] * 37
+        result = [None] * 38
         result[0]  = int(id)                                                              # ['NewID']    
         result[1]  = int(np.sum(weather_tmin[IndEmerg:IndHalfLai+1]<=0))                  # ['ColdT0']   
         result[2]  = int(np.sum(weather_tmin[IndHalfLai:IndMaxLai+1]<=0))                 # ['ColdT1']   
@@ -176,20 +179,25 @@ def handle_batch_record(rows, column_infos, writer):
         # print("safy_senb = {}".format(safy_senb))
         
         if safy_yield is not None and len(safy_yield) > 0:
-            result[34] = safy_yield[0]                                                        # ['safyyield'] 
+            result[34] = safy_yield[0]                                                    # ['safyyield'] 
         else :
             result[34] = None                                                              
 
         if safy_d0 is not None and len(safy_d0) > 0:
-            result[35] = safy_d0[0]                                                        # ['safyd0'] 
+            result[35] = safy_d0[0]                                                       # ['safyd0'] 
         else :
             result[35] = None                                                              
 
         if safy_senb is not None and len(safy_senb) > 0:
-            result[36] = safy_senb[0]                                                        # ['safysenb']
+            result[36] = safy_senb[0]                                                     # ['safysenb']
         else :
             result[36] = None                                                              
-                
+
+        if crop_type is not None and len(crop_type) > 0:
+            result[37] = int(crop_type)                                                   # ['crop_type']
+        else :
+            result[37] = None                                                              
+        
         batch_results.append(result)
 
     # write batch result lines

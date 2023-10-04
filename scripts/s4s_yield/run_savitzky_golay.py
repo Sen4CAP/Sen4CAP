@@ -10,8 +10,6 @@ from glob import glob
 import multiprocessing.dummy
 import os
 import os.path
-from osgeo import osr, gdal, ogr
-from gdal import gdalconst
 import re
 import sys
 import csv
@@ -27,6 +25,7 @@ METRICS_COLUMN_SUFFIXES=["mean_LaiSGWinter", "sum_LaiSGInt0", "sum_LaiSGInt1", "
 INDICES_COLUMN_SUFFIXES=["Ind_MaxLai", "Ind_HalfLai", "Ind_Emerg", "Ind_EndLai"]
 
 ID_COL_NAME = "NewID"
+CROP_CODE_COL_NAME = "crop_code"
 
 SG_DEFAULT_WINDOW_LEN = 21
 SG_DEFAULT_MIN_INDICES = 50
@@ -51,21 +50,24 @@ class OutputsHandler(object) :
 class SelectedColumns(object):
     def __init__(self, col_names, global_col_indices, id_col_global_idx, id_col_name = ID_COL_NAME):
         
-        col_names.sort()
+        # col_names.sort()
         self.columns = col_names
         self.global_col_indices = global_col_indices
         self.id_col_global_idx = id_col_global_idx
         
         dates = []
         self.id_col_name = id_col_name
+        
         self.mean_indices = []
         self.valid_pix_indices = []
+        self.invalid_pix_indices = []
         self.total_pix_indices = []
-        cur_idx = 1 # We start from 1 as on the first position in data is the ID
+        self.crop_code_indice = -1
+        cur_idx = 1 # We start from 1 as on the first position in data will be always the ID (see get_all_global_col_indices)
         for col in col_names:
             # get the date until the first _
             idx = col.index('_')
-            if idx > 0:
+            if CROP_CODE_COL_NAME != col and idx > 0:
                 date_str = col[:idx]
                 date_time_obj = dt.datetime.strptime(date_str, '%Y%m%d').date()
                 if not date_time_obj in dates:
@@ -80,12 +82,22 @@ class SelectedColumns(object):
             if "_total_pixels_cnt_" in col:
                 self.total_pix_indices.append(cur_idx)
 
+            if "_invalid_pixels_cnt_" in col:
+                self.invalid_pix_indices.append(cur_idx)
+
+            if CROP_CODE_COL_NAME == col:
+                self.crop_code_indice = cur_idx
+
             cur_idx = cur_idx+1
             
         self.dates = np.array(dates)
         self.all_column_names = [self.id_col_name] + self.columns
         
-        # print(self.mean_indices)
+        print("Mean indices: {}".format(self.mean_indices))
+        print("Valid pixels count indices: {}".format(self.valid_pix_indices))
+        print("Invalid pixels count indices: {}".format(self.invalid_pix_indices))
+        print("Total pixels count: {}".format(self.total_pix_indices))
+        print("Crop code index is: {}".format(self.crop_code_indice))
             
     def get_all_columns(self) :
         return self.all_column_names
@@ -130,7 +142,7 @@ def SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0, window_length):
 def get_selected_columns(columns) : 
     # print ("Schema: {}".format(reader.schema))
     # bi_cols = []
-    bi_cols = ['_mean_LAI', '_valid_pixels_cnt_LAI']
+    bi_cols = ['_mean_LAI', '_valid_pixels_cnt_LAI', '_invalid_pixels_cnt_LAI', '_total_pixels_cnt_LAI']
     # bi_cols = ['_mean_LAI', '_valid_pixels_cnt_LAI', '_total_pixels_cnt_LAI']
     # bi_cols = ['_mean_LAI', '_stdev_LAI', '_valid_pixels_cnt_LAI']
     col_names = []
@@ -138,14 +150,19 @@ def get_selected_columns(columns) :
     cur_idx = 0
     global_col_indices = []
     id_col_global_idx = -1
+    ct_col_global_idx = -1
     for name in columns:
-        if name != ID_COL_NAME:
+        if name == ID_COL_NAME:
+            id_col_global_idx = cur_idx
+        elif name == CROP_CODE_COL_NAME:
+            # we search for exact match here
+            col_names.append(name)
+            global_col_indices.append(cur_idx)
+        else:
             for bi_col in bi_cols:
                 if bi_col in name:
                     col_names.append(name)
                     global_col_indices.append(cur_idx)
-        else :
-            id_col_global_idx = cur_idx
         cur_idx = cur_idx+1
 
     # print("Selected columns: {}".format(col_names))
@@ -190,6 +207,8 @@ def handle_csv_file(input, output_handler, DoyList, Date0, window_length, min_in
                 gen = islice(read_obj,N)
                 arr = np.genfromtxt(gen, delimiter=',', usecols=selCols.get_all_global_col_indices(), encoding=None)
                 all_cropfields = np.array(arr.tolist())
+                if len(all_cropfields) > 0 and not hasattr(all_cropfields[0], "__len__"):
+                    all_cropfields = [all_cropfields]
                 # all_cropfields = arr.view(np.float).reshape(arr.shape + (-1,))
                 handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler, window_length, min_indices)
                 if arr.shape[0]<N:
@@ -298,9 +317,17 @@ def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler,
         # print("cropfield_descr: {}".format(cropfield_descr))
         mean_vals = cropfield_descr[selCols.mean_indices]
         valid_pixels = cropfield_descr[selCols.valid_pix_indices]
-        # total_pixels = cropfield_descr[selCols.total_pix_indices]
-        total_pixels = valid_pixels # TODO: For now we go with this but the line above should be uncommented
-        
+        # we initialize it this way, just in case, but we update it further accordingly
+        total_pixels = valid_pixels 
+        if len(selCols.total_pix_indices) > 0:
+            total_pixels = cropfield_descr[selCols.total_pix_indices]
+        else:
+            if len(selCols.invalid_pix_indices) == len(selCols.valid_pix_indices):
+                invalid_pixels = cropfield_descr[selCols.invalid_pix_indices]
+                total_pixels = []
+                for i in range(0, len(valid_pixels)):
+                    total_pixels.append(valid_pixels[i] + invalid_pixels[i])
+                
         # TODO: Threshold should be configurable
         # print("Total pixels = {}, valid pixels = {}".format(total_pixels, valid_pixels))
         test = np.array([y>0.8*x for x,y in zip(total_pixels,valid_pixels)])
@@ -316,6 +343,7 @@ def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler,
         savgol = SavitzkyGolay(cropfield, dates, bi_vals, DoyList, Date0, window_length)
         
         cropfield_n = int(cropfield)
+        
         # add the output to the output lines
         sg_outputs.append( [cropfield_n] + list(savgol) )
 
@@ -323,7 +351,11 @@ def handle_batch_record(selCols, all_cropfields, DoyList, Date0, output_handler,
         indices = compute_crop_partitioning_indices(savgol, min_indices)
         if indices is not None:
             # add the indices to the output list
-            indices_outputs.append([cropfield_n] + indices)
+            prefix_fields = [cropfield_n]
+            if selCols.crop_code_indice != -1:
+                crop_type = int(cropfield_descr[selCols.crop_code_indice])
+                prefix_fields.append(crop_type)
+            indices_outputs.append(prefix_fields + indices)
             
             # create the output for the metrics
             metrics_output = build_lai_metrics_output_record(savgol, indices, np.max(bi_vals))
@@ -339,8 +371,11 @@ def build_sg_output_header(date_list) :
     
     return header
 
-def build_indices_output_header(first_date) :
+def build_indices_output_header(first_date, has_ct_column) :
     header = [ID_COL_NAME]
+    if has_ct_column:
+        header += [CROP_CODE_COL_NAME]
+        
     first_date_str = first_date.strftime("%Y%m%d")
     for suffix in INDICES_COLUMN_SUFFIXES:
         header += [first_date_str + "_" + suffix]
@@ -370,7 +405,7 @@ def handle_file(input, output_handler, year, season_start, season_end, window_le
     
     # build the headers
     sg_header = build_sg_output_header(DateList)
-    indices_header = build_indices_output_header(DateList[0])
+    indices_header = build_indices_output_header(DateList[0], header_has_ct_column(input))
     metrics_header = build_metrics_output_header(DateList[0])
     # write the headers
     output_handler.write_sg_rows([sg_header])
@@ -388,6 +423,26 @@ def handle_file(input, output_handler, year, season_start, season_end, window_le
         print("Invalid file type received as input (unknow extension for {})".format(input))
         sys.exit(1)
 
+def header_has_ct_column(input_file):
+    lcinput = input_file.lower()
+    col_names = []
+    
+    if lcinput.endswith('.ipc'):
+        reader = ipc.open_file(input_file)
+        col_names = reader.schema.names
+    elif lcinput.endswith('.csv'):
+        with open(input_file, 'r') as read_obj:
+            # pass the file object to reader() to get the reader object
+            csv_reader = csv.reader(read_obj)
+            col_names = next(csv_reader)  
+    
+    for col in col_names:
+        if col == CROP_CODE_COL_NAME:
+            return True
+    
+    return False
+    
+    
 def main():
     parser = argparse.ArgumentParser(
         description="Performs the Savitzky Golay interpolation of the BI values in received file"

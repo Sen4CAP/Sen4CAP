@@ -75,7 +75,20 @@ def create_polygon(geotransform, xOffset,yOffset) :
     
     return poly.ExportToWkt()
 
-def extract_parcel_to_grid_mapping(input, feature, vec) :
+def get_ogr_driver_from_extension(filename):
+    ext = os.path.splitext(filename)[1].upper()
+    print("Extension is {}".format(ext))
+    if ".GPKG" == ext:
+        print("Using GPKG driver for file {}".format(filename))
+        return "GPKG"
+    elif ext in (".SHP"):
+        print("Using ESRI Shapefile driver for file {}".format(filename))
+        return "ESRI Shapefile"
+        
+    print("OGR driver could not be determined from file's {} extension. Defaulting to GPKG".format(filename))
+    return "GPKG"
+    
+def extract_parcel_to_grid_mapping(input, feature, vec, id_field_name) :
     # open the weather file and get information from it
     src_ds = gdal.Open("NETCDF:" + input + ":" + feature)
     geotransform = src_ds.GetGeoTransform()
@@ -83,14 +96,23 @@ def extract_parcel_to_grid_mapping(input, feature, vec) :
 
     # open the vector file and get infos from it
     # driver_vec = ogr.GetDriverByName("ESRI Shapefile")
-    driver_vec = ogr.GetDriverByName("GPKG")
+    ogr_driver = get_ogr_driver_from_extension(vec)
+    driver_vec = ogr.GetDriverByName(ogr_driver)
     dataSource = driver_vec.Open(vec, 0)
     layer_vec = dataSource.GetLayer()
     inSpatialRef = layer_vec.GetSpatialRef()
     sr = osr.SpatialReference(str(inSpatialRef))
     res = sr.AutoIdentifyEPSG()
     srid = sr.GetAuthorityCode(None)
-    # print(srid)
+    print("SRID is {}".format(srid))
+    
+    has_ct_field = False
+    layerDefinition = layer_vec.GetLayerDefn()
+    for i in range(layerDefinition.GetFieldCount()):
+        fieldName =  layerDefinition.GetFieldDefn(i).GetName()
+        if CT_COL_NAME == fieldName:
+            has_ct_field = True
+            break
     
     # Getting spatial reference of input vector
     srs = osr.SpatialReference()
@@ -125,10 +147,13 @@ def extract_parcel_to_grid_mapping(input, feature, vec) :
         geom_vec = feature.GetGeometryRef()
         if geom_vec is None :
             continue
-        geom_vec.Transform(wgs84_to_image_trasformation)
+        if int(srid) != 4326:
+            geom_vec.Transform(wgs84_to_image_trasformation)
         
-        parcel_id = feature.GetField(VEC_ID_COL_NAME)
-        parcel_ct = feature.GetField(CT_COL_NAME)
+        parcel_id = feature.GetField(id_field_name)
+        parcel_ct = "-1"
+        if has_ct_field:
+            parcel_ct = feature.GetField(CT_COL_NAME)
         for grid_descr in grid_descrs:
             if geom_vec.Intersects(grid_descr.geom):
                 print("Parcel found with NewID = {} intersecting grid no {} => Extracting value {} ...".format(parcel_id, grid_descr.grid_no, parcel_ct))
@@ -244,11 +269,13 @@ def main():
     parser.add_argument("-o", "--out-dir", help="Out directory where feature files are stored", required=True)
     parser.add_argument("-p", "--out-parcels-to-grid-file", help="File containing the mapping between parcel id and the grid number")
     parser.add_argument("-g", "--out-grid-to-parcels-file", help="File containing the mapping between grid number and the parcel id")
+    parser.add_argument("-f", "--id-field-name", help="Field name for the ID in the input vector", default=VEC_ID_COL_NAME)
     
     args = parser.parse_args()
     
+    
     # extract the mapping parcel_id - grid_no - crop type
-    parcels_to_grid = extract_parcel_to_grid_mapping(args.input_list[0], NETCDF_WEATHER_BANDS[0], args.vec)
+    parcels_to_grid = extract_parcel_to_grid_mapping(args.input_list[0], NETCDF_WEATHER_BANDS[0], args.vec, args.id_field_name)
     
     # extract the weather data for all inputs
     extract_parcels_weather_data_async(args.input_list, args.out_dir, parcels_to_grid)

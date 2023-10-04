@@ -34,6 +34,9 @@ from copy import deepcopy
 #MIN_WEATHER_SAMPLES = 100
 MIN_WEATHER_SAMPLES = 50
 
+# TODO: This Threshold should be configurable
+VALID_PIXELS_THR = 0.8
+
 NETCDF_WEATHER_BANDS = ["tmin", "tmax", "rad"]
 CROP_LIST = ['wheat','maize','sunfl']
 
@@ -54,10 +57,10 @@ OUT_HEADER = [CMN_ID_COL_NAME, CT_COL_NAME, D0OUT_COL_NAME, ELUEOUT_COL_NAME, SE
               SENBOUT_COL_NAME, RMSEMIN_COL_NAME, SIMYIELD_COL_NAME, CONF_COL_NAME]
 
 cropNum={}
-cropNum['wheat'] = [1152,1151,1115,1114,1113]
+cropNum['wheat'] = [1111,1112,1113,1114,1115]
 cropNum['maize'] = [1121]
 cropNum['sunfl'] = [1438]
-cropNum['all'] = [1152,1151,1115,1114,1113,1121,1438]
+cropNum['all'] = [1111,1112,1113,1114,1115,1121,1438]
 
 class CmdArgs(object): 
     def __init__(self, feature, input, output, tile = ""):
@@ -69,7 +72,7 @@ class CmdArgs(object):
 class SelectedColumns(object):
     def __init__(self, col_names, global_col_indices, id_col_global_idx, crop_type_col_idx, id_col_name = CMN_ID_COL_NAME, ct_col_name = CT_COL_NAME):
         
-        col_names.sort()
+        # col_names.sort()
         self.columns = col_names
         self.global_col_indices = global_col_indices
         self.id_col_global_idx = id_col_global_idx
@@ -80,6 +83,7 @@ class SelectedColumns(object):
         self.ct_col_name = ct_col_name
         self.mean_indices = []
         self.valid_pix_indices = []
+        self.invalid_pix_indices = []
         self.total_pix_indices = []
         cur_idx = 1 # We start from 1 as on the first position in data is the ID
         for col in col_names:
@@ -99,6 +103,9 @@ class SelectedColumns(object):
                 
             if "_total_pixels_cnt_" in col:
                 self.total_pix_indices.append(cur_idx)
+
+            if "_invalid_pixels_cnt_" in col:
+                self.invalid_pix_indices.append(cur_idx)
 
             cur_idx = cur_idx+1
             
@@ -154,7 +161,7 @@ class LaiFileHandler(object) :
         return ret_lai
     
     def get_selected_columns(self, columns) : 
-        bi_cols = ['_mean_LAI', '_valid_pixels_cnt_LAI']
+        bi_cols = ['_mean_LAI', '_valid_pixels_cnt_LAI', '_invalid_pixels_cnt_LAI', '_total_pixels_cnt_LAI']
         col_names = []
         cur_idx = 0
         global_col_indices = []
@@ -480,9 +487,6 @@ def load_safy_parameters(json_file) :
     fff.close()
     return parameters
     
-#def execute_safy(crop_type, weather, parameters) :
-    # TODO    
-
 def get_safy_range_params(params_dir) :
     d0v={}
     ELUEv={}
@@ -527,7 +531,7 @@ def FloatOrZero(value):
     except:
         return 0.0
         
-def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, d0v, ELUEv, SenAv, SenBv, json_parameters, lut_dir, writer, min_weather_samples) :
+def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, d0v, ELUEv, SenAv, SenBv, json_parameters, lut_dir, writer, min_weather_samples, thread_pool) :
     # load also the LAI for the parcels in the grid
     lai_parcel_rows = lai_file_handler.get_lai_rows(grid_parcels)
     if len(lai_parcel_rows) == 0 :
@@ -550,9 +554,8 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
         crop_num = int(float(row[lai_file_handler.selCols.crop_type_col_idx].rstrip()))
         crop_name = crop_type_to_crop_name(crop_num)
         if crop_name == "" :
-            print ("Could not find crop name for crop type {}".format(crop_num))
+            # print ("Could not find crop name for crop type {}".format(crop_num))
             continue
-        
         
         mean_vals = np.array([FloatOrZero(row[x]) for x in lai_file_handler.selCols.mean_indices])
         valid_pixels = np.array([FloatOrZero(row[x]) for x in lai_file_handler.selCols.valid_pix_indices])
@@ -560,11 +563,17 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
         # print("Mean vals = {}".format(mean_vals))
         # print("Valid pixels vals = {}".format(valid_pixels))
 
-        # total_pixels = cropfield_descr[selCols.total_pix_indices]
-        total_pixels = valid_pixels # TODO: For now we go with this but the line above should be uncommented
+        total_pixels = valid_pixels 
+        if len(lai_file_handler.selCols.total_pix_indices) > 0:
+            total_pixels = np.array([FloatOrZero(row[x]) for x in lai_file_handler.selCols.total_pix_indices])
+        else:
+            if len(lai_file_handler.selCols.invalid_pix_indices) == len(lai_file_handler.selCols.valid_pix_indices):
+                invalid_pixels = np.array([FloatOrZero(row[x]) for x in lai_file_handler.selCols.invalid_pix_indices])
+                total_pixels = np.empty(len(lai_file_handler.selCols.valid_pix_indices), dtype=float)
+                for i in range(0, len(valid_pixels)):
+                    total_pixels[i] = (valid_pixels[i] + invalid_pixels[i])
 
-        # TODO: Threshold should be configurable
-        test = np.array([y>0.8*x for x,y in zip(total_pixels,valid_pixels)])
+        test = np.array([y > VALID_PIXELS_THR * x for x,y in zip(total_pixels,valid_pixels)])
         
         if (len(test) == 0) :
             continue        
@@ -594,9 +603,9 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
                                                                 json_parameters, d0vC, ELUEvC, SenAvC, SenBvC, LAImatC, 
                                                                 ParametersTMP))
 
-    p = Pool(cpu_count())
-    OUT = p.map(partial(CalibrateSafy2), calibrate_safy_param_wrps )
-    p.close()
+    # thread_pool = Pool(cpu_count())
+    OUT = thread_pool.map(partial(CalibrateSafy2), calibrate_safy_param_wrps )
+    # thread_pool.close()
     
     #OUT = np.array(OUT)
     #print (OUT)
@@ -624,6 +633,7 @@ def main():
     parser.add_argument("-w", "--working-dir", help="Working dir", required=True)
     parser.add_argument("-o", "--out", help="File where the safy optim results will be written", required=True)
     parser.add_argument("-m", "--min-weather-samples", help="The minimum number of weather acquisitions", required=False, type=int, default=MIN_WEATHER_SAMPLES)
+    parser.add_argument("-x", "--valid-pixels-thr", help="The minimum number of weather acquisitions", required=False, type=float, default=VALID_PIXELS_THR)
     
     args = parser.parse_args()
 
@@ -639,6 +649,9 @@ def main():
     all_tair_vals_arr, all_rglb_vals = get_weather_features(args.input_weather)
 
     writer = initialize_out_writer(args.out)
+
+    # initialize pool
+    thread_pool = Pool(cpu_count())
     
     all_output = []
     with open(args.grid_to_parcel_file, 'r') as grid_to_parcel:
@@ -652,7 +665,7 @@ def main():
             if prev_grid_no != grid_no:
                 if len(grid_parcels) > 0 :
                     outputs = handle_grid_parcels(args.year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, 
-                                        d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer, args.min_weather_samples)
+                                        d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer, args.min_weather_samples, thread_pool)
                     if outputs is not None and len(outputs) > 0:
                         all_output += outputs                    
                     grid_parcels = []
@@ -663,7 +676,7 @@ def main():
                  
         if len(grid_parcels) > 0 :
             outputs = handle_grid_parcels(args.year, grid_no, grid_parcels, lai_file_handler, all_tair_vals_arr, all_rglb_vals, 
-                    d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer, args.min_weather_samples)  
+                    d0v, ELUEv, SenAv, SenBv, crop_jsons, args.lut_dir, writer, args.min_weather_samples, thread_pool)  
             if outputs is not None and len(outputs) > 0:
                 all_output += outputs                    
                     
@@ -671,6 +684,9 @@ def main():
         all_output.sort()
         print(all_output)
         writer.writerows(all_output)
-   
+    
+    # close the thread pool    
+    thread_pool.close()
+    
 if __name__ == "__main__":
     main()

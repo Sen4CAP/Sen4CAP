@@ -145,7 +145,7 @@ class DataExtraction(object):
     def export_parcels(self):
         with self.get_connection() as conn:
             if not table_exists(conn, "public", self.parcels_table):
-                logging.info("Parcels table does not exist, skipping export")
+                logging.info("Parcels table {} does not exist, skipping export".format(self.parcels_table))
                 sys.exit(1)
 
             try_rm_file(self.output)
