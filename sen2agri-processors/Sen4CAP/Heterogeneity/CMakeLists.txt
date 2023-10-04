@@ -1,0 +1,3 @@
+add_subdirectory(LocalClassConnectivityIndex)
+add_subdirectory(RemoveIsolated)
+add_subdirectory(TemporalResampling)
