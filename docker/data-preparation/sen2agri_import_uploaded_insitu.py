@@ -1,0 +1,1 @@
+../../scripts/sen2agri_import_uploaded_insitu.py
