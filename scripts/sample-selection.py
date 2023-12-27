@@ -113,7 +113,7 @@ def get_site_strata(conn: connection, site_id: int) -> List[Stratum]:
             query,
             (site_id, )
         )
-        for (stratum_id, tiles) in cursor:
+        for (stratum_id, _, _, tiles) in cursor:
             stratum = Stratum(stratum_id, tiles)
             strata.append(stratum)
 
