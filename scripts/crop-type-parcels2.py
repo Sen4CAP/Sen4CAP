@@ -25,7 +25,7 @@ import tempfile
 
 
 SEN4CAP_PROCESSORS_IMAGE_NAME = "sen4cap/processors:3.0.0"
-INTERPOLATION_IMAGE_NAME = "sen4x/interpolation:0.1.0"
+PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.1.0"
 
 
 SATELLITE_ID_SENTINEL2 = 1
@@ -961,7 +961,7 @@ class WeeklyCompositeS4S(object):
             path = os.path.dirname(os.path.abspath(self.output))
             client = docker.from_env()
             client.containers.run(
-                image=INTERPOLATION_IMAGE_NAME,
+                image=PROCESSORS_NEW_IMAGE_NAME,
                 auto_remove=True,
                 user=f"{os.getuid()}:{os.getgid()}",
                 volumes=self.volumes,

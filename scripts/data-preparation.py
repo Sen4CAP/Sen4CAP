@@ -496,52 +496,60 @@ class DataPreparation:
         )
 
     def find_overlaps(self, srid, tile_counts, total):
-        q = multiprocessing.dummy.Queue()
-        res = self.pool.map_async(
-            lambda t: self.get_overlapping_parcels(srid, q, t), self.tiles
-        )
-
-        progress = 0
-        sys.stdout.write("Finding overlapping parcels: 0.00%")
-        sys.stdout.flush()
-        for i in range(len(self.tiles)):
-            tile = q.get()
-            progress += tile_counts[tile.tile_id]
-            sys.stdout.write(
-                "\rFinding overlapping parcels: {0:.2f}%".format(
-                    100.0 * progress / total
-                )
+        try:
+            q = multiprocessing.dummy.Queue()
+            res = self.pool.map_async(
+                lambda t: self.get_overlapping_parcels(srid, q, t), self.tiles
             )
-            sys.stdout.flush()
-        sys.stdout.write("\n")
-        sys.stdout.flush()
 
-        overlaps = list(set.union(*map(set, res.get())))
-        logging.info("{} overlapping parcels".format(len(overlaps)))
-        self.mark_overlapping_parcels(overlaps)
+            progress = 0
+            sys.stdout.write("Finding overlapping parcels: 0.00%")
+            sys.stdout.flush()
+            for i in range(len(self.tiles)):
+                tile = q.get()
+                progress += tile_counts[tile.tile_id]
+                sys.stdout.write(
+                    "\rFinding overlapping parcels: {0:.2f}%".format(
+                        100.0 * progress / total
+                    )
+                )
+                sys.stdout.flush()
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+            overlaps = list(set.union(*map(set, res.get())))
+            logging.info("{} overlapping parcels".format(len(overlaps)))
+            self.mark_overlapping_parcels(overlaps)
+        except Exception as e:
+            logging.error(e)
+            sys.exit(1)
 
     def find_duplicates(self, srid, tile_counts, total):
-        q = multiprocessing.dummy.Queue()
-        res = self.pool.map_async(
-            lambda t: self.get_duplicate_parcels(srid, q, t), self.tiles
-        )
-
-        progress = 0
-        sys.stdout.write("Finding duplicate parcels: 0.00%")
-        sys.stdout.flush()
-        for i in range(len(self.tiles)):
-            tile = q.get()
-            progress += tile_counts[tile.tile_id]
-            sys.stdout.write(
-                "\rFinding duplicate parcels: {0:.2f}%".format(100.0 * progress / total)
+        try:
+            q = multiprocessing.dummy.Queue()
+            res = self.pool.map_async(
+                lambda t: self.get_duplicate_parcels(srid, q, t), self.tiles
             )
-            sys.stdout.flush()
-        sys.stdout.write("\n")
-        sys.stdout.flush()
 
-        duplicates = list(set.union(*map(set, res.get())))
-        logging.info("{} duplicate parcels".format(len(duplicates)))
-        self.mark_duplicate_parcels(duplicates)
+            progress = 0
+            sys.stdout.write("Finding duplicate parcels: 0.00%")
+            sys.stdout.flush()
+            for i in range(len(self.tiles)):
+                tile = q.get()
+                progress += tile_counts[tile.tile_id]
+                sys.stdout.write(
+                    "\rFinding duplicate parcels: {0:.2f}%".format(100.0 * progress / total)
+                )
+                sys.stdout.flush()
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+
+            duplicates = list(set.union(*map(set, res.get())))
+            logging.info("{} duplicate parcels".format(len(duplicates)))
+            self.mark_duplicate_parcels(duplicates)
+        except Exception as e:
+            logging.error(e)
+            sys.exit(1)
 
     def prepare_lut(self, lut_path):
         with self.get_connection() as conn:
@@ -1452,10 +1460,11 @@ from tiles;"""
                 return counts
 
     def get_overlapping_parcels(self, srid, q, tile):
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                query = SQL(
-                    """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    query = SQL(
+                        """
 with tile as (
     select ST_Transform(geom, %s) as geom
     from shape_tiles_s2
@@ -1464,107 +1473,121 @@ with tile as (
 select "NewID"
 from {} lpis, tile
 where "GeomValid"
-  and not is_deleted
-  and exists (
-      select 1
-      from {} t
-      where t."NewID" != lpis."NewID"
-      and t."GeomValid"
-      and not t.is_deleted
-      and ST_Intersects(t.wkb_geometry, tile.geom)
-      and ST_Intersects(t.wkb_geometry, lpis.wkb_geometry)
-      having sum(ST_Area(ST_Intersection(t.wkb_geometry, lpis.wkb_geometry))) / nullif(lpis."Area_meters", 0) > 0.1
-  )
-  and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
-                )
-                query = query.format(
-                    Identifier(self.lpis_table), Identifier(self.lpis_table)
-                )
-                logging.debug(query.as_string(conn))
-                cursor.execute(query, (srid, tile.tile_id))
+and not is_deleted
+and exists (
+    select 1
+    from {} t
+    where t."NewID" != lpis."NewID"
+    and t."GeomValid"
+    and not t.is_deleted
+    and ST_Intersects(t.wkb_geometry, tile.geom)
+    and ST_Intersects(t.wkb_geometry, lpis.wkb_geometry)
+    having sum(ST_Area(ST_Intersection(t.wkb_geometry, lpis.wkb_geometry))) / nullif(lpis."Area_meters", 0) > 0.1
+)
+and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
+                    )
+                    query = query.format(
+                        Identifier(self.lpis_table), Identifier(self.lpis_table)
+                    )
+                    logging.debug("%s, %s, %s", query.as_string(conn), srid, tile.tile_id)
+                    cursor.execute(query, (srid, tile.tile_id))
 
-                q.put(tile)
-                return [r[0] for r in cursor]
+                    q.put(tile)
+                    return [r[0] for r in cursor]
+        except Exception as e:
+            logging.error("%s, %s", e, tile.tile_id)
+            sys.exit(1)
 
     def get_duplicate_parcels(self, srid, q, tile):
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                query = SQL(
-                    """
-with tile as (
-    select ST_Transform(geom, %s) as geom
-    from shape_tiles_s2
-    where tile_id = %s
-)
-select "NewID"
-from (
-    select "NewID",
-            count(*) over(partition by wkb_geometry) as count
-    from {}, tile
-    where "GeomValid"
-      and ST_Intersects(wkb_geometry, tile.geom)
-      and not is_deleted
-) t where count > 1;"""
-                )
-                query = query.format(Identifier(self.lpis_table))
-                logging.debug(query.as_string(conn))
-                cursor.execute(query, (srid, tile.tile_id))
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    query = SQL(
+                        """
+    with tile as (
+        select ST_Transform(geom, %s) as geom
+        from shape_tiles_s2
+        where tile_id = %s
+    )
+    select "NewID"
+    from (
+        select "NewID",
+                count(*) over(partition by wkb_geometry) as count
+        from {}, tile
+        where "GeomValid"
+        and ST_Intersects(wkb_geometry, tile.geom)
+        and not is_deleted
+    ) t where count > 1;"""
+                    )
+                    query = query.format(Identifier(self.lpis_table))
+                    logging.debug(query.as_string(conn))
+                    cursor.execute(query, (srid, tile.tile_id))
 
-                q.put(tile)
-                return [r[0] for r in cursor]
+                    q.put(tile)
+                    return [r[0] for r in cursor]
+        except Exception as e:
+            logging.error(e)
+            sys.exit(1)
 
     def mark_overlapping_parcels(self, parcels):
-        total = len(parcels)
-        if not total:
-            return
-        progress = 0
-        sys.stdout.write("Marking overlapping parcels: 0.00%")
-        sys.stdout.flush()
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
-                    sql = SQL('update {} set "Overlap" = true where "NewID" = any(%s)')
-                    sql = sql.format(Identifier(self.lpis_table))
-                    logging.debug(sql.as_string(conn))
-                    cursor.execute(sql, (b,))
-                    conn.commit()
+        try:
+            total = len(parcels)
+            if not total:
+                return
+            progress = 0
+            sys.stdout.write("Marking overlapping parcels: 0.00%")
+            sys.stdout.flush()
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
+                        sql = SQL('update {} set "Overlap" = true where "NewID" = any(%s)')
+                        sql = sql.format(Identifier(self.lpis_table))
+                        logging.debug(sql.as_string(conn))
+                        cursor.execute(sql, (b,))
+                        conn.commit()
 
-                    progress += len(b)
-                    sys.stdout.write(
-                        "\rMarking overlapping parcels: {0:.2f}%".format(
-                            100.0 * progress / total
+                        progress += len(b)
+                        sys.stdout.write(
+                            "\rMarking overlapping parcels: {0:.2f}%".format(
+                                100.0 * progress / total
+                            )
                         )
-                    )
+                        sys.stdout.flush()
+                    sys.stdout.write("\n")
                     sys.stdout.flush()
-                sys.stdout.write("\n")
-                sys.stdout.flush()
+        except Exception as e:
+            logging.error(e)
+            sys.exit(1)
 
     def mark_duplicate_parcels(self, parcels):
-        total = len(parcels)
-        if not total:
-            return
-        progress = 0
-        sys.stdout.write("Marking duplicate parcels: 0.00%")
-        sys.stdout.flush()
-        with self.get_connection() as conn:
-            with conn.cursor() as cursor:
-                for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
-                    sql = SQL('update {} set "Duplic" = true where "NewID" = any(%s)')
-                    sql = sql.format(Identifier(self.lpis_table))
-                    logging.debug(sql.as_string(conn))
-                    cursor.execute(sql, (b,))
-                    conn.commit()
+        try:
+            total = len(parcels)
+            if not total:
+                return
+            progress = 0
+            sys.stdout.write("Marking duplicate parcels: 0.00%")
+            sys.stdout.flush()
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
+                        sql = SQL('update {} set "Duplic" = true where "NewID" = any(%s)')
+                        sql = sql.format(Identifier(self.lpis_table))
+                        logging.debug(sql.as_string(conn))
+                        cursor.execute(sql, (b,))
+                        conn.commit()
 
-                    progress += len(b)
-                    sys.stdout.write(
-                        "\rMarking duplicate parcels: {0:.2f}%".format(
-                            100.0 * progress / total
+                        progress += len(b)
+                        sys.stdout.write(
+                            "\rMarking duplicate parcels: {0:.2f}%".format(
+                                100.0 * progress / total
+                            )
                         )
-                    )
+                        sys.stdout.flush()
+                    sys.stdout.write("\n")
                     sys.stdout.flush()
-                sys.stdout.write("\n")
-                sys.stdout.flush()
-
+        except Exception as e:
+            logging.error(e)
+            sys.exit(1)
 
 def batch(iterable, n=1):
     count = len(iterable)
