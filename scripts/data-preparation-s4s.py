@@ -387,7 +387,7 @@ inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id;"""
         conn.commit()
 
         result = []
-        for (tile_id, epsg_code, tile_extent) in rows:
+        for tile_id, epsg_code, tile_extent in rows:
             tile_extent = ogr.CreateGeometryFromWkb(bytes(tile_extent))
             result.append(Tile(tile_id, epsg_code, tile_extent))
 
@@ -794,13 +794,20 @@ from {} polygons;"""
                 cursor.execute(query)
 
                 conn.commit()
+
+                print("Creating indexes")
+                create_spatial_index(conn, self.parcels_table, "wkb_geometry")
+                create_primary_key(conn, self.parcels_table, ["parcel_id"])
+                create_primary_key(conn, self.parcel_attributes_table, ["parcel_id"])
+                create_index(conn, self.parcel_attributes_table, ["tile_id"])
+
                 print("Computing polygon-tile membership")
                 query = SQL(
                     """
 with site_tiles as (select tile_id
                     from sp_get_site_tiles(%s :: smallint, 1 :: smallint)),
      srid as (select Find_SRID('public', %s, 'wkb_geometry') as epsg_code),
-     site_tile_geom as (select site_tiles.tile_id,
+     site_tile_geom as materialized (select site_tiles.tile_id,
                                ST_Transform(geom, srid.epsg_code) as geom
                         from site_tiles
                                  inner join srid on true
@@ -829,7 +836,7 @@ where polygon_tiles.parcel_id = attributes.parcel_id;
                 ).format(
                     parcels_table_id,
                     parcel_attributes_table_id,
-                    parcel_attributes_table_id
+                    parcel_attributes_table_id,
                 )
                 logging.debug(query.as_string(conn))
                 cursor.execute(query, (self.config.site_id, self.parcels_table))
@@ -838,12 +845,6 @@ where polygon_tiles.parcel_id = attributes.parcel_id;
                 query = SQL("drop table {};").format(parcels_table_staging_id)
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
-
-                print("Creating indexes")
-                create_spatial_index(conn, self.parcels_table, "wkb_geometry")
-                create_primary_key(conn, self.parcels_table, ["parcel_id"])
-                create_primary_key(conn, self.parcel_attributes_table, ["parcel_id"])
-                create_index(conn, self.parcel_attributes_table, ["tile_id"])
 
     def prepare_statistical_data(
         self,
