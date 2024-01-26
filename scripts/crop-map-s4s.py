@@ -1594,6 +1594,7 @@ def main():
     pool_hi_conc = Pool()
     pool_med_conc = Pool(min(os.cpu_count() or 1, 4))
     pool_lo_conc = Pool(min(os.cpu_count() or 1, 2))
+    pool_no_conc = Pool(1)
 
     config = Config(args)
     if config.stratum_start_dates and config.stratum_end_dates:
@@ -2601,7 +2602,7 @@ def main():
         strata,
         stratum_band_names,
     )
-    run_sample_augmentation(client, pool_hi_conc, output_dir, volumes, env, strata)
+    run_sample_augmentation(client, pool_no_conc, output_dir, volumes, env, strata)
     run_training(
         client, output_dir, volumes, env, processor_config, strata, stratum_band_names
     )
