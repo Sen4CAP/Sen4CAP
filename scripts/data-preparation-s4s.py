@@ -553,7 +553,7 @@ insert into stratum(site_id, year, stratum_type_id, stratum_id, wkb_geometry)
 select {},
        {},
        {},
-       id,
+       stratum_id,
        wkb_geometry
 from {}
 """
