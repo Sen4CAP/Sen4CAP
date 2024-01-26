@@ -1624,8 +1624,6 @@ def main():
             "--year",
             str(classification_year),
         ]
-        if args.tiles:
-            command += ["--tiles"] + args.tiles
         if args.remapping_set_id:
             command += ["--remapping-set-id", str(args.remapping_set_id)]
         if args.debug:
