@@ -210,15 +210,32 @@ class FeatureSet(object):
         return self.s1_features
 
     @staticmethod
-    def parse(features):
+    def empty():
         feature_set = FeatureSet()
-        if not features:
-            return feature_set
+        feature_set.s2_b2 = False
+        feature_set.s2_b3 = False
+        feature_set.s2_b4 = False
+        feature_set.s2_b8 = False
+        feature_set.s2_b5 = False
+        feature_set.s2_b6 = False
+        feature_set.s2_b7 = False
+        feature_set.s2_b11 = False
+        feature_set.s2_b12 = False
 
         feature_set.vegetation_indices = False
         feature_set.vegetation_indices_statistics = False
         feature_set.red_edge_features = False
+
         feature_set.s1_features = False
+
+        return feature_set
+
+    @staticmethod
+    def parse(features):
+        if not features:
+            return FeatureSet()
+
+        feature_set = FeatureSet.empty()
 
         for feature in features:
             if feature.startswith("-"):
