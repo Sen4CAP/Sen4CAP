@@ -2525,11 +2525,10 @@ def main():
     else:
         stratum_date_filters = None
 
-    stratum_band_names = write_tile_vrts(
-        strata, feature_set, s1_features, output_dates, stratum_date_filters
-    )
-
     if not args.broceliande:
+        stratum_band_names = write_tile_vrts(
+            strata, feature_set, s1_features, output_dates, stratum_date_filters
+        )
         run_sample_extraction(
             client,
             pool_lo_conc,
