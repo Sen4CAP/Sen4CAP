@@ -1531,6 +1531,9 @@ def main():
     parser.add_argument("--season-end", help="season end date")
     parser.add_argument("--year", help="in-situ data or classification year", type=int)
     parser.add_argument("--remapping-set-id", help="remapping set id", type=int)
+    parser.add_argument(
+        "--broceliande", help="Broceliande mode", default=False, action="store_true"
+    )
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true")
     parser.add_argument(
         "--keep-polygons",
@@ -1644,6 +1647,8 @@ def main():
         print(res)
 
     feature_set = FeatureSet.parse(args.features)
+    if args.broceliande:
+        feature_set = FeatureSet.parse(["s2_b4", "s2_b8"])
 
     if feature_set.need_s1_features():
         command = [
@@ -2509,93 +2514,100 @@ def main():
         strata, feature_set, s1_features, output_dates, stratum_date_filters
     )
 
-    run_sample_extraction(
-        client,
-        pool_lo_conc,
-        output_dir,
-        volumes,
-        env,
-        tiles,
-        strata,
-        stratum_band_names,
-    )
-    run_sample_augmentation(client, pool_no_conc, output_dir, volumes, env, strata)
-    run_training(
-        client, output_dir, volumes, env, processor_config, strata, stratum_band_names
-    )
-
-    remapping_table_name = "remapping-table.csv"
-    if os.path.exists(remapping_table_name):
-        remapping_table = remapping_table_name
-        remapping_enabled = True
-    else:
-        remapping_table = None
-        remapping_enabled = False
-
-    run_classification(client, pool_med_conc, output_dir, volumes, env, strata)
-
-    if strata[0].stratum_id:
-        strata_for_tile = defaultdict(lambda: [])
-        for stratum in strata:
-            for tile_id in stratum.tiles:
-                strata_for_tile[tile_id].append(stratum.stratum_id)
-
-        rasterize_stratum_masks(tiles, strata, strata_for_tile)
-        merge_strata(
+    if not args.broceliande:
+        run_sample_extraction(
             client,
-            pool_hi_conc,
+            pool_lo_conc,
             output_dir,
             volumes,
             env,
             tiles,
-            strata_for_tile,
-            remapping_enabled,
+            strata,
+            stratum_band_names,
+        )
+        run_sample_augmentation(client, pool_no_conc, output_dir, volumes, env, strata)
+        run_training(
+            client,
+            output_dir,
+            volumes,
+            env,
+            processor_config,
+            strata,
+            stratum_band_names,
         )
 
-    if remapping_table:
-        commands = []
-        for tile in tiles:
-            tile_id = tile.tile_id
-            classified_pre_tif = f"classified_pre_{tile_id}.tif"
-            classified_tif = f"classified_{tile_id}.tif"
-            command = [
-                "otbcli",
-                "ClassRemapping",
-                "-table",
-                remapping_table,
-                "-in",
-                classified_pre_tif,
-                "-out",
-                classified_tif,
-            ]
-            commands.append(command)
+        remapping_table_name = "remapping-table.csv"
+        if os.path.exists(remapping_table_name):
+            remapping_table = remapping_table_name
+            remapping_enabled = True
+        else:
+            remapping_table = None
+            remapping_enabled = False
 
-        containers = []
-        for command in commands:
-            container = ContainerInfo(
-                image=PROCESSORS_NEW_IMAGE_NAME,
-                command=command,
-                working_dir=output_dir,
-                volumes=volumes,
+        run_classification(client, pool_med_conc, output_dir, volumes, env, strata)
+
+        if strata[0].stratum_id:
+            strata_for_tile = defaultdict(lambda: [])
+            for stratum in strata:
+                for tile_id in stratum.tiles:
+                    strata_for_tile[tile_id].append(stratum.stratum_id)
+
+            rasterize_stratum_masks(tiles, strata, strata_for_tile)
+            merge_strata(
+                client,
+                pool_hi_conc,
+                output_dir,
+                volumes,
+                env,
+                tiles,
+                strata_for_tile,
+                remapping_enabled,
             )
-            containers.append(container)
-        run_containers_concurrently(client, pool_med_conc, containers)
 
-    if args.output_path:
-        for tile in tiles:
-            tile_id = tile.tile_id
-            classified_tif = f"classified_{tile_id}.tif"
-            confidence_map_tif = f"confidence_map_{tile_id}.tif"
-            probability_map_tif = f"probability_map_{tile_id}.tif"
-            shutil.copy2(classified_tif, args.output_path)
-            shutil.copy2(confidence_map_tif, args.output_path)
-            # shutil.copy2(probability_map_tif, args.output_path)
-
-            if remapping_table:
+        if remapping_table:
+            commands = []
+            for tile in tiles:
+                tile_id = tile.tile_id
                 classified_pre_tif = f"classified_pre_{tile_id}.tif"
-                shutil.copy2(classified_pre_tif, args.output_path)
+                classified_tif = f"classified_{tile_id}.tif"
+                command = [
+                    "otbcli",
+                    "ClassRemapping",
+                    "-table",
+                    remapping_table,
+                    "-in",
+                    classified_pre_tif,
+                    "-out",
+                    classified_tif,
+                ]
+                commands.append(command)
 
-        shutil.copy2(confusion_matrix, args.output_path)
+            containers = []
+            for command in commands:
+                container = ContainerInfo(
+                    image=PROCESSORS_NEW_IMAGE_NAME,
+                    command=command,
+                    working_dir=output_dir,
+                    volumes=volumes,
+                )
+                containers.append(container)
+            run_containers_concurrently(client, pool_med_conc, containers)
+
+        if args.output_path:
+            for tile in tiles:
+                tile_id = tile.tile_id
+                classified_tif = f"classified_{tile_id}.tif"
+                confidence_map_tif = f"confidence_map_{tile_id}.tif"
+                probability_map_tif = f"probability_map_{tile_id}.tif"
+                shutil.copy2(classified_tif, args.output_path)
+                shutil.copy2(confidence_map_tif, args.output_path)
+                # shutil.copy2(probability_map_tif, args.output_path)
+
+                if remapping_table:
+                    classified_pre_tif = f"classified_pre_{tile_id}.tif"
+                    shutil.copy2(classified_pre_tif, args.output_path)
+
+            shutil.copy2(confusion_matrix, args.output_path)
 
 
 if __name__ == "__main__":
