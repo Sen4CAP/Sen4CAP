@@ -524,7 +524,7 @@ class DataPreparation(object):
         cmd += ["-lco", "UNLOGGED=YES"]
         cmd += ["-lco", "SPATIAL_INDEX=NONE"]
         cmd += ["-nln", strata_table_staging]
-        cmd += ["-nlt", "POLYGON"]
+        cmd += ["-nlt", "MULTIPOLYGON"]
         run_command(cmd)
 
         with self.get_connection() as conn:
