@@ -1004,7 +1004,7 @@ def run_sample_extraction(
                 and os.path.exists(validation_points)
             ):
                 command = [
-                    "geo-tools",
+                    "erdy",
                     "sample-extraction",
                     bands_vrt,
                     "--points",
