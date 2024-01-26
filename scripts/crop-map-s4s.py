@@ -107,19 +107,83 @@ def get_season_dates(start_date, end_date):
 
 class FeatureSet(object):
     def __init__(self):
-        self.s2_reflectance_10m = True
-        self.s2_reflectance_20m = True
+        self.s2_b2 = False
+        self.s2_b3 = True
+        self.s2_b4 = True
+        self.s2_b8 = True
+        self.s2_b5 = True
+        self.s2_b6 = True
+        self.s2_b7 = True
+        self.s2_b11 = True
+        self.s2_b12 = True
+
         self.vegetation_indices = True
         self.vegetation_indices_statistics = True
         self.red_edge_features = False
 
         self.s1_features = True
 
-    def want_s2_reflectance_10m(self):
-        return self.s2_reflectance_10m
+    def want_s2_b2(self):
+        return self.s2_b2
 
-    def want_s2_reflectance_20m(self):
-        return self.s2_reflectance_20m
+    def want_s2_b3(self):
+        return self.s2_b3
+
+    def want_s2_b4(self):
+        return self.s2_b4
+
+    def want_s2_b8(self):
+        return self.s2_b8
+
+    def want_s2_b5(self):
+        return self.s2_b5
+
+    def want_s2_b6(self):
+        return self.s2_b6
+
+    def want_s2_b7(self):
+        return self.s2_b7
+
+    def want_s2_b11(self):
+        return self.s2_b11
+
+    def want_s2_b12(self):
+        return self.s2_b12
+
+    def need_s2_b2(self):
+        return self.s2_b2 or self.need_red_edge_features()
+
+    def need_s2_b3(self):
+        return self.s2_b3 or self.need_vegetation_indices()
+
+    def need_s2_b4(self):
+        return (
+            self.s2_b4
+            or self.need_vegetation_indices()
+            or self.need_red_edge_features()
+        )
+
+    def need_s2_b8(self):
+        return (
+            self.s2_b8
+            or self.need_vegetation_indices()
+            or self.need_red_edge_features()
+        )
+
+    def need_s2_b5(self):
+        return self.s2_b5 or self.need_red_edge_features()
+
+    def need_s2_b6(self):
+        return self.s2_b6 or self.need_red_edge_features()
+
+    def need_s2_b7(self):
+        return self.s2_b7 or self.need_red_edge_features()
+
+    def need_s2_b11(self):
+        return self.s2_b11 or self.need_vegetation_indices()
+
+    def need_s2_b12(self):
+        return self.s2_b12
 
     def want_vegetation_indices(self):
         return self.vegetation_indices
@@ -132,19 +196,6 @@ class FeatureSet(object):
 
     def want_s1_features(self):
         return self.s1_features
-
-    def need_s2_reflectance_b2(self):
-        return self.need_red_edge_features()
-
-    def need_s2_reflectance_10m(self):
-        return self.s2_reflectance_10m or self.need_vegetation_indices()
-
-    def need_s2_reflectance_20m(self):
-        return (
-            self.s2_reflectance_20m
-            or self.need_vegetation_indices()
-            or self.need_red_edge_features()
-        )
 
     def need_vegetation_indices(self):
         return self.vegetation_indices or self.vegetation_indices_statistics
@@ -161,13 +212,59 @@ class FeatureSet(object):
     @staticmethod
     def parse(features):
         feature_set = FeatureSet()
-        if features:
-            feature_set.s2_reflectance_10m = "sr10" in features
-            feature_set.s2_reflectance_20m = "sr20" in features
-            feature_set.vegetation_indices = "vi" in features
-            feature_set.vegetation_indices_statistics = "vis" in features
-            feature_set.red_edge_features = "re" in features
-            feature_set.s1_features = "sar" in features
+        if not features:
+            return feature_set
+
+        feature_set.vegetation_indices = False
+        feature_set.vegetation_indices_statistics = False
+        feature_set.red_edge_features = False
+        feature_set.s1_features = False
+
+        for feature in features:
+            if feature.startswith("-"):
+                feature = feature[1:]
+                value = False
+            else:
+                value = True
+
+            if feature == "s2_b2":
+                feature_set.s2_b2 = value
+            elif feature == "s2_b3":
+                feature_set.s2_b3 = value
+            elif feature == "s2_b4":
+                feature_set.s2_b4 = value
+            elif feature == "s2_b8":
+                feature_set.s2_b8 = value
+            elif feature == "s2_b5":
+                feature_set.s2_b5 = value
+            elif feature == "s2_b6":
+                feature_set.s2_b6 = value
+            elif feature == "s2_b7":
+                feature_set.s2_b7 = value
+            elif feature == "s2_b11":
+                feature_set.s2_b11 = value
+            elif feature == "s2_b12":
+                feature_set.s2_b12 = value
+            elif feature == "sr10":
+                feature_set.s2_b2 = value
+                feature_set.s2_b3 = value
+                feature_set.s2_b4 = value
+                feature_set.s2_b8 = value
+            elif feature == "sr20":
+                feature_set.s2_b5 = value
+                feature_set.s2_b6 = value
+                feature_set.s2_b7 = value
+                feature_set.s2_b11 = value
+                feature_set.s2_b12 = value
+            elif feature == "vi":
+                feature_set.vegetation_indices = value
+            elif feature == "vis":
+                feature_set.vegetation_indices_statistics = value
+            elif feature == "re":
+                feature_set.red_edge_features = value
+            elif feature == "sar":
+                feature_set.s1_features = value
+
         return feature_set
 
 
@@ -533,58 +630,6 @@ def get_site_strata(conn: connection, site_id: int) -> List[Stratum]:
     return strata
 
 
-def get_band_names(
-    feature_set: FeatureSet, output_dates: List[date], s1_features: List[str]
-):
-    band_names = []
-    if feature_set.want_s2_reflectance_10m():
-        for b in [
-            "S2_B03",
-            "S2_B04",
-            "S2_B08",
-        ]:
-            for d in output_dates:
-                dstr = d.strftime("%Y_%m_%d")
-                band_names.append(f"{b}_{dstr}")
-    if feature_set.want_s2_reflectance_20m():
-        for b in [
-            "S2_B05",
-            "S2_B06",
-            "S2_B07",
-            "S2_B11",
-            "S2_B12",
-        ]:
-            for d in output_dates:
-                dstr = d.strftime("%Y_%m_%d")
-                band_names.append(f"{b}_{dstr}")
-    if feature_set.want_vegetation_indices():
-        for b in [
-            "NDVI",
-            "NDWI",
-            "BRIGHTNESS",
-        ]:
-            for d in output_dates:
-                dstr = d.strftime("%Y_%m_%d")
-                band_names.append(f"{b}_{dstr}")
-    if feature_set.want_red_edge_features():
-        for b in [
-            "NDRE",
-            "REPI",
-            "PSRI",
-            "CIRE",
-        ]:
-            for d in output_dates:
-                dstr = d.strftime("%Y_%m_%d")
-                band_names.append(f"{b}_{dstr}")
-    if feature_set.want_vegetation_indices_statistics():
-        for indicator in ["NDVI", "NDWI", "BRIGHTNESS"]:
-            for statistic in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
-                band_name = f"{indicator}_{statistic}"
-                band_names.append(band_name)
-    band_names += s1_features
-    return band_names
-
-
 def write_tile_vrts(
     strata: List[Stratum],
     feature_set: FeatureSet,
@@ -594,6 +639,39 @@ def write_tile_vrts(
 ) -> List[str]:
     raster_size = 10980
     block_size = 256
+
+    band_types = []
+
+    if feature_set.want_s2_b2():
+        band_types.append("S2_B02")
+    if feature_set.want_s2_b3():
+        band_types.append("S2_B03")
+    if feature_set.want_s2_b4():
+        band_types.append("S2_B04")
+    if feature_set.want_s2_b8():
+        band_types.append("S2_B08")
+
+    if feature_set.want_s2_b5():
+        band_types.append("S2_B05")
+    if feature_set.want_s2_b6():
+        band_types.append("S2_B06")
+    if feature_set.want_s2_b7():
+        band_types.append("S2_B07")
+    if feature_set.want_s2_b11():
+        band_types.append("S2_B11")
+    if feature_set.want_s2_b12():
+        band_types.append("S2_B12")
+
+    if feature_set.want_vegetation_indices():
+        band_types.append("NDVI")
+        band_types.append("NDWI")
+        band_types.append("BRIGHTNESS")
+
+    if feature_set.want_red_edge_features():
+        band_types.append("NDRE")
+        band_types.append("REPI")
+        band_types.append("PSRI")
+        band_types.append("CIRE")
 
     season_start = output_dates[0]
     season_end = output_dates[-1]
@@ -626,41 +704,13 @@ def write_tile_vrts(
             f"Stratum {stratum.stratum_id}: start date {stratum_start_date}, end date {stratum_end_date}, start {stratum_start_date_idx}, end {stratum_end_date_idx}"
         )
         band_names = []
-        if feature_set.want_s2_reflectance_10m():
-            for name in ["S2_B03", "S2_B04", "S2_B08"]:
-                for b, d in enumerate(
-                    output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                    start=stratum_start_date_idx + 1,
-                ):
-                    dstr = d.strftime("%Y_%m_%d")
-                    band_names.append(f"{name}_{dstr}")
-
-        if feature_set.want_s2_reflectance_20m():
-            for name in ["S2_B05", "S2_B06", "S2_B07", "S2_B11", "S2_B12"]:
-                for b, d in enumerate(
-                    output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                    start=stratum_start_date_idx + 1,
-                ):
-                    dstr = d.strftime("%Y_%m_%d")
-                    band_names.append(f"{name}_{dstr}")
-
-        if feature_set.want_vegetation_indices():
-            for name in ["NDVI", "NDWI", "BRIGHTNESS"]:
-                for b, d in enumerate(
-                    output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                    start=stratum_start_date_idx + 1,
-                ):
-                    dstr = d.strftime("%Y_%m_%d")
-                    band_names.append(f"{name}_{dstr}")
-
-        if feature_set.want_red_edge_features():
-            for name in ["NDRE", "REPI", "PSRI", "CIRE"]:
-                for b, d in enumerate(
-                    output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                    start=stratum_start_date_idx + 1,
-                ):
-                    dstr = d.strftime("%Y_%m_%d")
-                    band_names.append(f"{name}_{dstr}")
+        for name in band_types:
+            for b, d in enumerate(
+                output_dates[stratum_start_date_idx:stratum_end_date_idx],
+                start=stratum_start_date_idx + 1,
+            ):
+                dstr = d.strftime("%Y_%m_%d")
+                band_names.append(f"{name}_{dstr}")
 
         if feature_set.want_vegetation_indices_statistics():
             for fname in ["NDVI", "NDWI", "BRIGHTNESS"]:
@@ -672,6 +722,7 @@ def write_tile_vrts(
                 band_names.append(name)
 
         for tile in stratum.tiles:
+            b2_tif = f"S2_B02_{tile}.tif"
             b3_tif = f"S2_B03_{tile}.tif"
             b4_tif = f"S2_B04_{tile}.tif"
             b8_tif = f"S2_B08_{tile}.tif"
@@ -695,8 +746,14 @@ def write_tile_vrts(
             psri = f"S2_PSRI_{tile}.tif"
             cire = f"S2_CIRE_{tile}.tif"
 
-            if feature_set.need_s2_reflectance_10m():
+            if feature_set.need_s2_b2():
+                ds = gdal.Open(b2_tif, gdal.gdalconst.GA_ReadOnly)
+            elif feature_set.need_s2_b3():
                 ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
+            elif feature_set.need_s2_b4():
+                ds = gdal.Open(b4_tif, gdal.gdalconst.GA_ReadOnly)
+            elif feature_set.need_s2_b8():
+                ds = gdal.Open(b8_tif, gdal.gdalconst.GA_ReadOnly)
             elif feature_set.want_s1_features:
                 ds = gdal.Open(f"S1_{tile}.vrt", gdal.gdalconst.GA_ReadOnly)
             else:
@@ -719,161 +776,77 @@ def write_tile_vrts(
             )
 
             out_band = 1
-            if feature_set.want_s2_reflectance_10m():
-                for p, name in zip(
-                    [b3_tif, b4_tif, b8_tif],
-                    ["S2_B03", "S2_B04", "S2_B08"],
-                ):
-                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                    assert ds.RasterCount == len(output_dates)
-                    for b, d in enumerate(
-                        output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                        start=stratum_start_date_idx + 1,
-                    ):
-                        dstr = d.strftime("%Y_%m_%d")
-                        description = f"{name}_{dstr}"
-                        assert band_names[out_band - 1] == description
-                        vrt_raster_band = E.VRTRasterBand(
-                            {
-                                "dataType": "Int16",
-                                "band": str(out_band),
-                                "blockXSize": str(block_size),
-                                "blockYSize": str(block_size),
-                            },
-                            E.Description(description),
-                            E.SimpleSource(
-                                E.SourceFilename({"relativeToVRT": "1"}, p),
-                                E.SourceBand(str(b)),
-                                E.SourceProperties(
-                                    {
-                                        "RasterXSize": str(raster_size),
-                                        "RasterYSize": str(raster_size),
-                                        "DataType": "Int16",
-                                        "BlockXSize": str(block_size),
-                                        "BlockYSize": str(block_size),
-                                    }
-                                ),
-                            ),
-                        )
-                        vrt_dataset.append(vrt_raster_band)
-                        out_band += 1
 
-            if feature_set.want_s2_reflectance_20m():
-                for p, name in zip(
-                    [b5_10m_vrt, b6_10m_vrt, b7_10m_vrt, b11_10m_vrt, b12_10m_vrt],
-                    ["S2_B05", "S2_B06", "S2_B07", "S2_B11", "S2_B12"],
-                ):
-                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                    assert ds.RasterCount == len(output_dates)
-                    for b, d in enumerate(
-                        output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                        start=stratum_start_date_idx + 1,
-                    ):
-                        dstr = d.strftime("%Y_%m_%d")
-                        description = f"{name}_{dstr}"
-                        assert band_names[out_band - 1] == description
-                        vrt_raster_band = E.VRTRasterBand(
-                            {
-                                "dataType": "Int16",
-                                "band": str(out_band),
-                                "blockXSize": str(block_size),
-                                "blockYSize": str(block_size),
-                            },
-                            E.Description(description),
-                            E.SimpleSource(
-                                E.SourceFilename({"relativeToVRT": "1"}, p),
-                                E.SourceBand(str(b)),
-                                E.SourceProperties(
-                                    {
-                                        "RasterXSize": str(raster_size),
-                                        "RasterYSize": str(raster_size),
-                                        "DataType": "Int16",
-                                        "BlockXSize": str(block_size),
-                                        "BlockYSize": str(block_size),
-                                    }
-                                ),
-                            ),
-                        )
-                        vrt_dataset.append(vrt_raster_band)
-                        out_band += 1
+            band_files = []
+
+            if feature_set.want_s2_b2():
+                band_files.append(b2_tif)
+            if feature_set.want_s2_b3():
+                band_files.append(b3_tif)
+            if feature_set.want_s2_b4():
+                band_files.append(b4_tif)
+            if feature_set.want_s2_b8():
+                band_files.append(b8_tif)
+
+            if feature_set.want_s2_b5():
+                band_files.append(b5_10m_vrt)
+            if feature_set.want_s2_b6():
+                band_files.append(b6_10m_vrt)
+            if feature_set.want_s2_b7():
+                band_files.append(b7_10m_vrt)
+            if feature_set.want_s2_b11():
+                band_files.append(b11_10m_vrt)
+            if feature_set.want_s2_b12():
+                band_files.append(b12_10m_vrt)
 
             if feature_set.want_vegetation_indices():
-                for p, name in zip(
-                    [ndvi, ndwi, brightness],
-                    ["NDVI", "NDWI", "BRIGHTNESS"],
-                ):
-                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                    assert ds.RasterCount == len(output_dates)
-                    for b, d in enumerate(
-                        output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                        start=stratum_start_date_idx + 1,
-                    ):
-                        dstr = d.strftime("%Y_%m_%d")
-                        description = f"{name}_{dstr}"
-                        assert band_names[out_band - 1] == description
-                        vrt_raster_band = E.VRTRasterBand(
-                            {
-                                "dataType": "Int16",
-                                "band": str(out_band),
-                                "blockXSize": str(block_size),
-                                "blockYSize": str(block_size),
-                            },
-                            E.Description(description),
-                            E.SimpleSource(
-                                E.SourceFilename({"relativeToVRT": "1"}, p),
-                                E.SourceBand(str(b)),
-                                E.SourceProperties(
-                                    {
-                                        "RasterXSize": str(raster_size),
-                                        "RasterYSize": str(raster_size),
-                                        "DataType": "Int16",
-                                        "BlockXSize": str(block_size),
-                                        "BlockYSize": str(block_size),
-                                    }
-                                ),
-                            ),
-                        )
-                        vrt_dataset.append(vrt_raster_band)
-                        out_band += 1
+                band_files.append(ndvi)
+                band_files.append(ndwi)
+                band_files.append(brightness)
 
             if feature_set.want_red_edge_features():
-                for p, name in zip(
-                    [ndre, repi, psri, cire],
-                    ["NDRE", "REPI", "PSRI", "CIRE"],
+                band_files.append(ndre)
+                band_files.append(repi)
+                band_files.append(psri)
+                band_files.append(cire)
+
+            for p, name in zip(
+                band_files,
+                band_types,
+            ):
+                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
+                assert ds.RasterCount == len(output_dates)
+                for b, d in enumerate(
+                    output_dates[stratum_start_date_idx:stratum_end_date_idx],
+                    start=stratum_start_date_idx + 1,
                 ):
-                    ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                    assert ds.RasterCount == len(output_dates)
-                    for b, d in enumerate(
-                        output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                        start=stratum_start_date_idx + 1,
-                    ):
-                        dstr = d.strftime("%Y_%m_%d")
-                        description = f"{name}_{dstr}"
-                        assert band_names[out_band - 1] == description
-                        vrt_raster_band = E.VRTRasterBand(
-                            {
-                                "dataType": "Int16",
-                                "band": str(out_band),
-                                "blockXSize": str(block_size),
-                                "blockYSize": str(block_size),
-                            },
-                            E.Description(description),
-                            E.SimpleSource(
-                                E.SourceFilename({"relativeToVRT": "1"}, p),
-                                E.SourceBand(str(b)),
-                                E.SourceProperties(
-                                    {
-                                        "RasterXSize": str(raster_size),
-                                        "RasterYSize": str(raster_size),
-                                        "DataType": "Int16",
-                                        "BlockXSize": str(block_size),
-                                        "BlockYSize": str(block_size),
-                                    }
-                                ),
+                    dstr = d.strftime("%Y_%m_%d")
+                    description = f"{name}_{dstr}"
+                    assert band_names[out_band - 1] == description
+                    vrt_raster_band = E.VRTRasterBand(
+                        {
+                            "dataType": "Int16",
+                            "band": str(out_band),
+                            "blockXSize": str(block_size),
+                            "blockYSize": str(block_size),
+                        },
+                        E.Description(description),
+                        E.SimpleSource(
+                            E.SourceFilename({"relativeToVRT": "1"}, p),
+                            E.SourceBand(str(b)),
+                            E.SourceProperties(
+                                {
+                                    "RasterXSize": str(raster_size),
+                                    "RasterYSize": str(raster_size),
+                                    "DataType": "Int16",
+                                    "BlockXSize": str(block_size),
+                                    "BlockYSize": str(block_size),
+                                }
                             ),
-                        )
-                        vrt_dataset.append(vrt_raster_band)
-                        out_band += 1
+                        ),
+                    )
+                    vrt_dataset.append(vrt_raster_band)
+                    out_band += 1
 
             if feature_set.want_vegetation_indices_statistics():
                 for p, fname in zip(
@@ -1780,7 +1753,6 @@ def main():
         "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
         "GDAL_PAM_ENABLED": "NO",
     }
-    band_names = get_band_names(feature_set, output_dates, s1_features)
     commands = []
     for tile, products in products_by_tile.items():
         if len(products) == 0:
@@ -1869,7 +1841,7 @@ def main():
         interpolation_max_distance = 30
         interpolation_window_radius = 15
 
-        if feature_set.need_s2_reflectance_b2() and not os.path.exists(b2_tif):
+        if feature_set.need_s2_b2() and not os.path.exists(b2_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -1906,7 +1878,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_10m() and not os.path.exists(b3_tif):
+        if feature_set.need_s2_b3() and not os.path.exists(b3_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -1943,7 +1915,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_10m() and not os.path.exists(b4_tif):
+        if feature_set.need_s2_b4() and not os.path.exists(b4_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -1980,7 +1952,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_10m() and not os.path.exists(b8_tif):
+        if feature_set.need_s2_b8() and not os.path.exists(b8_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -2017,7 +1989,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_20m() and not os.path.exists(b5_tif):
+        if feature_set.need_s2_b5() and not os.path.exists(b5_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -2054,7 +2026,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_20m() and not os.path.exists(b6_tif):
+        if feature_set.need_s2_b6() and not os.path.exists(b6_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -2091,7 +2063,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_20m() and not os.path.exists(b7_tif):
+        if feature_set.need_s2_b7() and not os.path.exists(b7_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -2128,7 +2100,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_20m() and not os.path.exists(b11_tif):
+        if feature_set.need_s2_b11() and not os.path.exists(b11_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -2165,7 +2137,7 @@ def main():
                 environment=env,
             )
             containers.append(container)
-        if feature_set.need_s2_reflectance_20m() and not os.path.exists(b12_tif):
+        if feature_set.need_s2_b12() and not os.path.exists(b12_tif):
             command = (
                 [
                     "otbcli_TemporalResampling",
@@ -2219,8 +2191,8 @@ def main():
         b11_nodata_vrt = f"S2_B11_{tile}_nodata.vrt"
         b12_nodata_vrt = f"S2_B12_{tile}_nodata.vrt"
 
-        if feature_set.need_s2_reflectance_20m():
-            command_b5_nodata_vrt = [
+        if feature_set.need_s2_b5():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-a_nodata",
@@ -2228,7 +2200,9 @@ def main():
                 b5_tif,
                 b5_nodata_vrt,
             ]
-            command_b6_nodata_vrt = [
+            commands.append(command)
+        if feature_set.need_s2_b6():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-a_nodata",
@@ -2236,7 +2210,9 @@ def main():
                 b6_tif,
                 b6_nodata_vrt,
             ]
-            command_b7_nodata_vrt = [
+            commands.append(command)
+        if feature_set.need_s2_b7():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-a_nodata",
@@ -2244,7 +2220,9 @@ def main():
                 b7_tif,
                 b7_nodata_vrt,
             ]
-            command_b11_nodata_vrt = [
+            commands.append(command)
+        if feature_set.need_s2_b11():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-a_nodata",
@@ -2252,7 +2230,9 @@ def main():
                 b11_tif,
                 b11_nodata_vrt,
             ]
-            command_b12_nodata_vrt = [
+            commands.append(command)
+        if feature_set.need_s2_b12():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-a_nodata",
@@ -2260,12 +2240,8 @@ def main():
                 b12_tif,
                 b12_nodata_vrt,
             ]
+            commands.append(command)
 
-            commands.append(command_b5_nodata_vrt)
-            commands.append(command_b6_nodata_vrt)
-            commands.append(command_b7_nodata_vrt)
-            commands.append(command_b11_nodata_vrt)
-            commands.append(command_b12_nodata_vrt)
     pool_med_conc.map(run_command, commands, chunksize=1)
 
     commands = []
@@ -2282,8 +2258,8 @@ def main():
         b11_10m_vrt = f"S2_B11_10m_{tile}.vrt"
         b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
 
-        if feature_set.need_s2_reflectance_20m():
-            command_b5_10m_vrt = [
+        if feature_set.need_s2_b5():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-tr",
@@ -2294,7 +2270,10 @@ def main():
                 b5_nodata_vrt,
                 b5_10m_vrt,
             ]
-            command_b6_10m_vrt = [
+            commands.append(command)
+
+        if feature_set.need_s2_b6():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-tr",
@@ -2305,7 +2284,10 @@ def main():
                 b6_nodata_vrt,
                 b6_10m_vrt,
             ]
-            command_b7_10m_vrt = [
+            commands.append(command)
+
+        if feature_set.need_s2_b7():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-tr",
@@ -2316,7 +2298,10 @@ def main():
                 b7_nodata_vrt,
                 b7_10m_vrt,
             ]
-            command_b11_10m_vrt = [
+            commands.append(command)
+
+        if feature_set.need_s2_b11():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-tr",
@@ -2327,7 +2312,10 @@ def main():
                 b11_nodata_vrt,
                 b11_10m_vrt,
             ]
-            command_b12_10m_vrt = [
+            commands.append(command)
+
+        if feature_set.need_s2_b12():
+            command = [
                 "gdal_translate",
                 "-q",
                 "-tr",
@@ -2338,12 +2326,8 @@ def main():
                 b12_nodata_vrt,
                 b12_10m_vrt,
             ]
+            commands.append(command)
 
-            commands.append(command_b5_10m_vrt)
-            commands.append(command_b6_10m_vrt)
-            commands.append(command_b7_10m_vrt)
-            commands.append(command_b11_10m_vrt)
-            commands.append(command_b12_10m_vrt)
     pool_med_conc.map(run_command, commands, chunksize=1)
 
     containers = []
