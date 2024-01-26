@@ -713,6 +713,32 @@ where ST_Intersects(municipality.geom, polygons_extent_4326.geog);
                 logging.debug(query.as_string(conn))
                 cursor.execute(query)
 
+                print("Reprojecting strata")
+                query = SQL(
+                    """
+create temporary table site_stratum as
+with polygons_srid as (
+         select Find_SRID('public', {}, 'wkb_geometry') as srid
+     )
+select
+    stratum_type_id,
+    stratum_id,
+    ST_Transform(wkb_geometry, srid) as wkb_geometry
+from stratum, polygons_srid
+where (stratum.site_id, stratum.year) = ({}, {})
+"""
+                ).format(
+                    Literal(self.parcels_table_staging),
+                    Literal(self.config.site_id),
+                    Literal(self.year),
+                )
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
+
+                query = SQL("create index on site_stratum using gist (wkb_geometry);")
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
+
                 print("Creating spatial index on staging parcels table")
                 create_spatial_index(conn, self.parcels_table_staging, "wkb_geometry")
 
@@ -762,18 +788,18 @@ select
     ),
     coalesce(
         (select stratum_id
-         from stratum
-         where (site_id, year, stratum_type_id) = ({}, {}, {})
+         from site_stratum
+         where stratum_type_id = {}
            and ST_IsValid(polygons.wkb_geometry)
-           and ST_Intersects(polygons.wkb_geometry, stratum.wkb_geometry)
+           and ST_Intersects(polygons.wkb_geometry, site_stratum.wkb_geometry)
          limit 1)
         , 0),
     coalesce(
         (select stratum_id
-         from stratum
-         where (site_id, year, stratum_type_id) = ({}, {}, {})
+         from site_stratum
+         where stratum_type_id = {}
            and ST_IsValid(polygons.wkb_geometry)
-           and ST_Intersects(polygons.wkb_geometry, stratum.wkb_geometry)
+           and ST_Intersects(polygons.wkb_geometry, site_stratum.wkb_geometry)
          limit 1)
         , 0)
 from {} polygons;"""
@@ -782,11 +808,7 @@ from {} polygons;"""
                     area_expr,
                     perimeter_expr,
                     area_expr,
-                    Literal(self.config.site_id),
-                    Literal(self.year),
                     Literal(STRATUM_TYPE_CLASSIFICATION),
-                    Literal(self.config.site_id),
-                    Literal(self.year),
                     Literal(STRATUM_TYPE_YIELD),
                     parcels_table_staging_id,
                 )
