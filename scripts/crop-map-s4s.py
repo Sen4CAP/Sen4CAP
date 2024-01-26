@@ -1839,70 +1839,6 @@ def main():
         write_stack_vrt_fast(b11s, b11_vrt)
         write_stack_vrt_fast(b12s, b12_vrt)
 
-        # command_b2_vrt = ["gdalbuildvrt", "-q", "-separate", b2_vrt] + b2s
-        # command_b3_vrt = ["gdalbuildvrt", "-q", "-separate", b3_vrt] + b3s
-        # command_b4_vrt = ["gdalbuildvrt", "-q", "-separate", b4_vrt] + b4s
-        # command_b8_vrt = ["gdalbuildvrt", "-q", "-separate", b8_vrt] + b8s
-
-        # command_b5_vrt = ["gdalbuildvrt", "-q", "-separate", b5_vrt] + b5s
-        # command_b6_vrt = ["gdalbuildvrt", "-q", "-separate", b6_vrt] + b6s
-        # command_b7_vrt = ["gdalbuildvrt", "-q", "-separate", b7_vrt] + b7s
-        # command_b11_vrt = ["gdalbuildvrt", "-q", "-separate", b11_vrt] + b11s
-        # command_b12_vrt = ["gdalbuildvrt", "-q", "-separate", b12_vrt] + b12s
-
-        # if (
-        #     feature_set.need_s2_reflectance_10m()
-        #     or feature_set.need_s2_reflectance_b2()
-        # ):
-        #     if not os.path.exists(mask_10m_vrt):
-        #         commands.append(command_mask_10m_vrt)
-
-    #     if feature_set.need_s2_reflectance_10m():
-    #         # if not os.path.exists(mask_10m_vrt):
-    #         #     commands.append(command_mask_10m_vrt)
-    #         if not os.path.exists(b3_vrt):
-    #             commands.append(command_b3_vrt)
-    #         if not os.path.exists(b4_vrt):
-    #             commands.append(command_b4_vrt)
-    #         if not os.path.exists(b8_vrt):
-    #             commands.append(command_b8_vrt)
-
-    #     if feature_set.need_s2_reflectance_b2():
-    #         if not os.path.exists(b2_vrt):
-    #             commands.append(command_b2_vrt)
-
-    #     if feature_set.need_s2_reflectance_20m():
-    #         # if not os.path.exists(mask_20m_vrt):
-    #         #     commands.append(command_mask_20m_vrt)
-    #         if not os.path.exists(b5_vrt):
-    #             commands.append(command_b5_vrt)
-    #         if not os.path.exists(b6_vrt):
-    #             commands.append(command_b6_vrt)
-    #         if not os.path.exists(b7_vrt):
-    #             commands.append(command_b7_vrt)
-    #         if not os.path.exists(b11_vrt):
-    #             commands.append(command_b11_vrt)
-    #         if not os.path.exists(b12_vrt):
-    #             commands.append(command_b12_vrt)
-    # pool_med_conc.map(lambda cmd: run_command(cmd, env=env), commands, chunksize=1)
-
-    # # work around mask layout
-    # commands = []
-    # for tile in products_by_tile.keys():
-    #     mask_10m_vrt = f"mask_10m_{tile}.vrt"
-    #     mask_20m_vrt = f"mask_20m_{tile}.vrt"
-
-    #     mask_10m_tif = f"mask_10m_{tile}.tif"
-    #     mask_20m_tif = f"mask_20m_{tile}.tif"
-
-    #     if feature_set.need_s2_reflectance_10m() and not os.path.exists(mask_10m_tif):
-    #         command_10m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_10m_vrt, mask_10m_tif]
-    #         commands.append(command_10m)
-    #     if feature_set.need_s2_reflectance_20m() and not os.path.exists(mask_20m_tif):
-    #         command_20m = ["gdal_translate", "-q", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", mask_20m_vrt, mask_20m_tif]
-    #         commands.append(command_20m)
-    # pool_lo_conc.map(run_command, commands, chunksize=1)
-
     containers = []
     tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
     for tile in products_by_tile.keys():
@@ -1925,9 +1861,6 @@ def main():
         b7_tif = f"S2_B07_{tile}.tif"
         b11_tif = f"S2_B11_{tile}.tif"
         b12_tif = f"S2_B12_{tile}.tif"
-
-        # mask_10m_tif = f"mask_10m_{tile}.tif"
-        # mask_20m_tif = f"mask_20m_{tile}.tif"
 
         mask_10m_vrt = f"mask_10m_{tile}.vrt"
         mask_20m_vrt = f"mask_20m_{tile}.vrt"
