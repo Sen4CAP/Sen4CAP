@@ -438,7 +438,7 @@ def load_tiles(
 with site_tiles as (
     select unnest(tiles) as tile_id
     from site_tiles
-    where site_id = 1
+    where site_id = %s
       and satellite_id = 1
 )
 select shape_tiles_s2.tile_id,
