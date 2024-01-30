@@ -1373,7 +1373,7 @@ def rasterize_stratum_masks(
             ]
             (min_x, max_x, min_y, max_y) = tile.geom.GetEnvelope()
             bounds = [min_x, min_y, max_x, max_y]
-            srs = tile.geom.GetSpatialReference()
+            srs = f"EPSG:{tile.epsg_code}"
             rasterize_options = gdal.RasterizeOptions(
                 format="GTiff",
                 outputType=gdal.GDT_Byte,
@@ -2525,7 +2525,108 @@ def main():
     else:
         stratum_date_filters = None
 
-    if not args.broceliande:
+    strata_for_tile: defaultdict[str, List[Optional[int]]] = defaultdict(lambda: [])
+    for stratum in strata:
+        for tile_id in stratum.tiles:
+            strata_for_tile[tile_id].append(stratum.stratum_id)
+
+    if args.broceliande:
+        tile_inputs_training: dict[str, str] = {}
+        tile_inputs_validation: dict[str, str] = {}
+        commands = []
+        for tile_id, strata in strata_for_tile.items():
+            if not strata:
+                pass
+
+            if not strata[0]:
+                training_polygons = f"training_polygons_{tile_id}.shp"
+                if os.path.exists(training_polygons):
+                    tile_inputs_training[tile_id] = training_polygons
+                validation_polygons = f"validation_polygons_{tile_id}.shp"
+                if os.path.exists(validation_polygons):
+                    tile_inputs_validation[tile_id] = validation_polygons
+            else:
+                has_training_polygons = False
+                has_validation_polygons = False
+
+                broceliande_training_vrt = f"training_polygons_{tile_id}.vrt"
+                broceliande_validation_vrt = f"validation_polygons_{tile_id}.vrt"
+                training_command = [
+                    "ogrmerge.py",
+                    "-overwrite_ds",
+                    "-single",
+                    "-o",
+                    broceliande_training_vrt,
+                ]
+                validation_command = [
+                    "ogrmerge.py",
+                    "-overwrite_ds",
+                    "-single",
+                    "-o",
+                    broceliande_validation_vrt,
+                ]
+                for stratum_id in strata:
+                    training_polygons = f"training_polygons_{stratum_id}_{tile_id}.shp"
+                    validation_polygons = (
+                        f"validation_polygons_{stratum_id}_{tile_id}.shp"
+                    )
+                    if os.path.exists(training_polygons):
+                        training_command.append(training_polygons)
+                        has_training_polygons = True
+                    if os.path.exists(validation_polygons):
+                        validation_command.append(validation_polygons)
+                        has_validation_polygons = True
+
+                if has_training_polygons:
+                    tile_inputs_training[tile_id] = broceliande_training_vrt
+                    commands.append(training_command)
+                if has_validation_polygons:
+                    tile_inputs_validation[tile_id] = broceliande_validation_vrt
+                    commands.append(validation_command)
+        pool_hi_conc.map(run_command, commands, chunksize=1)
+
+        for tile in tiles:
+            training_polygons = tile_inputs_training[tile.tile_id]
+            validation_polygons = tile_inputs_validation[tile.tile_id]
+            if not training_polygons or not validation_polygons:
+                continue
+
+            creation_options = [
+                "COMPRESS=DEFLATE",
+                "TILED=YES",
+                "NUM_THREADS=ALL_CPUS",
+            ]
+            (min_x, max_x, min_y, max_y) = tile.geom.GetEnvelope()
+            bounds = [min_x, min_y, max_x, max_y]
+            srs = f"EPSG:{tile.epsg_code}"
+            rasterize_options = gdal.RasterizeOptions(
+                format="GTiff",
+                outputType=gdal.GDT_Byte,
+                creationOptions=creation_options,
+                outputBounds=bounds,
+                outputSRS=srs,
+                width=10980,
+                height=10980,
+                xRes=10,
+                yRes=10,
+                noData=0,
+                attribute="code_lc",
+            )
+            training_raster = f"broceliande_training_{tile.tile_id}.tif"
+            if not os.path.exists(training_raster):
+                gdal.Rasterize(
+                    training_raster,
+                    training_polygons,
+                    options=rasterize_options,
+                )
+            validation_raster = f"broceliande_validation_{tile.tile_id}.tif"
+            if not os.path.exists(validation_raster):
+                gdal.Rasterize(
+                    validation_raster,
+                    validation_polygons,
+                    options=rasterize_options,
+                )
+    else:
         stratum_band_names = write_tile_vrts(
             strata, feature_set, s1_features, output_dates, stratum_date_filters
         )
@@ -2561,11 +2662,6 @@ def main():
         run_classification(client, pool_med_conc, output_dir, volumes, env, strata)
 
         if strata[0].stratum_id:
-            strata_for_tile = defaultdict(lambda: [])
-            for stratum in strata:
-                for tile_id in stratum.tiles:
-                    strata_for_tile[tile_id].append(stratum.stratum_id)
-
             rasterize_stratum_masks(tiles, strata, strata_for_tile)
             merge_strata(
                 client,
