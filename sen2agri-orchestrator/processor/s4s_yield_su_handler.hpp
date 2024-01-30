@@ -188,10 +188,11 @@ private:
     QStringList GetWeatherFeaturesTaskArgs(const QStringList &weatherFiles, const QString &parcelsShp, const QString &shpIdFieldName, const QString &outDir);
     QStringList GetWeatherFeaturesMergeTaskArgs(const QString &inDir, const QString &outWeatherFeatures);
 
-    QStringList GetAllFeaturesMergeTaskArgs(const QString &sgListFile, const QString &trendFeatFile, const QString &weatherFeatFile, const QString &outMergedFeatures);
+    QStringList GetAllFeaturesMergeTaskArgs(const QString &sgListFile, const QString &trendFeatFile, const QString &weatherFeatFile, const QString &outMergedFeatures, const QString &sgYieldLaiFeaturesPath);
     QStringList GetYieldFeaturesTaskArgs(const QString &inMergedFeatures, const QString &outYieldFeatures);
     QStringList GetYieldReferenceExtractionTaskArgs(int siteId, const QString &outRefYieldFile, const QDateTime &startDate, const QDateTime &endDate);
-    QStringList GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString &yieldReference, const QString &inYieldFeatures,
+    QStringList GetCropTypesExtractionTaskArgs(int siteId, int year, const QString &outCropTypesFile);
+    QStringList GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString &yieldReference, const QString &cropCodesFile, const QString &inYieldFeatures,
                                       const QString &outYieldEstimates, const QString &outYieldSUEstimates);
 
     QString GetProcessorDirValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,

@@ -10,11 +10,16 @@ class S4SCropTypeMappingHandler : public ProcessorHandler
 
     typedef struct CropTypeJobConfig {
         CropTypeJobConfig(EventProcessingContext *pContext, const JobSubmittedEvent &evt)
-            : event(evt), isScheduled(false) {
+            : event(evt) {
             pCtx = pContext;
             siteShortName = pContext->GetSiteShortName(evt.siteId);
             configParameters = pCtx->GetJobConfigurationParameters(evt.jobId, S4S_CTM_CFG_PREFIX);
             parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
+
+            startDate = ProcessorHandlerHelper::GetDateTimeFromString(
+                        ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "start_date", S4S_CTM_CFG_PREFIX));
+            endDate = ProcessorHandlerHelper::GetDateTimeFromString(
+                        ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "end_date", S4S_CTM_CFG_PREFIX));
         }
 
         EventProcessingContext *pCtx;
@@ -27,7 +32,6 @@ class S4SCropTypeMappingHandler : public ProcessorHandler
         QMap<QString, QString> mapCfgValues;
         std::map<QString, QString> configParameters;
         QJsonObject parameters;
-        bool isScheduled;
 
     } CropTypeJobConfig;
 
@@ -49,9 +53,4 @@ private:
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx,
                                         const JobSubmittedEvent &event, const QString &tmpPrdDir,
                                         const QDateTime &minDate, const QDateTime &maxDate);
-
-    bool GetStartEndDatesFromProducts(EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                      QDateTime &startDate, QDateTime &endDate, QList<ProductDetails> &productDetails);
-    void UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdate);
-    bool IsScheduledJobRequest(const QJsonObject &parameters);
 };

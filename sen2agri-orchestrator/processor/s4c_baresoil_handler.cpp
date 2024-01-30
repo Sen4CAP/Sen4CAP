@@ -59,7 +59,7 @@ NewStepList S4CBareSoilHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,co
 
     const QString &s1ResultsPath = s1ModelTask.GetFilePath("L4E_BS_S1results.csv");
     const QString &s1ModelPath = s1ModelTask.GetFilePath("L4E_BSmodelS1.sav");
-    const QString &s1FigImportancePath = s1ModelTask.GetFilePath("BSmodelS2featuresimportance.png");
+    const QString &s1FigImportancePath = s1ModelTask.GetFilePath("BSmodelS1featuresimportance.png");
 
     const QString &s2MarkersPath = markersTask.GetFilePath("L4E_BS_MarkersS2.csv");
     const QString &s1MarkersPath = markersTask.GetFilePath("L4E_BS_MarkersS1.csv");
@@ -90,6 +90,10 @@ NewStepList S4CBareSoilHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,co
     prdFormatterFiles.append(s1ModelPath);
     prdFormatterFiles.append(s1FigImportancePath);
 
+    prdFormatterFiles.append(s2MarkersPath);
+    prdFormatterFiles.append(s1MarkersPath);
+    prdFormatterFiles.append(allMarkersPath);
+
     const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, prdFormatterFiles);
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
 
@@ -118,7 +122,7 @@ QStringList S4CBareSoilHandler::GetS2CalibrationTaskArgs(const S4CBareSoilJobCon
 
 QStringList S4CBareSoilHandler::GetS1CalibrationTaskArgs(const S4CBareSoilJobConfig &cfg, const QString &s2CalibPath, const QString &s1CalibPath)
 {
-    return {    "--input", cfg.mdb1PrdPath,
+    return {    "--input", cfg.mdbL4SarMainPrdPath,
                 "--output", s1CalibPath,
                 "--s2-bs-calib", s2CalibPath
     };
@@ -146,7 +150,7 @@ QStringList S4CBareSoilHandler::GetS1ModelTaskArgs(const S4CBareSoilJobConfig &c
                                                    const QString &s1Results, const QString &outputModel,
                                                    const QString &figImportancePath)
 {
-    return {    "--input", cfg.mdb1PrdPath,
+    return {    "--input", cfg.mdbL4SarMainPrdPath,
                 "--output", s1Results,
                 "--s1-bs-calib", s1CalibPath,
                 "--estimators-number", QString::number(cfg.modelEstimatorsNo),
@@ -203,7 +207,7 @@ void S4CBareSoilHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
             const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
             GenericHighLevelProductHelper prdHelper(productFolder);
-            int prdId = ctx.InsertProduct({ ProductType::S4SYieldFeatProductTypeId, event.processorId,
+            int prdId = ctx.InsertProduct({ ProductType::S4CBareSoilProductTypeId, event.processorId,
                                             event.siteId, event.jobId, productFolder, prdHelper.GetAcqDate(),
                                             prodName, quicklook, footPrint,
                                             std::experimental::nullopt, TileIdList(), ProductIdsList() });
@@ -311,7 +315,7 @@ QStringList S4CBareSoilHandler::GetProductFormatterArgs(TaskToSubmit &productFor
     QString strTimePeriod = cfg.startDate.toString("yyyyMMddTHHmmss").append("_").append(cfg.endDate.toString("yyyyMMddTHHmmss"));
     QStringList additionalArgs = {"-processor.generic.files"};
     additionalArgs += listFiles;
-    return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.event.jobId, cfg.event.siteId, "S4S_YIELDFEAT", strTimePeriod,
+    return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.event.jobId, cfg.event.siteId, "S4C_BARESOIL", strTimePeriod,
                                          "generic", additionalArgs, true);
 }
 

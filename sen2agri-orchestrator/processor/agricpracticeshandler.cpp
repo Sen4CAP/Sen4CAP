@@ -340,7 +340,7 @@ ProcessorJobDefinitionParams AgricPracticesHandler::GetProcessingDefinitionImpl(
 
     // we might have an offset in days from starting the downloading products to start the S4C_L4C production
     // TODO: Is this really needed
-    int startSeasonOffset = mapCfg["processor.s4c_l4c.start_season_offset"].value.toInt();
+    int startSeasonOffset = mapCfg[QString(L4C_AP_CFG_PREFIX) + "start_season_offset"].value.toInt();
     // Get the start and end date for the production
     QDateTime startDate = seasonStartDate.addDays(startSeasonOffset);
     QDateTime endDate = qScheduledDate;

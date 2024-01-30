@@ -260,10 +260,10 @@ ProcessorJobDefinitionParams S4CCropTypeHandler::GetProcessingDefinitionImpl(
     }
 
     ConfigurationParameterValueMap cfgValues =
-        ctx.GetConfigurationParameters("processor.s4c_l4a.", siteId, requestOverrideCfgValues);
+        ctx.GetConfigurationParameters(L4A_CT_CFG_PREFIX, siteId, requestOverrideCfgValues);
     // we might have an offset in days from starting the downloading products to start the S4C L4A
     // production
-    int startSeasonOffset = cfgValues["processor.s4c_l4a.start_season_offset"].value.toInt();
+    int startSeasonOffset = cfgValues[QString(L4A_CT_CFG_PREFIX) + "start_season_offset"].value.toInt();
     seasonStartDate = seasonStartDate.addDays(startSeasonOffset);
 
     QDateTime startDate = seasonStartDate;

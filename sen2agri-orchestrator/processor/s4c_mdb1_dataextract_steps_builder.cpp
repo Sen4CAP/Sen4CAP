@@ -9,6 +9,7 @@
 #include "logger.hpp"
 #include "s4c_utils.hpp"
 #include "stepexecutiondecorator.h"
+#include "products/s1l2producthelper.h"
 #include <unordered_map>
 
 #include <memory>
@@ -17,6 +18,7 @@
 #include "products/producthelperfactory.h"
 using namespace orchestrator::products;
 
+#define S1_PREPROC_PROJ_KEY       "processor.l2s1.projection"
 #define MDB1_DEF_DATA_EXTR_ROOT   "/mnt/archive/marker_database_files/mdb1/{site}/{year}/data_extraction/"
 #define SECS_TILL_EOD               86399   // 24 hour x 3600 + 59 minutes x 60 + 59 seconds
 
@@ -62,7 +64,8 @@ QList<MarkerType> S4CMarkersDB1DataExtractStepsBuilder::allMarkerFileTypes =
 };
 
 QList<MetricType> S4CMarkersDB1DataExtractStepsBuilder::supportedMetrics = {
-  {"valid_pixels_enabled", "validity"},
+  {"valid_pixels_enabled", "validpixelscnt"},
+  {"invalid_pixels_enabled", "invalidpixelscnt"},
 //  {"stdev_enabled", "stdev"},
   {"minmax_enabled", "minmax"},
   {"median_enabled", "median"},
@@ -71,8 +74,10 @@ QList<MetricType> S4CMarkersDB1DataExtractStepsBuilder::supportedMetrics = {
 };
 
 S4CMarkersDB1DataExtractStepsBuilder::S4CMarkersDB1DataExtractStepsBuilder() :
-    m_idFieldName("NewID"), m_optParcelsPattern(".*_buf_5m.shp"), m_sarParcelsPattern(".*_buf_10m.shp")
+    dataExtractionRootDir(MDB1_DEF_DATA_EXTR_ROOT), m_bUseLpisTileRasters(false)
 {
+    m_parcelsPrdDescr = {"NewID", ".*_buf_5m.shp", ".*_(\\d{4,5})_buf_10m.shp", ".*_(\\d{2}[A-Z]{3})_S2.tif", ".*_(\\d{2}[A-Z]{3})_S1.tif"};
+    // parcelsPrdDescr = {"NewID", ".*_buf_5m.shp", ".*_(\\d{4,5})_buf_10m.shp", ".*_(\d{2}[A-Z]{3})_10m.tif", ".*_(\d{2}[A-Z]{3})_10m.tif"};   // sen4stat
 }
 
 QList<MarkerType> S4CMarkersDB1DataExtractStepsBuilder::GetEnabledMarkers() const {
@@ -92,11 +97,7 @@ QString S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionDir(const QString
 }
 
 QString S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionDir(int year, const QString &markerName) const {
-    QString val = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "data_extr_dir", MDB1_CFG_PREFIX);
-    if (val.size() == 0) {
-        val = MDB1_DEF_DATA_EXTR_ROOT;
-    }
-    val = val.replace("{site}", siteShortName);
+    QString val = dataExtractionRootDir;
     val = val.replace("{year}", QString::number(year));
     if (val.indexOf("{product_type}") == -1) {
         // force the product type to be added at the end of the directory
@@ -123,15 +124,22 @@ bool S4CMarkersDB1DataExtractStepsBuilder::HasAnyMarkerEnabled(const ProductType
     return false;
 }
 
-void S4CMarkersDB1DataExtractStepsBuilder::CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx) const
+void S4CMarkersDB1DataExtractStepsBuilder::CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx,
+                                                       const QList<int> &parentTaskIdxs) const
 {
+    QList<std::reference_wrapper<const TaskToSubmit>> parentsRefs;
+    for(int idx: parentTaskIdxs) {
+        if (idx < outAllTasksList.size()) {
+            parentsRefs.append(outAllTasksList[idx]);
+        }
+    }
     // create for all products of this marker the data extraction tasks, if needed
     QString dataExtrTaskName(isScheduledJob ? "mdb1-data-extraction-scheduled" :
                                               "mdb1-data-extraction");
     int initialTaskIdx = curTaskIdx;
     for(int i  = 0; i<fileInfos.size(); i++) {
         if (fileInfos[i].markerInfo.marker == marker.marker) {
-            outAllTasksList.append(TaskToSubmit{ dataExtrTaskName, {} });
+            outAllTasksList.append(TaskToSubmit{ dataExtrTaskName, parentsRefs });
             curTaskIdx++;
         }
     }
@@ -142,6 +150,11 @@ void S4CMarkersDB1DataExtractStepsBuilder::CreateTasks(const MarkerType &marker,
 void S4CMarkersDB1DataExtractStepsBuilder::CreateSteps(const MarkerType &marker, QList<TaskToSubmit> &allTasksList,
                                                        NewStepList &steps, int &curTaskIdx, QStringList &dataExtrDirs) const
 {
+    // If scheduled job, append any existing marker extraction dirs
+    if(isScheduledJob) {
+        dataExtrDirs += markerDataExtrDirInfos[marker.marker];
+    }
+
     for(int i  = 0; i<fileInfos.size(); i++) {
         const PrdMarkerInfo &prdMarkerInfo = fileInfos[i];
         if (prdMarkerInfo.markerInfo.marker == marker.marker) {
@@ -154,33 +167,70 @@ void S4CMarkersDB1DataExtractStepsBuilder::CreateSteps(const MarkerType &marker,
                 QDir().mkpath(dataExtrDirName);
                 dataExtrDirs.append(dataExtrDirName);
             }
-            const QStringList &dataExtractionArgs = GetDataExtractionArgs(m_idFieldName, prdMarkerInfo, dataExtrDirName);
-            steps.append(StepExecutionDecorator::GetInstance()->CreateTaskStep(parentProcessorName, dataExtractionTask,
-                                                                               "Markers1Extractor", dataExtractionArgs));
+            if (m_bUseLpisTileRasters) {
+
+                const QString &labelsImg = GetLabelsImage(prdMarkerInfo.prdFileInfo.inFilePath, prdMarkerInfo.prdFileInfo.prdTime.date().year());
+                const QStringList &dataExtractionArgs = GetDataExtractionFromRastersArgs(prdMarkerInfo, labelsImg, dataExtrDirName);
+                steps.append(StepExecutionDecorator::GetInstance()->CreateTaskStep(parentProcessorName, dataExtractionTask,
+                                                                                   "MdbFromLabelImage", dataExtractionArgs));
+            } else {
+                const QStringList &dataExtractionArgs = GetDataExtractionFromShpArgs(m_parcelsPrdDescr.m_idFieldName, prdMarkerInfo, dataExtrDirName);
+                steps.append(StepExecutionDecorator::GetInstance()->CreateTaskStep(parentProcessorName, dataExtractionTask,
+                                                                                   "Markers1Extractor", dataExtractionArgs));
+            }
         }
     }
 }
 
 void S4CMarkersDB1DataExtractStepsBuilder::Initialize(const QString &parentProc, EventProcessingContext &ctx, const QJsonObject &evtParams,
-                                                      int siteId, int jobId, const QStringList &markersEnabled)
+                                                      int siteId, int jobId, const QStringList &markersEnabled, bool bUseLpisTileRasters,
+                                                      const QMap<int, LpisInfos> &customParcelPrdsInfos,
+                                                      const ParcelsProductDescriptor &customParcelPrdDescriptor,
+                                                      const QString &dataExtrRootDir)
 {
     parentProcessorName = parentProc;
+    m_parentProcCfgPrefix = "processor." + parentProc + ".";
     pCtx = &ctx;
     parameters = evtParams;
     configParameters = pCtx->GetJobConfigurationParameters(jobId, MDB1_CFG_PREFIX);
+    parentConfigParameters = pCtx->GetJobConfigurationParameters(jobId, m_parentProcCfgPrefix);
     this->siteId = siteId;
     this->jobId = jobId;
     siteShortName = pCtx->GetSiteShortName(siteId);
-    isScheduledJob = IsScheduledJobRequest(parameters);
 
-    // Update parcels column name and file names patterns for the parcels product
-    UpdateParcelsPrdDescriptionsFromDB();
+    // update the data extraction root dir
+    if (dataExtrRootDir.size() > 0) {
+        dataExtractionRootDir = dataExtrRootDir;
+    } else {
+        const QString &val = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "data_extr_dir", MDB1_CFG_PREFIX);
+        if (val.size() > 0) {
+            dataExtractionRootDir = val;
+        }
+    }
+    dataExtractionRootDir = dataExtractionRootDir.replace("{site}", siteShortName);
+    Logger::info(QStringLiteral("MDB1: Using data extraction config root dir %1 for site %2").
+                 arg(dataExtractionRootDir).arg(siteId));
+
+    isScheduledJob = IsScheduledJobRequest(parameters);
+    m_bUseLpisTileRasters = bUseLpisTileRasters;
+    m_s1PreprocessingProj = GetS1ConfiguredProjection();
+    Logger::info(QStringLiteral("MDB1: The SAR products were processed with projection %1 for site %2").
+                 arg(m_s1PreprocessingProj).arg(siteId));
 
     InitEnabledMarkersDescriptions(markersEnabled);
 
-    // Get the list of most recent LPIS products per year, according to min and max dates extracted from files
-    lpisInfos = ExtractLpisInfos();
+    if (customParcelPrdsInfos.size() > 0) {
+        lpisInfos = customParcelPrdsInfos;
+        if (customParcelPrdDescriptor.m_idFieldName.size() > 0) {
+            m_parcelsPrdDescr.m_idFieldName = customParcelPrdDescriptor.m_idFieldName;
+        }
+    } else {
+        // Update parcels column name and file names patterns for the parcels product
+        UpdateParcelsPrdDescriptionsFromDB();
 
+        // Get the list of most recent LPIS products per year, according to min and max dates extracted from files
+        lpisInfos = ExtractLpisInfos();
+    }
     // Extract the raster files to be processed by filtering (if is the case) is LPIS is available and in case
     // of scheduled job,  if they were not processed or processing
     ExtractProductFiles();
@@ -213,12 +263,18 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
     QDateTime prdMinDate;
     QDateTime prdMaxDate;
 
+    Logger::info(QStringLiteral("MDB1: Extracting product files for site %1 for a number of %2 enabled markers and a number of enabled marker product types %3").
+                 arg(siteId).arg(enabledMarkers.size()).arg(enabledMarkersProductTypes.size()));
     if (enabledMarkers.size() > 0) {
         for (ProductType prdType: enabledMarkersProductTypes) {
             std::unique_ptr<ProductHelper> prdHelper = ProductHelperFactory::GetProductHelper(prdType);
-            const ProductList &prds = ProcessorHandler::GetInputProducts(*(pCtx), parameters, siteId, prdType,
-                                                                    &prdMinDate, &prdMaxDate);
+            // Here we need to use the parameters from the parent processor and not the MDB1 parameters
+
+            const ProductList &prds = ProcessorHandler::GetInputProducts(*(pCtx), parameters, parentConfigParameters, siteId, prdType,
+                                                                    m_parentProcCfgPrefix, &prdMinDate, &prdMaxDate);
             if (prds.size() == 0) {
+                Logger::info(QStringLiteral("MDB1: No products found in DB on site %1 for product type %2").
+                             arg(siteId).arg((int)prdType));
                 continue;
             }
             for (const auto &marker: enabledMarkers) {
@@ -244,9 +300,12 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
                         for (const auto &rasterFile : rasterFiles) {
                             if (isScheduledJob) {
                                 // first check if the product wasn't already processed
-                                const QString &dataExtrDirName = GetDataExtractionDir(prdDate.date().year(), marker.marker);
+                                const QString &dataExtrDirName = GetDataExtractionDir(prdYear, marker.marker);
                                 IsDataExtractionPerformed(dataExtrDirName, rasterFile) ? processedPrdFiles.push_back({rasterFile, prdDate}) :
                                                                                          missingPrdFiles.push_back({rasterFile, prdDate});
+                                if (!markerDataExtrDirInfos[marker.marker].contains(dataExtrDirName)) {
+                                    markerDataExtrDirInfos[marker.marker].push_back(dataExtrDirName);
+                                }
                             } else {
                                 // custom job, just add the file to the file infos list
                                 fileInfos.push_back({marker, rasterFile, prdDate});
@@ -289,8 +348,10 @@ QMap<int, LpisInfos> S4CMarkersDB1DataExtractStepsBuilder::ExtractLpisInfos() {
 
     QMap<int, LpisInfos> lpisInfos;
 
-    QRegularExpression reOpt(m_optParcelsPattern);
-    QRegularExpression reSar(m_sarParcelsPattern);
+    QRegularExpression reOpt(m_parcelsPrdDescr.m_optParcelsPattern);
+    QRegularExpression reSar(m_parcelsPrdDescr.m_sarParcelsPattern);
+    QRegularExpression reOptRasters(m_parcelsPrdDescr.m_optParcelsTiffsPattern);
+    QRegularExpression reSarRasters(m_parcelsPrdDescr.m_sarParcelsTiffsPattern);
     for(const Product &lpisPrd: lpisPrds) {
         // ignore LPIS products from a year where we already added an LPIS product newer
         QMap<int, LpisInfos>::const_iterator i = lpisInfos.find(lpisPrd.created.date().year());
@@ -308,21 +369,41 @@ QMap<int, LpisInfos> S4CMarkersDB1DataExtractStepsBuilder::ExtractLpisInfos() {
         Logger::info(QStringLiteral("MDB1: Extracting files for LPIS product %1").
                      arg(lpisPrd.fullPath));
 
-
-        const QStringList &dirFiles = directory.entryList(QStringList() << "*.shp" << "*.csv" << "*.gpkg" ,QDir::Files);
+        const QStringList &dirFiles = directory.entryList(QStringList() << "*.shp" << "*.csv" << "*.gpkg" << "*.tif" ,QDir::Files);
         LpisInfos lpisInfo;
         foreach(const QString &fileName, dirFiles) {
+            Logger::info(QStringLiteral("MDB1: Checking the LPIS file %1 ...").
+                         arg(directory.filePath(fileName)));
             // we don't want for optical products the LAEA projection
             if (reOpt.match(fileName).hasMatch() && (lpisInfo.opticalIdsGeomShapePath.size() == 0)) {
                 lpisInfo.opticalIdsGeomShapePath = directory.filePath(fileName);
+                Logger::info(QStringLiteral("MDB1: Using for Optical products the LPIS file %1").
+                             arg(lpisInfo.opticalIdsGeomShapePath));
             }
             // LAEA projection have priority for 10m buffer
-            if (reSar.match(fileName).hasMatch() && lpisInfo.sarGeomShapePath.size() == 0) {
-                lpisInfo.sarGeomShapePath = directory.filePath(fileName);
+            const QRegularExpressionMatch &sarShpMatch = reSar.match(fileName);
+            if (sarShpMatch.hasMatch()) {
+                const QString &projId = sarShpMatch.captured(1);
+                lpisInfo.sarGeomShapePaths[projId] = directory.filePath(fileName);
+                Logger::info(QStringLiteral("MDB1: Using for SAR products the LPIS file %1 for projection %2").
+                             arg(directory.filePath(fileName)).arg(projId));
             }
+
+            const QRegularExpressionMatch &matchOpt = reOptRasters.match(fileName);
+            if (matchOpt.hasMatch()) {
+                const QString &tileStr = matchOpt.captured(1);
+                lpisInfo.optTilesGeomsRasters[tileStr] = directory.filePath(fileName);
+            }
+
+            const QRegularExpressionMatch &matchSar = reSarRasters.match(fileName);
+            if (matchSar.hasMatch()) {
+                const QString &tileStr = matchSar.captured(1);
+                lpisInfo.sarTilesGeomsRasters[tileStr] = directory.filePath(fileName);
+            }
+
         }
         if (lpisInfo.opticalIdsGeomShapePath.size() != 0 &&
-                lpisInfo.sarGeomShapePath.size() != 0) {
+                lpisInfo.sarGeomShapePaths.size() != 0) {
             lpisInfo.productName = lpisPrd.name;
             lpisInfo.productPath = lpisPrd.fullPath;
             lpisInfo.productDate = lpisPrd.created;
@@ -337,29 +418,53 @@ QMap<int, LpisInfos> S4CMarkersDB1DataExtractStepsBuilder::ExtractLpisInfos() {
     return lpisInfos;
 }
 
-QStringList S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionArgs(const QString &uidField,
+QStringList S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionFromShpArgs(const QString &uidField,
                                                          const PrdMarkerInfo &inputFileInfo, const QString &outDir) const
 {
     QStringList retArgs = { "Markers1Extractor", "-field", uidField,
                             "-prdtype", ProductHelper::GetProductTypeShortName(inputFileInfo.markerInfo.prdType),
                             "-outdir", outDir, "-il", inputFileInfo.prdFileInfo.inFilePath };
-    const QString *idsGeomShapePath;
+    QString idsGeomShapePath;
     QMap<int, LpisInfos>::const_iterator i = lpisInfos.find(inputFileInfo.prdFileInfo.prdTime.date().year());
 
     switch(inputFileInfo.markerInfo.prdType) {
         case ProductType::L3BProductTypeId:
         case ProductType::L2AProductTypeId:
-            idsGeomShapePath = &(i.value().opticalIdsGeomShapePath);   // we can do that as we previously removed the products that do not have LPIS
+            idsGeomShapePath = i.value().opticalIdsGeomShapePath;   // we can do that as we previously removed the products that do not have LPIS
             break;
         default:
-            idsGeomShapePath = &(i.value().sarGeomShapePath);
+            // for S1 we try to identify as much as possible the best shapefile
+            idsGeomShapePath = GetBestS1ParcelsShp(i.value(), inputFileInfo.prdFileInfo.inFilePath);
             break;
     }
 
-    if (idsGeomShapePath->size() > 0) {
+    if (idsGeomShapePath.size() > 0) {
         retArgs += "-vec";
-        retArgs += *idsGeomShapePath;
+        retArgs += idsGeomShapePath;
     }
+
+    if (inputFileInfo.markerInfo.bandDiscriminationInfo.size() > 0) {
+        retArgs += "-banddiscr";
+        retArgs += inputFileInfo.markerInfo.bandDiscriminationInfo;
+    }
+
+    for (const MetricType &mt : supportedMetrics) {
+        bool mtEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, mt.configName, MDB1_CFG_PREFIX);
+        retArgs += ("-" + mt.paramName);
+        retArgs += QString::number(mtEnabled ? 1 : 0);
+    }
+
+    return retArgs;
+}
+
+QStringList S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionFromRastersArgs(const PrdMarkerInfo &inputFileInfo, const QString &labelsImg,
+                                                                                   const QString &outDir) const
+{
+    QStringList retArgs = { "MdbFromLabelImage", "-img", inputFileInfo.prdFileInfo.inFilePath,
+                            "-imglbl", labelsImg,
+                "-prdtype", ProductHelper::GetProductTypeShortName(inputFileInfo.markerInfo.prdType),
+                "-outdir", outDir
+              };
 
     if (inputFileInfo.markerInfo.bandDiscriminationInfo.size() > 0) {
         retArgs += "-banddiscr";
@@ -492,16 +597,87 @@ void S4CMarkersDB1DataExtractStepsBuilder::UpdateParcelsPrdDescriptionsFromDB() 
     const QString &parcelIdColName = ProcessorHandlerHelper::GetStringConfigValue(parameters, parcelsPrdKeys, "parcel_id_col_name", PARCELS_PRD_KEYS_PREFIX);
     if(parcelIdColName.size() > 0) {
         Logger::info(QStringLiteral("MDB1: Configured field name %1 from parcels product").arg(parcelIdColName));
-        m_idFieldName = parcelIdColName;
+        m_parcelsPrdDescr.m_idFieldName = parcelIdColName;
     }
     const QString &parcelsOptFileNamePat = ProcessorHandlerHelper::GetStringConfigValue(parameters, parcelsPrdKeys, "parcels_optical_file_name_pattern", PARCELS_PRD_KEYS_PREFIX);
     if(parcelsOptFileNamePat.size() > 0) {
-        Logger::info(QStringLiteral("MDB1: Configured pattern %1 for parcels product csv file").arg(parcelsOptFileNamePat));
-        m_optParcelsPattern = parcelsOptFileNamePat;
+        Logger::info(QStringLiteral("MDB1: Configured pattern %1 for parcels file used for optical products").arg(parcelsOptFileNamePat));
+        m_parcelsPrdDescr.m_optParcelsPattern = parcelsOptFileNamePat;
     }
     const QString &parcelsSarFileNamePat = ProcessorHandlerHelper::GetStringConfigValue(parameters, parcelsPrdKeys, "parcels_sar_file_name_pattern", PARCELS_PRD_KEYS_PREFIX);
     if(parcelsSarFileNamePat.size() > 0) {
-        Logger::info(QStringLiteral("MDB1: Configured pattern %1 for parcels product csv file").arg(parcelsSarFileNamePat));
-        m_sarParcelsPattern = parcelsSarFileNamePat;
+        Logger::info(QStringLiteral("MDB1: Configured pattern %1 for parcels file used for sar products").arg(parcelsSarFileNamePat));
+        m_parcelsPrdDescr.m_sarParcelsPattern = parcelsSarFileNamePat;
     }
+}
+
+
+QString S4CMarkersDB1DataExtractStepsBuilder::GetS1ConfiguredProjection() const {
+    const auto &cfgParams = pCtx->GetJobConfigurationParameters(jobId, S1_PREPROC_PROJ_KEY);
+    const QString &val = ProcessorHandlerHelper::GetStringConfigValue(QJsonObject(), cfgParams, S1_PREPROC_PROJ_KEY, "");
+    return val;
+}
+
+QString S4CMarkersDB1DataExtractStepsBuilder::GetLabelsImage(const QString &inRasterPath, int year) const {
+    QFileInfo info(inRasterPath);
+    const QString &fileName = info.fileName();
+    for (int &yr : lpisInfos.keys()) {
+        if (yr == year) {
+            const LpisInfos &lInfos = lpisInfos[year];
+            for (const QString &tile: lInfos.optTilesGeomsRasters.keys()) {
+                if (fileName.contains(tile)) {
+                    return lInfos.optTilesGeomsRasters[tile];
+                }
+            }
+        }
+    }
+    return "";
+}
+
+QString S4CMarkersDB1DataExtractStepsBuilder::GetBestS1ParcelsShp(const LpisInfos &lpisInfo, const QString &filePath) const
+{
+
+    const QList<FileNameInfosExtractor> &fnExtractors = S1L2ProductHelper::GetS1FileNameExtractors();
+    for(FileNameInfosExtractor fnExt: fnExtractors) {
+        if (fnExt.IsIntended(filePath)) {
+            const FileNameInfosType &infos = fnExt.ExtractInfos(filePath);
+            if (infos.tileId.size() > 0) {
+                Logger::info(QStringLiteral("MDB1: Tile id %1 extracted from file %2")
+                             .arg(infos.tileId).arg(filePath));
+
+                // we have an S1 product cut by S2
+                if (lpisInfo.sarGeomShapePaths.keys().contains(infos.tileId)) {
+                    Logger::info(QStringLiteral("MDB1: Tile id %1 found in the sar geometries. Returning %2")
+                                 .arg(infos.tileId).arg(lpisInfo.sarGeomShapePaths[infos.tileId]));
+                    return lpisInfo.sarGeomShapePaths[infos.tileId];
+                }
+            } else {
+                Logger::info(QStringLiteral("MDB1: Tile id NOT extracted from file %1. Trying laea ...")
+                             .arg(filePath));
+                // we have an S1 product not cut by S2 then check if processed with LAEA or another projections
+                if (m_s1PreprocessingProj.contains("LAEA")) {
+                    Logger::info(QStringLiteral("MDB1: Returning file for LAEA (%1)...")
+                                 .arg(lpisInfo.sarGeomShapePaths["3035"]));
+                    return lpisInfo.sarGeomShapePaths["3035"];
+                }
+            }
+        }
+    }
+    // if we got here, get the first projection, preferable not LAEA
+    if (lpisInfo.sarGeomShapePaths.size() == 1) {
+        Logger::info(QStringLiteral("MDB1: Only one projection file found. Returning is (%1)...")
+                     .arg(lpisInfo.sarGeomShapePaths.values()[0]));
+        return lpisInfo.sarGeomShapePaths.values()[0];
+    } else {
+        // get the first projection that is not LAEA
+        for (const auto &key : lpisInfo.sarGeomShapePaths.keys()) {
+            if (key != "3035") {
+                Logger::info(QStringLiteral("MDB1: Returning first not LAEA file (%1)...")
+                             .arg(lpisInfo.sarGeomShapePaths[key]));
+                return lpisInfo.sarGeomShapePaths[key];
+            }
+        }
+    }
+    Logger::info(QStringLiteral("MDB1: No valid parcels shape found for file %1").arg(filePath));
+    return "";
 }

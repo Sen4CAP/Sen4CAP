@@ -53,6 +53,7 @@ public:
 
     static bool IsIntendedFor(const QString &product);
     static bool IsIntendedFor(const ProductType &prdType);
+    static QList<FileNameInfosExtractor> GetS1FileNameExtractors();
 
 private:
     bool GetFileNameInfosExtractor(const QString &productPath, FileNameInfosExtractor &extractor);

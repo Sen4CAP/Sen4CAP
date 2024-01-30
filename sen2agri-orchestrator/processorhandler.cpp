@@ -106,10 +106,8 @@ bool ProcessorHandler::NeedRemoveJobFolder(EventProcessingContext &ctx, int jobI
 {
     QString strKey = "executor.processor." + procName + ".keep_job_folders";
     auto configParameters = ctx.GetJobConfigurationParameters(jobId, strKey);
-    auto keepStr = configParameters[strKey];
-    bool bRemove = true;
-    if(keepStr == "1") bRemove = false;
-    return bRemove;
+    bool keepFolders = ProcessorHandlerHelper::GetBoolConfigValue(QJsonObject(), configParameters, strKey, "", true);
+    return !keepFolders;
 }
 
 bool ProcessorHandler::RemoveJobFolder(EventProcessingContext &ctx, int jobId, const QString &procName)
@@ -471,20 +469,25 @@ QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters
     return prdTypeStr.size() > 0 ? FilterProducts(listProducts, prdType) : listProducts;
 }
 
-ProductList ProcessorHandler::GetInputProducts(EventProcessingContext &ctx,
-                                                          const QJsonObject &parameters, int siteId,
-                                                          const ProductType &prdType,
-                                                          QDateTime *pMinDate, QDateTime *pMaxDate) {
+ProductList ProcessorHandler::GetInputProducts(EventProcessingContext &ctx, const QJsonObject &parameters,
+                                               std::map<QString, QString> configParameters, int siteId,
+                                               const ProductType &prdType, const QString &procCfgPrefix,
+                                               QDateTime *pMinDate, QDateTime *pMaxDate) {
     ProductList retPrds;
-    bool isL2AMskEnabled = IsL2AValidityMaskEnabled(ctx, parameters, siteId);
-    ProductType prodType = (isL2AMskEnabled && prdType == ProductType::L2AProductTypeId) ?
-                ProductType::MaskedL2AProductTypeId : prdType;
+    ProductType prodType = prdType;
+    if (prdType == ProductType::L2AProductTypeId) {
+        if(IsL2AValidityMaskEnabled(ctx, parameters, siteId)) {
+            prodType = ProductType::MaskedL2AProductTypeId;
+        }
+    }
     const QStringList &prdNames = GetInputProductNames(parameters, prodType);
 
     // get the products from the input_products or based on date_start or date_end
     if(prdNames.size() == 0) {
-        const auto &startDate = QDateTime::fromString(parameters["start_date"].toString(), "yyyyMMdd");
-        const auto &endDateStart = QDateTime::fromString(parameters["end_date"].toString(), "yyyyMMdd");
+        const auto &startDate = ProcessorHandlerHelper::GetDateTimeFromString(
+                    ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "start_date", procCfgPrefix));
+        const auto &endDateStart = ProcessorHandlerHelper::GetDateTimeFromString(
+                    ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "end_date", procCfgPrefix));
         if(startDate.isValid() && endDateStart.isValid()) {
             // update min/max dates, if requested
             if (pMinDate && (!pMinDate->isValid() || *pMinDate > startDate)) {
@@ -654,9 +657,15 @@ bool ProcessorHandler::CheckAllAncestorProductCreation(ExecutionContextBase &ctx
                                         ProductType::L2AProductTypeId, ProductType::FMaskProductTypeId,
                                         ProductType::MaskedL2AProductTypeId};
                 break;
-            case ProductType::S4SPermCropsProductTypeId :
-            case ProductType::S4SYieldFeatProductTypeId :
             case ProductType::S4SCropTypeMappingProductTypeId :
+                ancestorProductTypes = {ProductType::S4CS1L2AmpProductTypeId, ProductType::S4CS1L2CoheProductTypeId,
+                                        ProductType::L2AProductTypeId, ProductType::FMaskProductTypeId,
+                                        ProductType::MaskedL2AProductTypeId};
+                break;
+
+            case ProductType::S4SPermCropsProductTypeId :
+            case ProductType::S4SYieldProductTypeId :
+            case ProductType::S4SYieldSUProductTypeId :
                 break;
             case ProductType::S1CompositeProductTypeId :
                 ancestorProductTypes = {ProductType::S4CS1L2AmpProductTypeId};

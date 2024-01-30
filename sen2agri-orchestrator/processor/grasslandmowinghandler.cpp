@@ -109,13 +109,15 @@ void GrasslandMowingHandler::CreateSteps(GrasslandMowingExecConfig &cfg, QList<T
                                                                           s1OutDir, s1MowingDetectionOutFile);
         steps.append(CreateTaskStep(s1MowingDetectionTask, "S1MowingDetection", s1MowingDetectionArgs));
 
-        productFormatterFiles += s1MowingDetectionOutFile;
-        // add also the dbf, prj and shx files
-        productFormatterFiles += s1MowingDetectionTask.GetFilePath(outShpFileName + ".dbf");
-        productFormatterFiles += s1MowingDetectionTask.GetFilePath(outShpFileName + ".prj");
-        productFormatterFiles += s1MowingDetectionTask.GetFilePath(outShpFileName + ".shx");
-        productFormatterFiles += s1MowingDetectionTask.GetFilePath(outShpFileName + ".cpg");
-
+        // add the S1 files but avoid adding the file twice (if already added for S2)
+        if (!productFormatterFiles.contains(s1MowingDetectionOutFile)) {
+            productFormatterFiles += s1MowingDetectionOutFile;
+            // add also the dbf, prj and shx files
+            productFormatterFiles += productFormatterTask.GetFilePath(outShpFileName + ".dbf");
+            productFormatterFiles += productFormatterTask.GetFilePath(outShpFileName + ".prj");
+            productFormatterFiles += productFormatterTask.GetFilePath(outShpFileName + ".shx");
+            productFormatterFiles += productFormatterTask.GetFilePath(outShpFileName + ".cpg");
+        }
         // Add also the intermediate files
         // TODO: see if this path should be better configured in database as
         // the script might use it to detect if vrt and other files were already generated

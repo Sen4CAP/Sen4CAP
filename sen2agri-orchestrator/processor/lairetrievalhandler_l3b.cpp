@@ -407,7 +407,7 @@ void LaiRetrievalHandlerL3B::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                              const JobSubmittedEvent &event)
 {
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    std::map<QString, QString> configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
+    std::map<QString, QString> configParameters = ctx.GetJobConfigurationParameters(event.jobId, L3B_CFG_PREFIX);
     const auto &modelsFolder = configParameters["processor.l3b.lai.modelsfolder"];
 
     if(!QDir::root().mkpath(modelsFolder)) {
@@ -417,7 +417,8 @@ void LaiRetrievalHandlerL3B::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     }
 
     // create and submit the tasks for the received products
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
+    const ProductList &prds = GetInputProducts(ctx, parameters, configParameters, event.siteId,
+                                               ProductType::L2AProductTypeId, L3B_CFG_PREFIX);
     const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);

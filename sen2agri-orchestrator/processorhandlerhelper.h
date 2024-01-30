@@ -38,6 +38,8 @@ public:
                             const QString &key, const QString &cfgPrefix, bool defVal = false);
     static int GetIntConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                           const QString &key, const QString &cfgPrefix, int defVal = 0);
+    static float GetFloatConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
+                          const QString &key, const QString &cfgPrefix, float defVal);
     static QString GetStringConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                             const QString &key, const QString &cfgPrefix);
 

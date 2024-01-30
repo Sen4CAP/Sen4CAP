@@ -24,43 +24,50 @@ using namespace orchestrator::products;
 #define SAMPLES_VECTOR_REPLACING_VAL  3
 
 QList<std::reference_wrapper<TaskToSubmit>>
-S4SPermanentCropHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList)
+S4SPermanentCropHandler::CreateTasks(QList<TaskToSubmit> &outAllTasksList, const S4SPermanentCropJobConfig &cfg)
 {
     int curIdx = 0;
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-extract-inputs", {} });
-    int inputsExtrTaskIdx = curIdx++;
     outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-extract-parcels", {} });
     int parcelsExtrTaskIdx = curIdx++;
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-build-refl-stack-tif", { outAllTasksList[inputsExtrTaskIdx] } });
+    QList<std::reference_wrapper<const TaskToSubmit>> prdFormatterParentTasks;
+    for (int i = 0; i<cfg.tileIds.size(); i++) {
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-extract-inputs", {} });
+        int inputsExtrTaskIdx = curIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-build-refl-stack-tif", { outAllTasksList[inputsExtrTaskIdx] } });
 
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-polygon-class-statistics", {outAllTasksList[parcelsExtrTaskIdx], outAllTasksList[curIdx++]} });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-selection", {outAllTasksList[curIdx++]} });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-extraction", {outAllTasksList[curIdx++]} });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-rasterization", {outAllTasksList[curIdx++]} });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-polygon-class-statistics", {outAllTasksList[parcelsExtrTaskIdx], outAllTasksList[curIdx++]} });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-selection", {outAllTasksList[curIdx++]} });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-extraction", {outAllTasksList[curIdx++]} });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-samples-rasterization", {outAllTasksList[curIdx++]} });
 
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-run-broceliande", { outAllTasksList[curIdx++] } });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-run-broceliande", { outAllTasksList[curIdx++] } });
 
-    int broceliandeIdx = curIdx;
-    // launch the next 3 in parallel
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-annual-crop-extraction", { outAllTasksList[broceliandeIdx] } });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-perenial-crop-extraction", { outAllTasksList[broceliandeIdx] } });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-no-cropland-extraction", { outAllTasksList[broceliandeIdx] } });
+        int broceliandeIdx = curIdx;
+        // launch the next 3 in parallel
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-annual-crop-extraction", { outAllTasksList[broceliandeIdx] } });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-perenial-crop-extraction", { outAllTasksList[broceliandeIdx] } });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-no-cropland-extraction", { outAllTasksList[broceliandeIdx] } });
 
-    // the next 3 are launched in parallel but each one waits for the corresponding extraction task above
-    curIdx += 3;
-    int annualSiegeTaskIdx = curIdx+1;
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-sieve", { outAllTasksList[broceliandeIdx+1] } });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-sieve", { outAllTasksList[broceliandeIdx+2] } });
-    outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-sieve", { outAllTasksList[broceliandeIdx+3] } });
+        // the next 3 are launched in parallel but each one waits for the corresponding extraction task above
+        curIdx += 3;
+        int annualSiegeTaskIdx = curIdx+1;
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-sieve", { outAllTasksList[broceliandeIdx+1] } });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-sieve", { outAllTasksList[broceliandeIdx+2] } });
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crops-sieve", { outAllTasksList[broceliandeIdx+3] } });
 
-    // increment with 3 steps above
-    curIdx += 3;
-    outAllTasksList.append(TaskToSubmit{ "s4s-annual-perm-crop-extraction", { outAllTasksList[annualSiegeTaskIdx],
-                                                                             outAllTasksList[annualSiegeTaskIdx+1],
-                                                                             outAllTasksList[annualSiegeTaskIdx+2] } });
-    curIdx++;
-    int annualPermCropExtrIdx = curIdx++;
-    outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[annualPermCropExtrIdx]} });
+        // increment with 3 steps above
+        curIdx += 3;
+        outAllTasksList.append(TaskToSubmit{ "s4s-annual-perm-crop-extraction", { outAllTasksList[annualSiegeTaskIdx],
+                                                                                 outAllTasksList[annualSiegeTaskIdx+1],
+                                                                                 outAllTasksList[annualSiegeTaskIdx+2] } });
+        curIdx++;
+        int annualPermCropExtrIdx = curIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-perm-crop-post-processing", { outAllTasksList[annualPermCropExtrIdx] } });
+        int postProcessingIdx = curIdx++;
+
+        prdFormatterParentTasks.append(outAllTasksList[postProcessingIdx]);
+    }
+    outAllTasksList.append(TaskToSubmit{ "product-formatter", prdFormatterParentTasks });
 
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef;
     for (TaskToSubmit &task : outAllTasksList) {
@@ -74,114 +81,126 @@ NewStepList S4SPermanentCropHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
 {
     int curTaskIdx = 0;
     NewStepList allSteps;
-    TaskToSubmit &extractInputsTask = allTasksList[curTaskIdx++];
     TaskToSubmit &extractParcelsTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &buildReflStackTifTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &polyClassStatsTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &samplesSelectionTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &samplesExtractionTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &samplesRasterizationTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &broceliandeTask = allTasksList[curTaskIdx++];
-
-    TaskToSubmit &annualCropExtractionTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &perenialCropExtractionTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &noCroplandExtractionTask = allTasksList[curTaskIdx++];
-
-    TaskToSubmit &annualCropSieveTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &perenialCropSieveTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &noCroplandSieveTask = allTasksList[curTaskIdx++];
-
-    TaskToSubmit &annualPermCropExtractionTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &productFormatterTask = allTasksList[curTaskIdx++];
-
-    // Resulting files from tasks
-    const QString &extractedInputsListPath = extractInputsTask.GetFilePath("input_rasters_list.csv");
-    const QString &extractedParcelsPath = extractInputsTask.GetFilePath("parcels.gpkg");
-    const QString &stackBuildWorkingDirPath = buildReflStackTifTask.GetFilePath("");
-    const QString &fullStackTifPath = buildReflStackTifTask.GetFilePath("reflectance_full_stack.tif");
-    const QString &sampleStats = polyClassStatsTask.GetFilePath("sample_stats.xml");
-    const QString &selectedUpdateSamples = samplesSelectionTask.GetFilePath("selected_update_samples.shp");
-    const QString &outRates = samplesSelectionTask.GetFilePath("out_rates.csv");
-    const QString &finalUpdateSamples = samplesExtractionTask.GetFilePath("resulted_update_samples.shp");
-    const QString &rasterizedSamples = samplesRasterizationTask.GetFilePath("conversion_output.tif");
-    const QString &broceliandeOutput = broceliandeTask.GetFilePath("broceliande_output.tif");
-    const QString &broceliandeClass1Output = broceliandeTask.GetFilePath("broceliande_output_class000.tif");
-    const QString &broceliandeClass2Output = broceliandeTask.GetFilePath("broceliande_output_class001.tif");
-    const QString &broceliandeClass3Output = broceliandeTask.GetFilePath("broceliande_output_class002.tif");
-
-    const QString &annualCropExtrResult = annualCropExtractionTask.GetFilePath("annual_crop_extraction.tif");
-    const QString &perenialCropExtrResult = perenialCropExtractionTask.GetFilePath("perenial_crop_extraction.tif");
-    const QString &noCroplandExtrResult = noCroplandExtractionTask.GetFilePath("no_cropland_extraction.tif");
-
-    const QString &annualCropSieveResult = annualCropSieveTask.GetFilePath("annual_crop_sieve.tif");
-    const QString &perenialCropSieveResult = perenialCropSieveTask.GetFilePath("perenial_crop_sieve.tif");
-    const QString &noCroplandSieveResult = noCroplandSieveTask.GetFilePath("no_cropland_sieve.tif");
-
-    const QString &annualPermCropExtrResult = annualPermCropExtractionTask.GetFilePath("annual_permanent_crop.tif");
-
-    // Inputs extraction, parcels extraction and reflectances stack tif creation
-    const QStringList &extractInputsArgs = GetExtractInputsTaskArgs(cfg, extractedInputsListPath);
-    allSteps.append(CreateTaskStep(extractInputsTask, "ExtractInputs", extractInputsArgs));
-
+    const QString &extractedParcelsPath = extractParcelsTask.GetFilePath("parcels.gpkg");
     const QStringList &extractParcelsArgs = GetExtractParcelsTaskArgs(cfg.event.siteId, cfg.year, extractedParcelsPath);
     allSteps.append(CreateTaskStep(extractParcelsTask, "ExtractParcels", extractParcelsArgs));
 
-    const QStringList &buildReflStackTifArgs = GetBuildFullStackTifTaskArgs(extractedInputsListPath, fullStackTifPath, stackBuildWorkingDirPath);
-    allSteps.append(CreateTaskStep(buildReflStackTifTask, "BuildReflStackTif", buildReflStackTifArgs));
+    QStringList prdFormatterFiles;
+    for (const QString &tileId: cfg.tileIds) {
+        TaskToSubmit &extractInputsTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &buildReflStackTifTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &polyClassStatsTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &samplesSelectionTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &samplesExtractionTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &samplesRasterizationTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &broceliandeTask = allTasksList[curTaskIdx++];
 
-    QString fieldName = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters, "vec_field", S4S_PERM_CROPS_CFG_PREFIX);
-    if (fieldName.size() == 0) {
-        fieldName = FIELD_NAME;
+        TaskToSubmit &annualCropExtractionTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &perenialCropExtractionTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &noCroplandExtractionTask = allTasksList[curTaskIdx++];
+
+        TaskToSubmit &annualCropSieveTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &perenialCropSieveTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &noCroplandSieveTask = allTasksList[curTaskIdx++];
+
+        TaskToSubmit &annualPermCropExtractionTask = allTasksList[curTaskIdx++];
+
+        TaskToSubmit &postProcessingTask = allTasksList[curTaskIdx++];
+
+        // Resulting files from tasks
+        const QString &extractedInputsListPath = extractInputsTask.GetFilePath("input_rasters_list.csv");
+        const QString &stackBuildWorkingDirPath = buildReflStackTifTask.GetFilePath("");
+        const QString &fullStackTifPath = buildReflStackTifTask.GetFilePath("reflectance_full_stack.tif");
+        const QString &sampleStats = polyClassStatsTask.GetFilePath("sample_stats.xml");
+        const QString &selectedUpdateSamples = samplesSelectionTask.GetFilePath("selected_update_samples.shp");
+        const QString &outRates = samplesSelectionTask.GetFilePath("out_rates.csv");
+        const QString &finalUpdateSamples = samplesExtractionTask.GetFilePath("resulted_update_samples.shp");
+        const QString &rasterizedSamples = samplesRasterizationTask.GetFilePath("conversion_output.tif");
+        const QString &broceliandeOutput = broceliandeTask.GetFilePath("broceliande_output.tif");
+        const QString &broceliandeClass1Output = broceliandeTask.GetFilePath("broceliande_output_class000.tif");
+        const QString &broceliandeClass2Output = broceliandeTask.GetFilePath("broceliande_output_class001.tif");
+        const QString &broceliandeClass3Output = broceliandeTask.GetFilePath("broceliande_output_class002.tif");
+
+        const QString &annualCropExtrResult = annualCropExtractionTask.GetFilePath("annual_crop_extraction.tif");
+        const QString &perenialCropExtrResult = perenialCropExtractionTask.GetFilePath("perenial_crop_extraction.tif");
+        const QString &noCroplandExtrResult = noCroplandExtractionTask.GetFilePath("no_cropland_extraction.tif");
+
+        const QString &annualCropSieveResult = annualCropSieveTask.GetFilePath("annual_crop_sieve.tif");
+        const QString &perenialCropSieveResult = perenialCropSieveTask.GetFilePath("perenial_crop_sieve.tif");
+        const QString &noCroplandSieveResult = noCroplandSieveTask.GetFilePath("no_cropland_sieve.tif");
+
+        const QString &annualPermCropExtrResult = annualPermCropExtractionTask.GetFilePath("annual_permanent_crop.tif");
+        const QString &postProcessingResult = annualPermCropExtractionTask.GetFilePath("annual_permanent_crop_post_processed.tif");
+
+        // Inputs extraction, parcels extraction and reflectances stack tif creation
+        const QStringList &extractInputsArgs = GetExtractInputsTaskArgs(cfg, extractedInputsListPath, tileId);
+        allSteps.append(CreateTaskStep(extractInputsTask, "ExtractInputs", extractInputsArgs));
+
+        const QStringList &buildReflStackTifArgs = GetBuildFullStackTifTaskArgs(extractedInputsListPath, fullStackTifPath, stackBuildWorkingDirPath);
+        allSteps.append(CreateTaskStep(buildReflStackTifTask, "BuildReflStackTif", buildReflStackTifArgs));
+
+        QString fieldName = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters, "vec_field", S4S_PERM_CROPS_CFG_PREFIX);
+        if (fieldName.size() == 0) {
+            fieldName = FIELD_NAME;
+        }
+
+        // Sample section
+        const QStringList &polygonClassStatisticsArgs = GetPolygonClassStatisticsTaskArgs(fullStackTifPath, extractedParcelsPath, fieldName, sampleStats);
+        allSteps.append(CreateTaskStep(polyClassStatsTask, "PolygonClassStatistics", polygonClassStatisticsArgs));
+
+        const QStringList &sampleSelectionArgs = GetSampleSelectionTaskArgs(fullStackTifPath, extractedParcelsPath, fieldName, sampleStats, outRates, selectedUpdateSamples);
+        allSteps.append(CreateTaskStep(samplesSelectionTask, "SampleSelection", sampleSelectionArgs));
+
+        const QStringList &sampleExtractionArgs = GetSampleExtractionTaskArgs(fullStackTifPath, selectedUpdateSamples, fieldName, finalUpdateSamples);
+        allSteps.append(CreateTaskStep(samplesExtractionTask, "SampleExtraction", sampleExtractionArgs));
+
+        const QStringList &samplesRasterizationArgs = GetSamplesRasterizationTaskArgs(fullStackTifPath, finalUpdateSamples, fieldName,
+                                                                                      SAMPLES_VECTOR_VAL_TO_REPLACE, SAMPLES_VECTOR_REPLACING_VAL,
+                                                                                      rasterizedSamples);
+        allSteps.append(CreateTaskStep(samplesRasterizationTask, "SamplesRasterization", samplesRasterizationArgs));
+
+        // Broceliande
+        const QStringList &broceliandeArgs = GetBroceliandeTaskArgs(cfg, broceliandeTask, fullStackTifPath, rasterizedSamples, broceliandeOutput);
+        allSteps.append(CreateTaskStep(broceliandeTask, "Broceliande", broceliandeArgs));
+
+        // Crop extractions
+        const QStringList &extrInputsList = {broceliandeClass1Output, broceliandeClass2Output, broceliandeClass3Output};
+        const QStringList &annualCropExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, ANNUAL_CROP_EXP, annualCropExtrResult);
+        allSteps.append(CreateTaskStep(annualCropExtractionTask, "AnnualCropExtraction", annualCropExtrArgs));
+        const QStringList &perenialCropExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, PERENIAL_CROP_EXP, perenialCropExtrResult);
+        allSteps.append(CreateTaskStep(perenialCropExtractionTask, "PerenialCropExtraction", perenialCropExtrArgs));
+        const QStringList &noCroplandExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, NO_CROPLAND_EXP, noCroplandExtrResult);
+        allSteps.append(CreateTaskStep(noCroplandExtractionTask, "NoCroplandExtraction", noCroplandExtrArgs));
+
+        // Crop sieve
+        const QStringList &annualCropSieveArgs = GetCropSieveTaskArgs(annualCropExtrResult, annualCropSieveResult);
+        allSteps.append(CreateTaskStep(annualCropSieveTask, "AnnualCropSieve", annualCropSieveArgs));
+        const QStringList &perenialCropSieveArgs = GetCropSieveTaskArgs(perenialCropExtrResult, perenialCropSieveResult);
+        allSteps.append(CreateTaskStep(perenialCropSieveTask, "PerenialCropSieve", perenialCropSieveArgs));
+        const QStringList &noCroplandSieveArgs = GetCropSieveTaskArgs(noCroplandExtrResult, noCroplandSieveResult);
+        allSteps.append(CreateTaskStep(noCroplandSieveTask, "NoCroplandSieve", noCroplandSieveArgs));
+
+        // Annual permanent crop extraction
+        const QStringList &permCropExtrInputs = {annualCropSieveResult, perenialCropSieveResult, noCroplandSieveResult};
+        const QStringList &annualPermCropExtrArgs = GetCropInfosExtractionTaskArgs(permCropExtrInputs, ANNUAL_PERMANENT_CROP_EXP, annualPermCropExtrResult);
+        allSteps.append(CreateTaskStep(annualPermCropExtractionTask, "AnnualPermanentCropExtraction", annualPermCropExtrArgs));
+
+        const QStringList &postProcessingArgs = GetPostProcessingTaskArgs(annualPermCropExtrResult, postProcessingResult);
+        allSteps.append(CreateTaskStep(postProcessingTask, "PostProcessing", postProcessingArgs));
+
+        prdFormatterFiles.append(annualPermCropExtrResult);
+        prdFormatterFiles.append(postProcessingResult);
     }
 
-    // Sample section
-    const QStringList &polygonClassStatisticsArgs = GetPolygonClassStatisticsTaskArgs(fullStackTifPath, extractedParcelsPath, fieldName, sampleStats);
-    allSteps.append(CreateTaskStep(polyClassStatsTask, "PolygonClassStatistics", polygonClassStatisticsArgs));
-
-    const QStringList &sampleSelectionArgs = GetSampleSelectionTaskArgs(fullStackTifPath, extractedParcelsPath, fieldName, sampleStats, outRates, selectedUpdateSamples);
-    allSteps.append(CreateTaskStep(samplesSelectionTask, "SampleSelection", sampleSelectionArgs));
-
-    const QStringList &sampleExtractionArgs = GetSampleExtractionTaskArgs(fullStackTifPath, selectedUpdateSamples, fieldName, finalUpdateSamples);
-    allSteps.append(CreateTaskStep(samplesExtractionTask, "SampleExtraction", sampleExtractionArgs));
-
-    const QStringList &samplesRasterizationArgs = GetSamplesRasterizationTaskArgs(fullStackTifPath, finalUpdateSamples, fieldName,
-                                                                                  SAMPLES_VECTOR_VAL_TO_REPLACE, SAMPLES_VECTOR_REPLACING_VAL,
-                                                                                  rasterizedSamples);
-    allSteps.append(CreateTaskStep(samplesRasterizationTask, "SamplesRasterization", samplesRasterizationArgs));
-
-    // Broceliande
-    const QStringList &broceliandeArgs = GetBroceliandeTaskArgs(cfg, broceliandeTask, fullStackTifPath, rasterizedSamples, broceliandeOutput);
-    allSteps.append(CreateTaskStep(broceliandeTask, "Broceliande", broceliandeArgs));
-
-    // Crop extractions
-    const QStringList &extrInputsList = {broceliandeClass1Output, broceliandeClass2Output, broceliandeClass3Output};
-    const QStringList &annualCropExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, ANNUAL_CROP_EXP, annualCropExtrResult);
-    allSteps.append(CreateTaskStep(annualCropExtractionTask, "AnnualCropExtraction", annualCropExtrArgs));
-    const QStringList &perenialCropExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, PERENIAL_CROP_EXP, perenialCropExtrResult);
-    allSteps.append(CreateTaskStep(perenialCropExtractionTask, "PerenialCropExtraction", perenialCropExtrArgs));
-    const QStringList &noCroplandExtrArgs = GetCropInfosExtractionTaskArgs(extrInputsList, NO_CROPLAND_EXP, noCroplandExtrResult);
-    allSteps.append(CreateTaskStep(noCroplandExtractionTask, "NoCroplandExtraction", noCroplandExtrArgs));
-
-    // Crop sieve
-    const QStringList &annualCropSieveArgs = GetCropSieveTaskArgs(annualCropExtrResult, annualCropSieveResult);
-    allSteps.append(CreateTaskStep(annualCropSieveTask, "AnnualCropSieve", annualCropSieveArgs));
-    const QStringList &perenialCropSieveArgs = GetCropSieveTaskArgs(perenialCropExtrResult, perenialCropSieveResult);
-    allSteps.append(CreateTaskStep(perenialCropSieveTask, "PerenialCropSieve", perenialCropSieveArgs));
-    const QStringList &noCroplandSieveArgs = GetCropSieveTaskArgs(noCroplandExtrResult, noCroplandSieveResult);
-    allSteps.append(CreateTaskStep(noCroplandSieveTask, "NoCroplandSieve", noCroplandSieveArgs));
-
-    // Annual permanent crop extraction
-    const QStringList &permCropExtrInputs = {annualCropExtrResult, perenialCropExtrResult, noCroplandExtrResult};
-    const QStringList &annualPermCropExtrArgs = GetCropInfosExtractionTaskArgs(permCropExtrInputs, ANNUAL_PERMANENT_CROP_EXP, annualPermCropExtrResult);
-    allSteps.append(CreateTaskStep(annualPermCropExtractionTask, "AnnualPermanentCropExtraction", annualPermCropExtrArgs));
-
-    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, {annualPermCropExtrResult});
+    TaskToSubmit &productFormatterTask = allTasksList[curTaskIdx++];
+    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, prdFormatterFiles);
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
 
     return allSteps;
 }
 
-QStringList S4SPermanentCropHandler::GetExtractInputsTaskArgs(const S4SPermanentCropJobConfig &cfg, const QString &outFile)
+QStringList S4SPermanentCropHandler::GetExtractInputsTaskArgs(const S4SPermanentCropJobConfig &cfg, const QString &outFile, const QString &tileId)
 {
     QStringList extractParcelsArgs = { "-s",
                                  QString::number(cfg.event.siteId),
@@ -189,10 +208,8 @@ QStringList S4SPermanentCropHandler::GetExtractInputsTaskArgs(const S4SPermanent
                                  cfg.startDate.toString("yyyy-MM-dd"),
                                  "--season-end",
                                  cfg.endDate.toString("yyyy-MM-dd")};
-    if (cfg.tileIds.size() > 0) {
-        extractParcelsArgs += "--tiles";
-        extractParcelsArgs.append(cfg.tileIds);
-    }
+    extractParcelsArgs += "--tiles";
+    extractParcelsArgs.append(tileId);
 
     if (cfg.filterProductNames.size() > 0) {
         extractParcelsArgs += "--products";
@@ -316,7 +333,7 @@ QStringList S4SPermanentCropHandler::GetBroceliandeTaskArgs(const S4SPermanentCr
 
 QStringList S4SPermanentCropHandler::GetCropInfosExtractionTaskArgs(const QStringList &imgs, const QString &exp, const QString &out)
 {
-    QStringList args = { "BandMathX",  "-out", out,
+    QStringList args = { "BandMathX",  "-out", out + "?gdal:co:COMPRESS=DEFLATE",
                          "-ram", "5000",
                         "-exp", "\"" + exp + "\"",
                         "-il"
@@ -325,6 +342,11 @@ QStringList S4SPermanentCropHandler::GetCropInfosExtractionTaskArgs(const QStrin
         args.append(img);
     }
     return args;
+}
+
+QStringList S4SPermanentCropHandler::GetPostProcessingTaskArgs(const QString &input, const QString &output)
+{
+    return {    "-i", input, "-o", output };
 }
 
 QStringList S4SPermanentCropHandler::GetCropSieveTaskArgs(const QString &annualCrop,
@@ -337,27 +359,13 @@ QStringList S4SPermanentCropHandler::GetCropSieveTaskArgs(const QString &annualC
     };
 }
 
-bool S4SPermanentCropHandler::GetStartEndDatesFromProducts(EventProcessingContext &ctx,
-                                                      const JobSubmittedEvent &event,
-                                                      QDateTime &startDate,
-                                                      QDateTime &endDate,
-                                                      QList<ProductDetails> &productDetails)
-{
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
-    productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
-
-    return ProcessorHandlerHelper::GetIntevalFromProducts(prds, startDate, endDate);
-}
-
 void S4SPermanentCropHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                                 const JobSubmittedEvent &event)
 {
     S4SPermanentCropJobConfig cfg(&ctx, event);
-    UpdateJobConfigParameters(cfg);
 
     QList<TaskToSubmit> allTasksList;
-    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList);
+    QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList, cfg);
     SubmitTasks(ctx, cfg.event.jobId, allTasksListRef);
     NewStepList allSteps = CreateSteps(allTasksList, cfg);
     ctx.SubmitSteps(allSteps);
@@ -478,48 +486,6 @@ ProcessorJobDefinitionParams S4SPermanentCropHandler::GetProcessingDefinitionImp
 }
 
 
-void S4SPermanentCropHandler::UpdateJobConfigParameters(S4SPermanentCropJobConfig &cfgToUpdate)
-{
-    if(IsScheduledJobRequest(cfgToUpdate.parameters)) {
-        QString strStartDate, strEndDate;
-        if (ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "start_date", strStartDate) &&
-            ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "end_date", strEndDate) &&
-            cfgToUpdate.parameters.contains("input_products") && cfgToUpdate.parameters["input_products"].toArray().size() == 0) {
-            cfgToUpdate.isScheduled = true;
-            cfgToUpdate.startDate = ProcessorHandlerHelper::GetDateTimeFromString(strStartDate);
-            cfgToUpdate.endDate = ProcessorHandlerHelper::GetDateTimeFromString(strEndDate);
-        }
-    } else {
-        const QStringList &filterProductNames = GetInputProductNames(cfgToUpdate.parameters);
-        cfgToUpdate.SetFilteringProducts(filterProductNames);
-
-        QList<ProductDetails> productDetails;
-        bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, productDetails);
-        if (!ret || productDetails.size() == 0) {
-            // try to get the start and end date if they are given
-            cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
-            throw std::runtime_error(
-                QStringLiteral(
-                    "No products provided at input or no products available in the specified interval")
-                    .toStdString());
-        }
-
-        cfgToUpdate.tileIds = GetTileIdsFromProducts(*(cfgToUpdate.pCtx), productDetails);
-    }
-    cfgToUpdate.year = cfgToUpdate.endDate.date().year();           // TODO: see if this is valid
-
-//    const QString &samplesFile = ExtractSamplesInfos(cfgToUpdate);
-//    if (samplesFile.size() == 0) {
-//        // try to get the start and end date if they are given
-//        cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
-//        throw std::runtime_error(
-//            QStringLiteral(
-//                "Cannot extract the gpkg file for the samples infos")
-//                .toStdString());
-//    }
-
-//    cfgToUpdate.SetSamplesInfosProducts(samplesFile);
-}
 
 //TODO: We should return here only one LPIS product according to the year
 //QString S4SPermanentCropHandler::ExtractSamplesInfos(const S4SPermanentCropJobConfig &cfg) {

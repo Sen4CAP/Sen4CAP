@@ -12,6 +12,8 @@
 #include "products/producthelperfactory.h"
 using namespace orchestrator::products;
 
+#define S2A_PHENO_NDVI_CFG_PREFIX   "processor.l3e."
+
 void PhenoNdviHandler::CreateTasksForNewProducts(QList<TaskToSubmit> &outAllTasksList,
                                                 QList<std::reference_wrapper<const TaskToSubmit>> &outProdFormatterParentsList)
 {
@@ -93,7 +95,9 @@ void PhenoNdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
+    const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, S2A_PHENO_NDVI_CFG_PREFIX);
+    const ProductList &prds = GetInputProducts(ctx, parameters, configParameters, event.siteId,
+                                               ProductType::L2AProductTypeId, S2A_PHENO_NDVI_CFG_PREFIX);
     const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);
@@ -126,7 +130,8 @@ void PhenoNdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     SubmitTasks(ctx, event.jobId, {productFormatterTask});
 
     // finally format the product
-    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, event, productDetails, listParams);
+    const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, ctx, event, productDetails,
+                                                                      configParameters, listParams);
 
     // add these steps to the steps list to be submitted
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
@@ -183,8 +188,8 @@ void PhenoNdviHandler::WriteExecutionInfosFile(const QString &executionInfosPath
 }
 
 QStringList PhenoNdviHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                    const QList<ProductDetails> &listProducts, const QList<PhenoProductFormatterParams> &productParams) {
-    const std::map<QString, QString> &configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3e.");
+                                                      const QList<ProductDetails> &listProducts, const std::map<QString, QString> &configParameters,
+                                                      const QList<PhenoProductFormatterParams> &productParams) {
     QStringList additionalArgs = {"-il"};
     std::for_each(listProducts.begin(), listProducts.end(), [&additionalArgs](const ProductDetails &prdDetails) {
         std::unique_ptr<ProductHelper> helper = ProductHelperFactory::GetProductHelper(prdDetails);
@@ -230,7 +235,7 @@ ProcessorJobDefinitionParams PhenoNdviHandler::GetProcessingDefinitionImpl(Sched
         return params;
     }
 
-    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString("processor.l3e."), siteId, requestOverrideCfgValues);
+    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(S2A_PHENO_NDVI_CFG_PREFIX), siteId, requestOverrideCfgValues);
     // we might have an offset in days from starting the downloading products to start the L3E production
     int startSeasonOffset = mapCfg["processor.l3e.start_season_offset"].value.toInt();
     seasonStartDate = seasonStartDate.addDays(startSeasonOffset);

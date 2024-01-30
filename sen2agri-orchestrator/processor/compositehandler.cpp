@@ -361,8 +361,10 @@ void CompositeHandler::FilterInputProducts(QStringList &listFiles,
 void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                               const JobSubmittedEvent &event)
 {
+    const CompositeJobConfig &cfg = GetJobConfig(ctx, event);
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
+    const ProductList &prds = GetInputProducts(ctx, parameters, cfg.allCfgMap, event.siteId, ProductType::L2AProductTypeId,
+                                               S4A_L3A_COMPOSITE_CFG_PREFIX);
     const QList<ProductDetails> &prdDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(prdDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);
@@ -376,8 +378,6 @@ void CompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                   .arg(event.jobId)
                   .arg(event.siteId));
 
-    CompositeJobConfig cfg;
-    GetJobConfig(ctx, event, cfg);
 
     int resolution = cfg.resolution;
     const TilesTimeSeries &mapTiles = GroupL2ATiles(ctx, prdDetails);
@@ -450,8 +450,10 @@ void CompositeHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx,
     }
 }
 
-void CompositeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event,CompositeJobConfig &cfg) {
-    cfg.allCfgMap = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3a.");
+CompositeJobConfig CompositeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event) {
+    CompositeJobConfig cfg;
+
+    cfg.allCfgMap = ctx.GetJobConfigurationParameters(event.jobId, S4A_L3A_COMPOSITE_CFG_PREFIX);
     auto execProcConfigParameters = ctx.GetJobConfigurationParameters(event.jobId, "executor.processor.l3a.keep_job_folders");
     //auto resourceParameters = ctx.GetJobConfigurationParameters(event.jobId, "resources.working-mem");
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
@@ -464,9 +466,9 @@ void CompositeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitt
         cfg.resolution = 10;
     }
 
-    cfg.bGenerate20MS2Res = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfg.allCfgMap, "generate_20m_s2_resolution", "processor.l3a.");
-    cfg.l3aSynthesisDate = ProcessorHandlerHelper::GetStringConfigValue(parameters, cfg.allCfgMap, "synthesis_date", "processor.l3a.");
-    cfg.synthalf = ProcessorHandlerHelper::GetStringConfigValue(parameters, cfg.allCfgMap, "half_synthesis", "processor.l3a.");
+    cfg.bGenerate20MS2Res = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfg.allCfgMap, "generate_20m_s2_resolution", S4A_L3A_COMPOSITE_CFG_PREFIX);
+    cfg.l3aSynthesisDate = ProcessorHandlerHelper::GetStringConfigValue(parameters, cfg.allCfgMap, "synthesis_date", S4A_L3A_COMPOSITE_CFG_PREFIX);
+    cfg.synthalf = ProcessorHandlerHelper::GetStringConfigValue(parameters, cfg.allCfgMap, "half_synthesis", S4A_L3A_COMPOSITE_CFG_PREFIX);
 
     // Get the parameters from the configuration
     // Get the Half Synthesis interval value if it was not specified by the user
@@ -493,6 +495,8 @@ void CompositeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitt
     cfg.keepJobFiles = false;
     auto keepStr = execProcConfigParameters["executor.processor.l3a.keep_job_folders"];
     if(keepStr == "1") cfg.keepJobFiles = true;
+
+    return cfg;
 }
 
 QStringList CompositeHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const CompositeJobConfig &cfg,
@@ -663,7 +667,7 @@ ProcessorJobDefinitionParams CompositeHandler::GetProcessingDefinitionImpl(Sched
         return params;
     }
 
-    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString("processor.l3a."), siteId, requestOverrideCfgValues);
+    ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(S4A_L3A_COMPOSITE_CFG_PREFIX), siteId, requestOverrideCfgValues);
 
     // we might have an offset in days from starting the downloading products to start the L3A production
     int startSeasonOffset = mapCfg["processor.l3a.start_season_offset"].value.toInt();

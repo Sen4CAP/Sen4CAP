@@ -241,6 +241,14 @@ int ProcessorHandlerHelper::GetIntConfigValue(const QJsonObject &parameters, con
     return (ok ? val : defVal);
 }
 
+float ProcessorHandlerHelper::GetFloatConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
+                                                const QString &key, const QString &cfgPrefix, float defVal) {
+    bool ok;
+    const QString &strVal = GetStringConfigValue(parameters, configParameters, key, cfgPrefix);
+    float val = strVal.toFloat(&ok);
+    return (ok ? val : defVal);
+}
+
 QString ProcessorHandlerHelper::GetStringConfigValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,
                                                 const QString &key, const QString &cfgPrefix) {
     QString fullKey(cfgPrefix);

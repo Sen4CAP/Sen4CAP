@@ -34,7 +34,8 @@ private:
     void WriteExecutionInfosFile(const QString &executionInfosPath,
                                  const QStringList &listProducts);
     QStringList GetProductFormatterArgs(TaskToSubmit &productFormatterTask, EventProcessingContext &ctx, const JobSubmittedEvent &event,
-                                        const QList<ProductDetails> &listProducts, const QList<PhenoProductFormatterParams> &productParams);
+                                        const QList<ProductDetails> &listProducts, const std::map<QString, QString> &configParameters,
+                                        const QList<PhenoProductFormatterParams> &productParams);
 
     ProcessorJobDefinitionParams GetProcessingDefinitionImpl(SchedulingContext &ctx, int siteId, int scheduledDate,
                                                 const ConfigurationParameterValueMap &requestOverrideCfgValues) override;

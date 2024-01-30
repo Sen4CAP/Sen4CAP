@@ -147,7 +147,7 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
     outAllTasksList[productFormatterIdx].parentTasks.append(productFormatterParentsRefs);
     if(jobCtx.bRemoveTempFiles) {
         // cleanup-intermediate-files -> product formatter
-        outAllTasksList[nCurTaskIdx].parentTasks.append(outAllTasksList[nCurTaskIdx-1]);
+        outAllTasksList[nCurTaskIdx].parentTasks.append(outAllTasksList[productFormatterIdx]);
     }
 }
 
@@ -385,6 +385,7 @@ int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(const L3BJobContext &jobCtx
     tileResultFileInfo.mapIndexFile[indexName] = quantifiedBIFileName;
 
     cleanupTemporaryFilesList.append(BIFileName);
+    cleanupTemporaryFilesList.append(domainFlagsFileName);
     cleanupTemporaryFilesList.append(correctedBIFileName);
     cleanupTemporaryFilesList.append(quantifiedBIFileName);
 
@@ -892,7 +893,7 @@ ProcessorJobDefinitionParams LaiRetrievalHandlerL3BNew::GetProcessingDefinitionI
     ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(L3B_CFG_PREFIX), siteId, requestOverrideCfgValues);
 
     // we might have an offset in days from starting the downloading products to start the L3B scheduling
-    int startSeasonOffset = mapCfg[QString(L3B_CFG_PREFIX) + "scheduling_start_season_delay"].value.toInt();
+    int startSeasonOffset = mapCfg[QString(L3B_CFG_PREFIX) + "start_season_offset"].value.toInt();
     if (startSeasonOffset == 0) {
         startSeasonOffset = 14;
     }
@@ -913,7 +914,18 @@ ProcessorJobDefinitionParams LaiRetrievalHandlerL3BNew::GetProcessingDefinitionI
                  (qScheduledDate > seasonEndDate.addDays(1))) {
                 // do not trigger anymore the schedule.
                 params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+                Logger::error(QStringLiteral("L3B Scheduled job execution at date %1 for site %2 will be retried later: Not all input products were "
+                                             "yet produced")
+                              .arg(qScheduledDate.toString())
+                               .arg(siteId));
             }
+        } else {
+            // if in the first 2 weeks of the season, and no products yet, do noop
+            params.schedulingFlags = SchedulingFlags::SCH_FLG_NOOP_AND_SCHEDULE_NEXT;
+            Logger::error(QStringLiteral("L3B Scheduled job execution at date %1 for site %2 is within the first %3 days of the season. Noop and schedule next ...")
+                          .arg(qScheduledDate.toString())
+                          .arg(siteId)
+                          .arg(startSeasonOffset));
         }
     }
     params.jsonParameters = "{ \"scheduled_job\": \"1\"";

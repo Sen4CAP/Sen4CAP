@@ -84,7 +84,7 @@ void L2AProductHelper::SetProduct(const QString &product)
 {
     ProductHelper::SetProduct(product);
     m_metadataFiles.clear();
-    m_matchedPattern = ProductNamePatternInfos();
+    // m_matchedPattern = ProductNamePatternInfos();
 
     m_bValid = ExtractInfosFromPath(product);
 
@@ -174,9 +174,9 @@ QStringList L2AProductHelper::GetProductFiles(const QString & fileNameSubstrFilt
         return retList;
     }
     for (const QString &metaFile: metaFiles) {
-        if (m_matchedPattern.satelliteIdType == Satellite::Sentinel2) {
+        if (m_prdDetails.GetProduct().satId == (int)Satellite::Sentinel2) {
             retList.append(GetS2ProductFiles(fileNameSubstrFilter, metaFile));
-        } else if (m_matchedPattern.satelliteIdType == Satellite::Landsat8) {
+        } else if (m_prdDetails.GetProduct().satId == (int)Satellite::Landsat8) {
             retList.append(GetL8ProductFiles(fileNameSubstrFilter, metaFile));
         }
     }
@@ -206,9 +206,9 @@ bool L2AProductHelper::ExtractInfosFromPath(const QString &path)
             } else {
                 matchOk = ExtractInfosFromMatch(infos, match);
             }
-            if (m_matchedPattern.satelliteIdType == Satellite::Invalid) {
-                m_matchedPattern = infos;
-            }
+//            if (m_matchedPattern.satelliteIdType == Satellite::Invalid) {
+//                m_matchedPattern = infos;
+//            }
             break;
         }
     }

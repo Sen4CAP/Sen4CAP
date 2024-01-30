@@ -326,7 +326,7 @@ void S4CHeterogeneityHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx
             const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
             GenericHighLevelProductHelper prdHelper(productFolder);
-            int prdId = ctx.InsertProduct({ ProductType::S4SYieldFeatProductTypeId, event.processorId,
+            int prdId = ctx.InsertProduct({ ProductType::S4CHeterogeneityProductTypeId, event.processorId,
                                             event.siteId, event.jobId, productFolder, prdHelper.GetAcqDate(),
                                             prodName, quicklook, footPrint,
                                             std::experimental::nullopt, TileIdList(), ProductIdsList() });
@@ -435,7 +435,7 @@ QStringList S4CHeterogeneityHandler::GetProductFormatterArgs(TaskToSubmit &produ
     QString strTimePeriod = cfg.startDate.toString("yyyyMMddTHHmmss").append("_").append(cfg.endDate.toString("yyyyMMddTHHmmss"));
     QStringList additionalArgs = {"-processor.generic.files"};
     additionalArgs += listFiles;
-    return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.event.jobId, cfg.event.siteId, "S4S_YIELDFEAT", strTimePeriod,
+    return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.event.jobId, cfg.event.siteId, "S4C_HETEROGENEITY", strTimePeriod,
                                          "generic", additionalArgs, true);
 }
 
@@ -620,7 +620,9 @@ QStringList S4CHeterogeneityHandler::GetS1ClusterAnalysisTaskArgs(const S4CHeter
                                                                 const QString &smoothedRaster, const QString &localConRaster,
                                                                 const QString &out)
 {
-    const QString &lpisRaster = cfg.lpisInfos.s1TiledRasters[tile];
+    // we do not use here the S1 rasters as they are at 20m resolution while all processing is at 10m resolution
+    // and we do not want a resampling
+    const QString &lpisRaster = cfg.lpisInfos.s2TiledRasters[tile];
     const QString &lpisCsv = cfg.lpisInfos.csvPath;
 
     QStringList args = {"--lpis-csv", lpisCsv};

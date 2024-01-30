@@ -15,8 +15,8 @@ void CropTypeHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmitte
     auto resourceParameters = ctx.GetJobConfigurationParameters(event.jobId, "resources.working-mem");
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
 
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId,
-                                               &cfg.startDate, &cfg.endDate);
+    const ProductList &prds = GetInputProducts(ctx, parameters, configParameters, event.siteId, ProductType::L2AProductTypeId,
+                                               S2A_CT_PREFIX, &cfg.startDate, &cfg.endDate);
     cfg.productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(cfg.productDetails.size() == 0) {
         // try to get the start and end date if they are given

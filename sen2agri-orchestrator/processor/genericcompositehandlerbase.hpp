@@ -120,7 +120,7 @@ private:
                                         const QMap<QString, QString> &tileResults, const QMap<QString, QString> &tileFlags,
                                         const QString &prdNameSuffix, const QMap<QString, QList<ProductMarkerInfo> > &tileFileInfos);
     QList<ProductType> GetMarkerProductTypes(const QList<MarkerDescriptorType> &markers);
-    QMap<QString, QList<ProductMarkerInfo> > ExtractFileInfos(EventProcessingContext &ctx, const JobSubmittedEvent &evt, const QJsonObject &parameters,
+    QMap<QString, QList<ProductMarkerInfo> > ExtractFileInfos(const GenericCompositeJobPayload &jobCfg,
                                                               const QList<MarkerDescriptorType> &markers, QDateTime &prdMinDate, QDateTime &prdMaxDate);
     QMap<QString, QList<ProductMarkerInfo>> FilterByMarkerName(const QMap<QString, QList<ProductMarkerInfo>> &tileFileInfos, const QString &marker);
     QString GetProductFormatterLevel();

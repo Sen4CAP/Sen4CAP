@@ -12,6 +12,16 @@ typedef struct {
     QString paramName;
 } MetricType;
 
+typedef struct ParcelsProductDescriptor
+{
+    QString m_idFieldName;
+    QString m_optParcelsPattern;
+    QString m_sarParcelsPattern;
+
+    QString m_optParcelsTiffsPattern;
+    QString m_sarParcelsTiffsPattern;
+} ParcelsProductDescriptor;
+
 typedef struct {
     QDateTime productDate;
     QDateTime insertedDate;
@@ -20,7 +30,9 @@ typedef struct {
     QString productName;
     QString productPath;
     QString opticalIdsGeomShapePath;
-    QString sarGeomShapePath;
+    QMap<QString, QString> sarGeomShapePaths;
+    QMap<QString, QString> optTilesGeomsRasters;
+    QMap<QString, QString> sarTilesGeomsRasters;
 
 } LpisInfos;
 
@@ -50,8 +62,12 @@ class S4CMarkersDB1DataExtractStepsBuilder
 public:
     S4CMarkersDB1DataExtractStepsBuilder();
     void Initialize(const QString &parentProc, EventProcessingContext &ctx, const QJsonObject &evtParams,
-                    int siteId, int jobId, const QStringList &markersEnabled = {});
-    void CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx) const;
+                    int siteId, int jobId, const QStringList &markersEnabled = {}, bool bUseLpisTileRasters = false,
+                    const QMap<int, LpisInfos> &customParcelPrdsInfos = {},
+                    const ParcelsProductDescriptor &customParcelPrdDescriptor = {"","","","",""},
+                    const QString &dataExtrRootDir = "");
+    void CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx,
+                     const QList<int> &parentTaskIdxs = {}) const;
     void CreateSteps(const MarkerType &marker, QList<TaskToSubmit> &allTasksList, NewStepList &steps,
                      int &curTaskIdx, QStringList &dataExtrDirs) const;
     QList<MarkerType> GetEnabledMarkers() const;
@@ -61,16 +77,15 @@ public:
 
     static bool HasAnyMarkerEnabled(const ProductType &prdType, const std::map<QString, QString> &cfgParams);
 
-    void SetIdFieldName(const QString &idFieldName) { m_idFieldName = idFieldName; }
-    void SetOptParcelsPattern(const QString &pattern) { m_optParcelsPattern = pattern; }
-    void SetSarParcelsPattern(const QString &pattern) { m_sarParcelsPattern = pattern; }
+    void SetParcelsProductDescriptor(const ParcelsProductDescriptor &descr) { m_parcelsPrdDescr = descr; }
 
 private:
     void InitEnabledMarkersDescriptions(const QStringList &markersEnabled);
 
     QString GetDataExtractionDir(int year, const QString &markerName) const;
     void ExtractProductFiles();
-    QStringList GetDataExtractionArgs(const QString &uidField, const PrdMarkerInfo &inputFileInfo, const QString &outDir) const;
+    QStringList GetDataExtractionFromShpArgs(const QString &uidField, const PrdMarkerInfo &inputFileInfo, const QString &outDir) const;
+    QStringList GetDataExtractionFromRastersArgs(const PrdMarkerInfo &inputFileInfo, const QString &labelsImg, const QString &outDir) const;
     QMap<int, LpisInfos> ExtractLpisInfos();
 
     bool IsDataExtractionPerformed(const QString &dataExtrDirPath, const QString &prdPath);
@@ -80,12 +95,17 @@ private:
     bool IsScheduledJobRequest(const QJsonObject &parameters);
     QMap<int, QList<PrdFileInfo>> GroupProductFileInfosByYear(const QList<PrdFileInfo> &fileInfos);
     void UpdateParcelsPrdDescriptionsFromDB();
+    QString GetS1ConfiguredProjection() const;
+    QString GetLabelsImage(const QString &inRasterPath, int year) const;
+    QString GetBestS1ParcelsShp(const LpisInfos &lpisInfo, const QString &filePath) const;
 
 private:
     EventProcessingContext *pCtx;
     QJsonObject parameters;
     std::map<QString, QString> configParameters;
+    std::map<QString, QString> parentConfigParameters;
     QString parentProcessorName;
+    QString m_parentProcCfgPrefix;
 
     // parameters used for data extraction step
     bool isScheduledJob;
@@ -93,6 +113,7 @@ private:
     int siteId;
     int jobId;
     QString siteShortName;
+    QString dataExtractionRootDir;
 
     QDateTime prdMinDate;
     QDateTime prdMaxDate;
@@ -104,10 +125,12 @@ private:
 
     QMap<int, LpisInfos> lpisInfos;
     QList<PrdMarkerInfo> fileInfos;
+    QMap<QString, QStringList> markerDataExtrDirInfos;
 
-    QString m_idFieldName;
-    QString m_optParcelsPattern;
-    QString m_sarParcelsPattern;
+    ParcelsProductDescriptor m_parcelsPrdDescr;
+    bool m_bUseLpisTileRasters;
+    QString m_s1PreprocessingProj;
+
 };
 
 

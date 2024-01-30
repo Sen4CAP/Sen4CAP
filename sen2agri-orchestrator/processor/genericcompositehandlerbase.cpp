@@ -137,7 +137,7 @@ void GenericCompositeHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx
                                                             m_cfgPrefix, m_markerNames, forcedEnabledMarkers);
     QDateTime prdMinDate;
     QDateTime prdMaxDate;
-    const QMap<QString, QList<ProductMarkerInfo>> &allTileFileInfos = ExtractFileInfos(ctx, evt, jobCfg.parameters, markers,
+    const QMap<QString, QList<ProductMarkerInfo>> &allTileFileInfos = ExtractFileInfos(jobCfg, markers,
                                                                                        prdMinDate, prdMaxDate);
     jobCfg.UpdateMinMaxDates(prdMinDate, prdMaxDate);
     QList<TaskToSubmit> allTasksList;
@@ -335,8 +335,7 @@ QList<ProductType> GenericCompositeHandler::GetMarkerProductTypes(const QList<Ma
     return prdTypes;
 }
 
-QMap<QString, QList<ProductMarkerInfo>> GenericCompositeHandler::ExtractFileInfos(EventProcessingContext &ctx, const JobSubmittedEvent &evt,
-                                                                                  const QJsonObject &parameters, const QList<MarkerDescriptorType> &markers,
+QMap<QString, QList<ProductMarkerInfo>> GenericCompositeHandler::ExtractFileInfos(const GenericCompositeJobPayload &jobCfg, const QList<MarkerDescriptorType> &markers,
                                                                                   QDateTime &prdMinDate, QDateTime &prdMaxDate) {
     QMap<QString, QList<ProductMarkerInfo>> fileInfos;
 
@@ -344,8 +343,8 @@ QMap<QString, QList<ProductMarkerInfo>> GenericCompositeHandler::ExtractFileInfo
         const QList<ProductType> &prdTypes = GetMarkerProductTypes(markers);
         for (ProductType prdType: prdTypes) {
             std::unique_ptr<ProductHelper> prdHelper = ProductHelperFactory::GetProductHelper(prdType);
-            const ProductList &prds = ProcessorHandler::GetInputProducts(ctx, parameters, evt.siteId, prdType,
-                                                                    &prdMinDate, &prdMaxDate);
+            const ProductList &prds = ProcessorHandler::GetInputProducts(*(jobCfg.pCtx), jobCfg.parameters, jobCfg.configParameters, jobCfg.event.siteId, prdType,
+                                                                    m_cfgPrefix, &prdMinDate, &prdMaxDate);
             if (prds.size() == 0) {
                 continue;
             }
@@ -376,7 +375,7 @@ QMap<QString, QList<ProductMarkerInfo>> GenericCompositeHandler::ExtractFileInfo
             }
         }
     } else {
-        Logger::error(QStringLiteral("No enabled markers for job %1!!!").arg(evt.jobId));
+        Logger::error(QStringLiteral("No enabled markers for job %1!!!").arg(jobCfg.event.jobId));
     }
 
     return fileInfos;

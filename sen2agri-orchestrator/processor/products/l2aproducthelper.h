@@ -84,7 +84,7 @@ private:
     QStringList m_metadataFiles;
 
     // infos about the matched
-    ProductNamePatternInfos m_matchedPattern;
+    // ProductNamePatternInfos m_matchedPattern;
 };
 
 } // end of namespace products

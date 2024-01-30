@@ -3,6 +3,8 @@
 
 #include "processorhandler.hpp"
 
+#define L3B_CFG_PREFIX  "processor.l3b."
+
 class LaiRetrievalHandlerL3B : public ProcessorHandler
 {
 public:

@@ -32,9 +32,10 @@ public:
     static QStringList FilterProducts(const QStringList &products, const ProductType &prdType);
     static QStringList GetInputProductNames(const QJsonObject &parameters, const QString &paramsCfgKey);
     static QStringList GetInputProductNames(const QJsonObject &parameters, const ProductType &prdType = ProductType::InvalidProductTypeId);
-    static ProductList GetInputProducts(EventProcessingContext &ctx, const QJsonObject &parameters, int siteId,
-                                            const ProductType &prdType = ProductType::InvalidProductTypeId,
+    static ProductList GetInputProducts(EventProcessingContext &ctx, const QJsonObject &parameters, std::map<QString, QString> configParameters, int siteId,
+                                            const ProductType &prdType = ProductType::InvalidProductTypeId, const QString &procCfgPrefix = "",
                                             QDateTime *pMinDate = NULL, QDateTime *pMaxDate = NULL);
+    static TilesTimeSeries GroupL2ATiles(EventProcessingContext &ctx, const QList<ProductDetails> &productDetails);
 protected:
     NewStep CreateTaskStep(TaskToSubmit &task, const QString &stepName, const QStringList &stepArgs);
 
@@ -63,7 +64,6 @@ protected:
                                   QDateTime &startTime, QDateTime &endTime,
                                   const QDateTime &executionDate, const ConfigurationParameterValueMap &requestOverrideCfgValues);
     QString GetProductFormatterTile(const QString &tile);
-    TilesTimeSeries GroupL2ATiles(EventProcessingContext &ctx, const QList<ProductDetails> &productDetails);
 
     void SubmitTasks(EventProcessingContext &ctx, int jobId, const QList<std::reference_wrapper<TaskToSubmit> > &tasks);
     QMap<Satellite, TileList> GetSiteTiles(EventProcessingContext &ctx, int siteId);

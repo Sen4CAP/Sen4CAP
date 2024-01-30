@@ -72,6 +72,14 @@ QStringList S4SCropTypeMappingHandler::GetCropTypeTaskArgs(const CropTypeJobConf
         cropTypeArgs += {"--remapping-set-id", QString::number(remappingId)};
     }
 
+    const QString &featuresStr = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
+                                                                                 "features-filter", S4S_CTM_CFG_PREFIX);
+    const QStringList &featuresFilter = featuresStr.split(',', QString::SkipEmptyParts);
+    if(featuresFilter.size() > 0) {
+        cropTypeArgs.append("--features");
+        cropTypeArgs += featuresFilter;
+    }
+
     return cropTypeArgs;
 }
 
@@ -88,24 +96,10 @@ QStringList S4SCropTypeMappingHandler::GetProductFormatterArgs(TaskToSubmit &pro
                                          "generic", additionalArgs, false, "", true);
 }
 
-bool S4SCropTypeMappingHandler::GetStartEndDatesFromProducts(EventProcessingContext &ctx,
-                                                      const JobSubmittedEvent &event,
-                                                      QDateTime &startDate,
-                                                      QDateTime &endDate,
-                                                      QList<ProductDetails> &productDetails)
-{
-    const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
-    productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
-
-    return ProcessorHandlerHelper::GetIntevalFromProducts(prds, startDate, endDate);
-}
-
 void S4SCropTypeMappingHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
                                                 const JobSubmittedEvent &event)
 {
     CropTypeJobConfig cfg(&ctx, event);
-    UpdateJobConfigParameters(cfg);
 
     QList<TaskToSubmit> allTasksList;
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(allTasksList);
@@ -201,61 +195,23 @@ ProcessorJobDefinitionParams S4SCropTypeMappingHandler::GetProcessingDefinitionI
                                  "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
                                  "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"}");
 
-    // Normally, we need at least 1 product available, the crop mask and the shapefile in order to
-    // be able to create a S4S L4A product but if we do not return here, the schedule block waiting
-    // for products (that might never happen)
-    bool waitForAvailProcInputs =
-        (cfgValues[QStringLiteral(S4S_CTM_CFG_PREFIX) + "sched_wait_proc_inputs"].value.toInt() != 0);
-    if ((waitForAvailProcInputs == false) || ((params.productList.size() > 0))) {
-        params.isValid = true;
-        Logger::debug(
-            QStringLiteral("Executing scheduled job. Scheduler extracted for S4S L4A a number "
-                           "of %1 products for site ID %2 with start date %3 and end date %4!")
-                .arg(params.productList.size())
+    params.isValid = true;
+    if (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4SCropTypeMappingProductTypeId, startDate, endDate)) {
+        // do not trigger yet the schedule.
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+        Logger::debug(QStringLiteral("Scheduled job for S4S_L4A and site ID %1 with start date %2 and end date %3 will "
+                                     "not be executed (retried later) ")
                 .arg(siteId)
                 .arg(startDate.toString())
                 .arg(endDate.toString()));
     } else {
-        Logger::debug(QStringLiteral("Scheduled job for S4S L4A and site ID %1 with start date %2 "
-                                     "and end date %3 will not be executed "
-                                     "(productsNo = %4)!")
+        Logger::debug(QStringLiteral("Executing scheduled S4S_L4A job for site ID %1 with start date %2 and end date %3!")
                           .arg(siteId)
                           .arg(startDate.toString())
-                          .arg(endDate.toString())
-                          .arg(params.productList.size()));
+                      .arg(endDate.toString()));
     }
 
     return params;
 }
 
-
-void S4SCropTypeMappingHandler::UpdateJobConfigParameters(CropTypeJobConfig &cfgToUpdate)
-{
-    if(IsScheduledJobRequest(cfgToUpdate.parameters)) {
-        QString strStartDate, strEndDate;
-        if (ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "start_date", strStartDate) &&
-            ProcessorHandlerHelper::GetParameterValueAsString(cfgToUpdate.parameters, "end_date", strEndDate) &&
-            cfgToUpdate.parameters.contains("input_products") && cfgToUpdate.parameters["input_products"].toArray().size() == 0) {
-            cfgToUpdate.isScheduled = true;
-            cfgToUpdate.startDate = ProcessorHandlerHelper::GetDateTimeFromString(strStartDate);
-            cfgToUpdate.endDate = ProcessorHandlerHelper::GetDateTimeFromString(strEndDate);
-        }
-    } else {
-        QList<ProductDetails> productDetails;
-        bool ret = GetStartEndDatesFromProducts(*(cfgToUpdate.pCtx), cfgToUpdate.event, cfgToUpdate.startDate, cfgToUpdate.endDate, productDetails);
-        if (!ret || productDetails.size() == 0) {
-            // try to get the start and end date if they are given
-            cfgToUpdate.pCtx->MarkJobFailed(cfgToUpdate.event.jobId);
-            throw std::runtime_error(
-                QStringLiteral(
-                    "No products provided at input or no products available in the specified interval")
-                    .toStdString());
-        }
-    }
-}
-
-bool S4SCropTypeMappingHandler::IsScheduledJobRequest(const QJsonObject &parameters) {
-    int jobVal;
-    return ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1);
-}
 

@@ -16,12 +16,12 @@ void CropMaskHandler::SetProcessorDescription(const ProcessorDescription &procDe
 
 
 void CropMaskHandler::GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event,CropMaskJobConfig &cfg) {
-    auto configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l4a.");
+    auto configParameters = ctx.GetJobConfigurationParameters(event.jobId, S2A_CM_PREFIX);
     auto resourceParameters = ctx.GetJobConfigurationParameters(event.jobId, "resources.working-mem");
     const auto &parameters = QJsonDocument::fromJson(event.parametersJson.toUtf8()).object();
 
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId,
-                                               &cfg.startDate, &cfg.endDate);
+    const ProductList &prds = GetInputProducts(ctx, parameters, configParameters, event.siteId, ProductType::L2AProductTypeId,
+                                               S2A_CM_PREFIX, &cfg.startDate, &cfg.endDate);
     cfg.productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(cfg.productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);

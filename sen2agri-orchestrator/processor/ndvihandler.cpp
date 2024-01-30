@@ -219,7 +219,8 @@ void NdviHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     std::map<QString, QString> configParameters = ctx.GetJobConfigurationParameters(event.jobId, "processor.l3b.");
 
     // create and submit the tasks for the received products
-    const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
+    const ProductList &prds = GetInputProducts(ctx, parameters, configParameters, event.siteId,
+                                               ProductType::L2AProductTypeId, "processor.l3b.");
     const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
     if(productDetails.size() == 0) {
         ctx.MarkJobFailed(event.jobId);

@@ -20,7 +20,7 @@ QMap<QString, ProductType> GenericHighLevelProductHelper::m_mapHighLevelProductT
     {"_S4C_L4B_", ProductType::S4CL4BProductTypeId},
     {"_S4C_L4C_", ProductType::S4CL4CProductTypeId},
     {"S4S_L4A_", ProductType::S4SCropTypeMappingProductTypeId},
-    {"_S4S_YIELDFEAT_", ProductType::S4SYieldFeatProductTypeId}
+    {"_S4S_YIELD_", ProductType::S4SYieldProductTypeId}
 };
 
 GenericHighLevelProductHelper::GenericHighLevelProductHelper()

@@ -8,12 +8,13 @@ using namespace orchestrator::products;
 
 // SEN4CAP_L2A_S7_V20200404T165041_20200329T165122_VH_146_AMP.tif
 // SEN4CAP_L2A_S7_V20200404T165041_20200329T165122_VH_146_COHE.tif
-#define S1_REGEX                    R"(SEN4CAP_(L2A)_.*_V(\d{8}T\d{6})_(\d{8}T\d{6})_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)(\.tif)?)"
+#define S1_REGEX                    R"(SEN4CAP_(L2A)_.*_V(\d{8}T\d{6})_(\d{8}T\d{6})_(VH|VV)_(\d{3})_(?:.+)?(AMP|COHE)(_(\d{2}\w{3}))?(\.tif)?)"
 #define S1_REGEX_VER_IDX            1
 #define S1_REGEX_DATE_IDX           2
 #define S1_REGEX_DATE2_IDX          3
 #define S1_REGEX_TYPE_IDX           6
 #define S1_REGEX_ORBIT_IDX          5
+#define S1_REGEX_TILE_IDX           8
 
 // S1A_L2_BCK_20200114T070238_VV_096_28RBR.tif
 // S1A_L2_COH_20200114T070238_20200108T070156_VV_096_28RBR.tif
@@ -27,7 +28,7 @@ using namespace orchestrator::products;
 
 const QList<FileNameInfosExtractor> S1L2ProductHelper::fnInfoExtractors = {
     FileNameInfosExtractor(S1_REGEX, S1_REGEX_VER_IDX, S1_REGEX_DATE_IDX, S1_REGEX_DATE2_IDX,
-                           S1_REGEX_TYPE_IDX, S1_REGEX_ORBIT_IDX),
+                           S1_REGEX_TYPE_IDX, S1_REGEX_ORBIT_IDX, S1_REGEX_TILE_IDX),
     FileNameInfosExtractor(S1_V2_REGEX, S1_V2_REGEX_VER_IDX, S1_V2_REGEX_DATE_IDX, S1_V2_REGEX_DATE2_IDX,
                            S1_V2_REGEX_TYPE_IDX, S1_V2_REGEX_ORBIT_IDX, S1_V2_REGEX_TILET_IDX)
 };
@@ -140,6 +141,10 @@ bool S1L2ProductHelper::GetFileNameInfosExtractor(const QString &productPath, Fi
     return false;
 }
 
+QList<FileNameInfosExtractor> S1L2ProductHelper::GetS1FileNameExtractors()
+{
+    return fnInfoExtractors;
+}
 
 bool FileNameInfosExtractor::IsIntended(const QString &productPath) const {
     QFileInfo qfileInfo(productPath);
@@ -193,3 +198,4 @@ FileNameInfosType FileNameInfosExtractor::ExtractInfos(const QString &productPat
 
     return fnInfos;
 }
+

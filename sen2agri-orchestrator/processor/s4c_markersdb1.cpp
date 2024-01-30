@@ -189,28 +189,43 @@ ProcessorJobDefinitionParams S4CMarkersDB1Handler::GetProcessingDefinitionImpl(S
 
     ConfigurationParameterValueMap mapCfg = ctx.GetConfigurationParameters(QString(MDB1_CFG_PREFIX),
                                                                            siteId, requestOverrideCfgValues);
+    int startSeasonOffset = mapCfg[QString(MDB1_CFG_PREFIX) + "start_season_offset"].value.toInt();
+    if (startSeasonOffset <= 0) {
+        startSeasonOffset = 20;
+    }
     std::map<QString, QString> configParams;
     for (const auto &p : mapCfg) {
         configParams.emplace(p.key, p.value);
     }
 
     // we might have an offset in days from starting the downloading products to start the S4C_L4C production
-    // TODO: Is this really needed
-    int startSeasonOffset = mapCfg["processor.s4c_l4c.start_season_offset"].value.toInt();
-    QDateTime startDate = seasonStartDate.addDays(startSeasonOffset);
-    if ((qScheduledDate > seasonStartDate.addDays(20)) &&
-        (!CheckAllAncestorProductCreation(ctx, siteId, ProductType::L3BProductTypeId, seasonStartDate, qScheduledDate) ||
-        !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2AmpProductTypeId, seasonStartDate, qScheduledDate) ||
-        !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2CoheProductTypeId, seasonStartDate, qScheduledDate))) {
-        params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
-        Logger::error("MDB1 Scheduled job execution will be retried later: Not all input products were yet produced");
+    if (qScheduledDate > seasonStartDate.addDays(startSeasonOffset)) {
+        const ProductList &lpisPrds = S4CUtils::GetLpisProduct((ExecutionContextBase*)&ctx, siteId);
+        bool hasLpis = (lpisPrds.size() > 0);
+        if (!hasLpis ||
+            !CheckAllAncestorProductCreation(ctx, siteId, ProductType::L3BProductTypeId, seasonStartDate, qScheduledDate) ||
+            !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2AmpProductTypeId, seasonStartDate, qScheduledDate) ||
+            !CheckAllAncestorProductCreation(ctx, siteId, ProductType::S4CS1L2CoheProductTypeId, seasonStartDate, qScheduledDate)) {
+            params.schedulingFlags = SchedulingFlags::SCH_FLG_RETRY_LATER;
+            Logger::error(QStringLiteral("MDB1 Scheduled job execution at date %1 for site %2 will be retried later: Not all input products were "
+                                         "yet produced or no LPIS available (nb lpis prds = %3)")
+                          .arg(qScheduledDate.toString())
+                          .arg(siteId)
+                          .arg(lpisPrds.size()));
+        }
     } else {
-        params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + startDate.toString("yyyyMMdd") + "\", " +
-                                     "\"end_date\": \"" + qScheduledDate.toString("yyyyMMdd") + "\", " +
-                                     "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
-                                     "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"");
-        params.jsonParameters.append(", \"execution_operation\": \"all\"}");
+        // we are within the first 20 days so we move on to the next schedule with NOOP
+        params.schedulingFlags = SchedulingFlags::SCH_FLG_NOOP_AND_SCHEDULE_NEXT;
+        Logger::error(QStringLiteral("MDB1 Scheduled job execution at date %1 for site %2 is within the first %3 days of the season. Noop and schedule next ...")
+                      .arg(qScheduledDate.toString())
+                      .arg(siteId)
+                      .arg(startSeasonOffset));
     }
+    params.jsonParameters.append("{ \"scheduled_job\": \"1\", \"start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                 "\"end_date\": \"" + qScheduledDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_start_date\": \"" + seasonStartDate.toString("yyyyMMdd") + "\", " +
+                                 "\"season_end_date\": \"" + seasonEndDate.toString("yyyyMMdd") + "\"");
+    params.jsonParameters.append(", \"execution_operation\": \"all\"}");
     params.isValid = true;
 
     return params;

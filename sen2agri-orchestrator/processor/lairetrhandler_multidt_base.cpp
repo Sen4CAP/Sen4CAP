@@ -384,7 +384,8 @@ QStringList LaiRetrievalHandlerMultiDateBase::GetL3BProducts(EventProcessingCont
         }
     } else {
         Logger::debug(QStringLiteral("Inputs are L2A for job %1").arg(event.jobId));
-        const ProductList &prds = GetInputProducts(ctx, parameters, event.siteId, ProductType::L2AProductTypeId);
+        const std::map<QString,QString> &configParameters = {};
+        const ProductList &prds = GetInputProducts(ctx, parameters, configParameters, event.siteId, ProductType::L2AProductTypeId);
         const QList<ProductDetails> &productDetails = ProcessorHandlerHelper::GetProductDetails(prds, ctx);
 
         // get the L3B products for the current product tiles

@@ -3,6 +3,9 @@
 
 #include "processorhandler.hpp"
 
+
+#define S4A_L3A_COMPOSITE_CFG_PREFIX "processor.l3a."
+
 typedef struct {
 
     NewStepList steps;
@@ -76,7 +79,7 @@ private:
     QStringList GetMissionsFromBandsMapping(const QString &bandsMappingFile);
     QString DeductBandsMappingFile(const QList<ProductDetails> &prdDetails, const QString &bandsMappingFile, int &resolution);
 
-    void GetJobConfig(EventProcessingContext &ctx,const JobSubmittedEvent &event,CompositeJobConfig &cfg);
+    CompositeJobConfig GetJobConfig(EventProcessingContext &ctx, const JobSubmittedEvent &event);
     QString GetL2AExternalMask(const ProductDetails &prdDetails);
 };
 

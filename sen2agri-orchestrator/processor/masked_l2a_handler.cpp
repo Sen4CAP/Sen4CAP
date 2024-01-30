@@ -49,16 +49,19 @@ void MaskedL2AHandler::CreateTasksAndSteps(EventProcessingContext &ctx, const Jo
 
     const auto &parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
     auto cfgParams = ctx.GetConfigurationParameters(MASKED_L2A_CFG_PREFIX, evt.siteId);
-    bool compressOutputs = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "compress", MASKED_L2A_CFG_PREFIX);
-    bool cogOutputs = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "cog", MASKED_L2A_CFG_PREFIX);
-    bool continueOnMissingPrd = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "continue-on-missing-input", MASKED_L2A_CFG_PREFIX);
+    bool compressOutputs = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "compress", MASKED_L2A_CFG_PREFIX, true);
+    bool tiledOutputs = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "tiled", MASKED_L2A_CFG_PREFIX, true);
+    bool continueOnMissingPrd = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "continue_on_missing_input", MASKED_L2A_CFG_PREFIX);
+    bool waterValid = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "water_is_valid", MASKED_L2A_CFG_PREFIX);
+    bool snowValid = ProcessorHandlerHelper::GetBoolConfigValue(parameters, cfgParams, "snow_is_valid", MASKED_L2A_CFG_PREFIX);
 
     NewStepList allSteps;
 
     cnt = 0;
     for(const InputPrdInfo &prdInfo: prdInfos) {
         TaskToSubmit &curTask = allTasksList[cnt++];
-        CreateValidityMaskExtractorStep(ctx, evt, prdInfo, curTask, allSteps, compressOutputs, cogOutputs, continueOnMissingPrd);
+        CreateValidityMaskExtractorStep(ctx, evt, prdInfo, curTask, allSteps, compressOutputs,
+                                        tiledOutputs, continueOnMissingPrd, waterValid, snowValid);
     }
     // create the end of all steps marker
     allSteps.append(CreateTaskStep(allTasksList[allTasksList.size()-1], "EndOfJob", QStringList()));
@@ -311,22 +314,31 @@ bool MaskedL2AHandler::CreateMaskedL2AProduct(EventProcessingContext &ctx, const
     const QString &prodName = GetOutputProductName(ctx, event);
     if(prodName != "") {
         const QList<int> &parentIds = GetOutputProductParentProductIds(ctx, event);
-        const ProductList &parentL2As = ctx.GetProducts({parentIds[0]});
-        const Product &parentL2A = parentL2As[0];
-        int ret = ctx.InsertProduct({ ProductType::MaskedL2AProductTypeId, event.processorId, parentL2A.satId, event.siteId,
-                            event.jobId, productPath, parentL2A.created,
-                            prodName, parentL2A.quicklookImage, parentL2A.geog,
-                            parentL2A.orbitId, parentL2A.tiles, parentIds });
-        Logger::debug(QStringLiteral("InsertProduct for %1 returned %2").arg(prodName).arg(ret));
+        if (parentIds.size() > 0) {
+            const ProductList &parentL2As = ctx.GetProducts({parentIds[0]});
+            if (parentL2As.size() > 0) {
+                const Product &parentL2A = parentL2As[0];
+                int ret = ctx.InsertProduct({ ProductType::MaskedL2AProductTypeId, event.processorId, parentL2A.satId, event.siteId,
+                                    event.jobId, productPath, parentL2A.created,
+                                    prodName, parentL2A.quicklookImage, parentL2A.geog,
+                                    parentL2A.orbitId, parentL2A.tiles, parentIds });
+                Logger::debug(QStringLiteral("InsertProduct for %1 returned %2").arg(prodName).arg(ret));
 
-        // Cleanup the currently processing products for the current job
-        Logger::info(QStringLiteral("Cleaning up the file containing currently processing products for output product %1 and folder %2 and site id %3 and job id %4").
-                     arg(prodName).arg(productPath).arg(event.siteId).arg(event.jobId));
-        const QString &curProcPrdsFilePath = QDir::cleanPath(GetFinalProductFolder(ctx, event.jobId, event.siteId) +
-                                                             QDir::separator() + "current_processing_l2a.txt");
-        QStringList prdStrIds;
-        for(int id: parentIds) { prdStrIds.append(QString::number(id)); }
-        ProcessorHandlerHelper::CleanupCurrentProductIdsForJob(curProcPrdsFilePath, event.jobId, prdStrIds);
+                // Cleanup the currently processing products for the current job
+                Logger::info(QStringLiteral("Cleaning up the file containing currently processing products for output product %1 and folder %2 and site id %3 and job id %4").
+                             arg(prodName).arg(productPath).arg(event.siteId).arg(event.jobId));
+                const QString &curProcPrdsFilePath = QDir::cleanPath(GetFinalProductFolder(ctx, event.jobId, event.siteId) +
+                                                                     QDir::separator() + "current_processing_l2a.txt");
+                QStringList prdStrIds;
+                for(int id: parentIds) { prdStrIds.append(QString::number(id)); }
+                ProcessorHandlerHelper::CleanupCurrentProductIdsForJob(curProcPrdsFilePath, event.jobId, prdStrIds);
+            } else {
+                Logger::error(QStringLiteral("L2A_MSK: Parent L2A product with ID %1 for product %2 seems that was deleted from database")
+                              .arg(parentIds[0]).arg(prodName));
+            }
+        } else {
+            Logger::error(QStringLiteral("L2A_MSK: Cannot determine the parent product %1").arg(prodName));
+        }
     } else {
         Logger::error(QStringLiteral("Cannot insert into database the product with name %1 and path %2").arg(prodName).arg(productPath));
     }
@@ -340,8 +352,9 @@ void MaskedL2AHandler::CreateValidityMaskExtractorStep(EventProcessingContext &c
                                                       TaskToSubmit &task,
                                                       NewStepList &steps,
                                                        bool compress,
-                                                       bool cog,
-                                                       bool continueOnMissingInput)
+                                                       bool tiled,
+                                                       bool continueOnMissingInput,
+                                                       bool waterIsValid, bool snowIsValid)
 {
     QString l2aMeta;
     try {
@@ -394,8 +407,14 @@ void MaskedL2AHandler::CreateValidityMaskExtractorStep(EventProcessingContext &c
     if (compress) {
         args += {"-compress", "1"};
     }
-    if (cog) {
-        args += {"-cog", "1"};
+    if (tiled) {
+        args += {"-tiled", "1"};
+    }
+    if (waterIsValid) {
+        args += {"-watvld", "1"};
+    }
+    if (snowIsValid) {
+        args += {"-snowvld", "1"};
     }
 
     WriteOutputProductPath(task, outProductPath);
