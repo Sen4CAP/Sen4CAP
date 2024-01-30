@@ -34,15 +34,21 @@ def run_command(args, env=None):
 
 def read_input_files(input_file):
     input_files = dict()
+    if input_file is None or input_file == "":
+        return input_files    
+    input_file_dir = os.path.dirname(input_file)
     with open(input_file, "r") as file:
         # skip headers
         reader = csv.reader(file)
         next(reader)
         for row in reader:
             if len(row) == 2:
-                input_files[row[0]] = row[1]
+                file_path = row[1]
+                if os.path.isabs(file_path):
+                    input_files[row[0]] = file_path
+                else:
+                    input_files[row[0]] = os.path.join(input_file_dir, file_path)
     return input_files
-
 
 def main():
     parser = argparse.ArgumentParser(

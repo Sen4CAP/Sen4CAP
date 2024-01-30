@@ -13,7 +13,7 @@ import os
 import os.path
 import pipes
 from osgeo import osr, gdal, ogr
-from gdal import gdalconst
+from osgeo import gdalconst
 import re
 import sys
 import csv
@@ -24,6 +24,7 @@ from functools import partial
 from multiprocessing import Pool,cpu_count
 import json
 import numpy as np
+import traceback
 
 NETCDF_WEATHER_BANDS = ["tmin", "tmax", "rad"]
 CROP_LIST = ['wheat','maize','sunfl']
@@ -36,16 +37,20 @@ class CmdArgs(object):
         self.tile = tile
 
 def RunSafy(FourPar, Weather, Parameters, k):
+
     Parameters['Pfen_MrgD'] = FourPar[k][0]
     Parameters['Pgro_Lue' ] = FourPar[k][1]
     Parameters['Pfen_SenA' ] = FourPar[k][2]
     Parameters['Pfen_SenB' ] = FourPar[k][3]
-    
-    GLA,dum=SafyModel(Parameters,Weather)
-    GLA = GLA * 1000
-    GLA = GLA.astype(np.uint16)
-    # print(Parameters)
-    return GLA
+    try:        
+        GLA,dum=SafyModel(Parameters,Weather)
+        GLA = GLA * 1000
+        GLA = GLA.astype(np.uint16)
+        # print(Parameters)
+        return GLA
+    except IndexError:
+        traceback.print_exc()
+        return None
     
 def Temp_Stress(T=None, Tmin=None, Topt=None, Tmax=None, TpSn=None):
     if T < Tmin or T > Tmax:    # T outside the functioning range
@@ -256,7 +261,19 @@ def get_safy_range_params(params_dir) :
         
         crop_params[crop] = FourPar
     return crop_params
-    
+
+def get_max_input_doy(inputs):
+    p = re.compile(".*weather_(\d{8}).nc")
+    max_day = -1
+    for input in inputs: 
+        m = p.search(input)
+        if m:
+            date = m.group(1)
+            cur_doy = dt.datetime.strptime(date,'%Y%m%d').timetuple().tm_yday
+            if (cur_doy > max_day):
+                max_day = cur_doy
+    return max_day
+        
 def main():
     parser = argparse.ArgumentParser(
         description="Extracts the weather features corresponding to the parcels provided"
@@ -276,7 +293,9 @@ def main():
     
     # extract weather features
     all_tair_vals_arr, all_rglb_vals = get_weather_features(args.input_list)
+    max_doy = get_max_input_doy(args.input_list)
     
+    p = Pool(cpu_count())
     # run safy for all the crops and weather grids
     for grid_no in range(0, all_tair_vals_arr.shape[1]):
         print("Running SAFY for grid {} ...".format(grid_no))
@@ -291,19 +310,22 @@ def main():
         
         for crop in CROP_LIST:
             crop_params = crop_jsons[crop]
+            if max_doy != -1 and crop_params['Pgen_StopSim'] > max_doy:
+                crop_params['Pgen_StopSim'] = max_doy - 1
+
             weather_filtered = get_updated_weather(weather_all, crop_params)
             
             range_params = safy_range_params[crop]
             
             print("Running SAFY for crop {} and a number of {} params".format(crop, len(range_params)))
-            p = Pool(cpu_count())
+
             OUT = p.map(partial(RunSafy, range_params, weather_filtered, crop_params), range(len(range_params)))
-            p.close()
+
             LAImat = np.array(OUT)
             OutFile = os.path.join(args.out_lut_dir, 'SafyLUT.G'+str(grid_no)+'.'+crop+'_New.npz')
             np.savez_compressed(OutFile, LAImat=LAImat)
             
-            
+    p.close()            
     # ReadWeather()
 
     

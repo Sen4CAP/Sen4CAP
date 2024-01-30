@@ -13,7 +13,7 @@ import os
 import os.path
 import pipes
 from osgeo import osr, gdal, ogr
-from gdal import gdalconst
+from osgeo import gdalconst
 import re
 import sys
 import csv
@@ -29,9 +29,11 @@ SAFY_YIELD_COL_NAME = "Yield"
 SAFY_D0OUT_COL_NAME = "d0out"
 SAFY_SENBOUT_COL_NAME = "SenBout"
 
-OUTPUT_FEATURE_NAMES = ['ColdT0', 'ColdT1', 'HotT2', 'SumT1', 'SumT2', 'SumT251', 'SumT252', 'SumP1', 'SumP2', 'SumR1', 'SumR2', 'SumE1', 'SumE2', 'MeanT1', 'MeanT2', 'MeanP1', 'MeanP2', 'MeanR1', 'MeanR2', 'MeanE1', 'MeanE2', 'MeanSW10', 'MeanSW11', 'MeanSW12', 'MeanSW20', 'MeanSW21', 'MeanSW22', 'MeanSW30', 'MeanSW31', 'MeanSW32', 'MeanSW40', 'MeanSW41', 'MeanSW42', SAFY_YIELD_COL_NAME, SAFY_D0OUT_COL_NAME, SAFY_SENBOUT_COL_NAME, CT_COL_NAME]
+OUTPUT_FEATURE_NAMES = ['MeanLaiSGWinter', 'SumLaiSGInt0', 'SumLaiSGInt1', 'SumLaiSGInt2', 'MaxSG', 'DayMaxSG', 'MaxLAI', 'ColdT0', 'ColdT1', 'HotT2', 'SumT1', 'SumT2', 'SumT251', 'SumT252', 'SumP1', 'SumP2', 'SumR1', 'SumR2', 'SumE1', 'SumE2', 'MeanT1', 'MeanT2', 'MeanP1', 'MeanP2', 'MeanR1', 'MeanR2', 'MeanE1', 'MeanE2', 'MeanSW10', 'MeanSW11', 'MeanSW12', 'MeanSW20', 'MeanSW21', 'MeanSW22', 'MeanSW30', 'MeanSW31', 'MeanSW32', 'MeanSW40', 'MeanSW41', 'MeanSW42', SAFY_YIELD_COL_NAME, SAFY_D0OUT_COL_NAME, SAFY_SENBOUT_COL_NAME, CT_COL_NAME]
 
 INDICES_COLUMN_SUFFIXES=["Ind_MaxLai", "Ind_HalfLai", "Ind_Emerg", "Ind_EndLai"]
+
+LAI_FEATURES_COLUMN_SUFFIXES=["_mean_LaiSGWinter", "_sum_LaiSGInt0", "_sum_LaiSGInt1", "_sum_LaiSGInt2", "_max_SG", "_daymax_SG", "_max_LAI"]
 
 class InputColumnsInfo(object) : 
     def __init__(self, header):
@@ -39,10 +41,16 @@ class InputColumnsInfo(object) :
         self.id_pos = header.index(ID_COL_NAME)
         self.ct_pos = header.index(CT_COL_NAME)
 
+        # extract the LAI features indices 
+        self.lai_features_indices = self.get_column_indices(header, LAI_FEATURES_COLUMN_SUFFIXES)
+        if len(self.lai_features_indices) > 0 and len(self.lai_features_indices) != len (LAI_FEATURES_COLUMN_SUFFIXES) :
+            print ("Error: the number of LAI features indices in columns is {} while it was expected {}. Exiting ...".format(len(self.lai_features_indices), len (LAI_FEATURES_COLUMN_SUFFIXES)))
+            sys.exit(1)
+
         # extract the crop partioning indices 
         self.crop_indices = self.get_column_indices(header, INDICES_COLUMN_SUFFIXES)
         if len(self.crop_indices) != len (INDICES_COLUMN_SUFFIXES) :
-            print ("Error: the number of crop indices in column is {} while it was expected {}. Exiting ...".format(len(self.crop_indices), len (INDICES_COLUMN_SUFFIXES)))
+            print ("Error: the number of crop indices in columns is {} while it was expected {}. Exiting ...".format(len(self.crop_indices), len (INDICES_COLUMN_SUFFIXES)))
             sys.exit(1)
         
         # extract the weather column indices
@@ -106,7 +114,12 @@ def FloatOrZero(value):
 
 def filter_row_values(row, indices) :
     return [FloatOrZero(row[i]) for i in indices]
-    
+   
+def update_result_row_idx_and_increment(result, pos, value) :
+    result[pos] = value
+    pos = pos + 1 
+    return pos
+
 def handle_batch_record(rows, column_infos, writer):
     outputs = []
     batch_results = []
@@ -134,69 +147,62 @@ def handle_batch_record(rows, column_infos, writer):
         weather_tmean = np.array(filter_row_values(row, column_infos.weather_tmean_indices))
         weather_tmin = np.array(filter_row_values(row, column_infos.weather_tmin_indices))
         
-        result = [None] * 38
-        result[0]  = int(id)                                                              # ['NewID']    
-        result[1]  = int(np.sum(weather_tmin[IndEmerg:IndHalfLai+1]<=0))                  # ['ColdT0']   
-        result[2]  = int(np.sum(weather_tmin[IndHalfLai:IndMaxLai+1]<=0))                 # ['ColdT1']   
-        result[3]  = int(np.sum(weather_tmax[IndMaxLai:IndEndLai+1]>=35))                 # ['HotT2']    
-        result[4]  = int(np.sum(np.maximum(weather_tmean[IndHalfLai:IndMaxLai+1],0)))     # ['SumT1']    
-        result[5]  = int(np.sum(np.maximum(weather_tmean[IndMaxLai :IndEndLai+1],0)))     # ['SumT2']    
-        result[6]  = int(np.sum(np.maximum(weather_tmax[IndHalfLai:IndMaxLai+1]-25,0)))   # ['SumT251']  
-        result[7]  = int(np.sum(np.maximum(weather_tmax[IndMaxLai :IndEndLai+1]-25,0)))   # ['SumT252']  
-        result[8]  = int(np.sum(weather_prec[IndHalfLai:IndMaxLai+1]))                    # ['SumP1']    
-        result[9]  = int(np.sum(weather_prec[IndMaxLai :IndEndLai+1]))                    # ['SumP2']    
-        result[10] = int(np.sum(weather_rad[IndHalfLai:IndMaxLai+1])/1000)                # ['SumR1']    
-        result[11] = int(np.sum(weather_rad[IndMaxLai :IndEndLai+1])/1000)                # ['SumR2']    
-        result[12] = int(np.sum(weather_evap[IndHalfLai:IndMaxLai+1]))                    # ['SumE1']    
-        result[13] = int(np.sum(weather_evap[IndMaxLai :IndEndLai+1]))                    # ['SumE2']    
-        result[14] = np.mean(np.maximum(weather_tmean[IndHalfLai:IndMaxLai+1],0))         # ['MeanT1']   
-        result[15] = np.mean(np.maximum(weather_tmean[IndMaxLai :IndEndLai+1],0))         # ['MeanT2']   
-        result[16] = np.mean(weather_prec[IndHalfLai:IndMaxLai+1])                        # ['MeanP1']   
-        result[17] = np.mean(weather_prec[IndMaxLai :IndEndLai+1])                        # ['MeanP2']   
-        result[18] = np.mean(weather_rad[IndHalfLai:IndMaxLai+1])/1000                    # ['MeanR1']   
-        result[19] = np.mean(weather_rad[IndMaxLai :IndEndLai+1])/1000                    # ['MeanR2']   
-        result[20] = np.mean(weather_evap[IndHalfLai:IndMaxLai+1])                        # ['MeanE1']   
-        result[21] = np.mean(weather_evap[IndMaxLai :IndEndLai+1])                        # ['MeanE2']   
-        result[22] = np.mean(weather_swvl1[IndEmerg  :IndHalfLai+1])                      # ['MeanSW10'] 
-        result[23] = np.mean(weather_swvl1[IndHalfLai:IndMaxLai +1])                      # ['MeanSW11'] 
-        result[24] = np.mean(weather_swvl1[IndMaxLai :IndEndLai +1])                      # ['MeanSW12'] 
-        result[25] = np.mean(weather_swvl2[IndEmerg  :IndHalfLai+1])                      # ['MeanSW20'] 
-        result[26] = np.mean(weather_swvl2[IndHalfLai:IndMaxLai +1])                      # ['MeanSW21'] 
-        result[27] = np.mean(weather_swvl2[IndMaxLai :IndEndLai +1])                      # ['MeanSW22'] 
-        result[28] = np.mean(weather_swvl3[IndEmerg  :IndHalfLai+1])                      # ['MeanSW30'] 
-        result[29] = np.mean(weather_swvl3[IndHalfLai:IndMaxLai +1])                      # ['MeanSW31'] 
-        result[30] = np.mean(weather_swvl3[IndMaxLai :IndEndLai +1])                      # ['MeanSW32'] 
-        result[31] = np.mean(weather_swvl4[IndEmerg  :IndHalfLai+1])                      # ['MeanSW40'] 
-        result[32] = np.mean(weather_swvl4[IndHalfLai:IndMaxLai +1])                      # ['MeanSW41'] 
-        result[33] = np.mean(weather_swvl4[IndMaxLai :IndEndLai +1])                      # ['MeanSW42'] 
+        i = 0
+        result = [None] * (len(OUTPUT_FEATURE_NAMES) + 1)     # + 1 for the NewID
+        i = update_result_row_idx_and_increment(result, i, int(id))                                                              # ['NewID'] 
+        
+        has_lai_features = (column_infos.lai_features_indices is not None and len(column_infos.lai_features_indices) > 0)        
+        i = update_result_row_idx_and_increment(result, i, row[column_infos.lai_features_indices[0]] if has_lai_features else None)                            # MeanLaiSGWinter
+        i = update_result_row_idx_and_increment(result, i, row[column_infos.lai_features_indices[1]] if has_lai_features else None)                            # SumLaiSGInt0
+        i = update_result_row_idx_and_increment(result, i, row[column_infos.lai_features_indices[2]] if has_lai_features else None)                            # SumLaiSGInt1
+        i = update_result_row_idx_and_increment(result, i, row[column_infos.lai_features_indices[3]] if has_lai_features else None)                            # SumLaiSGInt2
+        i = update_result_row_idx_and_increment(result, i, row[column_infos.lai_features_indices[4]] if has_lai_features else None)                            # MaxSG
+        i = update_result_row_idx_and_increment(result, i, row[column_infos.lai_features_indices[5]] if has_lai_features else None)                            # DayMaxSG
+        i = update_result_row_idx_and_increment(result, i, row[column_infos.lai_features_indices[6]] if has_lai_features else None)                            # MaxLAI
+        
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_tmin[IndEmerg:IndHalfLai+1]<=0)))                  # ['ColdT0']   
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_tmin[IndHalfLai:IndMaxLai+1]<=0)))                 # ['ColdT1']   
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_tmax[IndMaxLai:IndEndLai+1]>=35)))                 # ['HotT2']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(np.maximum(weather_tmean[IndHalfLai:IndMaxLai+1],0))))     # ['SumT1']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(np.maximum(weather_tmean[IndMaxLai :IndEndLai+1],0))))     # ['SumT2']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(np.maximum(weather_tmax[IndHalfLai:IndMaxLai+1]-25,0))))   # ['SumT251']  
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(np.maximum(weather_tmax[IndMaxLai :IndEndLai+1]-25,0))))   # ['SumT252']  
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_prec[IndHalfLai:IndMaxLai+1])))                    # ['SumP1']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_prec[IndMaxLai :IndEndLai+1])))                    # ['SumP2']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_rad[IndHalfLai:IndMaxLai+1])/1000))                # ['SumR1']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_rad[IndMaxLai :IndEndLai+1])/1000))                # ['SumR2']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_evap[IndHalfLai:IndMaxLai+1])))                    # ['SumE1']    
+        i = update_result_row_idx_and_increment(result, i, int(np.sum(weather_evap[IndMaxLai :IndEndLai+1])))                    # ['SumE2']    
+        i = update_result_row_idx_and_increment(result, i, np.mean(np.maximum(weather_tmean[IndHalfLai:IndMaxLai+1],0)))         # ['MeanT1']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(np.maximum(weather_tmean[IndMaxLai :IndEndLai+1],0)))         # ['MeanT2']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_prec[IndHalfLai:IndMaxLai+1]))                        # ['MeanP1']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_prec[IndMaxLai :IndEndLai+1]))                        # ['MeanP2']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_rad[IndHalfLai:IndMaxLai+1])/1000)                    # ['MeanR1']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_rad[IndMaxLai :IndEndLai+1])/1000)                    # ['MeanR2']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_evap[IndHalfLai:IndMaxLai+1]))                        # ['MeanE1']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_evap[IndMaxLai :IndEndLai+1]))                        # ['MeanE2']   
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl1[IndEmerg  :IndHalfLai+1]))                      # ['MeanSW10'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl1[IndHalfLai:IndMaxLai +1]))                      # ['MeanSW11'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl1[IndMaxLai :IndEndLai +1]))                      # ['MeanSW12'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl2[IndEmerg  :IndHalfLai+1]))                      # ['MeanSW20'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl2[IndHalfLai:IndMaxLai +1]))                      # ['MeanSW21'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl2[IndMaxLai :IndEndLai +1]))                      # ['MeanSW22'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl3[IndEmerg  :IndHalfLai+1]))                      # ['MeanSW30'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl3[IndHalfLai:IndMaxLai +1]))                      # ['MeanSW31'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl3[IndMaxLai :IndEndLai +1]))                      # ['MeanSW32'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl4[IndEmerg  :IndHalfLai+1]))                      # ['MeanSW40'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl4[IndHalfLai:IndMaxLai +1]))                      # ['MeanSW41'] 
+        i = update_result_row_idx_and_increment(result, i, np.mean(weather_swvl4[IndMaxLai :IndEndLai +1]))                      # ['MeanSW42'] 
         
         safy_yield = filter_row_values(row, column_infos.safy_yield_indices)
         safy_d0 = filter_row_values(row, column_infos.safy_d0_indices)
         safy_senb = filter_row_values(row, column_infos.safy_senb_indices)
         
-        # print("safy_yield = {}".format(safy_yield))
-        # print("safy_d0 = {}".format(safy_d0))
-        # print("safy_senb = {}".format(safy_senb))
-        
-        if safy_yield is not None and len(safy_yield) > 0:
-            result[34] = safy_yield[0]                                                    # ['safyyield'] 
-        else :
-            result[34] = None                                                              
-
-        if safy_d0 is not None and len(safy_d0) > 0:
-            result[35] = safy_d0[0]                                                       # ['safyd0'] 
-        else :
-            result[35] = None                                                              
-
-        if safy_senb is not None and len(safy_senb) > 0:
-            result[36] = safy_senb[0]                                                     # ['safysenb']
-        else :
-            result[36] = None                                                              
-
-        if crop_type is not None and len(crop_type) > 0:
-            result[37] = int(crop_type)                                                   # ['crop_type']
-        else :
-            result[37] = None                                                              
+        i = update_result_row_idx_and_increment(result, i, safy_yield[0] if safy_yield is not None and len(safy_yield) > 0 else None)   # ['safyyield']
+        i = update_result_row_idx_and_increment(result, i, safy_d0[0] if safy_d0 is not None and len(safy_d0) > 0 else None)            # ['safyd0'] 
+        i = update_result_row_idx_and_increment(result, i, safy_senb[0] if safy_senb is not None and len(safy_senb) > 0 else None)      # ['safysenb']
+       
+        i = update_result_row_idx_and_increment(result, i, int(crop_type) if crop_type is not None and len(crop_type) > 0 else None)    # ['crop_type']
         
         batch_results.append(result)
 
@@ -207,7 +213,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Extracts the weather features corresponding to the parcels provided"
     )
-    parser.add_argument("-i", "--input", help="File containing all merged extracted features (Weather, SG Crop Growth and SAFY)", required=True)
+    parser.add_argument("-i", "--input", help="File containing all merged extracted features (Weather, LAI, SG Crop Growth and SAFY)", required=True)
     parser.add_argument("-o", "--output", help="Output file containing the extracted yield features", required=True)
     
     args = parser.parse_args()

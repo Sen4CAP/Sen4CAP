@@ -13,7 +13,7 @@ import os
 import os.path
 import pipes
 from osgeo import osr, gdal, ogr
-from gdal import gdalconst
+from osgeo import gdalconst
 import re
 import sys
 import csv
@@ -548,6 +548,7 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
     if len(weather_all.keys()) == 0:
         return None
     
+    OUT = []
     calibrate_safy_param_wrps = [] 
     for row in lai_parcel_rows:
         parcel_id = int(row[lai_file_handler.selCols.id_col_global_idx])
@@ -555,6 +556,7 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
         crop_name = crop_type_to_crop_name(crop_num)
         if crop_name == "" :
             # print ("Could not find crop name for crop type {}".format(crop_num))
+            OUT.append([parcel_id,crop_num, None,None,None,None,None,None,None])
             continue
         
         mean_vals = np.array([FloatOrZero(row[x]) for x in lai_file_handler.selCols.mean_indices])
@@ -604,7 +606,7 @@ def handle_grid_parcels(year, grid_no, grid_parcels, lai_file_handler, all_tair_
                                                                 ParametersTMP))
 
     # thread_pool = Pool(cpu_count())
-    OUT = thread_pool.map(partial(CalibrateSafy2), calibrate_safy_param_wrps )
+    OUT += thread_pool.map(partial(CalibrateSafy2), calibrate_safy_param_wrps )
     # thread_pool.close()
     
     #OUT = np.array(OUT)
@@ -618,6 +620,18 @@ def initialize_out_writer(out) :
     out_writer.writerow(OUT_HEADER)
     
     return out_writer
+
+def get_max_input_doy(inputs):
+    p = re.compile(".*weather_(\d{8}).nc")
+    max_day = -1
+    for input in inputs: 
+        m = p.search(input)
+        if m:
+            date = m.group(1)
+            cur_doy = dt.datetime.strptime(date,'%Y%m%d').timetuple().tm_yday
+            if (cur_doy > max_day):
+                max_day = cur_doy
+    return max_day
 
 def main():
     parser = argparse.ArgumentParser(
@@ -647,6 +661,11 @@ def main():
     
     # extract weather features
     all_tair_vals_arr, all_rglb_vals = get_weather_features(args.input_weather)
+    max_doy = get_max_input_doy(args.input_weather)
+    for crop in CROP_LIST:
+        crop_params = crop_jsons[crop]
+        if max_doy != -1 and crop_params['Pgen_StopSim'] > max_doy:
+            crop_params['Pgen_StopSim'] = max_doy - 1
 
     writer = initialize_out_writer(args.out)
 

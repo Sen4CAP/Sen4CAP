@@ -31,13 +31,20 @@ def run_command(args, env=None):
 
 def read_input_files(input_file):
     input_files = dict()
+    if input_file is None or input_file == "":
+        return input_files    
+    input_file_dir = os.path.dirname(input_file)
     with open(input_file, "r") as file:
         # skip headers
         reader = csv.reader(file)
         next(reader)
         for row in reader:
             if len(row) == 2:
-                input_files[row[0]] = row[1]
+                file_path = row[1]
+                if os.path.isabs(file_path):
+                    input_files[row[0]] = file_path
+                else:
+                    input_files[row[0]] = os.path.join(input_file_dir, file_path)
     return input_files
 
 def main():
@@ -47,6 +54,7 @@ def main():
     parser.add_argument("-i", "--sg-list-file", help="File containing the SG indices files for each crop", required=True)
     parser.add_argument("-t", "--trend-features-list-file", help="File containing the trend features files for each crop", required=True)
     parser.add_argument("-w", "--weather-metrics-file", help="File or folder containing the weather features merged", required=True)
+    parser.add_argument("-l", "--sg-metrics-file", help="File or folder containing the SG weather features", required=False, default="")
     parser.add_argument("-o", "--output", help="Output merged file", required=True)
     parser.add_argument("-g", "--ignnodatecol", help="Ignore date column", required=False, default = 0)
     
@@ -54,12 +62,14 @@ def main():
     
     sg_input_files = read_input_files(args.sg_list_file)
     trend_input_files = read_input_files(args.trend_features_list_file)
+    sg_metrics_files = read_input_files(args.sg_metrics_file)
 
     output_ct_files_dict = dict()
     
     for crop_type in sg_input_files.keys() : 
         sg_input_file = sg_input_files[crop_type]
         trend_input_file = trend_input_files.get(crop_type)
+        sg_metrics_file = sg_metrics_files.get(crop_type, "")
         
         if trend_input_file is not None:
             output_file, file_extension = os.path.splitext(args.output)
@@ -71,19 +81,21 @@ def main():
             command = []
             command += ["otbcli", "Markers1CsvMerge"]
             command += ["-il", sg_input_file, trend_input_file, args.weather_metrics_file]
+            if sg_metrics_file != "" : 
+                command += [sg_metrics_file]
             command += ["-ignnodatecol", args.ignnodatecol]
             command += ["-out", output_file]
 
             run_command(command)
         
-            with open(args.output, 'w') as out_sg:  
-                writer = csv.writer(out_sg)
-                writer.writerow(["crop_type", "features_file"])
-                for key, value in output_ct_files_dict.items():
-                    writer.writerow([key, value])
         else :
             print("WARNING: Ignoring crop type = {} and SG file {} as the trend features do not exist for this crop type".format(crop_type, sg_input_file))
 
+    with open(args.output, 'w') as out_sg:  
+        writer = csv.writer(out_sg)
+        writer.writerow(["crop_type", "features_file"])
+        for key, value in output_ct_files_dict.items():
+            writer.writerow([key, value])
     
 if __name__ == "__main__":
     main()

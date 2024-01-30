@@ -171,7 +171,7 @@ def main():
 
     # Read the input files 
     print("Reading input features from {}".format(config.input_features))
-    merged_features = pd.read_csv(config.input_features, sep=',', names=['NewID','ColdT0','ColdT1','HotT2','SumT1','SumT2','SumT251','SumT252','SumP1','SumP2','SumR1','SumR2','SumE1','SumE2','MeanT1','MeanT2','MeanP1','MeanP2','MeanR1','MeanR2','MeanE1','MeanE2','MeanSW10','MeanSW11','MeanSW12','MeanSW20','MeanSW21','MeanSW22','MeanSW30','MeanSW31','MeanSW32','MeanSW40','MeanSW41','MeanSW42','Yield','d0out','SenBout', 'crop_code'], header = 1)    # TODO: add the other feature names here
+    merged_features = pd.read_csv(config.input_features, sep=',', names=['NewID', 'MeanLaiSGWinter', 'SumLaiSGInt0', 'SumLaiSGInt1', 'SumLaiSGInt2', 'MaxSG', 'DayMaxSG', 'MaxLAI', 'ColdT0','ColdT1','HotT2','SumT1','SumT2','SumT251','SumT252','SumP1','SumP2','SumR1','SumR2','SumE1','SumE2','MeanT1','MeanT2','MeanP1','MeanP2','MeanR1','MeanR2','MeanE1','MeanE2','MeanSW10','MeanSW11','MeanSW12','MeanSW20','MeanSW21','MeanSW22','MeanSW30','MeanSW31','MeanSW32','MeanSW40','MeanSW41','MeanSW42','Yield','d0out','SenBout', 'crop_code'], header = 1)    # TODO: add the other feature names here
     # merged_features['ColdT0'] = merged_features['ColdT0'].astype(float)
     crop_codes = pd.read_csv(config.crop_codes, sep=',')[['crop_code']] ### change
     # merged_features = merged_features.merge(id2crop, on='NewID')   ### change

@@ -101,7 +101,7 @@ def get_site_srid(conn, parcels_table):
 
 class DataExtraction(object):
 
-    def __init__(self, config, year, output):
+    def __init__(self, config, year, output, parcel_ids_to_crop_code):
         self.config = config
         self.year = year
 
@@ -123,6 +123,7 @@ class DataExtraction(object):
         self.site_name = site_name
         self.insitu_path = insitu_path
         self.output = output
+        self.parcel_ids_to_crop_code = parcel_ids_to_crop_code
 
     def get_connection(self):
         return psycopg2.connect(
@@ -187,6 +188,47 @@ where parcel_attributes.geom_valid = true
             
             run_command(command)
 
+    def export_parcels_to_crop_codes(self):
+        with self.get_connection() as conn:
+            if not table_exists(conn, "public", self.parcels_table):
+                logging.info("Parcels table {} does not exist, skipping export".format(self.parcels_table))
+                sys.exit(1)
+
+            try_rm_file(self.output)
+
+            sql = SQL(
+                """
+select parcels.parcel_id,
+    statistical_data.crop_code
+from {} parcels
+inner join {} parcel_attributes using (parcel_id)
+inner join {} statistical_data using (parcel_id)
+inner join crop_list_n4 on statistical_data.crop_code = crop_list_n4.code_n4
+inner join crop_list_n3 using (code_n3)
+inner join crop_list_n2 using (code_n2)
+where parcel_attributes.geom_valid = true
+order by parcels.parcel_id asc
+
+"""
+            ).format(
+                Identifier(self.parcels_table),
+                Identifier(self.parcel_attributes_table),
+                Identifier(self.statistical_data_table),
+            )
+            sql = sql.as_string(conn)
+            
+            srid = get_site_srid(conn, self.parcels_table)
+            command = []
+            command += ["ogr2ogr"]
+            command += ["-overwrite"]
+            command += ["-a_srs", "EPSG:{}".format(srid)]
+            command += ["-f", "CSV"]
+            command += ["-sql", sql]
+            command += [self.parcel_ids_to_crop_code]
+            command += [ self.get_ogr_connection_string() ]
+            
+            run_command(command)
+
 def get_insitu_path(conn, site_id):
     with conn.cursor() as cursor:
         query = SQL(
@@ -220,6 +262,7 @@ def main():
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true")
     parser.add_argument("-w", "--working-path", help="working path")
     parser.add_argument("-o", "--output", help="the output gpkg file")
+    parser.add_argument("-p", "--id2crop", help="output file containing the mapping from id to crop type", required=False, default="")
 
     args = parser.parse_args()
 
@@ -231,9 +274,11 @@ def main():
     logging.basicConfig(level=level)
 
     config = Config(args)
-    data_extraction = DataExtraction(config, args.year, args.output)
+    data_extraction = DataExtraction(config, args.year, args.output, args.id2crop)
 
     data_extraction.export_parcels()
+    if args.id2crop != "":
+        data_extraction.export_parcels_to_crop_codes()
 
 
 if __name__ == "__main__":
