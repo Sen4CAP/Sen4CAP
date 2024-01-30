@@ -237,16 +237,49 @@ enum class ProductType {
     S4MDBL4AOptReProductTypeId = 21,
     S4MDBL4ASarMainProductTypeId = 22,
     S4MDBL4ASarTempProductTypeId = 23,
-    // TODO                      = 24,
+    S4CHeterogeneityProductTypeId= 24,
     FMaskProductTypeId           = 25,
     MaskedL2AProductTypeId       = 26,
     S4SPermCropsProductTypeId    = 27,
-    S4SYieldFeatProductTypeId    = 28,
+    S4SYieldProductTypeId        = 28,
     ERA5WeatherProductTypeId     = 29,
     S1CompositeProductTypeId     = 30,
-    L3IndicatorsCompositeProductTypeId     = 31,
-    S4SCropTypeMappingProductTypeId     = 32
+    L3IndicatorsCompositeProductTypeId = 31,
+    S4SCropTypeMappingProductTypeId = 32,
+    S4CBareSoilProductTypeId     = 33,
+    S4SYieldSUProductTypeId      = 34
 };
+
+enum class Processor {
+    L2AProcessorId = 1,
+    L3AProcessorId = 2,
+    L3BProcessorId = 3,
+    L3EProcessorId = 4,
+    L4AProcessorId = 5,
+    L4BProcessorId = 6,
+    S1PreProcessorId = 7,
+    LPISProcessorId = 8,
+    S4CL4AProcessorId = 9,
+    S4CL4BProcessorId = 10,
+    S4CL4CProcessorId = 11,
+    L3CProcessorId = 12,
+    L3DProcessorId = 13,
+    MDBProcessorId = 14,
+    MaskedL2AProcessorId = 15,
+    S4SPermCropsProcessorId = 16,
+    S4SYieldProcessorId = 17,
+    Era5ProcessorId = 18,
+    ZarrProcessorId = 19,
+    S4SCropTypeMapProcessorId = 20,
+    TRexProcessorId = 21,
+    L3S1CompProcessorId = 22,
+    L3IndCompProcessorId = 23,
+    FMaskProcessorId = 24,
+    S4CHeterogeneity = 25,
+    S4CBareSoil = 26,
+    S4SYieldSUProcessorId = 27
+};
+
 
 QDBusArgument &operator<<(QDBusArgument &argument, const ProductType &productType);
 const QDBusArgument &operator>>(const QDBusArgument &argument, ProductType &productType);
