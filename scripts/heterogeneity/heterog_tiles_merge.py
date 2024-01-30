@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import sys
+import time
 
 class Config(object):
     def __init__(self, args):
@@ -11,50 +12,60 @@ class Config(object):
         self.output = args.output
 
 def merge_tiles(config) : 
-    dt_out = []
-    file_idx = 0
+    newid_idx = -1
+    main_marker_idx = -1
+    header = []
+    dict_parcels = dict()
     for tile_file in config.input_files:
         with open(tile_file) as f:
             line_idx = 0
-            main_marker = ""
-            main_marker_idx = -1
-            header = []
+            time1 = time.time()
             for line in f:
                 line_split = line.rstrip().split(',')
                 if line_idx == 0:   # skip header line
-                    try:
-                        main_marker_idx = line_split.index("M1")
-                        main_marker = "M1"
-                    except ValueError:
+                    # if the indexes were not initialized, do it once as we assume all files are of same type 
+                    # (we cannot combine S1 and S2) and created with the same order of columns
+                    if newid_idx == -1:
                         try:
-                            main_marker_idx = line_split.index("M5")
-                            main_marker = "M5"
+                            # Distinguish between S2 (contains M1) and S1 (contains M5) markers 
+                            main_marker_idx = line_split.index("M1")
                         except ValueError:
-                            print("M1 or M5 were not found in file {}. It will be ignored ...".format(tile_file))
-                            break      
-                    header = line_split 
+                            try:
+                                main_marker_idx = line_split.index("M5")
+                            except ValueError:
+                                print("M1 or M5 were not found in file {}. It will be skipped ...".format(tile_file))
+                                break   
+                        
+                        header = line_split 
+                        # keep the new_id the last check 
+                        try:
+                            newid_idx = line_split.index("NewID")
+                        except ValueError:
+                            print("ERROR: NewID cannot be found in the header of file {}. It will be skipped ...".format(tile_file))
+                            break
                 else :
-                    if file_idx == 0 :
-                        dt_out.append(dict(zip(header, line_split)))
+                    new_id = int(line_split[newid_idx])
+                    if not new_id in dict_parcels:    
+                        dict_parcels[new_id] = line_split
                     else :
-                        item = dt_out.loc[dt_out['NewID'] == line_split[0]]
+                        item = dict_parcels[new_id]
 
                         # In ATBD, if the main marker is 0, the others are also 0, so we check if
                         # are only differences in this marker. If this marker is 1 and there are 
                         # differences in other markers, we don't take them into account
-                        if line_split[main_marker_idx] == "1.0" :
-                            if  len(item[main_marker].values) == 0 or item[main_marker].values[0] == "0.0" or item[main_marker].values[0] == "0" :
-                                my_dict = dict(zip(header, line_split))
-                                for key in my_dict.keys():
-                                    dt_out.loc[item.index, key] = my_dict.get(key)
-
+                        main_marker_val1 = int(line_split[main_marker_idx])
+                        main_marker_val2 = int(item[main_marker_idx])
+                        # overwrite the dictionary entry if the case
+                        if main_marker_val1 == 1 and main_marker_val2 == 0 :
+                            dict_parcels[new_id] = line_split
                 line_idx = line_idx+1
-            if main_marker_idx >= 0: 
-                if file_idx == 0 :
-                    dt_out = pd.DataFrame(dt_out)
+            time2 = time.time()    
+            print("Execution for file {} took: {}".format(tile_file, time2-time1))
 
-                file_idx = file_idx+1   
-
+    dt_out = []          
+    for new_id in sorted(dict_parcels.keys()):
+        dt_out.append(dict(zip(header, dict_parcels[new_id])))
+    dt_out = pd.DataFrame(dt_out)
     dt_out.to_csv(config.output,index=False)
 
 def main():
@@ -68,7 +79,12 @@ def main():
     
     config = Config(args)
 
+    time1 = time.time()    
+
     merge_tiles(config)
-    
+
+    time2 = time.time()    
+    print("Total execution took: {}".format(time2-time1))
+
 if __name__ == "__main__":
     main()

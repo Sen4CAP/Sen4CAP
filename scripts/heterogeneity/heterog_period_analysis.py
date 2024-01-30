@@ -4,6 +4,13 @@ import argparse
 import numpy as np
 import pandas as pd
 import sys
+import time
+
+C_INDEX_NO = 0
+C_INDEX_STRONG = 1
+C_INDEX_MODERATE = 2
+C_INDEX_WEAK = 3
+C_INDEX_POOR = 4
 
 class Config(object):
     def __init__(self, args):
@@ -14,6 +21,69 @@ class Config(object):
         self.group_items_cnt = args.group_items_cnt
         self.output = args.output
 
+class MarkerInfos(object):
+    def __init__(self, m1, m2, m3, m4):
+        self.sum_m1 = (m1)
+        self.sum_m2 = (m2)
+        self.sum_m3 = (m3)
+        self.sum_m4 = (m4)
+
+        self.sum_all = (m1 + m2 + m3 + m4)
+
+    def add_markers(self, m1, m2, m3, m4) :
+        self.sum_m1 = self.sum_m1 + (m1)
+        self.sum_m2 = self.sum_m2 + (m2)
+        self.sum_m3 = self.sum_m3 + (m3)
+        self.sum_m4 = self.sum_m4 + (m4)
+
+        self.sum_all = self.sum_m1 + self.sum_m2 + self.sum_m3 + self.sum_m4
+
+class ParcelInfos(object):
+    def __init__(self, row, pm_period_start, pm_period_end, group_items_cnt):
+        self.HoleS2_All = getattr(row, 'HoleS2')
+        self.HoleS2_AllPart = getattr(row, 'HoleS2Part')
+        self.periods_dict = dict()
+        m1_val = row.M1
+        m2_val = row.M2
+        m3_val = row.M3
+        m4_val = row.M4
+        row_period = row.period
+        for p in range(pm_period_start,pm_period_end+1):
+            pm = range(p, p + group_items_cnt)
+            if row_period in pm :
+                mi = MarkerInfos(m1_val, m2_val, m3_val, m4_val)
+                self.periods_dict[p] = mi
+        
+    
+    def add_row(self, row, pm_period_start, pm_period_end, group_items_cnt) :
+        self.HoleS2_All = sum([self.HoleS2_All, row.HoleS2])
+        self.HoleS2_AllPart = sum([self.HoleS2_AllPart, row.HoleS2Part])
+        m1_val = row.M1
+        m2_val = row.M2
+        m3_val = row.M3
+        m4_val = row.M4
+        row_period = row.period
+        for p in range(pm_period_start,pm_period_end+1):
+            pm = range(p, p + group_items_cnt)
+            if row_period in pm :
+                if p in self.periods_dict.keys():
+                    self.periods_dict[p].add_markers(m1_val, m2_val, m3_val, m4_val)
+                else :
+                    mi = MarkerInfos(m1_val, m2_val, m3_val, m4_val)
+                    self.periods_dict[p] = mi
+
+def get_c_index(index_n) :
+    if index_n == C_INDEX_STRONG:
+        return "STRONG"
+    elif index_n == C_INDEX_MODERATE:
+        return 'MODERATE'
+    elif index_n == C_INDEX_WEAK:
+        return 'WEAK'
+    elif index_n == C_INDEX_POOR:
+        return 'POOR'
+    else:
+        return 'NO'
+        
 def period_analysis(config) : 
     lpis_csv = pd.read_csv(config.lpis_csv)
     lpis_csv.set_index('NewID', inplace=True)
@@ -30,67 +100,72 @@ def period_analysis(config) :
         
         dt_all = pd.concat([dt_all,f])
 
-    newid_l = dt_all.NewID.unique()
-    
-    print(dt_all.to_string())
+    dt_all = dt_all.sort_values(['NewID', 'period'])
+
+    pm_period_start = min(config.periods)
+    pm_period_end = max(f['period'])-config.group_items_cnt
+
+    ids_dict = dict()
+    for row in dt_all.itertuples():
+        new_id = row.NewID
+        if new_id in ids_dict.keys():
+            ids_dict[new_id].add_row(row, pm_period_start, pm_period_end, config.group_items_cnt)
+        else:
+            ids_dict[new_id] = ParcelInfos(row, pm_period_start, pm_period_end, config.group_items_cnt)
 
     dt_out = []
     l_marker = len(markerL)
-    for i in newid_l:
-        #i = 814
-        dt_i = dt_all.loc[dt_all['NewID']==i]
+    sum_markers_ref = l_marker*config.group_items_cnt
+    sum_markers_ref2 = round(sum_markers_ref-(config.group_items_cnt/2))
+    sum_markers_ref3 = round(l_marker*(config.group_items_cnt-1))
+    sum_markers_ref4 = round((l_marker/2)*(config.group_items_cnt))
+    for i in ids_dict.keys():
+        dt_i = ids_dict[i]
 
-        C_INDEX = 'NO'
+        C_INDEX = C_INDEX_NO
         P_Hete_L = np.nan
         M1 = np.nan
         M2 = np.nan
         M3 = np.nan
         M4 = np.nan
-        HoleS2_All = sum(dt_i['HoleS2']) 
-        HoleS2_AllPart = sum(dt_i['HoleS2Part'])
+        HoleS2_All = dt_i.HoleS2_All
+        HoleS2_AllPart = dt_i.HoleS2_AllPart
      
-        pm_period_start = min(config.periods)
-        pm_period_end = max(f['period'])-config.group_items_cnt
-
         for p in range(pm_period_start,pm_period_end+1):
             pm = range(p,p+config.group_items_cnt)
-            dt_i_m = dt_i.loc[dt_i['period'].isin(pm),markerL]
-            sum_markers = dt_i_m.values.sum()
-            M_sum = [sum(dt_i_m.iloc[:,0]),sum(dt_i_m.iloc[:,1]),sum(dt_i_m.iloc[:,2]),sum(dt_i_m.iloc[:,3])]
-            if sum_markers == l_marker*config.group_items_cnt :
-                # print('strong')
-                # print(i)
-                C_INDEX = 'STRONG'
+            marker_infos = dt_i.periods_dict[p]
+            sum_markers = marker_infos.sum_all
+            if sum_markers == sum_markers_ref :
+                C_INDEX = C_INDEX_STRONG
                 P_Hete_L = p
-                M1 = M_sum[0]
-                M2 = M_sum[1]
-                M3 = M_sum[2]
-                M4 = M_sum[3]
+                M1 = marker_infos.sum_m1
+                M2 = marker_infos.sum_m2
+                M3 = marker_infos.sum_m3
+                M4 = marker_infos.sum_m4
 
-            elif ((sum_markers >= round(l_marker*config.group_items_cnt-(config.group_items_cnt/2))) & (C_INDEX!= 'STRONG')):
-                C_INDEX = 'MODERATE'
+            elif ((sum_markers >= sum_markers_ref2) & (C_INDEX != C_INDEX_STRONG)):
+                C_INDEX = C_INDEX_MODERATE
                 P_Hete_L = p
-                M1 = M_sum[0]
-                M2 = M_sum[1]
-                M3 = M_sum[2]
-                M4 = M_sum[3]
+                M1 = marker_infos.sum_m1
+                M2 = marker_infos.sum_m2
+                M3 = marker_infos.sum_m3
+                M4 = marker_infos.sum_m4
             
-            elif ((sum_markers >= round(l_marker*(config.group_items_cnt-1))) & (C_INDEX not in ('STRONG','MODERATE'))):
-                C_INDEX = 'WEAK'
+            elif ((sum_markers >= sum_markers_ref3) & (C_INDEX not in (C_INDEX_STRONG, C_INDEX_MODERATE))):
+                C_INDEX = C_INDEX_WEAK
                 P_Hete_L = p
-                M1 = M_sum[0]
-                M2 = M_sum[1]
-                M3 = M_sum[2]
-                M4 = M_sum[3]
+                M1 = marker_infos.sum_m1
+                M2 = marker_infos.sum_m2
+                M3 = marker_infos.sum_m3
+                M4 = marker_infos.sum_m4
             
-            elif ((sum_markers >= round((l_marker/2)*(config.group_items_cnt))) & (C_INDEX not in ('STRONG','MODERATE','WEAK'))):
-                #print(f'markers sum : {dt_i_m.values.sum()} and c_index previous : {c_ind}')
-                C_INDEX = 'POOR'
+            elif ((sum_markers >= sum_markers_ref4) & (C_INDEX not in (C_INDEX_STRONG, C_INDEX_MODERATE,C_INDEX_WEAK))):
+                C_INDEX = C_INDEX_POOR
                 P_Hete_L = p
-                M1 = M_sum[0]
-                M2 = M_sum[1]
-                M3 = M_sum[2]
-                M4 = M_sum[3]
+                M1 = marker_infos.sum_m1
+                M2 = marker_infos.sum_m2
+                M3 = marker_infos.sum_m3
+                M4 = marker_infos.sum_m4
             
         dt_out.append({
             'NewID' : i,
@@ -101,11 +176,11 @@ def period_analysis(config) :
             'M3' : M3,
             'M4' : M4,
             'P_Hete_L' : P_Hete_L,
-            'C_INDEX' : C_INDEX,
+            'C_INDEX' : get_c_index(C_INDEX),
             'HoleS2' : HoleS2_All,
             'HoleS2_PM' : HoleS2_AllPart
         })
-            
+
     dt_out = pd.DataFrame(dt_out)
     dt_out = dt_out.astype({"M1":"int","M2":"int","M3":"int","M4":"int"}, errors='ignore')
     
@@ -134,7 +209,12 @@ def main():
     
     config = Config(args)
 
+    time1 = time.time()
+    
     period_analysis(config)
+
+    time2 = time.time()
+    print("Total execution took: {}".format(time2-time1))
     
 if __name__ == "__main__":
     main()

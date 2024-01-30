@@ -11,7 +11,7 @@ import pandas as pd
 import subprocess, platform, os, glob,sys
 import numpy.ma as ma
 from numpy.linalg import norm
-
+import time
 
 gdal.UseExceptions()
 gdal.AllRegister()
@@ -41,6 +41,33 @@ class Config(object):
         self.PerHetero = args.percentage_heterogeneity
 
         self.output = args.output
+
+class PixelInfos(object):
+    def __init__(self, x, y):
+        self.x = [x]
+        self.y = [y]
+
+    def add(self, x, y):
+        self.x.append(x)
+        self.y.append(y)
+
+def get_parcel_pixels(lpis_buffered_raster) :
+    raster = gdal.Open(lpis_buffered_raster,gdal.GA_ReadOnly)
+    imgR = raster.ReadAsArray()
+
+    dict_parcel_pixels = dict()
+    x_idx = 0
+    for row in imgR:
+        y_idx = 0
+        for pixel_val in row:
+            if pixel_val != 0 :
+                if pixel_val in dict_parcel_pixels.keys():
+                    dict_parcel_pixels[pixel_val].add(x_idx, y_idx)
+                else:
+                    dict_parcel_pixels[pixel_val] = PixelInfos(x_idx, y_idx)
+            y_idx = y_idx + 1
+        x_idx = x_idx + 1
+    return dict_parcel_pixels
 
 def import_data(config) : 
     print("Importing data ...")
@@ -85,8 +112,13 @@ def import_data(config) :
     print('imported NDVI')
     # ## extract cluster % of x parcels
 
-    raster = gdal.Open(config.lpis_buffered_raster,gdal.GA_ReadOnly)
-    imgR = raster.ReadAsArray()
+    # raster = gdal.Open(config.lpis_buffered_raster,gdal.GA_ReadOnly)
+    # imgR = raster.ReadAsArray()
+
+    start = time.time()
+    parcel_pixels = get_parcel_pixels(config.lpis_buffered_raster)
+    end = time.time()
+    print("Extracting parcels pixels took {}".format(end - start))
 
     Cluster_isolated = gdal.Open(config.smooted_raster,gdal.GA_ReadOnly)
     Cluster_extract = Cluster_isolated.ReadAsArray()
@@ -94,25 +126,38 @@ def import_data(config) :
     Cluster_connect = gdal.Open(config.local_conn_raster,gdal.GA_ReadOnly)
     Cluster_connectE = Cluster_connect.ReadAsArray()
 
-    imgC = np.stack([imgR,Cluster_extract,Cluster_connectE])
-    newid_l = np.unique(imgR)
-    newid_l = newid_l[newid_l!=0]
+    # imgC = np.stack([imgR,Cluster_extract,Cluster_connectE])
+    # newid_l = np.unique(imgR)
+    # newid_l = newid_l[newid_l!=0]
 
     df_cl = pd.DataFrame(columns=['NewID','Hete'])
 
-    for i in newid_l:
+    total_parcels_no = len(parcel_pixels.keys())
+    cnt = 0
+    updates = 0
+    for parcel_id in sorted(parcel_pixels.keys()):
+        #start = time.time()
+        #cl_i = np.where(imgC[0] == i)
+        #end = time.time()
+        #print("Stage 1 took {}".format(end - start))
 
-        cl_i = np.where(imgC[0] == i)
-        val_poly = imgC[1,cl_i[0],cl_i[1]]
+        # val_poly = imgC[1,cl_i[0],cl_i[1]]
+        cl_i = parcel_pixels[parcel_id]
+        val_poly = Cluster_extract[cl_i.x,cl_i.y]
         val_poly = val_poly.astype(np.int64)
+
+        # val_poly_tst = Cluster_extract[cl_i_tst.x, cl_i_tst.y]
+        # val_poly_tst = val_poly_tst.astype(np.int64)
+        # c = all(val_poly == val_poly_tst)
+
         val_poly1 = val_poly[val_poly!=0]
         v_countP = np.bincount(val_poly1)/len(val_poly1)
-        
-        v_count = np.bincount(val_poly1)
-        df_cl1 = pd.DataFrame({'NewID':[i]})
-        df_cl1['ShapeInd'] = lpis_csv['ShapeInd'][i] 
-        df_cl1['LC'] = lpis_csv['lc'][i] 
 
+        v_count = np.bincount(val_poly1)
+        df_cl1 = pd.DataFrame({'NewID':[parcel_id]})
+        df_cl1['ShapeInd'] = lpis_csv['ShapeInd'][parcel_id] 
+        df_cl1['LC'] = lpis_csv['lc'][parcel_id] 
+        
         if sum(val_poly)>0 :
 
             for c in range(1,max(val_poly1)+1):
@@ -125,9 +170,9 @@ def import_data(config) :
             
         elif max(v_countP) < config.PerHetero:
 
-            val_Connect = imgC[2,cl_i[0],cl_i[1]]
+            val_Connect = Cluster_connectE[cl_i.x,cl_i.y]
 
-            valAll_poly = img[cl_i[0],cl_i[1],:]
+            valAll_poly = img[cl_i.x,cl_i.y,:]
             valAll_poly = np.concatenate([val_poly[:, np.newaxis],valAll_poly],axis=1)
             #print(valAll_poly)
             valAll_poly = valAll_poly.astype(float)
@@ -166,7 +211,7 @@ def import_data(config) :
                 df_cl1['distNDVI'] = round(np.nanmax(dist['distNDVI'])/1000,5)
 
             df_cl1['Compact'] = np.nanmean(val_Connect)
-            df_cl1['CompactA'] = (np.nanmean(val_Connect)/np.log(lpis_csv[area][i]))
+            df_cl1['CompactA'] = (np.nanmean(val_Connect)/np.log(lpis_csv[area][parcel_id]))
             df_cl1['Hete'] = 1         
             
             if sum(v_count>config.NPixClS2) >= 2:
@@ -181,8 +226,20 @@ def import_data(config) :
             df_cl1['M2'] = 0
             df_cl1['Compact'] = 0
             df_cl1['CompactA'] = 0
-
+        
+        #end = time.time()
+        #print("Stage 2 took {}".format(end - start))
+        
         df_cl = pd.concat([df_cl,df_cl1])
+        
+
+        finished = 100*(cnt/total_parcels_no)
+        if divmod(finished, 10) == (updates, 0):
+            updates += 1
+            print('Completed {}%'.format(int(finished)))    
+        cnt = cnt + 1    
+        # end = time.time()
+        # print("Stage 3 took {}".format(end - start))
 
     df_cl.loc[df_cl['Hete'].isin((0,3)),'M1'] = 0 
     df_cl.loc[df_cl['Hete'] == 1,'M1'] = 1
@@ -218,7 +275,12 @@ def main():
     args = parser.parse_args()
     config = Config(args)
 
+    time1 = time.time()
+    
     import_data(config)
     
+    time2 = time.time()
+    print("ALL Execution took: {} s" .format(time2 - time1))
+
 if __name__ == "__main__":
     main()
