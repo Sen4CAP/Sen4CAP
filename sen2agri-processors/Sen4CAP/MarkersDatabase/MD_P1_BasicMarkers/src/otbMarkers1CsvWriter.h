@@ -179,6 +179,10 @@ public:
       m_bUseValidityCnt = bValidityCnt;
   }
 
+  inline void SetUseInvalidCnt(bool bInvalidCnt) {
+      m_bUseInvalidPixelsCnt = bInvalidCnt;
+  }
+
   inline void SetUseMedian(bool bUseMedian) {
       m_bUseMedian = bUseMedian;
   }
@@ -239,6 +243,7 @@ private:
   bool                          m_bUseMinMax;
   bool                          m_bUseStdev;
   bool                          m_bUseValidityCnt;
+  bool                          m_bUseInvalidPixelsCnt;
   bool                          m_bUseMedian;
   bool                          m_bUseP25;
   bool                          m_bUseP75;
@@ -250,6 +255,7 @@ private:
     int m_MinPosInHeader;
     int m_MaxPosInHeader;
     int m_ValidPixelsPosInHeader;
+    int m_InvalidPixelsPosInHeader;
     char m_csvSeparator;
     int m_mapValuesIndex;
     std::string m_defaultPrdType;

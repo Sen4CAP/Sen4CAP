@@ -34,7 +34,7 @@ namespace otb {
 template < class TMeasurementVector >
 Markers1CsvWriter<TMeasurementVector>
 ::Markers1CsvWriter(): m_TargetFileName(""),
-    m_bUseMinMax(false), m_bUseValidityCnt(false),
+    m_bUseMinMax(false), m_bUseValidityCnt(false), m_bUseInvalidPixelsCnt(false),
     m_bUseMedian(false), m_bUseP25(false), m_bUseP75(false)
 {
     m_IdPosInHeader = -1;
@@ -43,6 +43,7 @@ Markers1CsvWriter<TMeasurementVector>
     m_MinPosInHeader = -1;
     m_MaxPosInHeader = -1;
     m_ValidPixelsPosInHeader = -1;
+    m_InvalidPixelsPosInHeader = -1;
     m_MedianPosInHeader = -1;
     m_P25PosInHeader = -1;
     m_P75PosInHeader = -1;
@@ -99,7 +100,7 @@ Markers1CsvWriter<TMeasurementVector>
     int idx = 0;
     for (const auto &hdrItem: vec) {
         isFieldNameHdrItem = (hdrItem == idFieldName);
-        bool isIntValHdr = (hdrItem == "valid_pixels_cnt");
+        bool isIntValHdr = (hdrItem == "valid_pixels_cnt") || (hdrItem == "invalid_pixels_cnt");
         const HeaderInfoType &hdrInfo = isFieldNameHdrItem ?
                     HeaderInfoType(hdrItem, hdrItem, m_bIdIsInteger, true, idx) :
                     HeaderInfoType(BuildHeaderItem(dateStr, hdrItem, fileType, headerAdditionalFields),
@@ -197,7 +198,12 @@ Markers1CsvWriter<TMeasurementVector>
                 isIntValue = hdrItem.IsIntegerValue();
             }
             if (!isIntValue) {
-                outStream << DoubleToString(curLineVect[j]).c_str();
+                // even if is a double format, we check if is actually integer to reduce size of the strings in file
+                if (ceilf(curLineVect[j]) == curLineVect[j]) {
+                    outStream << DoubleToString(curLineVect[j], 1).c_str();
+                } else {
+                    outStream << DoubleToString(curLineVect[j]).c_str();
+                }
             } else {
                 outStream << (int)curLineVect[j];
             }
