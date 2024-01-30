@@ -149,6 +149,8 @@ private:
         if(minmax.size() == 2)
             printf("min: %g, max: %g\n", minmax[0], minmax[1]);
 
+        interpF = engeStepInterpolationFilter<inputImageType, outputImageType>::New();
+        maskF = engeMaskSerieFilter<inputImageType, inputImageType, outputImageType>::New();
         maskF->SetInput(0, this->GetParameterImage<inputImageType>("in") );
         maskF->SetInput(1, this->GetParameterImage<inputImageType>("msk") );
         maskF->setMasks(unmaskedvalues, replacing_values);
