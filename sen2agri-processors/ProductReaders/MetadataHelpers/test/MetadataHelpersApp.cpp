@@ -244,7 +244,7 @@ private:
 
         PrintStringVector("allBandNames", allBandNames);
 
-        PrintStringVector("physicalBandNames", allBandNames);
+        PrintStringVector("physicalBandNames", physicalBandNames);
 
         std::cout << "bandResB1: " << bandResB1  << std::endl;
         std::cout << "bandResB2: " << bandResB2  << std::endl;
