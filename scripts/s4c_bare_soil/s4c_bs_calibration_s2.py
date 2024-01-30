@@ -14,14 +14,20 @@ import re
 from pyarrow import ipc
 import datetime as dt
 import time
+from functools import partial
+from multiprocessing import Pool,cpu_count
+from statistics import mean
 
 ID_COL_NAME = "NewID"
 
-features_BS = ['mean_NDVI','mean_NDWI','mean_NDTI']
-features_NBS = ['mean_NDVI','mean_NDWI','mean_NDTI','mean_FCOVER']
+features_BS = ['mean_NDVI','mean_NDTI'] ## No need to use mean_NDWI for Belgium so I removed it 
+features_NBS = ['mean_NDVI','mean_NDTI','mean_FCOVER'] ## No need to use mean_NDWI for Belgium so I removed it 
 
 bi_to_filter = ['FAPAR', 'FCOVER','LAI', 'NDVI']
 refl_bands_to_filter = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12','mean_LAI', 'mean_NDVI']
+
+bands_forced_order = ["mean_FAPAR","mean_FCOVER","mean_LAI","mean_L2A_B2","mean_L2A_B3","mean_L2A_B4","mean_L2A_B8","mean_L2A_B11",
+                      "mean_L2A_B12","mean_NDVI"]
 
 class Config(object):
     def __init__(self, args):
@@ -52,6 +58,12 @@ class Config(object):
             print("Cannot find the declarations csv in the LPIS directory {}. Exiting ...".format(args.lpis))
             sys.exit(1)
 
+class DateValueIndexes(object): 
+    def __init__(self):
+        self.idxs = []
+
+    def add_index(self, idx):
+        self.idxs.append(idx)
 
 class SelectedColumns(object):
     def __init__(self, col_names, global_col_indices, id_col_global_idx, id_col_name = ID_COL_NAME):
@@ -65,7 +77,6 @@ class SelectedColumns(object):
         self.id_col_name = id_col_name
         
         self.mean_indices = []
-        self.all_dates = []
         cur_idx = 1 # We start from 1 as on the first position in data will be always the ID (see get_all_global_col_indices)
         self.dict_cols_indices = dict()
         self.dict_cols_dates = dict()
@@ -91,11 +102,29 @@ class SelectedColumns(object):
 
             cur_idx = cur_idx+1
 
-        self.dates = np.array(dates)
+        self.unique_dates = dates
         self.all_column_names = [self.id_col_name] + self.columns
+
+        self.update_dates_indexes()
+
+        if set(bands_forced_order) != set(self.dict_cols_indices.keys()) :
+            print("Forces column order differ from the actual columns. Exiting ...")
+            sys.exit(1)
 
         print("Mean indices: {}".format(self.mean_indices))
             
+    def update_dates_indexes(self) :
+        self.cols_indexes = dict()
+        for renamed_col in self.dict_cols_indices.keys():
+            arr_idxs = [DateValueIndexes() for j in range(len(self.unique_dates))]
+            i = 0
+            marker_dates = self.dict_cols_dates[renamed_col]
+            for marker_date in marker_dates:
+                idx_date = self.unique_dates.index(marker_date)
+                arr_idxs[idx_date].add_index(self.dict_cols_indices[renamed_col][i])
+                i = i + 1
+            self.cols_indexes[renamed_col] = arr_idxs
+
     def get_all_columns(self) :
         return self.all_column_names
         
@@ -104,7 +133,6 @@ class SelectedColumns(object):
 
     def update_col_infos(self, col, renamed_column, cur_idx, date_time_obj) :
         self.mean_indices.append(cur_idx)
-        self.all_dates.append(date_time_obj)
 
         if renamed_column in self.dict_cols_indices.keys():
             self.dict_cols_indices[renamed_column].append(cur_idx)
@@ -113,6 +141,10 @@ class SelectedColumns(object):
             self.dict_cols_indices[renamed_column] = [cur_idx]
             self.dict_cols_dates[renamed_column] = [date_time_obj]
 
+class CropFieldEntryWrapper(object) : 
+    def __init__(self, sel_cols, cropfield_descr):
+        self.sel_cols = sel_cols
+        self.cropfield_descr = cropfield_descr
 
 def get_selected_columns(columns, tiles_filter) : 
     # print ("Schema: {}".format(reader.schema))
@@ -146,45 +178,52 @@ def get_selected_columns(columns, tiles_filter) :
     # print("Selected columns: {}".format(col_names))
     return SelectedColumns(col_names, global_col_indices, id_col_global_idx, ID_COL_NAME)
 
-def handle_batch_record(selCols, all_cropfields, out_traint_all):
-    traint_all1 = pd.DataFrame()
-    nb_values = len(selCols.dates) 
+def handle_cropfield_entry(selCols, cropfield_descr):
+    nb_values = len(selCols.unique_dates) 
     values = np.empty(nb_values, dtype=object)
-    for cropfield_descr in all_cropfields:
-        # print("cropfield_descr: {}".format(cropfield_descr))
-        # mean_vals = cropfield_descr[selCols.mean_indices]
-        traint_i = pd.DataFrame()
-        traint_i['dates'] = selCols.dates
-        traint_i['NewID'] = cropfield_descr[selCols.id_col_global_idx].astype(int)
-        # iterated each renamed unique column 
-        for renamed_col in selCols.dict_cols_indices.keys():
-            # create a df in order to make a mean for the common dates 
-            # these common dates correspond normally to parcels covered by several tiles,
-            # other columns should not be impacted
-            ren_col_vals = pd.DataFrame()
-            ren_col_vals['dates'] = selCols.dict_cols_dates[renamed_col]
-            ren_col_vals['values'] = cropfield_descr[selCols.dict_cols_indices[renamed_col]]
-            ren_col_vals = ren_col_vals.groupby(['dates']).mean().reset_index()
-
-            # now fill out the dates missing for the current column
-            i = 0
-            for date in selCols.dates:
-                ret = ren_col_vals.loc[ren_col_vals['dates'] == date, 'values']
-                if len(ret) > 0:
-                    values[i] = ret.iloc[0]
+    traint_i = pd.DataFrame()
+    traint_i['dates'] = selCols.unique_dates
+    traint_i['NewID'] = cropfield_descr[selCols.id_col_global_idx].astype(int)
+    # iterated each renamed unique column 
+    for renamed_col in bands_forced_order:
+        date_idxs = selCols.cols_indexes[renamed_col]
+        i = 0
+        for date in selCols.unique_dates:
+            date_idx = date_idxs[i]
+            nb_idxs = len(date_idx.idxs)
+            if nb_idxs > 0 :
+                if nb_idxs == 1:
+                    values[i] = cropfield_descr[date_idx.idxs[0]]
                 else :
-                    values[i] = None
-                i = i + 1
+                    vals = cropfield_descr[date_idx.idxs]
+                    values[i] = mean(vals)
+            else:
+                values[i] = None
+            i = i + 1        
 
-            traint_i[renamed_col] = values.tolist()
+        traint_i[renamed_col] = values.tolist()
+    
+    return traint_i
 
-        traint_all1 = pd.concat([traint_all1,traint_i])
+def handle_cropfield_entry_wrp(cropfield_entry_wrp):
+    return handle_cropfield_entry(cropfield_entry_wrp.sel_cols, cropfield_entry_wrp.cropfield_descr)
+
+def handle_batch_record(selCols, all_cropfields, thread_pool):
+    traint_all = pd.DataFrame()
+    crop_field_entries_wrps = []
+    for cropfield_descr in all_cropfields:
+        crop_field_entries_wrps.append(CropFieldEntryWrapper(selCols, cropfield_descr))
+
+    return pd.concat(thread_pool.map(partial(handle_cropfield_entry_wrp), crop_field_entries_wrps ))
+    #for ret_df in all_df:
+#    traint_all = pd.concat([traint_all, all_df])
     
-    out_traint_all = pd.concat([out_traint_all,traint_all1]) 
-    
-    return out_traint_all
+#    return traint_all
 
 def handle_ipc_file(input, out, tiles_filter, out_traint_all) :
+    pool_size = cpu_count()
+    thread_pool = Pool(pool_size)
+
     reader = ipc.open_file(input)
     
     print("Having a number of {} columns ...".format(len(reader.schema.names)))
@@ -192,24 +231,33 @@ def handle_ipc_file(input, out, tiles_filter, out_traint_all) :
     all_column_names = selCols.get_all_columns()
     print ("Column names to select: {}".format(all_column_names))
             
+    schema = reader.schema
+    columns_schema_indexes = []        
+    for name in all_column_names:
+        columns_schema_indexes.append(schema.get_field_index(name))
+
     rowcnt = 0
     for i in range(0, reader.num_record_batches):
         time1 = time.time()
         b = reader.get_batch(i)
         schema = b.schema
         columns_to_select = []        
-        for name in all_column_names:
-            columns_to_select.append(b.column(schema.get_field_index(name)))
+        for idx in columns_schema_indexes:
+            columns_to_select.append(b.column(idx))
 
         rb = b.from_arrays(columns_to_select, all_column_names)
-        pd = rb.to_pandas()
-        all_cropfields = pd.to_numpy()
+        batch_pd = rb.to_pandas()
+        all_cropfields = batch_pd.to_numpy()
         
-        out_traint_all = handle_batch_record(selCols, all_cropfields, out_traint_all)
-        
+        traint_all1 = handle_batch_record(selCols, all_cropfields, thread_pool)
+
+        out_traint_all = pd.concat([out_traint_all, traint_all1])
+
         time2 = time.time()
         print("Execution for batch {}/{} for {} entries took: {} s"
                 .format(i, reader.num_record_batches, len(all_cropfields), time2 - time1))
+
+    thread_pool.close()
 
     return out_traint_all
         
@@ -300,9 +348,11 @@ def extract_calibration_data_s2(config, traint_all, lpis_csv, output) :
     calibration_id = lpis_csv[(lpis_csv['S2Pix']>=50)& (lpis_csv['eaa']==1)]
     len(calibration_id)
 
-    traint_all['mean_NDWI'] = (traint_all[f'mean_L2A_B8'] - traint_all[f'mean_L2A_B11']) / (traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B8'])
+    # traint_all['mean_NDWI'] = (traint_all[f'mean_L2A_B8'] - traint_all[f'mean_L2A_B11']) / (traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B8'])
     traint_all['mean_NDTI'] = (traint_all[f'mean_L2A_B11']-traint_all[f'mean_L2A_B12'])/(traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B12'])
-    traint_all['mean_BSI'] = ((traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B4']) - (traint_all[f'mean_L2A_B8']+traint_all[f'mean_L2A_B2'])) / ((traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B4']) + (traint_all[f'mean_L2A_B8']+traint_all[f'mean_L2A_B2']))
+    traint_all['mean_BSI'] = ((traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B4']) - (traint_all[f'mean_L2A_B8']+
+                                traint_all[f'mean_L2A_B2'])) / ((traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B4']) + 
+                                (traint_all[f'mean_L2A_B8']+traint_all[f'mean_L2A_B2']))
 
     traint_all = traint_all[traint_all.NewID.isin(calibration_id.NewID)]
     traint_BS = traint_all.copy()
@@ -318,8 +368,8 @@ def extract_calibration_data_s2(config, traint_all, lpis_csv, output) :
     #print(traint_all)
 
     traint_BS['cat'] = np.nan
-    traint_BS.loc[(traint_BS['mean_NDVI'] < config.thr_bs_ndvi*1000) & (traint_BS['mean_NDTI'] <= config.thr_bs_ndti) & 
-                  (traint_BS['mean_NDWI'] < config.thr_bs_ndwi),'cat'] = 'BS' 
+    traint_BS.loc[(traint_BS['mean_NDVI'] < config.thr_bs_ndvi*1000) & (traint_BS['mean_NDTI'] <= config.thr_bs_ndti), 'cat'] = 'BS' 
+                  # & (traint_BS['mean_NDWI'] < config.thr_bs_ndwi),'cat'] = 'BS' 
     traint_BS.loc[(traint_BS['mean_NDVI'] > config.thr_nbs_ndvi*1000) & (traint_BS['mean_NDTI'] > config.thr_nbs_ndti) & 
                   (traint_BS['mean_FCOVER'] > config.thr_nbs_fcover*1000),'cat'] = 'NBS' 
 
@@ -368,7 +418,12 @@ def main():
     # load the LPIS CSV
     lpis_csv_content = pd.read_csv(config.lpis_csv)
 
+    time1 = time.time()
+
     handle_file(config, args.input, args.output, lpis_csv_content)
+
+    time2 = time.time()
+    print("ALL Execution took: {} s" .format(time2 - time1))
     
 if __name__ == "__main__":
     main()

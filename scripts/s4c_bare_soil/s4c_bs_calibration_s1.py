@@ -22,6 +22,13 @@ ID_COL_NAME = "NewID"
 markers_sar_main = ["ASC_VV_BCK_MEAN","ASC_VV_COHE_MEAN","ASC_VH_BCK_MEAN","ASC_VH_COHE_MEAN","ASC_RATIO_BCK_MEAN",
                     "DESC_VV_BCK_MEAN","DESC_VV_COHE_MEAN","DESC_VH_BCK_MEAN","DESC_VH_COHE_MEAN","DESC_RATIO_BCK_MEAN"]
 
+class DateValueIndexes(object): 
+    def __init__(self):
+        self.idxs = []
+
+    def add_index(self, idx):
+        self.idxs.append(idx)
+
 class SelectedColumns(object):
     def __init__(self, col_names, global_col_indices, id_col_global_idx, id_col_name = ID_COL_NAME):
         
@@ -33,7 +40,7 @@ class SelectedColumns(object):
         self.id_col_name = id_col_name
         
         self.mean_indices = []
-        self.all_dates = []
+        self.all_unique_dates = []
         cur_idx = 1 # We start from 1 as on the first position in data will be always the ID (see get_all_global_col_indices)
         self.dict_cols_indices = dict()
         self.dict_cols_dates = dict()
@@ -65,6 +72,8 @@ class SelectedColumns(object):
 
         self.all_column_names = [self.id_col_name] + self.columns
 
+        self.update_dates_indexes()
+
         print("Mean indices: {}".format(self.mean_indices))
             
     def get_all_columns(self) :
@@ -75,7 +84,8 @@ class SelectedColumns(object):
 
     def update_col_infos(self, col, renamed_column, cur_idx, date_time_obj) :
         self.mean_indices.append(cur_idx)
-        self.all_dates.append(date_time_obj)
+        if not date_time_obj in self.all_unique_dates:
+            self.all_unique_dates.append(date_time_obj)
 
         if renamed_column in self.dict_cols_indices.keys():
             self.dict_cols_indices[renamed_column].append(cur_idx)
@@ -84,6 +94,17 @@ class SelectedColumns(object):
             self.dict_cols_indices[renamed_column] = [cur_idx]
             self.dict_cols_dates[renamed_column] = [date_time_obj]
 
+    def update_dates_indexes(self) :
+        self.cols_indexes = dict()
+        for renamed_col in self.dict_cols_indices.keys():
+            arr_idxs = [DateValueIndexes() for j in range(len(self.all_unique_dates))]
+            i = 0
+            marker_dates = self.dict_cols_dates[renamed_col]
+            for marker_date in marker_dates:
+                idx_date = self.all_unique_dates.index(marker_date)
+                arr_idxs[idx_date].add_index(self.dict_cols_indices[renamed_col][i])
+                i = i + 1
+            self.cols_indexes[renamed_col] = arr_idxs
 
 def get_selected_columns(columns) : 
     # print ("Schema: {}".format(reader.schema))
@@ -109,20 +130,28 @@ def handle_batch_record(selCols, all_cropfields, training_S1):
         # mean_vals = cropfield_descr[selCols.mean_indices]
         new_id = cropfield_descr[selCols.id_col_global_idx].astype(int)
         # Get all indexes from S2 calibration data for this new id
-        idx_i = training_S1.loc[training_S1.NewID==new_id].index
+        newid_indexes = training_S1.loc[training_S1.NewID==new_id].index
         for renamed_col in selCols.dict_cols_indices.keys():
-            dates_s = selCols.dict_cols_dates[renamed_col]
-            for idx in idx_i:
+            dates_s = selCols.all_unique_dates
+            date_idxs = selCols.cols_indexes[renamed_col]
+
+            for newid_idx in newid_indexes:
                 # get the date from S2 calibration data for the current index
-                d = datetime.strptime(training_S1.dates[idx],'%Y-%m-%d').date()
+                d = datetime.strptime(training_S1.dates[newid_idx],'%Y-%m-%d').date()
                 # search in the S1 markers the index of closest date to the current S2 date
                 d_m = min(range(len(dates_s)), key=lambda ii: abs(dates_s[ii]- d))
-                training_S1.at[idx,'datesS1'] = dates_s[d_m]
-                training_S1.at[idx,f'{renamed_col}'] = cropfield_descr[selCols.dict_cols_indices[renamed_col][d_m]]
+                date_idx = date_idxs[d_m]
+                val = None    
+                if len(date_idx.idxs) > 0 :
+                    # get the real idx in the renamed col values
+                    idx_value = date_idx.idxs[0]
+                    val = cropfield_descr[idx_value]
+                training_S1.at[newid_idx,f'{renamed_col}'] = val
+                training_S1.at[newid_idx,'datesS1'] = dates_s[d_m]
 
     return training_S1
 
-def handle_ipc_file(input, out, training_S1) :
+def handle_ipc_file(input, training_S1) :
     reader = ipc.open_file(input)
     
     print("Having a number of {} columns ...".format(len(reader.schema.names)))
@@ -151,7 +180,7 @@ def handle_ipc_file(input, out, training_S1) :
 
     return training_S1
         
-def handle_csv_file(input, out, training_S1) :
+def handle_csv_file(input, training_S1) :
     with open(input, 'r') as read_obj:
         # pass the file object to reader() to get the reader object
         csv_reader = csv.reader(read_obj)
@@ -175,7 +204,7 @@ def handle_csv_file(input, out, training_S1) :
     
     return training_S1
 
-def handle_json_file(input, out, training_S1) :
+def handle_json_file(input, training_S1) :
     re = {}
     with open(input,"r") as file:
         re = json.load(file)
@@ -200,18 +229,18 @@ def handle_file(input, output, training_S1):
     lcinput = input.lower()
     if lcinput.endswith('.ipc'):
         print("Handling ipc file {}".format(input))
-        training_S1 = handle_ipc_file(input, output, training_S1)
+        training_S1 = handle_ipc_file(input, training_S1)
     elif lcinput.endswith('.csv'):
         print("Handling csv file {}".format(input))
-        training_S1 = handle_csv_file(input, output, training_S1)
+        training_S1 = handle_csv_file(input, training_S1)
     elif lcinput.endswith('.json'):
         print("Handling json file {}".format(input))
-        training_S1 = handle_json_file(input, output, training_S1)        
+        training_S1 = handle_json_file(input, training_S1)        
     else :
         print("Invalid file type received as input (unknow extension for {})".format(input))
         sys.exit(1)
 
-    return training_S1
+    training_S1.to_csv(output,index=False)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -229,9 +258,12 @@ def main():
     input = args.input
     training_S1 = s2_bs_calib_content.copy()
 
-    training_S1 = handle_file(args.input, args.output, training_S1)
+    time1 = time.time()
 
-    training_S1.to_csv(args.output,index=False)
+    handle_file(args.input, args.output, training_S1)
+
+    time2 = time.time()
+    print("ALL Execution took: {} s" .format(time2 - time1))
 
 if __name__ == "__main__":
     main()

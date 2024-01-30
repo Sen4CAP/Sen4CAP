@@ -25,10 +25,31 @@ import time
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from functools import partial
+# from multiprocessing.pool import ThreadPool as TP
+from multiprocessing import Pool as TP
+from multiprocessing import cpu_count
+
 ID_COL_NAME = "NewID"
 
 bi_to_filter = ['FAPAR', 'FCOVER','LAI', 'NDVI']
 refl_bands_to_filter = ['B2', 'B3', 'B4', 'B8', 'B11', 'B12','mean_LAI', 'mean_NDVI']
+
+bands_forced_order = ["mean_FAPAR","mean_FCOVER","mean_LAI","mean_L2A_B2","mean_L2A_B3","mean_L2A_B4","mean_L2A_B8","mean_L2A_B11",
+                      "mean_L2A_B12","mean_NDVI"]
+
+#class DatesIndexesMapping() :
+#    def __init__(self, unique_dates, marker_dates, marker_indexes):
+#        self.indexes = [None] * len(unique_dates)
+#        i = 0
+#        for unique_date in unique_dates:
+
+class DateValueIndexes(object): 
+    def __init__(self):
+        self.idxs = []
+
+    def add_index(self, idx):
+        self.idxs.append(idx)
 
 class SelectedColumns(object):
     def __init__(self, col_names, global_col_indices, id_col_global_idx, id_col_name = ID_COL_NAME):
@@ -38,11 +59,10 @@ class SelectedColumns(object):
         self.global_col_indices = global_col_indices
         self.id_col_global_idx = id_col_global_idx
         
-        dates = []
+        unique_dates = []
         self.id_col_name = id_col_name
         
         self.mean_indices = []
-        self.all_dates = []
         cur_idx = 1 # We start from 1 as on the first position in data will be always the ID (see get_all_global_col_indices)
         self.dict_cols_indices = dict()
         self.dict_cols_dates = dict()
@@ -53,8 +73,8 @@ class SelectedColumns(object):
             if idx > 0:
                 date_str = col[:idx]
                 date_time_obj = dt.datetime.strptime(date_str, '%Y%m%d').date()
-                if not date_time_obj in dates:
-                    dates.append(date_time_obj)  
+                if not date_time_obj in unique_dates:
+                    unique_dates.append(date_time_obj)  
 
             if "mean_" in col:
                 if "_L2A_" in col:
@@ -68,11 +88,30 @@ class SelectedColumns(object):
 
             cur_idx = cur_idx+1
 
-        self.dates = np.array(dates)
+        self.unique_dates = unique_dates
         self.all_column_names = [self.id_col_name] + self.columns
 
+        self.update_dates_indexes()
+
+        if set(bands_forced_order) != set(self.dict_cols_indices.keys()) :
+            print("Forces column order differ from the actual columns. Exiting ...")
+            sys.exit(1)
+
         print("Mean indices: {}".format(self.mean_indices))
-            
+
+
+    def update_dates_indexes(self) :
+        self.cols_indexes = dict()
+        for renamed_col in self.dict_cols_indices.keys():
+            arr_idxs = [DateValueIndexes() for j in range(len(self.unique_dates))]
+            i = 0
+            marker_dates = self.dict_cols_dates[renamed_col]
+            for marker_date in marker_dates:
+                idx_date = self.unique_dates.index(marker_date)
+                arr_idxs[idx_date].add_index(self.dict_cols_indices[renamed_col][i])
+                i = i + 1
+            self.cols_indexes[renamed_col] = arr_idxs
+
     def get_all_columns(self) :
         return self.all_column_names
         
@@ -81,7 +120,6 @@ class SelectedColumns(object):
 
     def update_col_infos(self, col, renamed_column, cur_idx, date_time_obj) :
         self.mean_indices.append(cur_idx)
-        self.all_dates.append(date_time_obj)
 
         if renamed_column in self.dict_cols_indices.keys():
             self.dict_cols_indices[renamed_column].append(cur_idx)
@@ -90,6 +128,18 @@ class SelectedColumns(object):
             self.dict_cols_indices[renamed_column] = [cur_idx]
             self.dict_cols_dates[renamed_column] = [date_time_obj]
 
+class CropFieldEntryWrapper(object) : 
+    def __init__(self, sel_cols, cropfield_descr, newid, newid_exists):
+        self.sel_cols = sel_cols
+        self.cropfield_descr = cropfield_descr
+        self.newid = newid
+        self.newid_exists = newid_exists
+
+class ClassificationDataFrameMarkerWrapper(object) : 
+    def __init__(self, df_marker, classifier, newid):
+        self.df_marker = df_marker
+        self.classifier = classifier
+        self.newid = newid
 
 def get_selected_columns(columns, tiles_filter) : 
     # print ("Schema: {}".format(reader.schema))
@@ -123,101 +173,105 @@ def get_selected_columns(columns, tiles_filter) :
     # print("Selected columns: {}".format(col_names))
     return SelectedColumns(col_names, global_col_indices, id_col_global_idx, ID_COL_NAME)
 
-def handle_batch_record(selCols, all_cropfields, classifier, df_results_all, df_marker_all):
-    nb_values = len(selCols.dates) 
+def handle_cropfield_entry(selCols, cropfield_descr, newid, newid_exists):
+    nb_values = len(selCols.unique_dates) 
     values = np.empty(nb_values, dtype=object)
+
+    df_marker = pd.DataFrame()
+    df_marker['dates'] = selCols.unique_dates
+    if not newid_exists:
+        df_marker['NewID'] = newid
+    # iterated each renamed unique column 
+    for renamed_col in bands_forced_order:
+        date_idxs = selCols.cols_indexes[renamed_col]
+        i = 0
+        for date in selCols.unique_dates:
+            date_idx = date_idxs[i]
+            if len(date_idx.idxs) > 0 :
+                values[i] = cropfield_descr[date_idx.idxs[0]]
+            else:
+                values[i] = None
+            i = i + 1        
+
+        df_marker[renamed_col] = values.tolist()
+    
+    return df_marker
+
+def df_marker_predict(df_marker, classifier, newid):
+    # df_marker['mean_NDWI'] = (df_marker[f'mean_L2A_B8']-df_marker[f'mean_L2A_B11'])/(df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B11'])
+    df_marker['mean_NDTI'] = (df_marker[f'mean_L2A_B11']-df_marker[f'mean_L2A_B12'])/(df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B12'])
+    df_marker['mean_BSI'] = ((df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B4']) - (df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B2'])) / ((df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B4']) + (df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B2']))
+
+    df_dates = df_marker.copy()
+    df_marker = df_marker.drop(['dates','NewID'],axis=1)
+    
+    df_results_1 = pd.DataFrame()
+    if len(df_marker)==0:
+        df_results_1['dates'] = np.nan
+        df_results_1['pred'] =  np.nan
+        df_results_1['conf'] =  np.nan
+        df_results_1['NewID'] = np.nan
+
+    else: 
+
+        df_results_1['dates'] = df_dates['dates']
+        df_results_1['pred'] =  classifier.predict(df_marker)
+        df_results_1['conf'] =  classifier.predict_proba(df_marker).max(axis=1)
+        df_results_1['NewID'] = newid
+
+    return df_results_1
+
+def df_marker_predict_wrp(cropfield_entry_wrp):
+    return df_marker_predict(cropfield_entry_wrp.df_marker, cropfield_entry_wrp.classifier, cropfield_entry_wrp.newid)
+
+def handle_cropfield_entry_wrp(cropfield_entry_wrp):
+    return handle_cropfield_entry(cropfield_entry_wrp.sel_cols, cropfield_entry_wrp.cropfield_descr, 
+                                  cropfield_entry_wrp.newid, cropfield_entry_wrp.newid_exists)
+
+def handle_batch_record(selCols, all_cropfields, classifier, df_results_all, df_marker_all, result_all_ids, thread_pool):
     df_results = pd.DataFrame()
+
+    cropfield_entry_wrappers = []
     for cropfield_descr in all_cropfields:
-        # print("cropfield_descr: {}".format(cropfield_descr))
-        # mean_vals = cropfield_descr[selCols.mean_indices]
         newid = cropfield_descr[selCols.id_col_global_idx].astype(int)
-        df_results_1 = pd.DataFrame()
-        if newid in df_results_all.NewID:
+        newid_exists = newid in result_all_ids
+        cropfield_entry_wrappers.append(CropFieldEntryWrapper(selCols, cropfield_descr, newid, newid_exists))
+
+    all_df = thread_pool.map(partial(handle_cropfield_entry_wrp), cropfield_entry_wrappers )
+    i = 0
+
+    new_df_markers = []
+    for ret_df in all_df:
+        cropfield_descr = all_cropfields[i]
+        i = i + 1
+        newid = cropfield_descr[selCols.id_col_global_idx].astype(int)
+        if newid in result_all_ids:
             df_marker_old = df_marker_all[df_marker_all.NewID==newid]
-            df_marker_tile = pd.DataFrame()
-            df_marker_tile['dates'] = selCols.dates
-
-            for renamed_col in selCols.dict_cols_indices.keys():
-                # create a df in order to make a mean for the common dates 
-                # these common dates correspond normally to parcels covered by several tiles,
-                # other columns should not be impacted
-                ren_col_vals = pd.DataFrame()
-                ren_col_vals['dates'] = selCols.dict_cols_dates[renamed_col]
-                ren_col_vals['values'] = cropfield_descr[selCols.dict_cols_indices[renamed_col]]
-                # ren_col_vals = ren_col_vals.groupby(['dates']).mean().reset_index()
-
-                # now fill out the dates missing for the current column
-                i = 0
-                for date in selCols.dates:
-                    ret = ren_col_vals.loc[ren_col_vals['dates'] == date, 'values']
-                    if len(ret) > 0:
-                        values[i] = ret.iloc[0]
-                    else :
-                        values[i] = None
-                    i = i + 1
-
-                df_marker_tile[renamed_col] = values.tolist()  
-            
-            df_marker_new = pd.concat([df_marker_old,df_marker_tile])
+            df_marker_new = pd.concat([df_marker_old,ret_df])
             df_marker = df_marker_new.fillna(-1).groupby(['NewID','dates']).mean().reset_index()  
-                    
-        else :
-            df_marker = pd.DataFrame()
-            df_marker['dates'] = selCols.dates
-            df_marker['NewID'] = newid
-            # iterated each renamed unique column 
-            for renamed_col in selCols.dict_cols_indices.keys():
-                # create a df in order to make a mean for the common dates 
-                # these common dates correspond normally to parcels covered by several tiles,
-                # other columns should not be impacted
-                ren_col_vals = pd.DataFrame()
-                ren_col_vals['dates'] = selCols.dict_cols_dates[renamed_col]
-                ren_col_vals['values'] = cropfield_descr[selCols.dict_cols_indices[renamed_col]]
-                # ren_col_vals = ren_col_vals.groupby(['dates']).mean().reset_index()
-
-                # now fill out the dates missing for the current column
-                i = 0
-                for date in selCols.dates:
-                    ret = ren_col_vals.loc[ren_col_vals['dates'] == date, 'values']
-                    if len(ret) > 0:
-                        values[i] = ret.iloc[0]
-                    else :
-                        values[i] = None
-                    i = i + 1
-
-                df_marker[renamed_col] = values.tolist()
+        else:
+            df_marker = ret_df
 
         df_marker = df_marker.replace(-1,np.nan)
         df_marker = df_marker.dropna()
         df_marker_all = pd.concat([df_marker_all,df_marker])
 
-        df_marker['mean_NDWI'] = (df_marker[f'mean_L2A_B8']-df_marker[f'mean_L2A_B11'])/(df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B11'])
-        df_marker['mean_NDTI'] = (df_marker[f'mean_L2A_B11']-df_marker[f'mean_L2A_B12'])/(df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B12'])
-        df_marker['mean_BSI'] = ((df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B4']) - (df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B2'])) / ((df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B4']) + (df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B2']))
-    
-        df_dates = df_marker.copy()
-        df_marker = df_marker.drop(['dates','NewID'],axis=1)
+        new_df_markers.append(ClassificationDataFrameMarkerWrapper(df_marker, classifier, newid))
+        
+        result_all_ids.add(newid)
 
-        if len(df_marker)==0:
-            df_results_1['dates'] = np.nan
-            df_results_1['pred'] =  np.nan
-            df_results_1['conf'] =  np.nan
-            df_results_1['NewID'] = np.nan
-
-        else: 
-
-            df_results_1['dates'] = df_dates['dates']
-            df_results_1['pred'] =  classifier.predict(df_marker)
-            df_results_1['conf'] =  classifier.predict_proba(df_marker).max(axis=1)
-            df_results_1['NewID'] = newid
-
+    all_df1 = thread_pool.map(partial(df_marker_predict_wrp), new_df_markers)
+    for df_results_1 in all_df1:
         df_results = pd.concat([df_results,df_results_1])
     
     df_results_all = pd.concat([df_results_all,df_results]) 
     
     return df_results_all, df_marker_all
 
-def handle_ipc_file(input, out, classifier, tiles_filter, df_results_all, df_marker_all) :
+def handle_ipc_file(input, out, classifier, tiles_filter, df_results_all, df_marker_all, result_all_ids) :
+    pool_size = cpu_count()
+    thread_pool = TP(pool_size)
+
     reader = ipc.open_file(input)
     
     print("Having a number of {} columns ...".format(len(reader.schema.names)))
@@ -240,15 +294,18 @@ def handle_ipc_file(input, out, classifier, tiles_filter, df_results_all, df_mar
         pd = rb.to_pandas()
         all_cropfields = pd.to_numpy()
         
-        df_results_all, df_marker_all = handle_batch_record(selCols, all_cropfields, classifier, df_results_all, df_marker_all)
+        df_results_all, df_marker_all = handle_batch_record(selCols, all_cropfields, classifier, 
+                                                            df_results_all, df_marker_all, result_all_ids, thread_pool)
 
         time2 = time.time()
         print("Execution for batch {}/{} for {} entries took: {} s"
                 .format(i, reader.num_record_batches, len(all_cropfields), time2 - time1))
 
+    thread_pool.close()
+
     return df_results_all, df_marker_all
         
-def handle_csv_file(input, out, classifier, tiles_filter, df_results_all, df_marker_all) :
+def handle_csv_file(input, out, classifier, tiles_filter, df_results_all, df_marker_all, result_all_ids) :
     with open(input, 'r') as read_obj:
         # pass the file object to reader() to get the reader object
         csv_reader = csv.reader(read_obj)
@@ -272,7 +329,7 @@ def handle_csv_file(input, out, classifier, tiles_filter, df_results_all, df_mar
     
     return df_results_all, df_marker_all
 
-def handle_json_file(input, out, classifier, tiles_filter, df_results_all, df_marker_all) :
+def handle_json_file(input, out, classifier, tiles_filter, df_results_all, df_marker_all, result_all_ids) :
     # ## apply model for each dates available
     # ### S2 model - results
     df_results_all['NewID'] = np.nan
@@ -320,7 +377,7 @@ def handle_json_file(input, out, classifier, tiles_filter, df_results_all, df_ma
                 df_marker = df_marker.dropna()
                 df_marker_all = pd.concat([df_marker_all,df_marker])
 
-                df_marker['mean_NDWI'] = (df_marker[f'mean_L2A_B8']-df_marker[f'mean_L2A_B11'])/(df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B11'])
+                # df_marker['mean_NDWI'] = (df_marker[f'mean_L2A_B8']-df_marker[f'mean_L2A_B11'])/(df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B11'])
                 df_marker['mean_NDTI'] = (df_marker[f'mean_L2A_B11']-df_marker[f'mean_L2A_B12'])/(df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B12'])
                 df_marker['mean_BSI'] = ((df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B4']) - (df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B2'])) / ((df_marker[f'mean_L2A_B11']+df_marker[f'mean_L2A_B4']) + (df_marker[f'mean_L2A_B8']+df_marker[f'mean_L2A_B2']))
             
@@ -353,16 +410,19 @@ def handle_file(input, output, classifier, tiles_filter):
     lcinput = input.lower()
     df_results_all = pd.DataFrame()
     df_results_all['NewID'] = np.nan
+    df_results_all = df_results_all.astype({"NewID": int})
+    result_all_ids = set()
     df_marker_all = pd.DataFrame()
+
     if lcinput.endswith('.ipc'):
         print("Handling ipc file {}".format(input))
-        df_results_all, df_marker_all = handle_ipc_file(input, output, classifier, tiles_filter, df_results_all, df_marker_all)
+        df_results_all, df_marker_all = handle_ipc_file(input, output, classifier, tiles_filter, df_results_all, df_marker_all, result_all_ids)
     elif lcinput.endswith('.csv'):
         print("Handling csv file {}".format(input))
-        df_results_all, df_marker_all = handle_csv_file(input, output, classifier, tiles_filter, df_results_all, df_marker_all)
+        df_results_all, df_marker_all = handle_csv_file(input, output, classifier, tiles_filter, df_results_all, df_marker_all, result_all_ids)
     elif lcinput.endswith('.json'):
         print("Handling json file {}".format(input))
-        df_results_all, df_marker_all = handle_json_file(input, output, classifier, tiles_filter, df_results_all, df_marker_all)        
+        df_results_all, df_marker_all = handle_json_file(input, output, classifier, tiles_filter, df_results_all, df_marker_all, result_all_ids)        
     else :
         print("Invalid file type received as input (unknow extension for {})".format(input))
         sys.exit(1)
@@ -448,7 +508,12 @@ def main():
     classifier = create_model(args.s2_bs_calib, args.output_model, args.estimators_number,
                               args.output_fig_importance, period_calib, site_name)
 
+    time1 = time.time()
+
     handle_file(args.input, args.output, classifier, args.tiles)
+
+    time2 = time.time()
+    print("ALL Execution took: {} s" .format(time2 - time1))
 
 if __name__ == "__main__":
     main()
