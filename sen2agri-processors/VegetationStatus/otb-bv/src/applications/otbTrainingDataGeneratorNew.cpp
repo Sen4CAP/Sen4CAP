@@ -319,7 +319,7 @@ private:
               if(pos >= (std::ptrdiff_t)allBands.size()) {
                   itkGenericExceptionMacro(<< "Band " << bandName << " cannot be found in product band ");
               }
-              if(pos > nbFileReflBands) {
+              if(pos > (int)nbFileReflBands) {
                   itkGenericExceptionMacro(<< "Number of LAI band names higher than the number of valid reflectance bands " << nbFileReflBands);
               }
               bandsIndexes.push_back(pos);

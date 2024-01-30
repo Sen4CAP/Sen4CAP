@@ -64,6 +64,7 @@ bool IsValidLandValue(float fValue, float fMskValue)
 
 
 // DEPRECATED - NOT USED ANYMORE
+/*
 std::pair<VectorType, VectorType> 
 fit_csdm(const VectorType &dts, const VectorType &ts, const VectorType &ets, const VectorType &msks)
 {
@@ -122,9 +123,10 @@ fit_csdm(const VectorType &dts, const VectorType &ts, const VectorType &ets, con
 
   return std::make_pair(result,result_flag);
 }
+*/
 
 std::pair<VectorType, VectorType>
-fit_csdm_2(const VectorType &dts, const VectorType &ts, const VectorType &ets, const VectorType &msks)
+fit_csdm_2(const VectorType &dts, const VectorType &ts, const VectorType &, const VectorType &msks)
 {
     assert(/*ts.size()==ets.size() &&*/ ts.size()==dts.size() && ts.size()==msks.size());
     unsigned int nbDates = ts.size();
