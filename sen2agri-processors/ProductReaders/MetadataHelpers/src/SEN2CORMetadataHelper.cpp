@@ -589,8 +589,8 @@ SEN2CORMetadataHelper<PixelType, MasksPixelType>::GetL2AMasksImage(MasksFlagType
     // We use SCL file for all flags
     typename MetadataHelper<PixelType, MasksPixelType>::SingleBandMasksImageType::Pointer img;
     // force resolution to 10 m if not specified
-    img = this->m_maskFlagsBandsExtractor.ExtractResampledBand(
-        GetSCLFileName(resolution), 1, Interpolator_NNeighbor, -1,
+    const std::string &sclFn = GetSCLFileName(resolution);
+    img = this->m_maskFlagsBandsExtractor.ExtractResampledBand(sclFn, 1, Interpolator_NNeighbor, -1,
         (resolution == -1 ? 10 : resolution));
 
     this->m_maskHandlerFunctor.Initialize(nMaskFlags, binarizeResult);

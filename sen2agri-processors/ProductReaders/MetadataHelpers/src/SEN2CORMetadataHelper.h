@@ -80,7 +80,6 @@ class SEN2CORMetadataHelper : public MetadataHelper<PixelType, MasksPixelType>
             switch(val) {
                 case 2: // Dark features / Shadows
                 case 3: // Cloud shadows
-                case 7: // Cloud low probability / Unclassified
                 case 8: // Cloud medium probability
                 case 9: // Cloud high probability
                 case 10: // Thin cirrus
