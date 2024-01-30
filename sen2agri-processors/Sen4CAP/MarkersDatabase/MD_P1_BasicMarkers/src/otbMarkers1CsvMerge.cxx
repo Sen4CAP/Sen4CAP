@@ -65,7 +65,7 @@ public:
         bool bIgnore;           // specify if this file should be ignored from now on (nothing to read anymore)
         char csvSep;
 
-        inline void OnNewLinesLoaded(const std::vector<std::string> &lines, int newPosInFile) {
+        inline void OnNewLinesLoaded(const std::vector<std::string> &lines, uintmax_t newPosInFile) {
             fieldInfos.clear();
             if(lines.size() == 0) {
                 bIgnore = true;
@@ -432,22 +432,24 @@ private:
         }
 
         // search the pos in file
-        fseek(fp, offetInFile, SEEK_SET);
-
-        char* line = NULL;
-        size_t len = 0;
-        int readLines = 0;
-        while ((readLines++ < nLinesToExtract) && (getline(&line, &len, fp) != -1)) {
-            std::string lineStr(line);
-            boost::trim(lineStr);
-            if (lineStr.size() > 0) {
-                ret.push_back(lineStr);
+        int retFseek = fseek(fp, offetInFile, SEEK_SET);
+        // continue only if not eof
+        if (retFseek == 0) {
+            char* line = NULL;
+            size_t len = 0;
+            int readLines = 0;
+            while ((readLines++ < nLinesToExtract) && (getline(&line, &len, fp) != -1)) {
+                std::string lineStr(line);
+                boost::trim(lineStr);
+                if (lineStr.size() > 0) {
+                    ret.push_back(lineStr);
+                }
             }
-        }
-        newOffsetInFile = ftell(fp);
-        fclose(fp);
-        if (line) {
-            free(line);
+            newOffsetInFile = ftell(fp);
+            fclose(fp);
+            if (line) {
+                free(line);
+            }
         }
         return ret;
     }
