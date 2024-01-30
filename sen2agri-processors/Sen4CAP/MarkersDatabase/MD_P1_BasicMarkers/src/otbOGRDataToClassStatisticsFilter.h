@@ -331,9 +331,13 @@ public:
   itkSetMacro(ComputeMinMax, bool);
   itkGetMacro(ComputeMinMax, bool);
 
-  /** Set/Get macro for the flag specifying if min/max should be computed or not */
-  itkSetMacro(ComputeValidityPixelsCnt, bool);
-  itkGetMacro(ComputeValidityPixelsCnt, bool);
+  /** Set/Get macro for the flag specifying if valid pixels count should be computed or not */
+  itkSetMacro(ComputeValidPixelsCnt, bool);
+  itkGetMacro(ComputeValidPixelsCnt, bool);
+
+  /** Set/Get macro for the flag specifying if invalid ixels count should be computed or not */
+  itkSetMacro(ComputeInvalidPixelsCnt, bool);
+  itkGetMacro(ComputeInvalidPixelsCnt, bool);
 
   /** Set/Get macro for the flag specifying if median should be computed or not */
   itkSetMacro(ComputeMedian, bool);
@@ -397,6 +401,7 @@ private:
   PixelValueMapType                      m_MinRadiometricValue;
   PixelValueMapType                      m_MaxRadiometricValue;
   PixelValueMapType                      m_ValidPixelsCnt;
+  PixelValueMapType                      m_InvalidPixelsCnt;
   PixelValueMapType                      m_MedianValue;
   PixelValueMapType                      m_P25Value;
   PixelValueMapType                      m_P75Value;
@@ -405,7 +410,8 @@ private:
   bool m_ComputeMedian;
   bool m_ComputeP25;
   bool m_ComputeP75;
-  bool m_ComputeValidityPixelsCnt;
+  bool m_ComputeValidPixelsCnt;
+  bool m_ComputeInvalidPixelsCnt;
 };
 
 /**
@@ -452,49 +458,142 @@ public:
   itkTypeMacro(OGRDataToClassStatisticsFilter, PersistentFilterStreamingDecorator);
 
   using Superclass::SetInput;
-  virtual void SetInput(const TInputImage* image);
+  virtual void SetInput(const TInputImage* image)
+  {
+      this->GetFilter()->SetInput(image);
+  }
 
-  const TInputImage* GetInput();
+  const TInputImage* GetInput()
+  {
+      return this->GetFilter()->GetInput();
+  }
 
-  void SetOGRData(const otb::ogr::DataSource* data);
-  const otb::ogr::DataSource* GetOGRData();
+  void SetOGRData(const otb::ogr::DataSource* data)
+  {
+      this->GetFilter()->SetOGRData(data);
+  }
+  const otb::ogr::DataSource* GetOGRData()
+  {
+       return this->GetFilter()->GetOGRData();
+  }
 
-  void SetMask(const TMaskImage* mask);
-  const TMaskImage* GetMask();
+  void SetMask(const TMaskImage* mask)
+  {
+      this->GetFilter()->SetMask(mask);
+  }
+  const TMaskImage* GetMask()
+  {
+      return this->GetFilter()->GetMask();
+  }
 
-  void SetFieldName(const std::string &key);
-  std::string GetFieldName();
+  void SetFieldName(const std::string &key)
+  {
+      this->GetFilter()->SetFieldName(key);
+  }
+  std::string GetFieldName()
+  {
+      return this->GetFilter()->GetFieldName();
+  }
 
-  void SetConvertValuesToDecibels(bool exp);
-  bool GetConvertValuesToDecibels();
+  void SetConvertValuesToDecibels(bool exp)
+  {
+      this->GetFilter()->SetConvertValuesToDecibels(exp);
+  }
+  bool GetConvertValuesToDecibels()
+  {
+      return this->GetFilter()->GetConvertValuesToDecibels();
+  }
 
-  void SetComputeMinMax(bool exp);
-  bool GetComputeMinMax();
+  void SetComputeMinMax(bool exp)
+  {
+      this->GetFilter()->SetComputeMinMax(exp);
+  }
+  bool GetComputeMinMax()
+  {
+      return this->GetFilter()->GetComputeMinMax();
+  }
 
-  void SetComputeValidityPixelsCnt(bool exp);
-  bool GetComputeValidityPixelsCnt();
+  void SetComputeValidPixelsCnt(bool exp)
+  {
+      this->GetFilter()->SetComputeValidPixelsCnt(exp);
+  }
+  bool GetComputeValidPixelsCnt()
+  {
+      return this->GetFilter()->GetComputeValidPixelsCnt();
+  }
 
-  void SetComputeMedian(bool exp);
-  bool GetComputeMedian();
+  void SetComputeInvalidPixelsCnt(bool exp)
+  {
+      this->GetFilter()->SetComputeInvalidPixelsCnt(exp);
+  }
+  bool GetComputeInvalidPixelsCnt()
+  {
+      return this->GetFilter()->GetComputeInvalidPixelsCnt();
+  }
 
-  void SetComputeP25(bool exp);
-  bool GetComputeP25();
+  void SetComputeMedian(bool exp)
+  {
+      this->GetFilter()->SetComputeMedian(exp);
+  }
+  bool GetComputeMedian()
+  {
+      return this->GetFilter()->GetComputeMedian();
+  }
 
-  void SetComputeP75(bool exp);
-  bool GetComputeP75();
+  void SetComputeP25(bool exp)
+  {
+      this->GetFilter()->SetComputeP25(exp);
+  }
+  bool GetComputeP25()
+  {
+      return this->GetFilter()->GetComputeP25();
+  }
 
-  void SetMaskValidValue(int val);
-  int GetMaskValidValue();
+  void SetComputeP75(bool exp)
+  {
+      this->GetFilter()->SetComputeP75(exp);
+  }
+  bool GetComputeP75()
+  {
+      return this->GetFilter()->GetComputeP75();
+  }
 
-  void SetLayerIndex(int index);
-  int GetLayerIndex();
+  void SetMaskValidValue(int val)
+  {
+      this->GetFilter()->SetValidMaskValue(val);
+  }
+  int GetMaskValidValue()
+  {
+      return this->GetFilter()->GetValidMaskValue();
+  }
 
-  void SetFieldValueFilterIds(const std::map<std::string, int> &filters);
-  std::map<std::string, int> GetFieldValueFilterIds();
+  void SetLayerIndex(int index)
+  {
+      this->GetFilter()->SetLayerIndex(index);
+  }
+  int GetLayerIndex()
+  {
+      return this->GetFilter()->GetLayerIndex();
+  }
+
+  void SetFieldValueFilterIds(const std::map<std::string, int> &filters)
+  {
+      this->GetFilter()->SetFieldValueFilterIds(filters);
+  }
+  std::map<std::string, int> GetFieldValueFilterIds()
+  {
+      return this->GetFilter()->GetFieldValueFilterIds();
+  }
 
 
-  const ClassCountObjectType* GetClassCountOutput() const;
-  ClassCountObjectType* GetClassCountOutput();
+  const ClassCountObjectType* GetClassCountOutput() const
+  {
+      return this->GetFilter()->GetClassCountOutput();
+  }
+  ClassCountObjectType* GetClassCountOutput()
+  {
+      return this->GetFilter()->GetClassCountOutput();
+  }
 
 // NOT NEEDED FOR AGRICULTURAL PRACTICES
 //  const PolygonSizeObjectType* GetPolygonSizeOutput() const;
@@ -508,25 +607,52 @@ public:
 //   PixelValueMapType GetStandardDeviationValueMap() const;
 
    /** Return the computed Mean and Standard Deviation for each label in the input label image */
-   PixeMeanStdDevlValueMapType GetMeanStdDevValueMap() const;
+   PixeMeanStdDevlValueMapType GetMeanStdDevValueMap() const
+   {
+       return this->GetFilter()->GetMeanStdDevValueMap();
+   }
 
    /** Return the computed Min for each label in the input label image */
-   PixelValueMapType GetMinValueMap() const;
+   PixelValueMapType GetMinValueMap() const
+   {
+       return this->GetFilter()->GetMinValueMap();
+   }
 
    /** Return the computed Max for each label in the input label image */
-   PixelValueMapType GetMaxValueMap() const;
+   PixelValueMapType GetMaxValueMap() const
+   {
+       return this->GetFilter()->GetMaxValueMap();
+   }
 
    /** Return the computed the number of valid pixels for each label in the input label image */
-   PixelValueMapType GetValidPixelsCntMap() const;
+   PixelValueMapType GetValidPixelsCntMap() const
+   {
+       return this->GetFilter()->GetValidPixelsCntMap();
+   }
+
+   /** Return the computed the number of invalid pixels for each label in the input label image */
+   PixelValueMapType GetInvalidPixelsCntMap() const
+   {
+       return this->GetFilter()->GetInvalidPixelsCntMap();
+   }
 
    /** Return the computed median for each label in the input label image */
-   PixelValueMapType GetMedianValuesMap() const;
+   PixelValueMapType GetMedianValuesMap() const
+   {
+       return this->GetFilter()->GetMedianValuesMap();
+   }
 
    /** Return the computed the P25 quatrile for each label in the input label image */
-   PixelValueMapType GetP25ValuesMap() const;
+   PixelValueMapType GetP25ValuesMap() const
+   {
+       return this->GetFilter()->GetP25ValuesMap();
+   }
 
    /** Return the computed the P75 quatrile for each label in the input label image */
-   PixelValueMapType GetP75ValuesMap() const;
+   PixelValueMapType GetP75ValuesMap() const
+   {
+       return this->GetFilter()->GetP75ValuesMap();
+   }
 
 protected:
   /** Constructor */

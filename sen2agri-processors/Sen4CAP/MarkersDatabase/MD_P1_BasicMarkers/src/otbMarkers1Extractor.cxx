@@ -41,6 +41,7 @@
 #define MIN_COL_NAME "min"
 #define MAX_COL_NAME "max"
 #define VALD_PIX_CNT_COL_NAME "valid_pixels_cnt"
+#define INVALD_PIX_CNT_COL_NAME "invalid_pixels_cnt"
 #define MEDIAN_COL_NAME "median"
 #define P25_COL_NAME "p25"
 #define P75_COL_NAME "p75"
@@ -245,10 +246,15 @@ private:
         MandatoryOff("minmax");
         SetDefaultParameterInt("minmax",0);
 
-        AddParameter(ParameterType_Int, "validity", "Extract the number of valid and invalid pixels for each parcel statistics.");
-        SetParameterDescription("validity", "Extract the number of valid and invalid pixels for each parcel statistics");
-        MandatoryOff("validity");
-        SetDefaultParameterInt("validity",0);
+        AddParameter(ParameterType_Int, "validpixelscnt", "Extract the number of valid pixels for each parcel statistics.");
+        SetParameterDescription("validpixelscnt", "Extract the number of valid pixels for each parcel statistics");
+        MandatoryOff("validpixelscnt");
+        SetDefaultParameterInt("validpixelscnt",0);
+
+        AddParameter(ParameterType_Int, "invalidpixelscnt", "Extract the number of invalid pixels for each parcel statistics.");
+        SetParameterDescription("invalidpixelscnt", "Extract the number of invalid pixels for each parcel statistics");
+        MandatoryOff("invalidpixelscnt");
+        SetDefaultParameterInt("invalidpixelscnt",0);
 
         AddParameter(ParameterType_Int, "median", "Extract the median for each parcel statistics.");
         SetParameterDescription("median", "Extract the median for each parcel statistics");
@@ -402,6 +408,7 @@ private:
         const FilterType::PixelValueMapType &p25Values = filter->GetP25ValuesMap();
         const FilterType::PixelValueMapType &p75Values = filter->GetP75ValuesMap();
         const FilterType::PixelValueMapType &validPixelsCntValues = filter->GetValidPixelsCntMap();
+        const FilterType::PixelValueMapType &invalidPixelsCntValues = filter->GetInvalidPixelsCntMap();
         std::map<std::string, const FilterType::PixeMeanStdDevlValueMapType*> mapMeanStd;
         std::map<std::string, const FilterType::PixelValueMapType*> mapOptionals;
         mapMeanStd[MEAN_COL_NAME] = &meanStdValues;
@@ -412,6 +419,7 @@ private:
         mapOptionals[P25_COL_NAME] = &p25Values;
         mapOptionals[P75_COL_NAME] = &p75Values;
         mapOptionals[VALD_PIX_CNT_COL_NAME] = &validPixelsCntValues;
+        mapOptionals[INVALD_PIX_CNT_COL_NAME] = &invalidPixelsCntValues;
 
         writer->AddInputMap<FilterType::PixeMeanStdDevlValueMapType,
                  FilterType::PixelValueMapType>(mapMeanStd, mapOptionals);
@@ -449,8 +457,11 @@ private:
         if (GetParameterInt("minmax") != 0) {
             filter->SetComputeMinMax(true);
         }
-        if (GetParameterInt("validity") != 0) {
-            filter->SetComputeValidityPixelsCnt(true);
+        if (GetParameterInt("validpixelscnt") != 0) {
+            filter->SetComputeValidPixelsCnt(true);
+        }
+        if (GetParameterInt("invalidpixelscnt") != 0) {
+            filter->SetComputeInvalidPixelsCnt(true);
         }
         if (GetParameterInt("median") != 0) {
             filter->SetComputeMedian(true);
@@ -515,8 +526,11 @@ private:
         if (GetParameterInt("p75") != 0) {
             header.push_back(P75_COL_NAME);
         }
-        if (GetParameterInt("validity") != 0) {
+        if (GetParameterInt("validpixelscnt") != 0) {
             header.push_back(VALD_PIX_CNT_COL_NAME);
+        }
+        if (GetParameterInt("invalidpixelscnt") != 0) {
+            header.push_back(INVALD_PIX_CNT_COL_NAME);
         }
 
         agricPracticesDataWriter->SetDefaultProductType(m_prdType);
@@ -771,6 +785,7 @@ private:
             // Get the mask raster from the ../QI_DATA/
             const std::string &maskRaster = GetFileFromDir((pRefFile.parent_path().parent_path() / "QI_DATA").string(), R"(S2AGRI_L3B_MMONODFLG.*\.TIF)");
             maskValidValue = IMG_FLG_LAND;
+            // bOk = true;
             return GetMaskImage(maskRaster);
         }
         maskValidValue = m_maskValidValue;
