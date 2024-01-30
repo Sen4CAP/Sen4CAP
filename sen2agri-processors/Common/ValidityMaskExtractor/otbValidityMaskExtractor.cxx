@@ -79,8 +79,50 @@ public:
         int m_nExtMskValidVal;
     };
 
+    template< class TInput, class TOutput>
+    class MaskImageBinarizeFlagsFunctor
+    {
+    public:
+        MaskImageBinarizeFlagsFunctor() {}
+        ~MaskImageBinarizeFlagsFunctor() {}
+
+        void Initialize(bool bWaterIsValid, bool bSnowIsValid)
+        {
+            m_bWaterIsValid = bWaterIsValid;
+            m_bSnowIsValid = bSnowIsValid;
+        }
+
+      bool operator!=( const MaskImageBinarizeFlagsFunctor &a) const
+      {
+        return false;
+      }
+      bool operator==( const MaskImageBinarizeFlagsFunctor & other ) const
+      {
+        return !(*this != other);
+      }
+      inline TOutput operator()( const TInput & A ) const
+      {
+          if(m_bWaterIsValid) {
+              if (A == IMG_FLG_WATER) {
+                  return 0;
+              }
+          }
+          if(m_bSnowIsValid) {
+              if (A == IMG_FLG_SNOW) {
+                  return 0;
+              }
+          }
+          return ((A == IMG_FLG_LAND) ? 0 : 1);
+      }
+
+    private:
+        int m_bWaterIsValid;
+        int m_bSnowIsValid;
+
+    };
+
     typedef MetadataHelper<short>::SingleBandMasksImageType MaskImageType;
-    typedef otb::ImageFileReader<MaskImageType>             ExternaMaskImageReaderType;
+    typedef otb::ImageFileReader<MaskImageType>             MaskImageReaderType;
     typedef otb::ImageFileWriter<MaskImageType> WriterType;
     typedef otb::StreamingResampleImageFilter<MaskImageType, MaskImageType, double>     ResampleFilterType;
 
@@ -88,6 +130,11 @@ public:
                     MaskImagesCombineFunctor<
                         MaskImageType::PixelType, MaskImageType::PixelType,
                         MaskImageType::PixelType> > MaskImagesCombineFilterType;
+    typedef itk::UnaryFunctorImageFilter<MaskImageType,MaskImageType,
+                    MaskImageBinarizeFlagsFunctor<
+                        MaskImageType::PixelType,
+                        MaskImageType::PixelType> > MaskImageBinarizeFlagsFilterType;
+
 
 private:
     void DoInit()
@@ -111,17 +158,25 @@ private:
         MandatoryOff("extmaskvalidval");
         SetDefaultParameterInt("extmaskvalidval", 0);
 
+        AddParameter(ParameterType_Int,  "watvld",   "Consider water pixels valid");
+        MandatoryOff("watvld");
+        SetDefaultParameterInt("watvld", 0);
+
+        AddParameter(ParameterType_Int,  "snowvld",   "Consider snow pixels valid");
+        MandatoryOff("snowvld");
+        SetDefaultParameterInt("snowvld", 0);
+
         AddParameter(ParameterType_StringList,  "out",   "The output(s) mask flags image corresponding extracted from the provided L2A product. "
                                                           "If multiple values are provided, then the outres parameter is also mandatory."
                                                          "The output validity map will return a value = 0 for valid pixels and 1 for invalid pixels.");
 
         AddParameter(ParameterType_Int, "compress", "If set to a value different of 0, the output is compressed");
         MandatoryOff("compress");
-        SetDefaultParameterInt("compress", 0);
+        SetDefaultParameterInt("compress", 1);
 
-        AddParameter(ParameterType_Int, "cog", "If set to a value different of 0, the output is created in cloud optimized geotiff and compressed.");
-        MandatoryOff("cog");
-        SetDefaultParameterInt("cog", 0);
+        AddParameter(ParameterType_Int, "tiled", "If set to a value different of 0, the output is created as tiled and compressed.");
+        MandatoryOff("tiled");
+        SetDefaultParameterInt("tiled", 1);
 
         AddParameter(ParameterType_StringList, "outres", "Output resolutions. If provided, a value for each output will be expected. "
                                                          "If not provided, only one element is expected in outs parameter."
@@ -192,6 +247,7 @@ private:
             } else {
                 WriteOutput(imgMsk, outImgs[i], -1);
             }
+            WriteBinarizedOutput(outImgs[i]);
         }
     }
 
@@ -205,10 +261,10 @@ private:
         std::string fileName(outImg);
 
         bool bCompress = (GetParameterInt("compress") != 0);
-        bool bClodOptimizedGeotiff = (GetParameterInt("cog") != 0);
+        bool bClodOptimizedGeotiff = (GetParameterInt("tiled") != 0);
 
         if (bClodOptimizedGeotiff) {
-            fileName += "?gdal:co:TILED=YES&gdal:co:COPY_SRC_OVERVIEWS=YES&gdal:co:COMPRESS=DEFLATE";
+            fileName += "?gdal:co:TILED=YES&gdal:co:COMPRESS=DEFLATE";
         } else if (bCompress) {
             fileName += std::string("?gdal:co:COMPRESS=DEFLATE");
         }
@@ -253,6 +309,59 @@ private:
         osswriter<< "Wrinting flags "<< outImg;
         AddProcess(paramOut->GetWriter(), osswriter.str());
         paramOut->Write();
+    }
+
+    std::string WriteBinarizedOutput(const std::string &inFile) {
+
+        std::string outFileName(inFile);
+        boost::filesystem::path dirPath(outFileName);
+        size_t lastindex = outFileName.find_last_of(".");
+        if (lastindex > 0) {
+            const std::string &fnNoExt = outFileName.substr(0, lastindex);
+            std::string ext = dirPath.extension().string().c_str();
+            outFileName = fnNoExt + "_BIN" + ext;
+        }
+        // save the file without potential gdal args to display it
+        std::string outFn = outFileName;
+
+        bool bCompress = (GetParameterInt("compress") != 0);
+        bool bClodOptimizedGeotiff = (GetParameterInt("tiled") != 0);
+
+        if (bClodOptimizedGeotiff) {
+            outFileName += "?gdal:co:TILED=YES&gdal:co:COMPRESS=DEFLATE";
+        } else if (bCompress) {
+            outFileName += std::string("?gdal:co:COMPRESS=DEFLATE");
+        }
+
+        // Create an output parameter to write the current output image
+        OutputImageParameter::Pointer paramOut = OutputImageParameter::New();
+        // Set the filename of the current output image
+        paramOut->SetFileName(outFileName);
+
+        MaskImageReaderType::Pointer reader = MaskImageReaderType::New();
+        // set the file name
+        reader->SetFileName(inFile);
+        reader->UpdateOutputInformation();
+        typename MaskImageType::Pointer mskImg = reader->GetOutput();
+
+        bool bWaterValid = (GetParameterInt("watvld") != 0);
+        bool bSnowValid = (GetParameterInt("snowvld") != 0);
+        MaskImageBinarizeFlagsFilterType::Pointer binarizeMasksFilter = MaskImageBinarizeFlagsFilterType::New();
+        binarizeMasksFilter->GetFunctor().Initialize(bWaterValid, bSnowValid);
+        binarizeMasksFilter->SetInput(mskImg);
+        mskImg = binarizeMasksFilter->GetOutput();
+        mskImg->UpdateOutputInformation();
+
+        paramOut->SetValue(mskImg);
+        paramOut->SetPixelType(ImagePixelType_uint8);
+        // Add the current level to be written
+        paramOut->InitializeWriters();
+        std::ostringstream osswriter;
+        osswriter<< "Wrinting flags "<< outFileName;
+        AddProcess(paramOut->GetWriter(), osswriter.str());
+        paramOut->Write();
+
+        return outFn;
     }
 
     MaskImageType::Pointer GetResampledImage(int nCurRes, int nDesiredRes,
@@ -315,7 +424,7 @@ private:
     }
 
 private:
-    ExternaMaskImageReaderType::Pointer m_reader;
+    MaskImageReaderType::Pointer m_reader;
     ImageResampler<MaskImageType, MaskImageType> m_Resampler;
 
     MaskImageType::Pointer m_curMask;
@@ -327,6 +436,7 @@ private:
     int                                   m_nCurImgRes;
 
     MaskImagesCombineFilterType::Pointer m_combineMasksFilter;
+    MaskImageBinarizeFlagsFilterType::Pointer m_binarizeMasksFilter;
 
     std::vector<AppExternalMaskProvider<short>::Pointer> m_appExtMskProviders;
 };

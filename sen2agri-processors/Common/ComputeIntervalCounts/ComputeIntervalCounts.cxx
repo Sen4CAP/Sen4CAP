@@ -129,7 +129,7 @@ void DoExecute() override
   std::vector<std::tuple<int32_t, std::string, uint64_t>> counts;
   counts.reserve(populationMap.size());
 
-  uint64_t totalPixCnt;
+  uint64_t totalPixCnt = 0;
   for (auto it = populationMap.begin(); it != populationMap.end(); ++it) {
     counts.emplace_back(std::make_tuple(it->first, mapLabels[it->first], it->second));
     totalPixCnt += it->second;
@@ -141,7 +141,7 @@ void DoExecute() override
   fout << "thresholdIdx" << ',' << "threshold" << ',' << "label" << ',' << "count" << ',' << "percentage" << ',' << "status" << '\n';
   float percentage;
   for (const auto &p : counts) {
-      percentage = (((float)std::get<2>(p)) * 100 / totalPixCnt);
+      percentage = (totalPixCnt == 0 ? 0 : (((float)std::get<2>(p)) * 100 / totalPixCnt));
       fout << std::get<0>(p) << ',' << intervals[std::get<0>(p)] << ',' << std::get<1>(p) << ',' << std::get<2>(p) <<
             ',' << percentage << ',' << ComputeStatus(percentage) << '\n';
   }
