@@ -22,10 +22,13 @@
 #include "processor/s4s_croptypemappinghandler.hpp"
 #include "processor/s4s_permanent_crop_handler.hpp"
 #include "processor/s4s_yieldhandler.hpp"
+#include "processor/s4s_yield_su_handler.hpp"
 #include "processor/trex_handler.hpp"
 #include "processor/compositehandlers1.hpp"
 #include "processor/compositehandlerindicators.hpp"
 #include "processor/zarr_handler.hpp"
+#include "processor/s4c_heterogeneity_handler.hpp"
+#include "processor/s4c_baresoil_handler.hpp"
 #include "json_conversions.hpp"
 #include "schedulingcontext.h"
 #include "logger.hpp"
@@ -65,22 +68,28 @@ std::map<int, std::unique_ptr<ProcessorHandler>> & GetHandlersMap(PersistenceMan
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4CMarkersDB1Handler>());
         } else if(procDescr.shortName == "l2a_msk") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<MaskedL2AHandler>());
-        } else if(procDescr.processorId == 19) {            // zarr converter
+        } else if(procDescr.processorId == (int)Processor::ZarrProcessorId) {
             handlersMap.emplace(procDescr.processorId, std::make_unique<ZarrHandler>());
-        } else if(procDescr.processorId== 20) {
+        } else if(procDescr.processorId== (int)Processor::S4SCropTypeMapProcessorId) {
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4SCropTypeMappingHandler>());
         } else if(procDescr.shortName == "t_rex_updater") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<TRexHandler>());
         } else if(procDescr.shortName == "s4s_yield_feat") {
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4SYieldHandler>());
-        } else if(procDescr.processorId == 22) {            // l3_s1_comp
+        } else if(procDescr.processorId == (int)Processor::L3S1CompProcessorId) {
             handlersMap.emplace(procDescr.processorId, std::make_unique<CompositeHandlerS1>());
-        } else if(procDescr.processorId == 23) {            // l3_ind_comp
+        } else if(procDescr.processorId == (int)Processor::L3IndCompProcessorId) {
             handlersMap.emplace(procDescr.processorId, std::make_unique<CompositeHandlerIndicators>());
+        } else if(procDescr.processorId == (int)Processor::S4CHeterogeneity) {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<S4CHeterogeneityHandler>());
+        } else if(procDescr.processorId == (int)Processor::S4SYieldSUProcessorId) {
+            handlersMap.emplace(procDescr.processorId, std::make_unique<S4SYieldSUHandler>());
+        } else if(procDescr.processorId == (int)Processor::S4CBareSoil) {
+             handlersMap.emplace(procDescr.processorId, std::make_unique<S4CBareSoilHandler>());
         } else {
             bAdded = false;
             Logger::error(QStringLiteral("Invalid processor configuration found in database: %1, "
-                                         "igoring it as no handler is available for it!")
+                                         "ignoring it as no handler is available for it!")
                           .arg(procDescr.shortName));
         }
         if(bAdded) {
