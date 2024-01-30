@@ -44,7 +44,7 @@ static QString SCANCEL_CMD_ARGS("--name");
 static QString SBATCH_CMD("sbatch");
 #endif
 
-#define SACCT_RETRY_CNT                 10
+#define SACCT_RETRY_CNT                 3
 #define SACCT_RETRY_TIMEOUT_IN_MSEC     1000
 
 ResourceManagerItf_SLURM::ResourceManagerItf_SLURM()
