@@ -79,6 +79,9 @@ install(FILES ../scripts/insert_l2a_product_to_db.py
               ../scripts/arrow/ipc_to_csv.py
               ../scripts/arrow/extract_mdb3_markers.py
               ../scripts/zarr/s2x_prd_to_zarr.py
+              ../scripts/heterogeneity/heterog_crop_type_wrapper.py
+              ../scripts/s4s_yield/s4s_yieldsu_all_markers_merge_wrp.py
+
         DESTINATION usr/bin/
 	    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                     GROUP_READ GROUP_EXECUTE
