@@ -35,8 +35,18 @@ otb_create_application(
   LINK_LIBRARIES ${OTBExtensions} ${OTB_LIBRARIES} ${OTBCommon_LIBRARIES} ${OTBITK_LIBRARIES}  ${Boost_LIBRARIES} Sen2AgriCommonUtils
 )
 
+otb_create_application(
+  NAME           MdbFromLabelImage
+  SOURCES        otbMdbFromLabelImage.cxx
+                 otbMarkersFromLabelImageFilter.h
+                 otbMarkersFromLabelImageFilter.hxx
+
+  LINK_LIBRARIES ${OTBExtensions} ${OTB_LIBRARIES} ${OTBCommon_LIBRARIES} ${OTBITK_LIBRARIES}  MACCSMetadata Sen2AgriProductReaders ${Boost_LIBRARIES} Sen2AgriCommonUtils
+)
+
 
 install(TARGETS otbapp_Markers1Extractor DESTINATION usr/lib/otb/applications/)
 install(TARGETS otbapp_Markers1CsvMerge DESTINATION usr/lib/otb/applications/)
 install(TARGETS otbapp_Markers2Extractor DESTINATION usr/lib/otb/applications/)
+install(TARGETS otbapp_MdbFromLabelImage DESTINATION usr/lib/otb/applications/)
 
