@@ -51,6 +51,7 @@ class ContainerInfo:
             print(exc)
             return None
 
+
 def run_containers_concurrently(client, pool, containers):
     results = pool.map(lambda c: c.run(client), containers, chunksize=1)
     for res in results:
@@ -109,15 +110,13 @@ def get_site_strata(conn: connection, site_id: int) -> List[Stratum]:
 
     strata = []
     with conn.cursor() as cursor:
-        cursor.execute(
-            query,
-            (site_id, )
-        )
-        for (stratum_id, _, _, tiles) in cursor:
+        cursor.execute(query, (site_id,))
+        for stratum_id, _, _, tiles in cursor:
             stratum = Stratum(stratum_id, tiles)
             strata.append(stratum)
 
     return strata
+
 
 class Tile(object):
     def __init__(
@@ -154,7 +153,12 @@ class TileOutput(object):
         self.validation_points: Optional[str] = None
 
 
-def create_tile_outputs(driver: ogr.Driver, stratum_id: Optional[int], tile: Tile, parcel_id_field: ogr.FieldDefn, crop_code_field: ogr.FieldDefn, pix_10m_field: ogr.FieldDefn, strategy_field: ogr.FieldDefn) -> TileOutput:
+def create_tile_outputs(
+    driver: ogr.Driver,
+    stratum_id: Optional[int],
+    tile: Tile,
+    fields: List[ogr.FieldDefn],
+) -> TileOutput:
     tile_id = tile.id
     if stratum_id:
         training_polygons = f"training_polygons_{stratum_id}_{tile_id}.shp"
@@ -181,15 +185,9 @@ def create_tile_outputs(driver: ogr.Driver, stratum_id: Optional[int], tile: Til
         ogr.wkbMultiPolygon,
     )
 
-    training_layer.CreateField(parcel_id_field)
-    training_layer.CreateField(crop_code_field)
-    training_layer.CreateField(pix_10m_field)
-    training_layer.CreateField(strategy_field)
-
-    validation_layer.CreateField(parcel_id_field)
-    validation_layer.CreateField(crop_code_field)
-    validation_layer.CreateField(pix_10m_field)
-    validation_layer.CreateField(strategy_field)
+    for field in fields:
+        training_layer.CreateField(field)
+        validation_layer.CreateField(field)
 
     tile_output = TileOutput(
         tile_id,
@@ -247,25 +245,25 @@ def main():
 
     training_feature_defn = ogr.FeatureDefn()
     training_feature_defn.AddFieldDefn(parcel_id_field)
-    training_feature_defn.AddFieldDefn(crop_code_field)
-    training_feature_defn.AddFieldDefn(pix_10m_field)
-    training_feature_defn.AddFieldDefn(strategy_field)
     training_feature_defn.AddFieldDefn(code_n1_field)
     training_feature_defn.AddFieldDefn(code_n2_field)
     training_feature_defn.AddFieldDefn(code_n3_field)
     training_feature_defn.AddFieldDefn(code_n4_field)
     training_feature_defn.AddFieldDefn(code_lc_field)
+    training_feature_defn.AddFieldDefn(crop_code_field)
+    training_feature_defn.AddFieldDefn(pix_10m_field)
+    training_feature_defn.AddFieldDefn(strategy_field)
 
     validation_feature_defn = ogr.FeatureDefn()
     validation_feature_defn.AddFieldDefn(parcel_id_field)
-    validation_feature_defn.AddFieldDefn(crop_code_field)
-    validation_feature_defn.AddFieldDefn(pix_10m_field)
-    validation_feature_defn.AddFieldDefn(strategy_field)
     validation_feature_defn.AddFieldDefn(code_n1_field)
     validation_feature_defn.AddFieldDefn(code_n2_field)
     validation_feature_defn.AddFieldDefn(code_n3_field)
     validation_feature_defn.AddFieldDefn(code_n4_field)
     validation_feature_defn.AddFieldDefn(code_lc_field)
+    validation_feature_defn.AddFieldDefn(crop_code_field)
+    validation_feature_defn.AddFieldDefn(pix_10m_field)
+    validation_feature_defn.AddFieldDefn(strategy_field)
 
     polygon_class_statistics_commands = []
     sample_selection_commands = []
@@ -637,7 +635,7 @@ order by random();
                             if crop_code not in smote_targets:
                                 smote_targets[crop_code] = smote_target
 
-                        assert(crop_target)
+                        assert crop_target
                         pixels = training_pixels[crop_code]
                         if pixels + pix_10m <= crop_target:
                             training_pixels[crop_code] = pixels + pix_10m
@@ -650,7 +648,23 @@ order by random();
                     tile_output = tile_outputs.get(tile_id)
                     if not tile_output:
                         tile = tiles[tile_id]
-                        tile_output = create_tile_outputs(driver, stratum.stratum_id, tile, parcel_id_field, crop_code_field, pix_10m_field, strategy_field)
+                        fields = [
+                            parcel_id_field,
+                            code_n1_field,
+                            code_n2_field,
+                            code_n3_field,
+                            code_n4_field,
+                            code_lc_field,
+                            crop_code_field,
+                            pix_10m_field,
+                            strategy_field,
+                        ]
+                        tile_output = create_tile_outputs(
+                            driver,
+                            stratum.stratum_id,
+                            tile,
+                            fields,
+                        )
                         tile_outputs[tile_id] = tile_output
 
                     if purpose == 0:
@@ -692,7 +706,7 @@ order by random();
             with open(smote_targets_json, "wt") as file:
                 json.dump(smote_targets, file)
 
-            for (tile_id, tile_output) in tile_outputs.items():
+            for tile_id, tile_output in tile_outputs.items():
                 tile = tiles[tile_id]
 
                 # HACK
@@ -707,11 +721,19 @@ order by random();
                 tile_output.validation_dataset = None
 
                 if stratum.stratum_id:
-                    training_stats = f"training_statistics_{stratum.stratum_id}_{tile_id}.xml"
-                    validation_stats = f"validation_statistics_{stratum.stratum_id}_{tile_id}.xml"
+                    training_stats = (
+                        f"training_statistics_{stratum.stratum_id}_{tile_id}.xml"
+                    )
+                    validation_stats = (
+                        f"validation_statistics_{stratum.stratum_id}_{tile_id}.xml"
+                    )
 
-                    tile_output.training_points = f"training_points_{stratum.stratum_id}_{tile_id}.shp"
-                    tile_output.validation_points = f"validation_points_{stratum.stratum_id}_{tile_id}.shp"
+                    tile_output.training_points = (
+                        f"training_points_{stratum.stratum_id}_{tile_id}.shp"
+                    )
+                    tile_output.validation_points = (
+                        f"validation_points_{stratum.stratum_id}_{tile_id}.shp"
+                    )
                 else:
                     training_stats = f"training_statistics_{tile_id}.xml"
                     validation_stats = f"validation_statistics_{tile_id}.xml"
