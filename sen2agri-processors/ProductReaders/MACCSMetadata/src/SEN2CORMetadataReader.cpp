@@ -25,6 +25,18 @@
 #include "tinyxml_utils.hpp"
 #include "string_utils.hpp"
 
+// In old versions of L2A products we had the name called L2A_Product_Info and we want to support this too
+static std::vector<std::string> PRODUCT_INFO_NODE_NAMES = {"Product_Info", "L2A_Product_Info"};
+static std::vector<std::string> PRODUCT_ORGANISATION_NODE_NAMES = {"Product_Organisation", "L2A_Product_Organisation"};
+static std::vector<std::string> PRODUCT_IMG_CHARACTERISTICS_NODE_NAMES = {"Product_Image_Characteristics", "L2A_Product_Image_Characteristics"};
+static std::vector<std::string> QUANTIF_VALUES_NODE_NAMES = {"QUANTIFICATION_VALUES_LIST", "L1C_L2A_Quantification_Values_List"};
+static std::vector<std::string> BOA_QUANTIF_VAL_NODE_NAMES = {"BOA_QUANTIFICATION_VALUE", "L2A_BOA_QUANTIFICATION_VALUE"};
+static std::vector<std::string> AOT_QUANTIF_VAL_NODE_NAMES = {"AOT_QUANTIFICATION_VALUE", "L2A_AOT_QUANTIFICATION_VALUE"};
+static std::vector<std::string> WVP_QUANTIF_VAL_NODE_NAMES = {"WVP_QUANTIFICATION_VALUE", "L2A_WVP_QUANTIFICATION_VALUE"};
+static std::vector<std::string> QUALITY_IND_INFO_NODE_NAMES = {"n1:Quality_Indicators_Info", "n1:L2A_Quality_Indicators_Info"};
+static std::vector<std::string> GRANULE_IMAGE_FILE_NODE_NAMES = {"IMAGE_FILE", "IMAGE_FILE_2A"};
+
+
 namespace itk
 {
 std::unique_ptr<MACCSFileMetadata> SEN2COR_METADATA_READER_EXPORT SEN2CORMetadataReader::ReadMetadata(const std::string &path)
@@ -40,6 +52,49 @@ std::unique_ptr<MACCSFileMetadata> SEN2COR_METADATA_READER_EXPORT SEN2CORMetadat
     }
 
     return metadata;
+}
+
+const TiXmlElement* FirstChildElement(const TiXmlElement * parent, const std::vector<std::string> &possibleValues)
+{
+    if (!parent) {
+        return nullptr;
+    }
+    for (auto val: possibleValues) {
+        auto el = parent->FirstChildElement(val.c_str());
+        if (el) {
+            return el;
+        }
+    }
+    return nullptr;
+}
+
+const TiXmlElement* NextSiblingElement(const TiXmlElement * parent, const std::vector<std::string> &possibleValues)
+{
+    if (!parent) {
+        return nullptr;
+    }
+    for (auto val: possibleValues) {
+        auto el = parent->NextSiblingElement(val.c_str());
+        if (el) {
+            return el;
+        }
+    }
+    return nullptr;
+}
+
+std::string GetChildText(const TiXmlElement *element, const std::vector<std::string> &possibleValues)
+{
+    if (!element) {
+        return std::string();
+    }
+    for (auto childName: possibleValues) {
+        if (auto el = element->FirstChildElement(childName)) {
+            if (const char *text = el->GetText())
+                return text;
+        }
+    }
+
+    return std::string();
 }
 
 MACCSFixedHeader ReadSEN2CORGeneralInfo(const TiXmlElement *el)
@@ -81,9 +136,9 @@ MACCSImageInformation ReadSEN2CORProductImageCharacteristics(const TiXmlElement 
         }
     }
     //get the quantification values
-    if (auto quantificationValueListEl = el->FirstChildElement("QUANTIFICATION_VALUES_LIST")) {
-        result.AOTQuantificationValue = GetChildText(quantificationValueListEl, "AOT_QUANTIFICATION_VALUE");
-        result.VAPQuantificationValue = GetChildText(quantificationValueListEl, "WVP_QUANTIFICATION_VALUE");
+    if (auto quantificationValueListEl = FirstChildElement(el, QUANTIF_VALUES_NODE_NAMES)) {
+        result.AOTQuantificationValue = GetChildText(quantificationValueListEl, AOT_QUANTIF_VAL_NODE_NAMES);
+        result.VAPQuantificationValue = GetChildText(quantificationValueListEl, WVP_QUANTIF_VAL_NODE_NAMES);
     }
     // get the bands
     if (auto spectralInformationListEl = el->FirstChildElement("Spectral_Information_List")) {
@@ -117,10 +172,10 @@ MACCSProductInformation ReadSEN2CORProductInformation(const TiXmlElement *el) {
     if (!el) {
         return result;
     }
-    if (auto productInfoEl = el->FirstChildElement("Product_Info")) {
+    if (auto productInfoEl = FirstChildElement(el, PRODUCT_INFO_NODE_NAMES)) {
         result.AcquisitionDateTime = GetChildText(productInfoEl, "PRODUCT_START_TIME");
     }
-    if(auto productImageCharaceristicsEl = el->FirstChildElement("Product_Image_Characteristics")) {
+    if(auto productImageCharaceristicsEl = FirstChildElement(el, PRODUCT_IMG_CHARACTERISTICS_NODE_NAMES)) {
         if (auto spectralInformationListEl = productImageCharaceristicsEl->FirstChildElement("Spectral_Information_List")) {
             for (auto spectralInfoEl = spectralInformationListEl->FirstChildElement("Spectral_Information"); spectralInfoEl;
                  spectralInfoEl = spectralInfoEl->NextSiblingElement("Spectral_Information")) {
@@ -146,8 +201,8 @@ MACCSProductInformation ReadSEN2CORProductInformation(const TiXmlElement *el) {
             }
         }
         //get the reflectance quantification value (BOA)
-        if (auto quantificationValueListEl = productImageCharaceristicsEl->FirstChildElement("QUANTIFICATION_VALUES_LIST")) {
-            result.ReflectanceQuantificationValue = GetChildText(quantificationValueListEl, "BOA_QUANTIFICATION_VALUE");
+        if (auto quantificationValueListEl = FirstChildElement(productImageCharaceristicsEl, QUANTIF_VALUES_NODE_NAMES)) {
+            result.ReflectanceQuantificationValue = GetChildText(quantificationValueListEl, BOA_QUANTIF_VAL_NODE_NAMES);
         }
     }
 
@@ -265,7 +320,7 @@ std::vector<CommonFileInformation> ReadSEN2CORImageFileInformation(const TiXmlEl
     if (!el) {
         return result;
     }
-    const TiXmlElement *productOrganizationEl = el->FirstChildElement("Product_Organisation");
+    const TiXmlElement *productOrganizationEl = FirstChildElement(el, PRODUCT_ORGANISATION_NODE_NAMES);
     if (!productOrganizationEl) {
         return result;
     }
@@ -284,8 +339,8 @@ std::vector<CommonFileInformation> ReadSEN2CORImageFileInformation(const TiXmlEl
             continue;
         }
 
-        for (auto fileEl = granuleEl->FirstChildElement("IMAGE_FILE"); fileEl;
-             fileEl = fileEl->NextSiblingElement("IMAGE_FILE")) {
+        for (auto fileEl = FirstChildElement(granuleEl, GRANULE_IMAGE_FILE_NODE_NAMES); fileEl;
+             fileEl = NextSiblingElement(fileEl, GRANULE_IMAGE_FILE_NODE_NAMES)) {
             CommonFileInformation imageFile;
             //no nature for the image files, so set one by default
             imageFile.Nature = "PIC";
@@ -329,10 +384,11 @@ std::unique_ptr<MACCSFileMetadata> SEN2CORMetadataReader::ReadMetadataXml(const 
 
     if ( rootProductGeneralInfoElement && (generalInfoElement = rootProductGeneralInfoElement->FirstChildElement("n1:General_Info")) ) {
 
+        auto productInfoEl = FirstChildElement(generalInfoElement, PRODUCT_INFO_NODE_NAMES);
         file->Header.SchemaLocation = GetAttribute(rootProductGeneralInfoElement, "xsi:schemaLocation");
-        file->Header.FixedHeader = ReadSEN2CORGeneralInfo(generalInfoElement->FirstChildElement("Product_Info"));
-        file->ImageInformation = ReadSEN2CORProductImageCharacteristics(generalInfoElement->FirstChildElement("Product_Image_Characteristics"));
-        file->ProductOrganization.ImageFiles = ReadSEN2CORImageFileInformation(generalInfoElement->FirstChildElement("Product_Info"));
+        file->Header.FixedHeader = ReadSEN2CORGeneralInfo(productInfoEl);
+        file->ImageInformation = ReadSEN2CORProductImageCharacteristics(FirstChildElement(generalInfoElement, PRODUCT_IMG_CHARACTERISTICS_NODE_NAMES));
+        file->ProductOrganization.ImageFiles = ReadSEN2CORImageFileInformation(productInfoEl);
         file->ProductInformation = ReadSEN2CORProductInformation(generalInfoElement);
         file->InstanceId.AcquisitionDate = ExtractDateFromDateTime(file->ProductInformation.AcquisitionDateTime);
         return file;
@@ -343,7 +399,7 @@ std::unique_ptr<MACCSFileMetadata> SEN2CORMetadataReader::ReadMetadataXml(const 
             file->ImageInformation = ReadSEN2CORTile_Geocoding(geometricInfoElement->FirstChildElement("Tile_Geocoding"));
             file->ProductInformation = ReadSEN2CORProductInformation(geometricInfoElement->FirstChildElement("Tile_Angles"));
         }
-        if (auto qualityIndicatorElement = rootTileInfoElement->FirstChildElement("n1:Quality_Indicators_Info")) {
+        if (auto qualityIndicatorElement = FirstChildElement(rootTileInfoElement, QUALITY_IND_INFO_NODE_NAMES)) {
             file->ProductOrganization.AnnexFiles = ReadSEN2CORAnnexFileInformation(qualityIndicatorElement->FirstChildElement("Pixel_Level_QI"));
         }
 
