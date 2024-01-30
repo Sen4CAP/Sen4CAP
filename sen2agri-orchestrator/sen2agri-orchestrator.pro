@@ -76,7 +76,11 @@ SOURCES += main.cpp \
     processor/compositehandlerindicators.cpp \
     processor/compositehandlers1.cpp \
     processor/s4s_croptypemappinghandler.cpp \
-    processor/zarr_handler.cpp
+    processor/zarr_handler.cpp \
+    processor/s4c_heterogeneity_handler.cpp \
+    processor/products/lpisinfosextractor.cpp \
+    processor/s4s_yield_su_handler.cpp \
+    processor/s4c_baresoil_handler.cpp
 
 HEADERS += \
     pch.hpp \
@@ -132,7 +136,11 @@ HEADERS += \
     processor/compositehandlerindicators.hpp \
     processor/genericcompositehandlerbase.hpp \
     processor/s4s_croptypemappinghandler.hpp \
-    processor/zarr_handler.hpp
+    processor/zarr_handler.hpp \
+    processor/s4c_heterogeneity_handler.hpp \
+    processor/products/lpisinfosextractor.h \
+    processor/s4s_yield_su_handler.hpp \
+    processor/s4c_baresoil_handler.hpp
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \
