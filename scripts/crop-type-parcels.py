@@ -1532,126 +1532,130 @@ def process_radar(args, pool):
             tile_vrt_bands.append(vrt_raster_band)
 
     coherence_monthly_composites = []
-    coherence_monthly_groups = sorted(list(coherence_monthly_groups.items()))
-    for group, products in coherence_monthly_groups:
-        if args.lpis_path:
-            if ref_map_10m and tile_spacing[group.tile_id] == 10:
-                tile_ref = ref_map_10m.get(group.tile_id)
-            elif ref_map_20m and tile_spacing[group.tile_id] == 20:
-                tile_ref = ref_map_20m.get(group.tile_id)
+    if not args.disable_coherence_monthly_composites:
+        coherence_monthly_groups = sorted(list(coherence_monthly_groups.items()))
+        for group, products in coherence_monthly_groups:
+            if args.lpis_path:
+                if ref_map_10m and tile_spacing[group.tile_id] == 10:
+                    tile_ref = ref_map_10m.get(group.tile_id)
+                elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+                    tile_ref = ref_map_20m.get(group.tile_id)
+                else:
+                    continue
+                if tile_ref is None:
+                    continue
             else:
-                continue
-            if tile_ref is None:
-                continue
-        else:
-            tile_ref = None
+                tile_ref = None
 
-        output = os.path.join(args.path, group.format(args.site_id))
-        output_extended = get_otb_extended_filename_with_tiling(output)
+            output = os.path.join(args.path, group.format(args.site_id))
+            output_extended = get_otb_extended_filename_with_tiling(output)
 
-        composite = CoherenceMonthlyComposite(
-            tile_ref, output, output_extended, products
-        )
-        coherence_monthly_composites.append(composite)
+            composite = CoherenceMonthlyComposite(
+                tile_ref, output, output_extended, products
+            )
+            coherence_monthly_composites.append(composite)
 
-        tile_vrt_bands = vrt_bands[group.tile_id]
-        vrt_raster_band = E.VRTRasterBand(
-            {
-                "dataType": "Float32",
-                "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(256),
-                "blockYSize": str(256),
-            },
-            E.Description(group.band_description(1)),
-            E.SimpleSource(
-                E.SourceFileName({"relativeToVRT": "1"}, output),
-                E.SourceBand("1"),
-                E.SourceProperties(
-                    {
-                        "RasterXSize": str(5490),
-                        "RasterYSize": str(5490),
-                        "DataType": "Float32",
-                        "BlockXSize": str(256),
-                        "BlockYSize": str(256),
-                    }
+            tile_vrt_bands = vrt_bands[group.tile_id]
+            vrt_raster_band = E.VRTRasterBand(
+                {
+                    "dataType": "Float32",
+                    "band": str(len(tile_vrt_bands) + 1),
+                    "blockXSize": str(256),
+                    "blockYSize": str(256),
+                },
+                E.Description(group.band_description(1)),
+                E.SimpleSource(
+                    E.SourceFileName({"relativeToVRT": "1"}, output),
+                    E.SourceBand("1"),
+                    E.SourceProperties(
+                        {
+                            "RasterXSize": str(5490),
+                            "RasterYSize": str(5490),
+                            "DataType": "Float32",
+                            "BlockXSize": str(256),
+                            "BlockYSize": str(256),
+                        }
+                    ),
                 ),
-            ),
-        )
-        tile_vrt_bands.append(vrt_raster_band)
-        vrt_raster_band = E.VRTRasterBand(
-            {
-                "dataType": "Float32",
-                "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(256),
-                "blockYSize": str(256),
-            },
-            E.Description(group.band_description(2)),
-            E.SimpleSource(
-                E.SourceFileName({"relativeToVRT": "1"}, output),
-                E.SourceBand("2"),
-                E.SourceProperties(
-                    {
-                        "RasterXSize": str(5490),
-                        "RasterYSize": str(5490),
-                        "DataType": "Float32",
-                        "BlockXSize": str(256),
-                        "BlockYSize": str(256),
-                    }
+            )
+            tile_vrt_bands.append(vrt_raster_band)
+            vrt_raster_band = E.VRTRasterBand(
+                {
+                    "dataType": "Float32",
+                    "band": str(len(tile_vrt_bands) + 1),
+                    "blockXSize": str(256),
+                    "blockYSize": str(256),
+                },
+                E.Description(group.band_description(2)),
+                E.SimpleSource(
+                    E.SourceFileName({"relativeToVRT": "1"}, output),
+                    E.SourceBand("2"),
+                    E.SourceProperties(
+                        {
+                            "RasterXSize": str(5490),
+                            "RasterYSize": str(5490),
+                            "DataType": "Float32",
+                            "BlockXSize": str(256),
+                            "BlockYSize": str(256),
+                        }
+                    ),
                 ),
-            ),
-        )
-        tile_vrt_bands.append(vrt_raster_band)
+            )
+            tile_vrt_bands.append(vrt_raster_band)
 
     coherence_season_composites = []
-    coherence_season_groups = sorted(list(coherence_season_groups.items()))
-    for group, products in coherence_season_groups:
-        if args.lpis_path:
-            if ref_map_10m and tile_spacing[group.tile_id] == 10:
-                tile_ref = ref_map_10m.get(group.tile_id)
-            elif ref_map_20m and tile_spacing[group.tile_id] == 20:
-                tile_ref = ref_map_20m.get(group.tile_id)
+    if not args.disable_coherence_season_composites:
+        coherence_season_groups = sorted(list(coherence_season_groups.items()))
+        for group, products in coherence_season_groups:
+            if args.lpis_path:
+                if ref_map_10m and tile_spacing[group.tile_id] == 10:
+                    tile_ref = ref_map_10m.get(group.tile_id)
+                elif ref_map_20m and tile_spacing[group.tile_id] == 20:
+                    tile_ref = ref_map_20m.get(group.tile_id)
+                else:
+                    continue
             else:
-                continue
-        else:
-            tile_ref = None
+                tile_ref = None
 
-        output = os.path.join(args.path, group.format(args.site_id))
-        output_extended = get_otb_extended_filename_with_tiling(output)
+            output = os.path.join(args.path, group.format(args.site_id))
+            output_extended = get_otb_extended_filename_with_tiling(output)
 
-        composite = CoherenceSeasonComposite(
-            tile_ref, output, output_extended, products
-        )
-        coherence_season_composites.append(composite)
+            composite = CoherenceSeasonComposite(
+                tile_ref, output, output_extended, products
+            )
+            coherence_season_composites.append(composite)
 
-        tile_vrt_bands = vrt_bands[group.tile_id]
-        vrt_raster_band = E.VRTRasterBand(
-            {
-                "dataType": "Float32",
-                "band": str(len(tile_vrt_bands) + 1),
-                "blockXSize": str(256),
-                "blockYSize": str(256),
-            },
-            E.Description(group.band_description()),
-            E.SimpleSource(
-                E.SourceFileName({"relativeToVRT": "1"}, output),
-                E.SourceBand("1"),
-                E.SourceProperties(
-                    {
-                        "RasterXSize": str(5490),
-                        "RasterYSize": str(5490),
-                        "DataType": "Float32",
-                        "BlockXSize": str(256),
-                        "BlockYSize": str(256),
-                    }
+            tile_vrt_bands = vrt_bands[group.tile_id]
+            vrt_raster_band = E.VRTRasterBand(
+                {
+                    "dataType": "Float32",
+                    "band": str(len(tile_vrt_bands) + 1),
+                    "blockXSize": str(256),
+                    "blockYSize": str(256),
+                },
+                E.Description(group.band_description()),
+                E.SimpleSource(
+                    E.SourceFileName({"relativeToVRT": "1"}, output),
+                    E.SourceBand("1"),
+                    E.SourceProperties(
+                        {
+                            "RasterXSize": str(5490),
+                            "RasterYSize": str(5490),
+                            "DataType": "Float32",
+                            "BlockXSize": str(256),
+                            "BlockYSize": str(256),
+                        }
+                    ),
                 ),
-            ),
-        )
-        tile_vrt_bands.append(vrt_raster_band)
+            )
+            tile_vrt_bands.append(vrt_raster_band)
 
     pool.map(lambda c: c.run(), backscatter_composites)
     pool.map(lambda c: c.run(), backscater_ratio_statistics)
-    pool.map(lambda c: c.run(), coherence_monthly_composites)
-    pool.map(lambda c: c.run(), coherence_season_composites)
+    if not args.disable_coherence_monthly_composites:
+        pool.map(lambda c: c.run(), coherence_monthly_composites)
+    if not args.disable_coherence_season_composites:
+        pool.map(lambda c: c.run(), coherence_season_composites)
 
     for tile_id, vrt_bands in vrt_bands.items():
         gt = ref_gt_map[tile_id]
@@ -1780,6 +1784,16 @@ def main():
         default=2,
         type=int,
         help="backscatter compositing period in months",
+    )
+    parser.add_argument(
+        "--disable-coherence-monthly-composites",
+        help="enable coherence montly composites",
+        action="store_false",
+    )
+    parser.add_argument(
+        "--disable-coherence-season-composites",
+        help="enable coherence season composites",
+        action="store_false",        
     )
 
     re = parser.add_mutually_exclusive_group(required=False)
