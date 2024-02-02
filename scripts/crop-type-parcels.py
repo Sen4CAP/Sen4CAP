@@ -1793,7 +1793,7 @@ def main():
     parser.add_argument(
         "--disable-coherence-season-composites",
         help="enable coherence season composites",
-        action="store_false",        
+        action="store_false",
     )
 
     re = parser.add_mutually_exclusive_group(required=False)
