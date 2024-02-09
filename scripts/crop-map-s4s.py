@@ -2677,6 +2677,7 @@ def main():
             )
 
         if remapping_table:
+            tiling_suffix = "?&gdal:co:TILED=YES&gdal:co:COMPRESS=DEFLATE&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
             commands = []
             for tile in tiles:
                 tile_id = tile.tile_id
@@ -2690,7 +2691,7 @@ def main():
                     "-in",
                     classified_pre_tif,
                     "-out",
-                    classified_tif,
+                    classified_tif + tiling_suffix,
                 ]
                 commands.append(command)
 
