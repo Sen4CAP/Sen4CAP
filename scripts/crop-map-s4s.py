@@ -636,6 +636,7 @@ def get_site_strata(conn: connection, site_id: int) -> List[Stratum]:
             if not srs:
                 srs = osr.SpatialReference()
                 srs.ImportFromEPSG(epsg_code)
+                srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
                 srs_cache[epsg_code] = srs
 
             geom = ogr.CreateGeometryFromWkb(geom)
@@ -1338,6 +1339,7 @@ def rasterize_stratum_masks(
     for epsg_code in target_epsg_codes:
         srs = osr.SpatialReference()
         srs.ImportFromEPSG(epsg_code)
+        srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
         ds = driver.CreateDataSource(f"strata_{epsg_code}.gpkg")
         strata_layer = ds.CreateLayer(
