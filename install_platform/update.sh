@@ -58,7 +58,7 @@ function install_sen2agri_services()
             if [ -d "${TARGET_SERVICES_DIR}/lib" ] && [ ! -z "$(ls -A ${TARGET_SERVICES_DIR}/lib)" ] ; then
                     datasources_plugins_dir="${TARGET_SERVICES_DIR}/lib"
                 fi
-            fi            
+            fi
             #check if lib directory exist and is not empty
             if [ -d "${datasources_plugins_dir}" ] && [ ! -z "$(ls -A ${datasources_plugins_dir})" ] ; then
                 mkdir -p ${TARGET_SERVICES_DIR}/$add_plgs_bkp
@@ -87,7 +87,7 @@ function install_sen2agri_services()
                             fi
                         done;
                     fi
-                    if [ -d ${TARGET_SERVICES_DIR}/$add_plgs_bkp ]; then 
+                    if [ -d ${TARGET_SERVICES_DIR}/$add_plgs_bkp ]; then
                         echo "Removing directory ${TARGET_SERVICES_DIR}/$add_plgs_bkp"
                         rm -rf ${TARGET_SERVICES_DIR}/$add_plgs_bkp
                     fi
@@ -107,8 +107,8 @@ function install_sen2agri_services()
                 if [ -f ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ] ; then
                     mv ${TARGET_SERVICES_DIR}/config/sen2agri-services.properties ${TARGET_SERVICES_DIR}/config/services.properties
                 fi
-                
-                
+
+
                 if grep -q "'../modules/\*:../lib/\*:../services/\*:../plugins/\*'" ${TARGET_SERVICES_DIR}/bin/start.sh
                 then
                     echo "start.sh corresponds does not have datasources directory included. Added datasources to classpath ..."
@@ -121,7 +121,7 @@ function install_sen2agri_services()
                         echo "Cannot identify the classpath line in services start.sh ... "
                     fi
                 fi
-                
+
                 # Add new lines for 3.0 if missing
                 if grep -q "endpoints.not.authenticated" ${TARGET_SERVICES_DIR}/config/services.properties
                 then
@@ -132,7 +132,7 @@ function install_sen2agri_services()
                     echo "Updating 3.0 site infos ..."
                     sed -i '/^plugins.use.docker =.*/i site.location=static\r\nvector.tile.service.url = http:\/\/localhost:6767\r\nsite.prefix = \/ui\r\nendpoints.not.authenticated=\/;\/login;\/products\/download;\/users\/pwd\/request;\/users\/pwd\/reset\r\n\r\n' ${TARGET_SERVICES_DIR}/config/services.properties
                 fi
-                
+
                 if [ -f ${TARGET_SERVICES_DIR}/config/application.properties ] ; then
                     cp -f ${TARGET_SERVICES_DIR}/config/application.properties ${TARGET_SERVICES_DIR}/config/application.properties.bkp
                 fi
@@ -149,7 +149,7 @@ function install_sen2agri_services()
     # it might happen that some files to be packaged with the wrong read rights
     chmod -R a+r ${TARGET_SERVICES_DIR}
     chown -R ${SYS_ACC_NAME}: ${TARGET_SERVICES_DIR}/static/
-    
+
     # cleanup the /home/sen2agri-service/.snap and /home/sen2agri-service/.sen2agri-services in case the gdal version changed
     if [ -d /home/${SYS_ACC_NAME}/.snap ] ; then
         rm -fr /home/${SYS_ACC_NAME}/.snap

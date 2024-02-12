@@ -18,7 +18,7 @@ RUN yum -y install \
     https://kojipkgs.fedoraproject.org/packages/armadillo/8.600.1/2.el7/x86_64/armadillo-8.600.1-2.el7.x86_64.rpm \
     file \
     postgresql12 \
-    python-psycopg2 \
+    python2-psycopg2 \
     python-dateutil \
     R \
     libcurl \
