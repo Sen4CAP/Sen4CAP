@@ -8,7 +8,6 @@ RUN yum -y install \
     epel-release \
     https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm \
     https://apache.bintray.com/arrow/centos/7/apache-arrow-release-latest.rpm && \
-    yum-config-manager --disable pgdg95 && \
     yum -y update && \
     yum -y install \
     https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-libs-1.11.4-3.el7.x86_64.rpm \
