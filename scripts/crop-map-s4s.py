@@ -1805,8 +1805,21 @@ def main():
         masks_10m = [p.mask_10m for p in products]
         masks_20m = [p.mask_20m for p in products]
 
-        write_stack_vrt_fast(masks_10m, mask_10m_vrt)
-        write_stack_vrt_fast(masks_20m, mask_20m_vrt)
+        if (
+            feature_set.need_s2_b2()
+            or feature_set.need_s2_b3()
+            or feature_set.need_s2_b4()
+            or feature_set.need_s2_b8()
+        ):
+            write_stack_vrt_fast(masks_10m, mask_10m_vrt)
+        if (
+            feature_set.need_s2_b5()
+            or feature_set.need_s2_b6()
+            or feature_set.need_s2_b7()
+            or feature_set.need_s2_b11()
+            or feature_set.need_s2_b12()
+        ):
+            write_stack_vrt_fast(masks_20m, mask_20m_vrt)
 
         b2_vrt = f"S2_B02_{tile}.vrt"
         b3_vrt = f"S2_B03_{tile}.vrt"
@@ -1818,15 +1831,24 @@ def main():
         b11_vrt = f"S2_B11_{tile}.vrt"
         b12_vrt = f"S2_B12_{tile}.vrt"
 
-        write_stack_vrt_fast(b2s, b2_vrt)
-        write_stack_vrt_fast(b3s, b3_vrt)
-        write_stack_vrt_fast(b4s, b4_vrt)
-        write_stack_vrt_fast(b8s, b8_vrt)
-        write_stack_vrt_fast(b5s, b5_vrt)
-        write_stack_vrt_fast(b6s, b6_vrt)
-        write_stack_vrt_fast(b7s, b7_vrt)
-        write_stack_vrt_fast(b11s, b11_vrt)
-        write_stack_vrt_fast(b12s, b12_vrt)
+        if feature_set.need_s2_b2():
+            write_stack_vrt_fast(b2s, b2_vrt)
+        if feature_set.need_s2_b3():
+            write_stack_vrt_fast(b3s, b3_vrt)
+        if feature_set.need_s2_b4():
+            write_stack_vrt_fast(b4s, b4_vrt)
+        if feature_set.need_s2_b8():
+            write_stack_vrt_fast(b8s, b8_vrt)
+        if feature_set.need_s2_b5():
+            write_stack_vrt_fast(b5s, b5_vrt)
+        if feature_set.need_s2_b6():
+            write_stack_vrt_fast(b6s, b6_vrt)
+        if feature_set.need_s2_b7():
+            write_stack_vrt_fast(b7s, b7_vrt)
+        if feature_set.need_s2_b11():
+            write_stack_vrt_fast(b11s, b11_vrt)
+        if feature_set.need_s2_b12():
+            write_stack_vrt_fast(b12s, b12_vrt)
 
     containers = []
     tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
