@@ -1,7 +1,7 @@
 version: '3.0'
 services:
     db:
-        image: postgis/postgis:11-3.0
+        image: postgis/postgis:16-3.4
         environment:
             POSTGRES_PASSWORD: sen2agri
         ports:
