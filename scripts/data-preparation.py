@@ -311,7 +311,7 @@ def add_table_columns(conn, schema, table, columns):
     with conn.cursor() as cursor:
         query = SQL("alter table {}\n").format(Identifier(table))
         to_add = []
-        for (column, ty) in columns:
+        for column, ty in columns:
             if get_column_type(conn, schema, table, column) is None:
                 q = SQL("add column {} {}").format(Identifier(column), SQL(ty))
                 to_add.append(q)
@@ -443,7 +443,7 @@ inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id;"""
         conn.commit()
 
         result = []
-        for (tile_id, epsg_code, tile_extent) in rows:
+        for tile_id, epsg_code, tile_extent in rows:
             tile_extent = ogr.CreateGeometryFromWkb(bytes(tile_extent))
             result.append(Tile(tile_id, epsg_code, tile_extent))
 
@@ -538,7 +538,9 @@ class DataPreparation:
                 tile = q.get()
                 progress += tile_counts[tile.tile_id]
                 sys.stdout.write(
-                    "\rFinding duplicate parcels: {0:.2f}%".format(100.0 * progress / total)
+                    "\rFinding duplicate parcels: {0:.2f}%".format(
+                        100.0 * progress / total
+                    )
                 )
                 sys.stdout.flush()
             sys.stdout.write("\n")
@@ -946,6 +948,17 @@ and {} is distinct from {};"""
                 cursor.execute(query)
                 conn.commit()
 
+                query = SQL(
+                    """
+update {}
+set "Overlap" = false,
+    "Duplic" = false
+where "Overlap" or "Duplic";"""
+                ).format(lpis_table_id)
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
+                conn.commit()
+
                 print("Inserting new parcels")
                 insert_cols = SQL(", ").join(
                     [
@@ -1214,9 +1227,9 @@ where "GeomValid"
         class_counts_20m = read_counts_csv(counts_20m)
 
         c = defaultdict(lambda: (0, 0))
-        for (id, count) in class_counts.items():
+        for id, count in class_counts.items():
             c[id] = (count, c[id][1])
-        for (id, count) in class_counts_20m.items():
+        for id, count in class_counts_20m.items():
             c[id] = (c[id][0], count)
         del c[0]
 
@@ -1489,7 +1502,9 @@ and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
                     query = query.format(
                         Identifier(self.lpis_table), Identifier(self.lpis_table)
                     )
-                    logging.debug("%s, %s, %s", query.as_string(conn), srid, tile.tile_id)
+                    logging.debug(
+                        "%s, %s, %s", query.as_string(conn), srid, tile.tile_id
+                    )
                     cursor.execute(query, (srid, tile.tile_id))
 
                     q.put(tile)
@@ -1540,7 +1555,9 @@ and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
                     for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
-                        sql = SQL('update {} set "Overlap" = true where "NewID" = any(%s)')
+                        sql = SQL(
+                            'update {} set "Overlap" = true where "NewID" = any(%s)'
+                        )
                         sql = sql.format(Identifier(self.lpis_table))
                         logging.debug(sql.as_string(conn))
                         cursor.execute(sql, (b,))
@@ -1570,7 +1587,9 @@ and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
                     for b in batch(parcels, self.DB_UPDATE_BATCH_SIZE):
-                        sql = SQL('update {} set "Duplic" = true where "NewID" = any(%s)')
+                        sql = SQL(
+                            'update {} set "Duplic" = true where "NewID" = any(%s)'
+                        )
                         sql = sql.format(Identifier(self.lpis_table))
                         logging.debug(sql.as_string(conn))
                         cursor.execute(sql, (b,))
@@ -1588,6 +1607,7 @@ and ST_Intersects(lpis.wkb_geometry, tile.geom);"""
         except Exception as e:
             logging.error(e)
             sys.exit(1)
+
 
 def batch(iterable, n=1):
     count = len(iterable)
