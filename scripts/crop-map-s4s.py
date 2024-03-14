@@ -1767,8 +1767,6 @@ def main():
 
     s1_features = list(s1_features)
 
-    begin = first_date - season_start
-    end = last_date - season_start
     output_dates_param = []
     d = first_date
     while d <= last_date:
@@ -1805,20 +1803,7 @@ def main():
         mask_20m_vrt = f"mask_20m_{tile}.vrt"
 
         masks_10m = [p.mask_10m for p in products]
-        # command_mask_10m_vrt = [
-        #     "gdalbuildvrt",
-        #     "-q",
-        #     "-separate",
-        #     mask_10m_vrt,
-        # ] + masks_10m
-
         masks_20m = [p.mask_20m for p in products]
-        # command_mask_20m_vrt = [
-        #     "gdalbuildvrt",
-        #     "-q",
-        #     "-separate",
-        #     mask_20m_vrt,
-        # ] + masks_20m
 
         write_stack_vrt_fast(masks_10m, mask_10m_vrt)
         write_stack_vrt_fast(masks_20m, mask_20m_vrt)
