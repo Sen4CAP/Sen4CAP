@@ -691,53 +691,56 @@ def write_tile_vrts(
         band_types.append("PSRI")
         band_types.append("CIRE")
 
-    season_start = output_dates[0]
-    season_end = output_dates[-1]
-    stratum_date_filters = stratum_date_filters or [
-        (season_start, season_end) for _ in strata
-    ]
+    if output_dates:
+        season_start = output_dates[0]
+        season_end = output_dates[-1]
+        stratum_date_filters_opt = stratum_date_filters or [
+            (season_start, season_end) for _ in strata
+        ]
+    else:
+        stratum_date_filters_opt = stratum_date_filters or [None for _ in strata]
+
     stratum_band_names = []
 
-    for stratum, stratum_date_filter in zip(strata, stratum_date_filters):
-        stratum_start_date = stratum_date_filter[0]
-        stratum_end_date = stratum_date_filter[1]
+    for stratum, stratum_date_filter in zip(strata, stratum_date_filters_opt):
+        stratum_start_date = stratum_date_filter[0] if stratum_date_filter else None
+        stratum_end_date = stratum_date_filter[1] if stratum_date_filter else None
 
         stratum_start_date_idx = None
         stratum_end_date_idx = None
 
-        for idx, d in enumerate(output_dates):
-            if d >= stratum_start_date:
-                stratum_start_date_idx = idx
-                break
-        for idx, d in enumerate(reversed(output_dates)):
-            if d <= stratum_end_date:
-                stratum_end_date_idx = len(output_dates) - idx
-                break
-
-        if stratum_start_date_idx is None or stratum_end_date_idx is None:
-            stratum_band_names.append([])
-            continue
+        if stratum_start_date:
+            for idx, d in enumerate(output_dates):
+                if d >= stratum_start_date:
+                    stratum_start_date_idx = idx
+                    break
+        if stratum_end_date:
+            for idx, d in enumerate(reversed(output_dates)):
+                if d <= stratum_end_date:
+                    stratum_end_date_idx = len(output_dates) - idx
+                    break
 
         print(
             f"Stratum {stratum.stratum_id}: start date {stratum_start_date}, end date {stratum_end_date}, start {stratum_start_date_idx}, end {stratum_end_date_idx}"
         )
         band_names = []
-        for name in band_types:
-            for b, d in enumerate(
-                output_dates[stratum_start_date_idx:stratum_end_date_idx],
-                start=stratum_start_date_idx + 1,
-            ):
-                dstr = d.strftime("%Y_%m_%d")
-                band_names.append(f"{name}_{dstr}")
-
-        if feature_set.want_vegetation_indices_statistics():
-            for fname in ["NDVI", "NDWI", "BRIGHTNESS"]:
-                for name in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
-                    band_names.append(f"{fname}_{name}")
-
         if feature_set.want_s1_features():
             for name in s1_features:
                 band_names.append(name)
+
+        if stratum_start_date_idx and stratum_end_date_idx:
+            for name in band_types:
+                for b, d in enumerate(
+                    output_dates[stratum_start_date_idx:stratum_end_date_idx],
+                    start=stratum_start_date_idx + 1,
+                ):
+                    dstr = d.strftime("%Y_%m_%d")
+                    band_names.append(f"{name}_{dstr}")
+
+            if feature_set.want_vegetation_indices_statistics():
+                for fname in ["NDVI", "NDWI", "BRIGHTNESS"]:
+                    for name in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
+                        band_names.append(f"{fname}_{name}")
 
         for tile in stratum.tiles:
             b2_tif = f"S2_B02_{tile}.tif"
@@ -832,6 +835,9 @@ def write_tile_vrts(
                 band_files,
                 band_types,
             ):
+                if not stratum_start_date_idx or not stratum_end_date_idx:
+                    continue
+
                 ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
                 assert ds.RasterCount == len(output_dates)
                 for b, d in enumerate(
@@ -866,7 +872,11 @@ def write_tile_vrts(
                     vrt_dataset.append(vrt_raster_band)
                     out_band += 1
 
-            if feature_set.want_vegetation_indices_statistics():
+            if (
+                stratum_start_date_idx
+                and stratum_end_date_idx
+                and feature_set.want_vegetation_indices_statistics()
+            ):
                 for p, fname in zip(
                     [ndvi_statistics, ndwi_statistics, brightness_statistics],
                     ["NDVI", "NDWI", "BRIGHTNESS"],
@@ -1778,7 +1788,7 @@ def main():
     commands = []
     for tile, products in products_by_tile.items():
         if len(products) == 0:
-            print("No products for tile", tile)
+            print("No S2 products for tile", tile)
             continue
 
         b2s = [p.b2 for p in products]
