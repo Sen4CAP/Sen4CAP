@@ -228,7 +228,7 @@ function migrate_postgres_to_docker() {
     echo "Installing Postgres client libraries and tools"
     yum -y install https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
     yum -y update pgdg-redhat-repo
-    yum -y install postgresql12 python-psycopg2 gdal-python
+    yum -y install postgresql15 python-psycopg2 gdal-python
 
     echo "Starting Postgres container"
     cd docker

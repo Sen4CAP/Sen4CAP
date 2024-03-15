@@ -16,7 +16,7 @@ RUN yum -y install \
     https://kojipkgs.fedoraproject.org/packages/gdal/1.11.4/3.el7/x86_64/gdal-python-1.11.4-3.el7.x86_64.rpm \
     https://kojipkgs.fedoraproject.org/packages/armadillo/8.600.1/2.el7/x86_64/armadillo-8.600.1-2.el7.x86_64.rpm \
     file \
-    postgresql12 \
+    postgresql15 \
     python2-psycopg2 \
     python-dateutil \
     R \

@@ -324,7 +324,7 @@ function install_and_config_postgresql()
    # NB: the container uses `trust`, not `peer` for local connections
 
    # Install `psql` and client libraries
-   yum -y install postgresql12
+   yum -y install postgresql15
 
    #------------DATABASE CREATION------------#
     #DB_NAME=$(head -q -n 1 ./config/db_name.conf 2>/dev/null)
