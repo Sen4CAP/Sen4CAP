@@ -22,7 +22,7 @@ S4SYieldHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit> &
     int curTaskIdx = 0;
     int yieldFeatExtrIdx = -1;
     int prdFormatterParentIdx = -1;
-    if (cfg.extractFeatures) {
+//    if (cfg.extractFeatures) {
         const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
         QList<int> mergeTasksIndexes;
         QList<std::reference_wrapper<const TaskToSubmit>> mergeTasks;
@@ -66,9 +66,9 @@ S4SYieldHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit> &
 
         yieldFeatExtrIdx = curTaskIdx++;
         prdFormatterParentIdx = yieldFeatExtrIdx;
-    }
+//    }
 
-    if (cfg.enableYieldModel) {
+//    if (cfg.enableYieldModel) {
         outAllTasksList.append(TaskToSubmit{ "s4s-yield-reference-extraction", {} });
         int yieldReferenceExtrIdx = curTaskIdx++;
         outAllTasksList.append(TaskToSubmit{ "s4s-yield-crop-types-extraction", {} });
@@ -81,7 +81,7 @@ S4SYieldHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit> &
         outAllTasksList.append(TaskToSubmit{ "s4s-yield-model", parentTasks });
         int yieldModelIdx = curTaskIdx++;
         prdFormatterParentIdx = yieldModelIdx;
-    }
+//    }
 
     outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[prdFormatterParentIdx]} });
 
@@ -99,7 +99,7 @@ NewStepList S4SYieldHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,const
     NewStepList allSteps;
     QStringList prdFormatterFiles;
     QString yieldFeaturesOutputPath;
-    if (cfg.extractFeatures) {
+//    if (cfg.extractFeatures) {
         const QList<MarkerType> &enabledMarkers = dataExtrStepsBuilder.GetEnabledMarkers();
         // if only data extraction is needed, then we create the filter ids step into the general configured directory
         QString mdb1File;
@@ -203,21 +203,21 @@ NewStepList S4SYieldHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,const
         const QStringList &yieldFeatExtractionArgs = GetYieldFeaturesTaskArgs(allFeatOutputPath, yieldFeaturesOutputPath);
         allSteps.append(CreateTaskStep(yieldFeatTask, "YieldFeatures", yieldFeatExtractionArgs));
         prdFormatterFiles.append(yieldFeaturesOutputPath);
-    } else {
-        yieldFeaturesOutputPath = cfg.yieldFeatPrd;
-    }
+//    } else {
+//        yieldFeaturesOutputPath = cfg.yieldFeatPrd;
+//    }
 
     int yieldRefTskId = -1;
     int ctExtrTskId = -1;
     int yieldModelTskId = -1;
-    if (cfg.enableYieldModel) {
+//    if (cfg.enableYieldModel) {
         yieldRefTskId = curTaskIdx++;
         ctExtrTskId = curTaskIdx++;
         yieldModelTskId = curTaskIdx++;
-    }
+//    }
     TaskToSubmit &productFormatterTask = allTasksList[curTaskIdx++];
 
-    if (cfg.enableYieldModel) {
+//    if (cfg.enableYieldModel) {
         TaskToSubmit &yieldReferenceExtrTask = allTasksList[yieldRefTskId];
         TaskToSubmit &ctExtrTask = allTasksList[ctExtrTskId];
         const QString &yieldReference = yieldReferenceExtrTask.GetFilePath("yield_reference.csv");
@@ -235,7 +235,7 @@ NewStepList S4SYieldHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,const
                                                                             yieldEstimateOutputPath, yieldStatisticalUnitEstimateOutputPath);
         allSteps.append(CreateTaskStep(yieldModelTask, "YieldModel", yieldModelExtractionArgs));
         prdFormatterFiles += {yieldEstimateOutputPath, yieldStatisticalUnitEstimateOutputPath};
-    }
+//    }
 
     const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, prdFormatterFiles);
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
@@ -439,9 +439,9 @@ void S4SYieldHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
 {
     S4SYieldJobConfig cfg(&ctx, event);
     S4CMarkersDB1DataExtractStepsBuilder dataExtrStepsBuilder;
-    if (cfg.extractFeatures) {
+//    if (cfg.extractFeatures) {
         dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, cfg.parameters, event.siteId, event.jobId, {"LAI"});
-    }
+//    }
 
     QList<TaskToSubmit> allTasksList;
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(cfg, allTasksList, dataExtrStepsBuilder);

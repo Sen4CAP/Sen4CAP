@@ -25,8 +25,11 @@ class S4SYieldSUHandler : public ProcessorHandler
                         ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "start_date", S4S_YIELD_SU_CFG_PREFIX));
             endDate = ProcessorHandlerHelper::GetDateTimeFromString(
                         ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "end_date", S4S_YIELD_SU_CFG_PREFIX));
-
-            year = endDate.date().year();           // TODO: see if this is valid
+            for(int year = startDate.date().year(); year <= endDate.date().year(); year++) {
+                if (std::find(years.begin(), years.end(), year) == years.end()) {
+                    years.push_back(year);
+                }
+            }
 
             // extract the historical yield file
             historicalYieldFile = GetProcessorDirValue(parameters, configParameters, "historical_data_path", siteShortName,
@@ -47,26 +50,24 @@ class S4SYieldSUHandler : public ProcessorHandler
             suPath = GetSUShapefile(suPath);
             suUniqueId = "ID_2";    // TODO: This should be configurable
 
-            enableYieldModel = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
-                                                                            "enable_yield_model", S4S_YIELD_SU_CFG_PREFIX, false);
-            if (enableYieldModel) {
-                const QString &yieldFeatPrdName = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
-                                                                                "yield_features_product", S4S_YIELD_SU_CFG_PREFIX);
-                const QMap<QString, QString> &prds = pCtx->GetProductsFullPaths(evt.siteId, {yieldFeatPrdName});
-                if (prds.size() > 0) {
-                    yieldFeatPrd = prds[yieldFeatPrdName];
-                    yieldFeatPrd = QDir(QDir(yieldFeatPrd).filePath("VECTOR_DATA")).filePath("yield_features.csv");
-                    orchestrator::products::GenericHighLevelProductHelper prdHelper(yieldFeatPrdName);
-                    if(prdHelper.IsValid()) {
-                        startDate = prdHelper.GetStartDate();
-                        endDate = prdHelper.GetEndDate();
-                    }
-                }
-            }
-
-            extractFeatures = (!enableYieldModel || yieldFeatPrd.length() == 0);
-
-            if (extractFeatures) {
+//            enableYieldModel = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
+//                                                                            "enable_yield_model", S4S_YIELD_SU_CFG_PREFIX, false);
+//            if (enableYieldModel) {
+//                const QString &yieldFeatPrdName = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
+//                                                                                "yield_features_product", S4S_YIELD_SU_CFG_PREFIX);
+//                const QMap<QString, QString> &prds = pCtx->GetProductsFullPaths(evt.siteId, {yieldFeatPrdName});
+//                if (prds.size() > 0) {
+//                    yieldFeatPrd = prds[yieldFeatPrdName];
+//                    yieldFeatPrd = QDir(QDir(yieldFeatPrd).filePath("VECTOR_DATA")).filePath("yield_features.csv");
+//                    orchestrator::products::GenericHighLevelProductHelper prdHelper(yieldFeatPrdName);
+//                    if(prdHelper.IsValid()) {
+//                        startDate = prdHelper.GetStartDate();
+//                        endDate = prdHelper.GetEndDate();
+//                    }
+//                }
+//            }
+//            extractFeatures = (!enableYieldModel || yieldFeatPrd.length() == 0);
+//            if (extractFeatures) {
                 cropTypePrdPath = GetCropTypeProductPath();
 
                 const ProductList &weatherPrdsList = pCtx->GetProducts(event.siteId, (int)ProductType::ERA5WeatherProductTypeId,
@@ -79,7 +80,7 @@ class S4SYieldSUHandler : public ProcessorHandler
                                              .arg(endDate.toString()).toStdString());
                 }
                 SetWeatherProducts(weatherPrdsList);
-            }
+//            }
 
             lpisInfos = CreateLpisInfos(procShortName);
         }
@@ -143,14 +144,14 @@ class S4SYieldSUHandler : public ProcessorHandler
         QDateTime endDate;
         QStringList filterProductNames;
         QStringList weatherPrdPaths;
-        bool enableYieldModel;
-        QString yieldFeatPrd;
-        bool extractFeatures;
+        // bool enableYieldModel;
+        // QString yieldFeatPrd;
+        // bool extractFeatures;
 
         std::map<QString, QString> configParameters;
         QJsonObject parameters;
         bool isScheduled;
-        int year;
+        std::vector<int> years;
         QMap<int, LpisInfos> lpisInfos;
         QString cropTypePrdPath;
         QString dataExtractionRootDir;
@@ -181,18 +182,19 @@ private:
     QStringList GetEsuExtractionTaskArgs(const S4SYieldJobConfig &cfg, const QString &workingDir, const QString &outESUCsvFile);
     QStringList GetESUAggregationTaskArgs(const QString &esuCsvFile, const QString &laiMergedPath, const QString &workingDir,
                                           const QString &outAggregatedLAI);
-    QStringList GetSGLaiTaskArgs(int year, const QString &mdb1File, const QString &sgOutFile,
+    QStringList GetSGLaiTaskArgs(const std::vector<int> &years, const QString &mdb1File, const QString &sgOutFile,
                                  const QString &outCropGrowthIndicesFile, const QString &outLaiMetricsFile);
-    QStringList GetTrendFeaturesTaskArgs(const QString &input, int year, const QString &output);
+    QStringList GetTrendFeaturesTaskArgs(const QString &input, const std::vector<int> &years, const QString &output);
     QStringList GetParcelsExtractionTaskArgs(int siteId, int year, const QString &outFile);
     QStringList GetWeatherFeaturesTaskArgs(const QStringList &weatherFiles, const QString &parcelsShp, const QString &shpIdFieldName, const QString &outDir);
     QStringList GetWeatherFeaturesMergeTaskArgs(const QString &inDir, const QString &outWeatherFeatures);
 
     QStringList GetAllFeaturesMergeTaskArgs(const QString &sgListFile, const QString &trendFeatFile, const QString &weatherFeatFile, const QString &outMergedFeatures, const QString &sgYieldLaiFeaturesPath);
-    QStringList GetYieldFeaturesTaskArgs(const QString &inMergedFeatures, const QString &outYieldFeatures);
+    QStringList GetYieldFeaturesTaskArgs(const QString &inMergedFeatures, int maxYear, const QString &outYieldFeatures, const QString &outPrevYearsYieldFeatures);
+    QStringList GetMergeYieldFeaturesTaskArgs(const QString &inYieldFeatures, const QString &outMergedYieldFeatures);
     QStringList GetYieldReferenceExtractionTaskArgs(int siteId, const QString &outRefYieldFile, const QDateTime &startDate, const QDateTime &endDate);
     QStringList GetCropTypesExtractionTaskArgs(int siteId, int year, const QString &outCropTypesFile);
-    QStringList GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString &yieldReference, const QString &cropCodesFile, const QString &inYieldFeatures,
+    QStringList GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString &cropCodesFile, const QString &inYieldFeatures, const QString &inPrevYearsYieldFeatures,
                                       const QString &outYieldEstimates, const QString &outYieldSUEstimates);
 
     QString GetProcessorDirValue(const QJsonObject &parameters, const std::map<QString, QString> &configParameters,

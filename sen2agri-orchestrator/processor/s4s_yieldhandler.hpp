@@ -23,27 +23,30 @@ class S4SYieldHandler : public ProcessorHandler
                         ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "end_date", S4S_YIELD_CFG_PREFIX));
 
             year = endDate.date().year();           // TODO: see if this is valid
+            // change to the beginning of the next day to avoid losing products that are in the same date as the end date
+            // We update this after the year extraction as adding 1 day might move to the next year
+            endDate = endDate.addDays(1);
 
-            enableYieldModel = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
-                                                                            "enable_yield_model", S4S_YIELD_CFG_PREFIX, true);
-            if (enableYieldModel) {
-                const QString &yieldFeatPrdName = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
-                                                                                "yield_features_product", S4S_YIELD_CFG_PREFIX);
-                const QMap<QString, QString> &prds = pCtx->GetProductsFullPaths(evt.siteId, {yieldFeatPrdName});
-                if (prds.size() > 0) {
-                    yieldFeatPrd = prds[yieldFeatPrdName];
-                    yieldFeatPrd = QDir(QDir(yieldFeatPrd).filePath("VECTOR_DATA")).filePath("yield_features.csv");
-                    orchestrator::products::GenericHighLevelProductHelper prdHelper(yieldFeatPrdName);
-                    if(prdHelper.IsValid()) {
-                        startDate = prdHelper.GetStartDate();
-                        endDate = prdHelper.GetEndDate();
-                    }
-                }
-            }
+//            enableYieldModel = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
+//                                                                            "enable_yield_model", S4S_YIELD_CFG_PREFIX, true);
+//            if (enableYieldModel) {
+//                const QString &yieldFeatPrdName = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
+//                                                                                "yield_features_product", S4S_YIELD_CFG_PREFIX);
+//                const QMap<QString, QString> &prds = pCtx->GetProductsFullPaths(evt.siteId, {yieldFeatPrdName});
+//                if (prds.size() > 0) {
+//                    yieldFeatPrd = prds[yieldFeatPrdName];
+//                    yieldFeatPrd = QDir(QDir(yieldFeatPrd).filePath("VECTOR_DATA")).filePath("yield_features.csv");
+//                    orchestrator::products::GenericHighLevelProductHelper prdHelper(yieldFeatPrdName);
+//                    if(prdHelper.IsValid()) {
+//                        startDate = prdHelper.GetStartDate();
+//                        endDate = prdHelper.GetEndDate();
+//                    }
+//                }
+//            }
 
-            extractFeatures = (!enableYieldModel || yieldFeatPrd.length() == 0);
+//            extractFeatures = (!enableYieldModel || yieldFeatPrd.length() == 0);
 
-            if (extractFeatures) {
+//            if (extractFeatures) {
                 const ProductList &weatherPrdsList = pCtx->GetProducts(event.siteId, (int)ProductType::ERA5WeatherProductTypeId,
                                                                                    startDate, endDate);
                 if (weatherPrdsList.size() == 0) {
@@ -54,7 +57,7 @@ class S4SYieldHandler : public ProcessorHandler
                                              .arg(endDate.toString()).toStdString());
                 }
                 SetWeatherProducts(weatherPrdsList);
-            }
+//            }
         }
 
         void SetWeatherProducts(const ProductList &weatherPrds) {
@@ -69,9 +72,9 @@ class S4SYieldHandler : public ProcessorHandler
         QDateTime startDate;
         QDateTime endDate;
         QStringList weatherPrdPaths;
-        bool enableYieldModel;
-        QString yieldFeatPrd;
-        bool extractFeatures;
+//        bool enableYieldModel;
+//        QString yieldFeatPrd;
+//        bool extractFeatures;
 
         std::map<QString, QString> configParameters;
         QJsonObject parameters;

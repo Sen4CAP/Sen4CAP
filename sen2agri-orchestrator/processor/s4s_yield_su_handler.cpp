@@ -20,9 +20,7 @@ S4SYieldSUHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit>
                              const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder)
 {
     int curTaskIdx = 0;
-    int yieldFeatExtrIdx = -1;
-    int prdFormatterParentIdx = -1;
-    if (cfg.extractFeatures) {
+//    if (cfg.extractFeatures) {
         outAllTasksList.append(TaskToSubmit{ "s4s-yield-esu-extraction", {} });
         int extractESUIdx = curTaskIdx++;
         auto dataExtrParentTaskIdxs = {extractESUIdx};
@@ -63,25 +61,23 @@ S4SYieldSUHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit>
                                                                             outAllTasksList[trendFeatExtrIdx]}  });
         int mergeAllFeatIdx = curTaskIdx++;
         outAllTasksList.append(TaskToSubmit{ "s4s-yield-features-extraction-wrp", {outAllTasksList[mergeAllFeatIdx]} });
+        int yieldFeatExtrIdx = curTaskIdx++;
+        outAllTasksList.append(TaskToSubmit{ "s4s-yield-su-merge-yearly-features", {outAllTasksList[yieldFeatExtrIdx]} });
+        int mergeYearlyFeatIdx = curTaskIdx++;
+        int prdFormatterParentIdx = yieldFeatExtrIdx;
+//    }
 
-        yieldFeatExtrIdx = curTaskIdx++;
-        prdFormatterParentIdx = yieldFeatExtrIdx;
-    }
-
-    if (cfg.enableYieldModel) {
-        outAllTasksList.append(TaskToSubmit{ "s4s-yield-reference-extraction", {} });
-        int yieldReferenceExtrIdx = curTaskIdx++;
+//    if (cfg.enableYieldModel) {
+//        outAllTasksList.append(TaskToSubmit{ "s4s-yield-reference-extraction", {} });
+//        int yieldReferenceExtrIdx = curTaskIdx++;
         outAllTasksList.append(TaskToSubmit{ "s4s-yield-crop-types-extraction", {} });
         int yieldCTExtrIdx = curTaskIdx++;
 
-        QList<std::reference_wrapper<const TaskToSubmit>> parentTasks = {outAllTasksList[yieldReferenceExtrIdx], outAllTasksList[yieldCTExtrIdx]};
-        if (yieldFeatExtrIdx != -1) {
-            parentTasks.append(outAllTasksList[yieldFeatExtrIdx]);
-        }
-        outAllTasksList.append(TaskToSubmit{ "s4s-yield-model", {} });
+        // QList<std::reference_wrapper<const TaskToSubmit>> parentTasks = {/*outAllTasksList[yieldReferenceExtrIdx], */outAllTasksList[yieldCTExtrIdx], outAllTasksList[yieldFeatExtrIdx]};
+        outAllTasksList.append(TaskToSubmit{ "s4s-yield-su-model-wrp", {outAllTasksList[yieldCTExtrIdx], outAllTasksList[mergeYearlyFeatIdx] } } );
         int yieldModelIdx = curTaskIdx++;
         prdFormatterParentIdx = yieldModelIdx;
-    }
+//    }
 
     outAllTasksList.append(TaskToSubmit{ "product-formatter", {outAllTasksList[prdFormatterParentIdx]} });
 
@@ -98,8 +94,7 @@ NewStepList S4SYieldSUHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,con
     int curTaskIdx = 0;
     NewStepList allSteps;
     QStringList prdFormatterFiles;
-    QString yieldFeaturesOutputPath;
-    if (cfg.extractFeatures) {
+//    if (cfg.extractFeatures) {
         // create the step for ESU extraction
         TaskToSubmit &esuExtrTask = allTasksList[curTaskIdx++];
 
@@ -146,6 +141,7 @@ NewStepList S4SYieldSUHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,con
         TaskToSubmit &weatherFeatMergeTask = allTasksList[curTaskIdx++];
         TaskToSubmit &mergeAllFeatTask = allTasksList[curTaskIdx++];
         TaskToSubmit &yieldFeatTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &mergeYearlyYieldFeatTask = allTasksList[curTaskIdx++];
 
         // Resulting files from tasks
         const QString &esuAggWorkPath = esuAggregateTask.GetFilePath("");
@@ -158,17 +154,19 @@ NewStepList S4SYieldSUHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,con
         // Workaround: Althogh created by weather featurs task, we add these here in order to avoid putting them in the same directory
         const QString &outWeatherFeaturesPath = weatherFeatMergeTask.GetFilePath("weather_raw_features.csv");
         const QString &allFeatOutputPath = mergeAllFeatTask.GetFilePath("merged_weather_sg_features.csv");
-        yieldFeaturesOutputPath = yieldFeatTask.GetFilePath("yield_features.csv");
+        const QString &yieldFeaturesOutputPath = yieldFeatTask.GetFilePath("yield_features.csv");
+        const QString &yieldFeaturesPrevYearsOutputPath = yieldFeatTask.GetFilePath("yield_features_prev_years.csv");
+        const QString &mergePrevYearsYieldFeatOutPath = mergeYearlyYieldFeatTask.GetFilePath("merged_prev_years_yield_features.csv");
 
         // Inputs extraction and reflectances stack tif creation
         const QStringList &esuAggArgs = GetESUAggregationTaskArgs(esuCSVPath, mdb1File, esuAggWorkPath, esuAggResultPath);
         allSteps.append(CreateTaskStep(esuAggregateTask, "ESUAggregation", esuAggArgs ));
 
         // Inputs extraction and reflectances stack tif creation
-        const QStringList &sgArgs = GetSGLaiTaskArgs(cfg.year, esuAggResultPath, sgLaiPath, sgCropGrowthIndicesPath, sgYieldLaiFeaturesPath);
+        const QStringList &sgArgs = GetSGLaiTaskArgs(cfg.years, esuAggResultPath, sgLaiPath, sgCropGrowthIndicesPath, sgYieldLaiFeaturesPath);
         allSteps.append(CreateTaskStep(sgTask, "SavitzkyGolay", sgArgs ));
 
-        const QStringList &trendArgs = GetTrendFeaturesTaskArgs(cfg.historicalYieldFile, cfg.year, trendFeaturesPath);
+        const QStringList &trendArgs = GetTrendFeaturesTaskArgs(cfg.historicalYieldFile, cfg.years, trendFeaturesPath);
         allSteps.append(CreateTaskStep(trendFeatExtrTask, "TrendFeatures", trendArgs ));
 
         const QStringList &weatherFeaturesExtractionArgs = GetWeatherFeaturesTaskArgs(cfg.weatherPrdPaths, cfg.suPath, cfg.suUniqueId,
@@ -182,44 +180,50 @@ NewStepList S4SYieldSUHandler::CreateSteps(QList<TaskToSubmit> &allTasksList,con
         allSteps.append(CreateTaskStep(mergeAllFeatTask, "AllFeaturesMerge", allFeatureMergeArgs));
 
         const QString &yieldFeatDirOutputPath = yieldFeatTask.GetFilePath("");
-        const QStringList &yieldFeatExtractionArgs = GetYieldFeaturesTaskArgs(allFeatOutputPath, yieldFeaturesOutputPath);
+        const QStringList &yieldFeatExtractionArgs = GetYieldFeaturesTaskArgs(allFeatOutputPath, cfg.years.back(), yieldFeaturesOutputPath, yieldFeaturesPrevYearsOutputPath);
         allSteps.append(CreateTaskStep(yieldFeatTask, "YieldFeatures", yieldFeatExtractionArgs));
+
+        const QString &mergedFeatDirOutputPath = mergeYearlyYieldFeatTask.GetFilePath("");
+        const QStringList &mergeYieldFeaturesArgs = GetMergeYieldFeaturesTaskArgs(yieldFeaturesPrevYearsOutputPath, mergePrevYearsYieldFeatOutPath);
+        allSteps.append(CreateTaskStep(mergeYearlyYieldFeatTask, "MergeYieldFeatures", mergeYieldFeaturesArgs));
+
         // we append the full directory containing all resulted files
         prdFormatterFiles.append(yieldFeatDirOutputPath);
-    } else {
-        yieldFeaturesOutputPath = cfg.yieldFeatPrd;
-    }
+        prdFormatterFiles.append(mergedFeatDirOutputPath);
+//    } else {
+//        yieldFeaturesOutputPath = cfg.yieldFeatPrd;
+//    }
 
-    int yieldRefTskId = -1;
+    //int yieldRefTskId = -1;
     int ctExtrTskId = -1;
     int yieldModelTskId = -1;
-    if (cfg.enableYieldModel) {
-        yieldRefTskId = curTaskIdx++;
+//    if (cfg.enableYieldModel) {
+        // yieldRefTskId = curTaskIdx++;
         ctExtrTskId = curTaskIdx++;
         yieldModelTskId = curTaskIdx++;
-    }
+//    }
     TaskToSubmit &productFormatterTask = allTasksList[curTaskIdx++];
 
-    if (cfg.enableYieldModel) {
-        TaskToSubmit &yieldReferenceExtrTask = allTasksList[yieldRefTskId];
+//    if (cfg.enableYieldModel) {
+        // TaskToSubmit &yieldReferenceExtrTask = allTasksList[yieldRefTskId];
         TaskToSubmit &ctExtrTask = allTasksList[ctExtrTskId];
-        const QString &yieldReference = yieldReferenceExtrTask.GetFilePath("yield_reference.csv");
+        // const QString &yieldReference = yieldReferenceExtrTask.GetFilePath("yield_reference.csv");
         const QString &cropTypes = ctExtrTask.GetFilePath("crop_types.csv");
-        const QStringList &yieldReferenceExtractionArgs = GetYieldReferenceExtractionTaskArgs(cfg.event.siteId, yieldReference, cfg.startDate, cfg.endDate);
-        allSteps.append(CreateTaskStep(yieldReferenceExtrTask, "YieldReferenceExtraction", yieldReferenceExtractionArgs));
+//        const QStringList &yieldReferenceExtractionArgs = GetYieldReferenceExtractionTaskArgs(cfg.event.siteId, yieldReference, cfg.startDate, cfg.endDate);
+//        allSteps.append(CreateTaskStep(yieldReferenceExtrTask, "YieldReferenceExtraction", yieldReferenceExtractionArgs));
 
-        const QStringList &cropTypesExtractionArgs = GetCropTypesExtractionTaskArgs(cfg.event.siteId, cfg.year, cropTypes);
+        const QStringList &cropTypesExtractionArgs = GetCropTypesExtractionTaskArgs(cfg.event.siteId, cfg.years.back(), cropTypes);
         allSteps.append(CreateTaskStep(ctExtrTask, "CropTypesExtraction", cropTypesExtractionArgs));
 
         TaskToSubmit &yieldModelTask = allTasksList[yieldModelTskId];
         const QString &yieldModelOutputPath = yieldModelTask.GetFilePath("");
         const QString &yieldEstimateOutputPath = yieldModelTask.GetFilePath("yield_estimate.csv");
         const QString &yieldStatisticalUnitEstimateOutputPath = yieldModelTask.GetFilePath("yield_statistical_units_estimate.csv");
-        const QStringList &yieldModelExtractionArgs = GetYieldModelTaskArgs(cfg, yieldReference, cropTypes, yieldFeaturesOutputPath, yieldEstimateOutputPath, yieldStatisticalUnitEstimateOutputPath);
+        const QStringList &yieldModelExtractionArgs = GetYieldModelTaskArgs(cfg, /* yieldReference, */ cropTypes, yieldFeaturesOutputPath, mergePrevYearsYieldFeatOutPath, yieldEstimateOutputPath, yieldStatisticalUnitEstimateOutputPath);
         allSteps.append(CreateTaskStep(yieldModelTask, "YieldModel", yieldModelExtractionArgs));
         // we append the full directory containing all resulted files
         prdFormatterFiles.append(yieldModelOutputPath);
-    }
+//    }
 
     const QStringList &productFormatterArgs = GetProductFormatterArgs(productFormatterTask, cfg, prdFormatterFiles);
     allSteps.append(CreateTaskStep(productFormatterTask, "ProductFormatter", productFormatterArgs));
@@ -244,7 +248,7 @@ QString S4SYieldSUHandler::CreateStepsForFilesMerge(const S4SYieldJobConfig &job
                               const QStringList &dataExtrDirs, NewStepList &steps,
                               QList<TaskToSubmit> &allTasksList, int &curTaskIdx) {
     TaskToSubmit &mergeTask = allTasksList[curTaskIdx++];
-    QString yearStr = QString::number(jobCfg.year);
+    QString yearStr = QString::number(jobCfg.years.back());
     QString mergeResultFileName = yearStr.append("_LAI_Extracted_Data.csv");
     const QString &mergedFile = mergeTask.GetFilePath(mergeResultFileName);
     QStringList mergeArgs = { "Markers1CsvMerge", "-out", mergedFile, "-il" };
@@ -284,23 +288,33 @@ QStringList S4SYieldSUHandler::GetESUAggregationTaskArgs(const QString &esuCsvFi
     };
 }
 
-QStringList S4SYieldSUHandler::GetSGLaiTaskArgs(int year, const QString &mdb1File, const QString &sgOutFile,
+QStringList S4SYieldSUHandler::GetSGLaiTaskArgs(const std::vector<int> &years, const QString &mdb1File, const QString &sgOutFile,
                                               const QString &outCropGrowthIndicesFile, const QString &outLaiMetricsFile)
 {
-    return {    "--input", mdb1File,
-                "--year", QString::number(year),
-                "--sg-output", sgOutFile,
-                "--indices-output", outCropGrowthIndicesFile,
-                "--metrics-output", outLaiMetricsFile
+    QStringList args = {
+        "--input", mdb1File,
+        "--sg-output", sgOutFile,
+        "--indices-output", outCropGrowthIndicesFile,
+        "--metrics-output", outLaiMetricsFile
     };
+    args += "--year";
+    for(const int &year: years) {
+        args += QString::number(year);
+    }
+    return args;
 }
 
-QStringList S4SYieldSUHandler::GetTrendFeaturesTaskArgs(const QString &input, int year, const QString &output)
+QStringList S4SYieldSUHandler::GetTrendFeaturesTaskArgs(const QString &input, const std::vector<int> &years, const QString &output)
 {
-    return {    "--input", input,
-                "--year", QString::number(year),
-                "--output", output
+    QStringList args = {
+        "--input", input,
+        "--output", output
     };
+    args += "--year";
+    for(const int &year: years) {
+        args += QString::number(year);
+    }
+    return args;
 }
 
 QStringList S4SYieldSUHandler::GetParcelsExtractionTaskArgs(int siteId, int year, const QString &outFile)
@@ -335,11 +349,24 @@ QStringList S4SYieldSUHandler::GetAllFeaturesMergeTaskArgs(const QString &sgList
               "-g", "0"};
 }
 
-QStringList S4SYieldSUHandler::GetYieldFeaturesTaskArgs(const QString &inMergedFeatures, const QString &outYieldFeatures)
+QStringList S4SYieldSUHandler::GetYieldFeaturesTaskArgs(const QString &inMergedFeatures, int maxYear, const QString &outYieldFeatures,
+                                                        const QString &outPrevYearsYieldFeatures)
 {
 
-    return { "-i", inMergedFeatures, "-o", outYieldFeatures};
+    return { "-i", inMergedFeatures,
+             "-y", QString::number(maxYear),
+             "-o", outYieldFeatures,
+             "-p", outPrevYearsYieldFeatures
+    };
 }
+
+QStringList S4SYieldSUHandler::GetMergeYieldFeaturesTaskArgs(const QString &inYieldFeatures, const QString &outMergedYieldFeatures)
+{
+
+    return { "-i", inYieldFeatures, "-o", outMergedYieldFeatures};
+}
+
+
 
 QStringList S4SYieldSUHandler::GetYieldReferenceExtractionTaskArgs(int siteId, const QString &outRefYieldFile, const QDateTime &startDate, const QDateTime &endDate)
 {
@@ -356,8 +383,8 @@ QStringList S4SYieldSUHandler::GetCropTypesExtractionTaskArgs(int siteId, int ye
     };
 }
 
-QStringList S4SYieldSUHandler::GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString & yieldReference, const QString & cropCodesFile,
-                                                     const QString &inYieldFeatures, const QString &outYieldEstimates, const QString &outYieldSUEstimates)
+QStringList S4SYieldSUHandler::GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString & cropCodesFile, const QString & inYieldFeatures,
+                                                     const QString &inPrevYearsYieldFeatures, const QString &outYieldEstimates, const QString &outYieldSUEstimates)
 {
     const QString &algo = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
                                                                                "algorithm", S4S_YIELD_SU_CFG_PREFIX);
@@ -390,10 +417,9 @@ QStringList S4SYieldSUHandler::GetYieldModelTaskArgs(const S4SYieldJobConfig &cf
     {
         "-i", inYieldFeatures,
         "-o", outYieldEstimates,
-        "-e", outYieldSUEstimates,
-        "-r", yieldReference,
+        // "-e", outYieldSUEstimates,
+        "-r", inPrevYearsYieldFeatures,
         "-c", cropCodesFile
-        // "-u", statisticalUnitFields // TODO: We should obtain this somehow
     };
     if (algo.size() > 0) {
         args += "-a";
@@ -423,12 +449,12 @@ void S4SYieldSUHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
 {
     S4SYieldJobConfig cfg(&ctx, event, processorDescr.shortName);
     S4CMarkersDB1DataExtractStepsBuilder dataExtrStepsBuilder;
-    if (cfg.extractFeatures) {
+//    if (cfg.extractFeatures) {
         // we do not provide the patterns as we provide directly the custom lpisInfos
         ParcelsProductDescriptor descr = {cfg.suUniqueId, "", "", "", ""};
         dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, cfg.parameters, event.siteId, event.jobId,
                                         {"LAI"}, true, cfg.lpisInfos, descr, cfg.dataExtractionRootDir);
-    }
+//    }
 
     QList<TaskToSubmit> allTasksList;
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(cfg, allTasksList, dataExtrStepsBuilder);
