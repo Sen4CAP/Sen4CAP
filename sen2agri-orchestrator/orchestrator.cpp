@@ -29,6 +29,7 @@
 #include "processor/zarr_handler.hpp"
 #include "processor/s4c_heterogeneity_handler.hpp"
 #include "processor/s4c_baresoil_handler.hpp"
+#include "processor/s4c_change_detection_handler.hpp"
 #include "json_conversions.hpp"
 #include "schedulingcontext.h"
 #include "logger.hpp"
@@ -80,12 +81,15 @@ std::map<int, std::unique_ptr<ProcessorHandler>> & GetHandlersMap(PersistenceMan
             handlersMap.emplace(procDescr.processorId, std::make_unique<CompositeHandlerS1>());
         } else if(procDescr.processorId == (int)Processor::L3IndCompProcessorId) {
             handlersMap.emplace(procDescr.processorId, std::make_unique<CompositeHandlerIndicators>());
-        } else if(procDescr.processorId == (int)Processor::S4CHeterogeneity) {
+        } else if(procDescr.processorId == (int)Processor::S4CHeterogeneityProcessorId) {
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4CHeterogeneityHandler>());
         } else if(procDescr.processorId == (int)Processor::S4SYieldSUProcessorId) {
             handlersMap.emplace(procDescr.processorId, std::make_unique<S4SYieldSUHandler>());
-        } else if(procDescr.processorId == (int)Processor::S4CBareSoil) {
+        } else if(procDescr.processorId == (int)Processor::S4CBareSoilProcessorId) {
              handlersMap.emplace(procDescr.processorId, std::make_unique<S4CBareSoilHandler>());
+        } else if(procDescr.processorId == (int)Processor::S4CChangeDetectionProcessorId) {
+             handlersMap.emplace(procDescr.processorId, std::make_unique<S4CChangeDetectionHandler>());
+
         } else {
             bAdded = false;
             Logger::error(QStringLiteral("Invalid processor configuration found in database: %1, "

@@ -80,7 +80,8 @@ SOURCES += main.cpp \
     processor/s4c_heterogeneity_handler.cpp \
     processor/products/lpisinfosextractor.cpp \
     processor/s4s_yield_su_handler.cpp \
-    processor/s4c_baresoil_handler.cpp
+    processor/s4c_baresoil_handler.cpp \
+    processor/s4c_change_detection_handler.cpp
 
 HEADERS += \
     pch.hpp \
@@ -140,7 +141,8 @@ HEADERS += \
     processor/s4c_heterogeneity_handler.hpp \
     processor/products/lpisinfosextractor.h \
     processor/s4s_yield_su_handler.hpp \
-    processor/s4c_baresoil_handler.hpp
+    processor/s4c_baresoil_handler.hpp \
+    processor/s4c_change_detection_handler.hpp
 
 DISTFILES += \
     ../dbus-interfaces/org.esa.sen2agri.orchestrator.xml \

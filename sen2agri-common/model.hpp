@@ -247,7 +247,8 @@ enum class ProductType {
     L3IndicatorsCompositeProductTypeId = 31,
     S4SCropTypeMappingProductTypeId = 32,
     S4CBareSoilProductTypeId     = 33,
-    S4SYieldSUProductTypeId      = 34
+    S4SYieldSUProductTypeId      = 34,
+    S4CChangeDetectionProductTypeId = 35
 };
 
 enum class Processor {
@@ -275,9 +276,10 @@ enum class Processor {
     L3S1CompProcessorId = 22,
     L3IndCompProcessorId = 23,
     FMaskProcessorId = 24,
-    S4CHeterogeneity = 25,
-    S4CBareSoil = 26,
-    S4SYieldSUProcessorId = 27
+    S4CHeterogeneityProcessorId = 25,
+    S4CBareSoilProcessorId = 26,
+    S4SYieldSUProcessorId = 27,
+    S4CChangeDetectionProcessorId = 28
 };
 
 
