@@ -19,7 +19,7 @@ def write_geotiff(filename, arr, in_ds):
         arr_type = gdal.GDT_Int32
 
     driver = gdal.GetDriverByName("GTiff")
-    out_ds = driver.Create(filename, arr.shape[1], arr.shape[0], 1, arr_type)
+    out_ds = driver.Create(filename, arr.shape[1], arr.shape[0], 1, arr_type, options=['COMPRESS=DEFLATE'])
     out_ds.SetProjection(in_ds.GetProjection())
     out_ds.SetGeoTransform(in_ds.GetGeoTransform())
     band = out_ds.GetRasterBand(1)
@@ -80,73 +80,58 @@ def kmeans_missing(X, n_clusters, max_iter=10):
 
     return labels, centroids, X_hat
 
-def do_clustering(input_images, lpis_buffered_raster, period, num_imgs, num_clusters, out_file_cluster) :
-    img_ds_input_img = [s for s in input_images if "_B08_" in os.path.basename(s)]
-    img_ds = gdal.Open(img_ds_input_img[0],gdal.GA_ReadOnly)
+def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs, num_clusters, out_file_cluster) :
     raster = gdal.Open(lpis_buffered_raster,gdal.GA_ReadOnly)
     imgR = raster.ReadAsArray()
-    num_bands = img_ds.RasterCount
-    
-    # for p in Period_l:
-    #outputs
-    # file_cluster = f'{imG_path}/L4D_{site}_{n_cl}clusters_{p}_TMP.tif'
-    # file_out_post = f'{imG_path}/L4D_{site}_{n_cl}clusters_isoP_{p}.tif'
-    # file_out_post2 = f'{imG_path}/L4D_{site}_{n_cl}clusters_isoP_{p}_Com.tif'
-    date_l = []
-    for i in range(1,num_imgs+1):
-        # protection for the last period when we might not have all dates in raster
-        print("Date to add: {}".format(i + (period-1)*num_imgs))
-        if (i + (period-1)*num_imgs <= num_bands):
-            date_l.append(i + (period-1)*num_imgs)
-        
-    # date_l = [i + (period-1)*num_imgs for i in range(1,num_imgs+1)]
-    if len(date_l) == 0 : 
-        print("Cannot compute dates list from the given parameters (num_imgs = {}, num_bands = {}, period = {})".format(num_imgs, num_bands, period))
-        # write a image with only zeroes in order to avoid further steps failure. This kind of images will be ignored further in the analysis
-        img = np.zeros((img_ds.RasterYSize,img_ds.RasterXSize),
-                    gdal_array.GDALTypeCodeToNumericTypeCode(img_ds.GetRasterBand(1).DataType))
-        print(img.shape)
-        ds = gdal.Open(lpis_buffered_raster)
-        write_geotiff(out_file_cluster,img,ds)
-        
-        sys.exit(0)
 
-    n_var = len(input_images)*len(date_l)
+    date_l = [i + (period-1)*num_imgs for i in range(1,num_imgs+1)]
+    
+    n_var = 0
+    for cur_date in range(len(date_l)):
+        date = date_l[cur_date]
+        print(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date:02d}_T{tile}_*.tif')
+        L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date:02d}_T{tile}_*.tif')
+        print("(1) L2_IMG = {}".format(L2A_image))
+        bands_list = [t[t.index(f'T{tile}_') + len(f'T{tile}_'):t.index(f'.tif')] for t in L2A_image]
+        n_var += len(bands_list)
+        print("Band_list = {}, n_var = {}".format(bands_list, n_var))
+    
+    L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date_l[0]:02d}_T*_{bands_list[0]}.tif')
+    print("(2) L2_IMG = {}".format(L2A_image))
+    img_ds = gdal.Open(L2A_image[0],gdal.GA_ReadOnly)
 
     img = np.zeros((img_ds.RasterYSize,img_ds.RasterXSize,n_var),
                 gdal_array.GDALTypeCodeToNumericTypeCode(img_ds.GetRasterBand(1).DataType))
 
-    print("Input images len = {}".format(len(input_images)))
-    print("date_l = {}".format(date_l))
-    print("n_var = {}".format(n_var))
-    
-    for d in range(len(date_l)):
-        date = date_l[d]
-        print('imported date ' + str(date))
-        for b in range(len(input_images)):
-            img_ds = gdal.Open(input_images[b],gdal.GA_ReadOnly)
-            if img_ds is not None: 
-                # protection for last month where we can have less bands (ex. Feb)
-                if date <= img_ds.RasterCount : 
-                    img_dsB = img_ds.GetRasterBand(date)
-                    img_dsA = img_dsB.ReadAsArray()
+    for cur_date in range(len(date_l)):
+        date = date_l[cur_date]
+        print('imported date' + str(date))
+        L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date:02d}_T{tile}_*.tif')
+        print("(3) L2_IMG = {}".format(L2A_image))
+        bands_list = [t[t.index(f'T{tile}_') + len(f'T{tile}_'):t.index(f'.tif')] for t in L2A_image]
+        print("Band_list = {}".format(bands_list))
+        for b in range(len(bands_list)):
+            bands_n = bands_list[b]
+            L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date:02d}_T{tile}_{bands_n}.tif')
+            print("(4) L2_IMG = {}".format(L2A_image))
+            
+            img_ds = gdal.Open(L2A_image[0],gdal.GA_ReadOnly)
+            img_dsA = img_ds.ReadAsArray()
+            img[:, :,(cur_date*len(bands_list))+b] = img_dsA
 
-                    img[:, :,(d*len(input_images))+b] = img_dsA
-                    print("Extracted image from file {}".format(input_images[b]))
+        #L2A_image = glob.glob(f'{input_dir}/S2*{date}T*.SAFE/*V1-0/*FRE_{bands_n}.tif')
+    print('all images imported for month :'+ str(period))
 
-    print('images imported')
     #test mask crop with remove
-    img0 = img
+    img0 = img.copy()
     img = img0[imgR!=0,:]
 
-    print(img)
     img = img.astype(float)
-    img[img==-10000] = np.nan
-    img[img==0] = np.nan
-    
-    print(img)
+    #img[img==-10000] = np.nan
+    #img[img==0] = np.nan
 
     t_missing = kmeans_missing(X = img,n_clusters=num_clusters,max_iter=10)
+
     
     raster = gdal.Open(lpis_buffered_raster,gdal.GA_ReadOnly)
     imgR = raster.ReadAsArray()
@@ -170,16 +155,18 @@ def main():
         description="Parcels cluster extraction"
     )
     
-    parser.add_argument("-i", "--input-images", nargs='+', help="List of input image containing the resampled images", required=True)
+    parser.add_argument("-i", "--input-dir", help="Input directory containing S1 rasters", required=True)
     parser.add_argument("-b", "--lpis-buffered-raster", help="LPIS buffered raster corresponding to the input image tile", required=True)
     parser.add_argument("-c", "--number-of-clusters", type=int, help="Number of clusters", required=False, default=4)
     parser.add_argument("-n", "--number-of-images", type=int, help="Number of images to use in the period (if month: 3 images of 10 days resampled S2)", required=False, default=3)
     parser.add_argument("-p", "--period", type=int, help="Clustering period index (1 to 12 months, for example)", required=True)
+    parser.add_argument("-t", "--tile", help="S2 tile", required=True)
+    parser.add_argument("-y", "--year", type=int, help="L4A product year", required=True)
     parser.add_argument("-o", "--output", help="Output cluster file", required=True)
 
     args = parser.parse_args()
     
-    do_clustering(args.input_images, args.lpis_buffered_raster, args.period, args.number_of_images, args.number_of_clusters, args.output)
+    do_clustering(args.input_dir, args.tile, args.year, args.lpis_buffered_raster, args.period, args.number_of_images, args.number_of_clusters, args.output)
     
 if __name__ == "__main__":
     main()

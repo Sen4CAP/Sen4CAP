@@ -27,21 +27,24 @@ QList<std::reference_wrapper<TaskToSubmit>>
 S4CHeterogeneityHandler::CreateTasks(const S4CHeterogneneityJobConfig &cfg, QList<TaskToSubmit> &outAllTasksList)
 {
     int curTaskIdx = -1;
+    int ctTaskIdx = -1;
     QList<std::reference_wrapper<const TaskToSubmit>> prdFormatterParentTasks;
     QList<std::reference_wrapper<const TaskToSubmit>> s2ClustAnalysisTasks;
     QList<std::reference_wrapper<const TaskToSubmit>> s1ClustAnalysisTasks;
     QList<std::reference_wrapper<const TaskToSubmit>> finalAnalysisTasks;
 
-    // Extract the L4A parcels and S1 products (tiles.csv and radar.csv). We use the same task ids like for L4A (s4c_croptypehandler)
-    outAllTasksList.append(TaskToSubmit{ "s4c-l4a-extract-parcels", {} });
-    outAllTasksList.append(TaskToSubmit{ "s4c-heterog-crop-type", { outAllTasksList[0] } });
-    curTaskIdx += 2;
-    int ctTaskIdx = curTaskIdx;
+    if (cfg.existingCTSARDir.size() == 0) {
+        // Extract the L4A parcels and S1 products (tiles.csv and radar.csv). We use the same task ids like for L4A (s4c_croptypehandler)
+        outAllTasksList.append(TaskToSubmit{ "s4c-l4a-extract-parcels", {} });
+        outAllTasksList.append(TaskToSubmit{ "s4c-heterog-crop-type", { outAllTasksList[0] } });
+        curTaskIdx += 2;
+        ctTaskIdx = curTaskIdx;
+    }
 
     // In parallel with the S1 steps, we do the S2 temporal resampling
     // create the gdalbuildvrt steps
     for(auto info : cfg.tileInfos.keys()) {
-        QList<int> prevS2Ids, prevS1Ids;
+        QList<int> prevS2Ids/*, prevS1Ids*/;
 
         // Iterate all S2 masks, including NDVI, and create the vrts for rasters and masks + perform temporal resampling
         for(int i = 0; i<s2Bands.size(); i++) {
@@ -51,17 +54,17 @@ S4CHeterogeneityHandler::CreateTasks(const S4CHeterogneneityJobConfig &cfg, QLis
             prevS2Ids.append(++curTaskIdx);
         }
         // S1 extract S1 list and create a raster
-        for(int i = 0; i<s1Bands.size(); i++) {
-            outAllTasksList.append(TaskToSubmit{ "s4c-heterog-extract-s1-list", {outAllTasksList[ctTaskIdx]} });
-            curTaskIdx++;
-            outAllTasksList.append(TaskToSubmit{ "gdalbuildvrt", {outAllTasksList[curTaskIdx++]} });
-            outAllTasksList.append(TaskToSubmit{ "gdal_translate", {outAllTasksList[curTaskIdx++]} });
-            prevS1Ids.append(curTaskIdx);
-        }
+//        for(int i = 0; i<s1Bands.size(); i++) {
+//            outAllTasksList.append(TaskToSubmit{ "s4c-heterog-extract-s1-list", {outAllTasksList[ctTaskIdx]} });
+//            curTaskIdx++;
+//            outAllTasksList.append(TaskToSubmit{ "gdalbuildvrt", {outAllTasksList[curTaskIdx++]} });
+//            outAllTasksList.append(TaskToSubmit{ "gdal_translate", {outAllTasksList[curTaskIdx++]} });
+//            prevS1Ids.append(curTaskIdx);
+//        }
 
         // Cluster preparation
         for (int period = 0; period < cfg.clusteringIntervals; period++) {
-            outAllTasksList.append(TaskToSubmit{ "s4c-cluster-preparation", {} });
+            outAllTasksList.append(TaskToSubmit{ "s4c-cluster-preparation-s2", {} });
             int clustPrepIdx = ++curTaskIdx;
             for (const auto &curIdx : prevS2Ids) {
                 outAllTasksList[clustPrepIdx].parentTasks.append(outAllTasksList[curIdx]);
@@ -73,11 +76,15 @@ S4CHeterogeneityHandler::CreateTasks(const S4CHeterogneneityJobConfig &cfg, QLis
             s2ClustAnalysisTasks.append(outAllTasksList[curTaskIdx]);
 
             // Add also the S1 steps
-            outAllTasksList.append(TaskToSubmit{ "s4c-cluster-preparation", {} });
-            int clustPrepS1Idx = ++curTaskIdx;
-            for (const auto &curIdx : prevS1Ids) {
-                outAllTasksList[clustPrepS1Idx].parentTasks.append(outAllTasksList[curIdx]);
+            if (ctTaskIdx == -1) {
+                outAllTasksList.append(TaskToSubmit{ "s4c-cluster-preparation-s1", {} });
+            } else {
+                outAllTasksList.append(TaskToSubmit{ "s4c-cluster-preparation-s1", {outAllTasksList[ctTaskIdx]} });
             }
+            curTaskIdx++;
+//            for (const auto &curIdx : prevS1Ids) {
+//                outAllTasksList[clustPrepS1Idx].parentTasks.append(outAllTasksList[curIdx]);
+//            }
             outAllTasksList.append(TaskToSubmit{ "s4c-remove-isolated-pixels", {outAllTasksList[curTaskIdx++]} });
             outAllTasksList.append(TaskToSubmit{ "s4c-spatial-connectivity", {outAllTasksList[curTaskIdx++]} });
             outAllTasksList.append(TaskToSubmit{ "s4c-cluster-analysis-s1", {outAllTasksList[curTaskIdx++]} });
@@ -115,23 +122,28 @@ NewStepList S4CHeterogeneityHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
     QMap<int, QStringList> s2PeriodAnalysisTiles;
     QMap<int, QStringList> s1PeriodAnalysisTiles;
 
-    TaskToSubmit &extractParcelsTask = allTasksList[curTaskIdx++];
-    TaskToSubmit &cropTypeTask = allTasksList[curTaskIdx++];
+    QString ctFilesPath;
+    if (cfg.existingCTSARDir.size() == 0) {
+        TaskToSubmit &extractParcelsTask = allTasksList[curTaskIdx++];
+        TaskToSubmit &cropTypeTask = allTasksList[curTaskIdx++];
 
-    const QString &parcelsPath = extractParcelsTask.GetFilePath("parcels.csv");
-    const QString &lutPath = extractParcelsTask.GetFilePath("lut.csv");
-    const QString &tilesPath = extractParcelsTask.GetFilePath("tiles.csv");
-    const QString &opticalPath = extractParcelsTask.GetFilePath("optical.csv");
-    const QString &radarPath = extractParcelsTask.GetFilePath("radar.csv");
-    const QString &lpisPath = extractParcelsTask.GetFilePath("lpis.txt");
+        const QString &parcelsPath = extractParcelsTask.GetFilePath("parcels.csv");
+        const QString &lutPath = extractParcelsTask.GetFilePath("lut.csv");
+        const QString &tilesPath = extractParcelsTask.GetFilePath("tiles.csv");
+        const QString &opticalPath = extractParcelsTask.GetFilePath("optical.csv");
+        const QString &radarPath = extractParcelsTask.GetFilePath("radar.csv");
+        const QString &lpisPath = extractParcelsTask.GetFilePath("lpis.txt");
 
-    const QStringList &extractParcelsArgs = GetExtractParcelsTaskArgs(cfg, parcelsPath, lutPath, tilesPath,
-                                                                      opticalPath, radarPath, lpisPath);
-    allSteps.append(CreateTaskStep(extractParcelsTask, "S4CCropTypeExtractParcels", extractParcelsArgs));
+        const QStringList &extractParcelsArgs = GetExtractParcelsTaskArgs(cfg, parcelsPath, lutPath, tilesPath,
+                                                                          opticalPath, radarPath, lpisPath);
+        allSteps.append(CreateTaskStep(extractParcelsTask, "S4CCropTypeExtractParcels", extractParcelsArgs));
 
-    const QString &workingPath = cropTypeTask.GetFilePath("");
-    const QStringList &cropTypeArgs = GetCropTypeTaskArgs(cfg, workingPath, tilesPath, radarPath, lpisPath);
-    allSteps.append(CreateTaskStep(cropTypeTask, "S4CCropType", cropTypeArgs));
+        ctFilesPath= cropTypeTask.GetFilePath("");
+        const QStringList &cropTypeArgs = GetCropTypeTaskArgs(cfg, ctFilesPath, tilesPath, radarPath, lpisPath);
+        allSteps.append(CreateTaskStep(cropTypeTask, "S4CCropType", cropTypeArgs));
+    } else {
+        ctFilesPath = cfg.existingCTSARDir;
+    }
 
     for(auto tile : cfg.tileInfos.keys()) {
         const auto &mapRasters = cfg.tileInfos.value(tile).mapRasters;
@@ -172,26 +184,26 @@ NewStepList S4CHeterogeneityHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
             }
         }
 
-        QStringList s1TemporalResamplingFiles;
-        for(auto band: s1Bands) {
-            TaskToSubmit &s1ExtractPrdsListTask = allTasksList[curTaskIdx++];
-            TaskToSubmit &s1BuildVrtTask = allTasksList[curTaskIdx++];
-            TaskToSubmit &s1GdalTranslateTask = allTasksList[curTaskIdx++];
+//        QStringList s1TemporalResamplingFiles;
+//        for(auto band: s1Bands) {
+//            TaskToSubmit &s1ExtractPrdsListTask = allTasksList[curTaskIdx++];
+//            TaskToSubmit &s1BuildVrtTask = allTasksList[curTaskIdx++];
+//            TaskToSubmit &s1GdalTranslateTask = allTasksList[curTaskIdx++];
 
-            const QString &s1PrdsListPath = s1ExtractPrdsListTask.GetFilePath(tile + "_" + band + "_S1_prds_list.txt");
-            const QStringList &s1ExtrListArgs = GetS1ProductsListArgs(workingPath, band, tile, s1PrdsListPath);
-            allSteps.append(CreateTaskStep(s1ExtractPrdsListTask, "ExtractS1List", s1ExtrListArgs));
+//            const QString &s1PrdsListPath = s1ExtractPrdsListTask.GetFilePath(tile + "_" + band + "_S1_prds_list.txt");
+//            const QStringList &s1ExtrListArgs = GetS1ProductsListArgs(workingPath, band, tile, s1PrdsListPath);
+//            allSteps.append(CreateTaskStep(s1ExtractPrdsListTask, "ExtractS1List", s1ExtrListArgs));
 
-            const QString &s1VrtPath = s1BuildVrtTask.GetFilePath(tile + "_" + band + "_S1_prds.vrt");
-            const QStringList &s1VrtArgs = GetS1VrtTaskArgs(s1PrdsListPath, s1VrtPath);
-            allSteps.append(CreateTaskStep(s1BuildVrtTask, "CreateS1VRT", s1VrtArgs));
+//            const QString &s1VrtPath = s1BuildVrtTask.GetFilePath(tile + "_" + band + "_S1_prds.vrt");
+//            const QStringList &s1VrtArgs = GetS1VrtTaskArgs(s1PrdsListPath, s1VrtPath);
+//            allSteps.append(CreateTaskStep(s1BuildVrtTask, "CreateS1VRT", s1VrtArgs));
 
-            const QString &s1OutPath = s1GdalTranslateTask.GetFilePath(tile + "_" + band + "_S1_all.tif");
-            const QStringList &s1RasterBuildArgs = GetS1RasterBuildTaskArgs(s1VrtPath, s1OutPath);
-            allSteps.append(CreateTaskStep(s1GdalTranslateTask, "S1RasterCreation", s1RasterBuildArgs));
+//            const QString &s1OutPath = s1GdalTranslateTask.GetFilePath(tile + "_" + band + "_S1_all.tif");
+//            const QStringList &s1RasterBuildArgs = GetS1RasterBuildTaskArgs(s1VrtPath, s1OutPath);
+//            allSteps.append(CreateTaskStep(s1GdalTranslateTask, "S1RasterCreation", s1RasterBuildArgs));
 
-            s1TemporalResamplingFiles.append(s1OutPath);
-        }
+//            s1TemporalResamplingFiles.append(s1OutPath);
+//        }
 
         for (int period = 1; period <= cfg.clusteringIntervals; period++) {
             TaskToSubmit &s2ClusterPrepTask = allTasksList[curTaskIdx++];
@@ -206,8 +218,7 @@ NewStepList S4CHeterogeneityHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
 
             // Cluster preparation step
             const QString &outClusterFile = s2ClusterPrepTask.GetFilePath(tile + "_cluster_prep_S2_" + QString::number(period) + ".tif");
-            const QStringList &s2ClustPrepResArgs = GetClusterPrepTaskArgs(cfg, temporalResamplingFiles, tile, Satellite::Sentinel2,
-                                                                             period, outClusterFile);
+            const QStringList &s2ClustPrepResArgs = GetS2ClusterPrepTaskArgs(cfg, temporalResamplingFiles, tile, period, outClusterFile);
             allSteps.append(CreateTaskStep(s2ClusterPrepTask, "S2ClusterPreparation", s2ClustPrepResArgs));
 
             // Remove isolated pixels
@@ -234,9 +245,8 @@ NewStepList S4CHeterogeneityHandler::CreateSteps(QList<TaskToSubmit> &allTasksLi
 
             // S1
             // Cluster preparation step
-            const QString &outS1ClusterFile = s2ClusterPrepTask.GetFilePath(tile + "_cluster_prep_S1_" + QString::number(period) + ".tif");
-            const QStringList &s1ClustPrepResArgs = GetClusterPrepTaskArgs(cfg, s1TemporalResamplingFiles, tile, Satellite::Sentinel1,
-                                                                             period, outS1ClusterFile);
+            const QString &outS1ClusterFile = s1ClusterPrepTask.GetFilePath(tile + "_cluster_prep_S1_" + QString::number(period) + ".tif");
+            const QStringList &s1ClustPrepResArgs = GetS1ClusterPrepTaskArgs(cfg, ctFilesPath, tile, period, outS1ClusterFile);
             allSteps.append(CreateTaskStep(s1ClusterPrepTask, "S1ClusterPreparation", s1ClustPrepResArgs));
 
             // Remove isolated pixels
@@ -306,6 +316,9 @@ void S4CHeterogeneityHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx
                                                 const JobSubmittedEvent &event)
 {
     S4CHeterogneneityJobConfig cfg(&ctx, event);
+    if (cfg.existingCTSARDir.size() > 0) {
+        Logger::info("Heterogeneity: Using existing CT product " + cfg.existingCTSARDir);
+    }
 
     QList<TaskToSubmit> allTasksList;
     QList<std::reference_wrapper<TaskToSubmit>> allTasksListRef = CreateTasks(cfg, allTasksList);
@@ -497,7 +510,7 @@ QStringList S4CHeterogeneityHandler::GetS2TemporalResTaskArgs(const S4CHeterogne
     QStringList args = { "TemporalResampling",
                                  "-in", in,
                                  "-mask", inMsk,
-                                 "-out", out,
+                                 "-out", out + "?gdal:co:COMPRESS=DEFLATE",
                                  "-bv", QString::number(cfg.maskValue),
                                  "-nan", QString::number(cfg.nanValue),
                                  "-maxdist", QString::number(cfg.s2MaxDist),
@@ -522,19 +535,18 @@ QStringList S4CHeterogeneityHandler::GetS1ProductsListArgs(const QString &s1Rast
     };
 }
 
-QStringList S4CHeterogeneityHandler::GetS1VrtTaskArgs(const QString &s1PrdsListPath, const QString &s1VrtPath)
-{
-    return {"-separate", "-input_file_list", s1PrdsListPath, s1VrtPath};
-}
+//QStringList S4CHeterogeneityHandler::GetS1VrtTaskArgs(const QString &s1PrdsListPath, const QString &s1VrtPath)
+//{
+//    return {"-separate", "-input_file_list", s1PrdsListPath, s1VrtPath};
+//}
 
-QStringList S4CHeterogeneityHandler::GetS1RasterBuildTaskArgs(const QString &s1VrtPath, const QString &s1OutPath)
-{
-    return {s1VrtPath, s1OutPath};
-}
+//QStringList S4CHeterogeneityHandler::GetS1RasterBuildTaskArgs(const QString &s1VrtPath, const QString &s1OutPath)
+//{
+//    return {s1VrtPath, s1OutPath + "?gdal:co:COMPRESS=DEFLATE"};
+//}
 
-QStringList S4CHeterogeneityHandler::GetClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QStringList &inFiles,
-                                                              const QString &tile, Satellite sat, int periodIdx,
-                                                              const QString &out)
+QStringList S4CHeterogeneityHandler::GetS2ClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QStringList &inFiles,
+                                                              const QString &tile, int periodIdx, const QString &out)
 {
     // The S1 LPIS rasters are at 20m resolutions but during heterogeneity benchmarking the S1 AMP and COHE were created at 10m resolution
 //    const QMap<QString, QString> &tiledRasters = (sat == Satellite::Sentinel1 ?
@@ -550,9 +562,32 @@ QStringList S4CHeterogeneityHandler::GetClusterPrepTaskArgs(const S4CHeterognene
     QStringList args = {"--input-images"};
     args += inFiles;
     args+= {"--lpis-buffered-raster", lpisRaster};
-    args+= {"--number-of-clusters", QString::number(cfg.GetNoOfClusters(sat))};
-    args+= {"--number-of-images", QString::number(cfg.GetNoOfImagesInPeriod(sat))};
+    args+= {"--number-of-clusters", QString::number(cfg.GetNoOfClusters(Satellite::Sentinel2))};
+    args+= {"--number-of-images", QString::number(cfg.GetNoOfImagesInPeriod(Satellite::Sentinel2))};
     args+= {"--period", QString::number(periodIdx)};
+    args+= {"--output", out};
+
+    return args;
+}
+
+QStringList S4CHeterogeneityHandler::GetS1ClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QString &inS1CTDir,
+                                                              const QString &tile, int periodIdx, const QString &out)
+{
+    const QMap<QString, QString> &tiledRasters = cfg.lpisInfos.s2TiledRasters;
+    if (!tiledRasters.contains(tile)) {
+        cfg.pCtx->MarkJobFailed(cfg.event.jobId);
+        Logger::error(QStringLiteral("Heterogeneity: Cannot find 5m buffered raster for tile %1 in LPIS %2")
+                .arg(tile)
+                .arg(cfg.lpisInfos.productPath));
+    }
+    const QString &lpisRaster = tiledRasters[tile];
+    QStringList args = {"--input-dir", inS1CTDir};
+    args+= {"--lpis-buffered-raster", lpisRaster};
+    args+= {"--number-of-clusters", QString::number(cfg.GetNoOfClusters(Satellite::Sentinel1))};
+    args+= {"--number-of-images", QString::number(cfg.GetNoOfImagesInPeriod(Satellite::Sentinel1))};
+    args+= {"--period", QString::number(periodIdx)};
+    args+= {"--year", QString::number(cfg.year)};
+    args+= {"--tile", tile};
     args+= {"--output", out};
 
     return args;
@@ -575,7 +610,7 @@ QStringList S4CHeterogeneityHandler::GetIsolatedPixelsTaskArgs(const S4CHeterogn
         args += QString::number(cls);
     }
 
-    args += {"-out", out};
+    args += {"-out", out + "?gdal:co:COMPRESS=DEFLATE"};
 
     return args;
 }
@@ -586,7 +621,7 @@ QStringList S4CHeterogeneityHandler::GetSpatialConnectivityTaskArgs(const S4CHet
     QStringList args = {"HeterogeneityLocalClassConnectivityIndex", "-in", in};
     args += {"-fullconnectivity", QString::number(cfg.fullConnectivity)};
     args += {"-radius", QString::number(sat == Satellite::Sentinel1 ? cfg.searchRadiusS1 : cfg.searchRadiusS2)};
-    args += {"-out", out};
+    args += {"-out", out + "?gdal:co:COMPRESS=DEFLATE"};
 
     return args;
 }

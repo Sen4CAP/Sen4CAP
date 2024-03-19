@@ -149,13 +149,11 @@ def import_data(config) :
             else: 
                 df_cl1['M6'] = 0                
         else: 
-            dist = pd.DataFrame() 
             df_cl1['Hete'] = 0 
             df_cl1['Compact'] = 0
             df_cl1['CompactA'] = 0
             df_cl1['M6'] = 0  
-            df_cl = pd.concat([df_cl,df_cl1]) 
-            df_cl = df_cl.fillna(0)
+        df_cl = pd.concat([df_cl,df_cl1]) 
 
         finished = 100*(cnt/total_parcels_no)
         if divmod(finished, 10) == (updates, 0):

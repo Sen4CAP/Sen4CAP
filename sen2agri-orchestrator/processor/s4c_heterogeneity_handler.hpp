@@ -116,6 +116,7 @@ class S4CHeterogeneityHandler : public ProcessorHandler
                                          .arg(startDate.toString())
                                          .toStdString());
             }
+            existingCTSARDir = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "existing_ct_dir", S4C_HETEROGENEITY_CFG_PREFIX);
 
             UpdateOpticalPrdsTileBandMaps();
             UpdateLpisInfos();
@@ -139,6 +140,7 @@ class S4CHeterogeneityHandler : public ProcessorHandler
         QList<ProductDetails> l3bProductDetails;
         QMap<QString, TileInfoMaps> tileInfos;
         QStringList outDates;
+        QString existingCTSARDir;
 
         std::map<QString, QString> configParameters;
         QJsonObject parameters;
@@ -213,11 +215,12 @@ private:
     QStringList GetGdalBuidVrtTaskArgs(const QStringList &files, const QString &vrtFile);
 
     QStringList GetS1ProductsListArgs(const QString &s1RastersDir, const QString &band, const QString &tile, const QString &s1PrdsListPath);
-    QStringList GetS1VrtTaskArgs(const QString &s1PrdsListPath, const QString &s1VrtPath);
-    QStringList GetS1RasterBuildTaskArgs(const QString &s1VrtPath, const QString &s1OutPath);
+//    QStringList GetS1VrtTaskArgs(const QString &s1PrdsListPath, const QString &s1VrtPath);
+//    QStringList GetS1RasterBuildTaskArgs(const QString &s1VrtPath, const QString &s1OutPath);
 
-    QStringList GetClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QStringList &inFiles, const QString &tile,
-                                         Satellite sat, int periodIdx, const QString &out);
+    QStringList GetS2ClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QStringList &inFiles, const QString &tile, int periodIdx, const QString &out);
+    QStringList GetS1ClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QString &inS1CTDir, const QString &tile, int periodIdx, const QString &out);
+
     QStringList GetIsolatedPixelsTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QString &in, Satellite sat, const QString &out);
     QStringList GetSpatialConnectivityTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QString &in, Satellite sat, const QString &out);
     QStringList GetS2ClusterAnalysisTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QString &inNdvi, const QString &tile, int periodIdx, const QString &smoothedRaster, const QString &localConRaster,

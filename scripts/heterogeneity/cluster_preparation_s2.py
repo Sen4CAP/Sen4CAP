@@ -19,7 +19,7 @@ def write_geotiff(filename, arr, in_ds):
         arr_type = gdal.GDT_Int32
 
     driver = gdal.GetDriverByName("GTiff")
-    out_ds = driver.Create(filename, arr.shape[1], arr.shape[0], 1, arr_type)
+    out_ds = driver.Create(filename, arr.shape[1], arr.shape[0], 1, arr_type, options=['COMPRESS=DEFLATE'])
     out_ds.SetProjection(in_ds.GetProjection())
     out_ds.SetGeoTransform(in_ds.GetGeoTransform())
     band = out_ds.GetRasterBand(1)
@@ -50,7 +50,7 @@ def kmeans_missing(X, n_clusters, max_iter=10):
     mu = np.nanmean(X, 0, keepdims=1)
     X_hat = np.where(missing, mu, X)
     # print("Before: {}".format(str(X_hat)))
-    # X_hat = np.nan_to_num(X_hat, False)
+    X_hat = np.nan_to_num(X_hat, False)
     # print("After: {}".format(str(X_hat)))
 
     for i in range(max_iter):
