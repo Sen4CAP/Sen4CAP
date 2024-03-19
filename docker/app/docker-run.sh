@@ -6,3 +6,5 @@ docker build \
 docker run -it --rm \
        -v $(realpath ../..):/sen2agri \
        sen2agri-app-build /bin/bash entry.sh
+
+sudo chown $USER:$USER ../packaging/Sen2AgriApp/rpm_binaries/*.rpm
