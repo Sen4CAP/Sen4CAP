@@ -74,7 +74,11 @@ QStringList S4SCropTypeMappingHandler::GetCropTypeTaskArgs(const CropTypeJobConf
 
     const QString &featuresStr = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
                                                                                  "features-filter", S4S_CTM_CFG_PREFIX);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    const QStringList &featuresFilter = featuresStr.split(',', Qt::SkipEmptyParts);
+#else
     const QStringList &featuresFilter = featuresStr.split(',', QString::SkipEmptyParts);
+#endif
     if(featuresFilter.size() > 0) {
         cropTypeArgs.append("--features");
         cropTypeArgs += featuresFilter;

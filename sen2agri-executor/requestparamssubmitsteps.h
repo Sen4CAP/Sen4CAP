@@ -20,8 +20,6 @@ public:
     QString &GetProcessorPath();
     QStringList &GetArgumentsList();
 
-    ExecutionStep& operator=(const ExecutionStep &rhs);
-
 private:
     int m_nProcessorId;
     int m_nTaskId;

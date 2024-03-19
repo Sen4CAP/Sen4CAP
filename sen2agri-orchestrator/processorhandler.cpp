@@ -4,6 +4,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFileInfoList>
+#include <QTimeZone>
+
 #include <fstream>
 
 #include "schedulingcontext.h"
@@ -312,8 +314,13 @@ bool IsInSeason(const QDate &startSeasonDate, const QDate &endSeasonDate, const 
         // we allow maximum 1 month after the end of season (in case of composite, for example,
         // we have scheduled date after end of season)
         if(currentDate >= sSeasonDate && currentDate <= endSeasonDate.addMonths(1)) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            startTime = sSeasonDate.startOfDay(QTimeZone::systemTimeZone());
+            endTime = endSeasonDate.startOfDay(QTimeZone::systemTimeZone());
+#else
             startTime = QDateTime(sSeasonDate);
             endTime = QDateTime(endSeasonDate);
+#endif
             return true;
         } else {
             Logger::debug(QStringLiteral("IsInSeason: Date not in season (start = %1, end = %2, current=%3)")
@@ -390,8 +397,13 @@ bool ProcessorHandler::GetBestSeasonToMatchDate(ExecutionContextBase &ctx, int s
             for (const Season &season: seasons) {
                 if (season.seasonId == siteSeasonId) {
                     if (season.enabled) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                        startTime = season.startDate.startOfDay(QTimeZone::systemTimeZone());
+                        endTime = season.endDate.startOfDay(QTimeZone::systemTimeZone());
+#else
                         startTime = QDateTime(season.startDate);
                         endTime = QDateTime(season.endDate);
+#endif
                         return true;
                     } else {
                         Logger::error(QStringLiteral("GetSeasonStartEndDates: Season with site_season_id = %1 is disabled!").arg(seasonIdStr));
@@ -425,8 +437,13 @@ bool ProcessorHandler::GetBestSeasonToMatchDate(ExecutionContextBase &ctx, int s
         }
     }
     if (bestSeasonSet) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        startTime = bestSeason.startDate.startOfDay(QTimeZone::systemTimeZone());
+        endTime = bestSeason.endDate.startOfDay(QTimeZone::systemTimeZone());
+#else
         startTime = QDateTime(bestSeason.startDate);
         endTime = QDateTime(bestSeason.endDate);
+#endif
         return true;
     }
 

@@ -1,6 +1,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <fstream>
@@ -155,7 +156,11 @@ QStringList LaiRetrievalHandlerL3C::GetL3BProductsSinceStartOfSeason(EventProces
 {
     // extract the start and end dates
     const QDate &startSeasonDate = GetSiteFirstSeasonStartDate(ctx, siteId);
-    const QDateTime &startDateTime = QDateTime(startSeasonDate);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    const QDateTime &startDateTime = startSeasonDate.startOfDay(QTimeZone::systemTimeZone());
+#else
+    const QDateTime startDateTime{startSeasonDate};
+#endif
     const QDateTime &lastPrdsTime = GetL3BLastAcqDate(listExistingPrds);
 
     // Get all products since the start of the first season

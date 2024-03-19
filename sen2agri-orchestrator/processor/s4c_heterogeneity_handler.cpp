@@ -351,7 +351,11 @@ void S4CHeterogeneityHandler::HandleTaskFinishedImpl(EventProcessingContext &ctx
             QFile file(prodFolderOutPath);
             if (file.open(QIODevice::ReadWrite)) {
                 QTextStream stream(&file);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                stream << prdId << ";" << productFolder << Qt::endl;
+#else
                 stream << prdId << ";" << productFolder << endl;
+#endif
             }
             ctx.MarkJobFinished(event.jobId);
             // Now remove the job folder containing temporary files

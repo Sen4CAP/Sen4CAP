@@ -1,6 +1,7 @@
-#include "l2aproducthelper.h"
+#include <QDirIterator>
+#include <QTimeZone>
 
-#include "QDirIterator"
+#include "l2aproducthelper.h"
 
 using namespace orchestrator::products;
 
@@ -224,7 +225,11 @@ bool L2AProductHelper::ExtractInfosFromMatch(const ProductNamePatternInfos &info
         if (infos.isDoy && extractedStr.size() == 7) {
             QDate date(extractedStr.left(4).toInt(), 1,1);
             date = date.addDays(extractedStr.right(3).toInt());
-            dateTime = QDateTime (date);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            dateTime = date.startOfDay(QTimeZone::systemTimeZone());
+#else
+            dateTime = QDateTime(date);
+#endif
         } else {
             dateTime = QDateTime::fromString(extractedStr, infos.dateFormat);
         }

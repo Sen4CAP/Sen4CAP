@@ -506,7 +506,11 @@ QList<PrdFileInfo> S4CMarkersDB1DataExtractStepsBuilder::FilterAndUpdateAlreadyP
     QList<int> allYears = mapMissing.keys();
     allYears.append(mapProcessed.keys());
     // keep common unique years from missing and processed products
-    const QSet<int> &setYears = QSet<int>::fromList(allYears);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    const QSet<int> setYears{allYears.begin(), allYears.end()};
+#else
+    const QSet<int> setYears = allYears.toSet();
+#endif
     for (int year: setYears) {
         const QList<PrdFileInfo> &yearMissingPrdsFiles = mapMissing[year];
         const QList<PrdFileInfo> &yearProcessedPrdsFiles = mapProcessed[year];

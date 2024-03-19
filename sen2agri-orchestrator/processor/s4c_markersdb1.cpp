@@ -1,6 +1,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QTimeZone>
+
 #include <fstream>
 
 #include "s4c_markersdb1.hpp"
@@ -302,9 +304,14 @@ ProductList S4CMarkersDB1Handler::GetLpisProduct(ExecutionContextBase *pCtx, int
     // We take it the last LPIS product for this site.
     QDate  startDate, endDate;
     startDate.setDate(1970, 1, 1);
-    QDateTime startDateTime(startDate);
     endDate.setDate(2050, 12, 31);
-    QDateTime endDateTime(endDate);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    QDateTime startDateTime = startDate.startOfDay(QTimeZone::systemTimeZone());
+    QDateTime endDateTime = endDate.startOfDay(QTimeZone::systemTimeZone());
+#else
+    QDateTime startDateTime{startDate};
+    QDateTime endDateTime{endDate};
+#endif
     return pCtx->GetProducts(siteId, (int)ProductType::S4CLPISProductTypeId, startDateTime, endDateTime);
 }
 

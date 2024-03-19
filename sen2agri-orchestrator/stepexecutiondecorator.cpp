@@ -276,7 +276,11 @@ QString StepExecutionDecorator::GetScratchPathRoot(const QString &procName)
 
     val = QDir::cleanPath(val) + QDir::separator();
     if (val.contains('{')) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        val = val.split('{', Qt::SkipEmptyParts).at(0);
+#else
         val = val.split('{', QString::SkipEmptyParts).at(0);
+#endif
         // remove also the last / character, no matter if there is or isn't something after it
         int pos = val.lastIndexOf(QChar('/'));
         val = val.left(pos);

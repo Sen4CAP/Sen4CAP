@@ -47,20 +47,6 @@ QStringList& ExecutionStep::GetArgumentsList()
     return m_listArgs;
 }
 
-ExecutionStep& ExecutionStep::operator=(const ExecutionStep &rhs)
-{
-    // Check for self-assignment!
-    if (this == &rhs)      // Same object?
-      return *this;
-
-    m_nTaskId = rhs.m_nTaskId;
-    m_strStepName = rhs.m_strStepName;
-    m_nProcessorId = rhs.m_nProcessorId;
-    m_strProcessorPath = rhs.m_strProcessorPath;
-    m_listArgs = rhs.m_listArgs;
-    return *this;
-}
-
 RequestParamsSubmitSteps::RequestParamsSubmitSteps()
     : RequestParamsBase(START_STEP_REQ)
 {

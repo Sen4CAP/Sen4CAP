@@ -178,7 +178,11 @@ QList<int64_t> getCpuStats()
 
     QTextStream in(&contents);
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    const auto &values = in.readLine().split(' ', Qt::SkipEmptyParts);
+#else
     const auto &values = in.readLine().split(' ', QString::SkipEmptyParts);
+#endif
 
     QList<int64_t> result;
     auto sz = values.size();

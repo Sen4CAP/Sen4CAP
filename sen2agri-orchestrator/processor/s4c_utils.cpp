@@ -1,3 +1,5 @@
+#include <QTimeZone>
+
 #include "s4c_utils.hpp"
 #include "logger.hpp"
 #include "processorhandler.hpp"
@@ -6,9 +8,14 @@ ProductList S4CUtils::GetLpisProduct(ExecutionContextBase *pCtx, int siteId) {
     // We take it the last LPIS product for this site.
     QDate  startDate, endDate;
     startDate.setDate(1970, 1, 1);
-    QDateTime startDateTime(startDate);
     endDate.setDate(2050, 12, 31);
-    QDateTime endDateTime(endDate);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    QDateTime startDateTime = startDate.startOfDay(QTimeZone::systemTimeZone());
+    QDateTime endDateTime = endDate.startOfDay(QTimeZone::systemTimeZone());
+#else
+    QDateTime startDateTime{startDate};
+    QDateTime endDateTime{endDate};
+#endif
     return pCtx->GetProducts(siteId, (int)ProductType::S4CLPISProductTypeId, startDateTime, endDateTime);
 }
 

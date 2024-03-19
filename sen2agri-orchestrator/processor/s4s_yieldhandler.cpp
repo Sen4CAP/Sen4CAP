@@ -388,7 +388,11 @@ QStringList S4SYieldHandler::GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg,
     if (selectionType == "manual") {
         const QString &strManualFeatures = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
                                                                                    "manual-selection-features", S4S_YIELD_CFG_PREFIX);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        manualFeatures = strManualFeatures.split(',', Qt::SkipEmptyParts);
+#else
         manualFeatures = strManualFeatures.split(',', QString::SkipEmptyParts);
+#endif
     }
 
 //        "-a", "--algo", required=False, default="rf", help="The algorithm to be used. lm - LinerarRegression, svm - SupportVectortMachine. Default rf = RandomForest", choices=['rf', 'lm', 'svm']
