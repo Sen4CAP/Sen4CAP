@@ -51,6 +51,9 @@ class S4SPermanentCropHandler : public ProcessorHandler
                 std::transform(tiles.cbegin(), tiles.cend(), std::back_inserter(tileIds), [](const Tile & tile) {return tile.tileId ; } );
             }
             year = endDate.date().year();           // TODO: see if this is valid
+            // change to the beginning of the next day to avoid losing products that are in the same date as the end date
+            // We update this after the year extraction as adding 1 day might move to the next year
+            endDate = endDate.addDays(1);
         }
 //        void SetSamplesInfosProducts(const QString &sampleFile) {
 //            samplesShapePath = sampleFile;
