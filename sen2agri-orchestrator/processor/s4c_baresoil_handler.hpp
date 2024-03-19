@@ -23,6 +23,9 @@ class S4CBareSoilHandler : public ProcessorHandler
                         ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "end_date", S4C_BARE_SOIL_CFG_PREFIX));
 
             year = endDate.date().year();           // TODO: see if this is valid
+            // change to the beginning of the next day to avoid losing products that are in the same date as the end date
+            // We update this after the year extraction as adding 1 day might move to the next year
+            endDate = endDate.addDays(1);
 
             const TileList &tiles = pCtx->GetSiteTiles(event.siteId, (int)Satellite::Sentinel2);
             if (tiles.size() == 0) {
