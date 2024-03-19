@@ -28,8 +28,9 @@ CT_COL_NAME = "crop_code"
 SAFY_YIELD_COL_NAME = "Yield"
 SAFY_D0OUT_COL_NAME = "d0out"
 SAFY_SENBOUT_COL_NAME = "SenBout"
+TREND_COL_NAME = "Trend"
 
-OUTPUT_FEATURE_NAMES = ['MeanLaiSGWinter', 'SumLaiSGInt0', 'SumLaiSGInt1', 'SumLaiSGInt2', 'MaxSG', 'DayMaxSG', 'MaxLAI', 'ColdT0', 'ColdT1', 'HotT2', 'SumT1', 'SumT2', 'SumT251', 'SumT252', 'SumP1', 'SumP2', 'SumR1', 'SumR2', 'SumE1', 'SumE2', 'MeanT1', 'MeanT2', 'MeanP1', 'MeanP2', 'MeanR1', 'MeanR2', 'MeanE1', 'MeanE2', 'MeanSW10', 'MeanSW11', 'MeanSW12', 'MeanSW20', 'MeanSW21', 'MeanSW22', 'MeanSW30', 'MeanSW31', 'MeanSW32', 'MeanSW40', 'MeanSW41', 'MeanSW42', SAFY_YIELD_COL_NAME, SAFY_D0OUT_COL_NAME, SAFY_SENBOUT_COL_NAME, CT_COL_NAME]
+OUTPUT_FEATURE_NAMES = ['MeanLaiSGWinter', 'SumLaiSGInt0', 'SumLaiSGInt1', 'SumLaiSGInt2', 'MaxSG', 'DayMaxSG', 'MaxLAI', 'ColdT0', 'ColdT1', 'HotT2', 'SumT1', 'SumT2', 'SumT251', 'SumT252', 'SumP1', 'SumP2', 'SumR1', 'SumR2', 'SumE1', 'SumE2', 'MeanT1', 'MeanT2', 'MeanP1', 'MeanP2', 'MeanR1', 'MeanR2', 'MeanE1', 'MeanE2', 'MeanSW10', 'MeanSW11', 'MeanSW12', 'MeanSW20', 'MeanSW21', 'MeanSW22', 'MeanSW30', 'MeanSW31', 'MeanSW32', 'MeanSW40', 'MeanSW41', 'MeanSW42', SAFY_YIELD_COL_NAME, SAFY_D0OUT_COL_NAME, SAFY_SENBOUT_COL_NAME, TREND_COL_NAME, CT_COL_NAME]
 
 INDICES_COLUMN_SUFFIXES=["Ind_MaxLai", "Ind_HalfLai", "Ind_Emerg", "Ind_EndLai"]
 
@@ -68,6 +69,7 @@ class InputColumnsInfo(object) :
         self.safy_d0_indices = self.get_column_indices(header, [SAFY_D0OUT_COL_NAME])
         self.safy_senb_indices = self.get_column_indices(header, [SAFY_SENBOUT_COL_NAME])
         self.safy_yield_indices = self.get_column_indices(header, [SAFY_YIELD_COL_NAME])
+        self.trend_indices = self.get_column_indices(header, [TREND_COL_NAME])
         
         # TODO: Here we should remove the duplicated dates (due to intersection of several S2 tiles)
                     
@@ -197,10 +199,12 @@ def handle_batch_record(rows, column_infos, writer):
         safy_yield = filter_row_values(row, column_infos.safy_yield_indices)
         safy_d0 = filter_row_values(row, column_infos.safy_d0_indices)
         safy_senb = filter_row_values(row, column_infos.safy_senb_indices)
+        trend = filter_row_values(row, column_infos.trend_indices)
         
         i = update_result_row_idx_and_increment(result, i, safy_yield[0] if safy_yield is not None and len(safy_yield) > 0 else None)   # ['safyyield']
         i = update_result_row_idx_and_increment(result, i, safy_d0[0] if safy_d0 is not None and len(safy_d0) > 0 else None)            # ['safyd0'] 
         i = update_result_row_idx_and_increment(result, i, safy_senb[0] if safy_senb is not None and len(safy_senb) > 0 else None)      # ['safysenb']
+        i = update_result_row_idx_and_increment(result, i, trend[0] if trend is not None and len(trend) > 0 else None)                  # ['Trend']
        
         i = update_result_row_idx_and_increment(result, i, int(crop_type) if crop_type is not None and len(crop_type) > 0 else None)    # ['crop_type']
         

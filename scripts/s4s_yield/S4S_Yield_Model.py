@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 
 from enum import Enum
 
+INPUT_FEATURE_NAMES = ['NewID', 'MeanLaiSGWinter', 'SumLaiSGInt0', 'SumLaiSGInt1', 'SumLaiSGInt2', 'MaxSG', 'DayMaxSG', 'MaxLAI', 'ColdT0','ColdT1','HotT2','SumT1','SumT2','SumT251','SumT252','SumP1','SumP2','SumR1','SumR2','SumE1','SumE2','MeanT1','MeanT2','MeanP1','MeanP2','MeanR1','MeanR2','MeanE1','MeanE2','MeanSW10','MeanSW11','MeanSW12','MeanSW20','MeanSW21','MeanSW22','MeanSW30','MeanSW31','MeanSW32','MeanSW40','MeanSW41','MeanSW42','Yield','d0out','SenBout', 'Trend', 'crop_code']    # TODO: add the other feature names here
 
 class Selection(Enum):
     NoSelection = 1
@@ -60,15 +61,27 @@ class Config(object):
             self.selection_suffix = "Automatic"
             self.no_of_selection_features = args.max_automatic_features_no
 
+def remove_ignoring_columns(merged_features, columns_to_ignore) :
+    if columns_to_ignore is not None and len(columns_to_ignore) > 0:
+        for col_to_ignore in columns_to_ignore:
+            if col_to_ignore in merged_features.columns:
+                merged_features = merged_features.drop(columns=[col_to_ignore])
+            else:
+                print("The column to be ignored {} is not present in the input columns list ({})".format(col_to_ignore, merged_features.columns))
+    return merged_features
+    
 def clean_dataset(df):
     assert isinstance(df, pd.DataFrame), "df needs to be a pd.DataFrame"
     df.dropna(inplace=True)
     indices_to_keep = ~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)
     return df[indices_to_keep].astype(np.float64)
     
-def train_model(config, yield_ref, merged_features) : 
-    calibdata = pd.merge(yield_ref, merged_features,on='NewID').iloc[:,1:]
-    print("Calibration data (initial) = {}".format(calibdata))
+def train_model(config, calibdata) : 
+    # if yield_ref is None:
+    #     calibdata = merged_features.iloc[:,1:]
+    # else:
+    #     calibdata = pd.merge(yield_ref, merged_features,on='NewID').iloc[:,1:]
+    # print("Calibration data (initial) = {}".format(calibdata))
 
     if config.selection is Selection.Manual:
         print("Executing manual selection ...")
@@ -92,9 +105,17 @@ def train_model(config, yield_ref, merged_features) :
     # Model training
     print("Cleaning calibration data ...")
     clean_dataset(calibdata)
+    
+    # print("==============================================")
     # print(calibdata.to_string())
+    # print("==============================================")
+    # print("calibdata.iloc[:,1:]")
     # print(calibdata.iloc[:,1:].to_string())
+    # print("==============================================")
+    # print("calibdata.iloc[:,0]")
     # print(calibdata.iloc[:,0].to_string())
+    # print("==============================================")
+    
     print("Training model with {} ...".format(config.algo))
     config.algo.fit(calibdata.iloc[:,1:], calibdata.iloc[:,0])
     
@@ -163,26 +184,54 @@ def main():
     )
 
     parser.add_argument(
-        "-e", "--output-statistical-units-estimate", required=True, help="The output for statistical units estimation file"
+        "-e", "--output-statistical-units-estimate", help="The output for statistical units estimation file"
     )
+    parser.add_argument('--has-trend', default=False, action='store_true')
     
     args = parser.parse_args()
     config = Config(args)
 
+    if args.statistical_unit_fields is not None:
+        if args.output_statistical_units_estimate is None:
+            print("Statistical units estimate output file is not provided but is required as --statistical-unit-fields was given. Exiting ...")
+            sys.exit(1)
+            
     # Read the input files 
     print("Reading input features from {}".format(config.input_features))
-    merged_features = pd.read_csv(config.input_features, sep=',', names=['NewID', 'MeanLaiSGWinter', 'SumLaiSGInt0', 'SumLaiSGInt1', 'SumLaiSGInt2', 'MaxSG', 'DayMaxSG', 'MaxLAI', 'ColdT0','ColdT1','HotT2','SumT1','SumT2','SumT251','SumT252','SumP1','SumP2','SumR1','SumR2','SumE1','SumE2','MeanT1','MeanT2','MeanP1','MeanP2','MeanR1','MeanR2','MeanE1','MeanE2','MeanSW10','MeanSW11','MeanSW12','MeanSW20','MeanSW21','MeanSW22','MeanSW30','MeanSW31','MeanSW32','MeanSW40','MeanSW41','MeanSW42','Yield','d0out','SenBout', 'crop_code'], header = 1)    # TODO: add the other feature names here
+    in_feat_names = INPUT_FEATURE_NAMES.copy()
+    
+    columns_to_ignore = []
+    yield_ref_columns = []
+    if args.has_trend:
+        # remove SAFY columns
+        columns_to_ignore = ["Yield", "d0out", "SenBout"]
+        yield_ref_columns = in_feat_names.copy()
+        yield_ref_columns.insert(len(yield_ref_columns)-1, "year")
+    else :
+        # remove Trend column
+        columns_to_ignore = ["Trend"]
+        yield_ref_columns = ['NewID','yield_estimate']
+        
+    merged_features = pd.read_csv(config.input_features, sep=',', names=in_feat_names, header = 1)    
     # merged_features['ColdT0'] = merged_features['ColdT0'].astype(float)
+    # print(merged_features)
     crop_codes = pd.read_csv(config.crop_codes, sep=',')[['crop_code']] ### change
     # merged_features = merged_features.merge(id2crop, on='NewID')   ### change
 
-    print("Cleaning input features for NaN");
-    clean_dataset(merged_features)
+    print("Reading yield reference from {}".format(config.yield_reference))
+    print("Yield referece columns are {}".format(yield_ref_columns))
+    yield_ref = pd.read_csv(config.yield_reference, sep=',', names=yield_ref_columns, header = 1)
+
+    print("Cleaning input features for NaN")
+    merged_features = remove_ignoring_columns(merged_features, columns_to_ignore)
+    yield_ref = remove_ignoring_columns(yield_ref, columns_to_ignore)
     
     # print(merged_features)
-    print("Reading yield reference from {}".format(config.yield_reference))
-    yield_ref = pd.read_csv(config.yield_reference, sep=',', names=['NewID','yield_estimate'], header = 1)
     # print(yield_ref)
+    
+    clean_dataset(merged_features)
+    clean_dataset(yield_ref)
+    # print(merged_features)
     
     fieldestim= pd.DataFrame(columns=["NewID", "Estimation",'crop_code'])
     if args.statistical_unit_fields is not None:
@@ -190,18 +239,55 @@ def main():
 
     for cc in np.unique(crop_codes['crop_code']): ### change
         merged_features_cc =  merged_features[merged_features['crop_code'] == cc] ### change
+        # print("Crop Code {} Values: {}".format(cc, merged_features_cc))
 
-        if len(merged_features_cc)<10 : ### change
+        if len(merged_features_cc)<5 : ### change
+            # print("Too few features provided {}".format(len(merged_features_cc)))
             continue  ### change
 
         # train the model
+        if args.has_trend:
+            # remove the NewID column
+            calibdata = yield_ref.iloc[:,1:]
+            # remove the crop_code column
+            calibdata = calibdata.iloc[:,:-1]
+            # move the Trend column as the first column
+            col = calibdata.pop("Trend")
+            calibdata.insert(0, col.name, col)
+        else :
+            feats = merged_features_cc.iloc[:,:-1]
+            calibdata = pd.merge(yield_ref, feats,on='NewID').iloc[:,1:]
+            
+        # print("=====================================================")
+        # print("Calibration data : {}".format(str(calibdata))) ### change
+        # print("=====================================================")
+        
         print("Training model {} ...".format(str(cc))) ### change
-        list_features = train_model(config, yield_ref, merged_features_cc.iloc[:,:-1]) ### change
+        list_features = train_model(config, calibdata) ### change
+        
+        # print(list_features)
         
         # apply the model
         print("Applying model {}...".format(str(cc))) ### change
-        fieldestimcc = apply_model(config.algo, merged_features_cc.iloc[:,:-1], list_features) ### change
+        
+        data_features = merged_features_cc.copy()
+        if args.has_trend:
+            # print("Orig :")
+            # print("=====================================================")
+            # print(data_features.to_string())
+            
+            data_features.insert(len(data_features.columns)-1, 'year', '2020')
+            
+            # print("With year column:")
+            # print("=====================================================")
+            # print(data_features.to_string())
+            # print("=====================================================")
+        
+        fieldestimcc = apply_model(config.algo, data_features.iloc[:,:-1], list_features) ### change
         fieldestimcc['crop_code'] = cc  ### change
+        
+        # print(fieldestimcc)
+        
         fieldestim = pd.concat([fieldestim,fieldestimcc]) ### change
 
         if args.statistical_unit_fields is not None:

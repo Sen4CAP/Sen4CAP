@@ -39,12 +39,17 @@ def read_input_files(input_file):
         reader = csv.reader(file)
         next(reader)
         for row in reader:
-            if len(row) == 2:
-                file_path = row[1]
-                if os.path.isabs(file_path):
-                    input_files[row[0]] = file_path
-                else:
-                    input_files[row[0]] = os.path.join(input_file_dir, file_path)
+            if len(row) == 3:
+                year = row[0]
+                crop_type = row[1]
+                file_path = row[2]
+                abs_path = file_path
+                if not os.path.isabs(file_path):
+                    abs_path = os.path.join(input_file_dir, file_path)
+                if not year in input_files:
+                    input_files[year] = dict()
+                input_files[year][crop_type] = abs_path
+                    
     return input_files
 
 def main():
@@ -64,38 +69,51 @@ def main():
     trend_input_files = read_input_files(args.trend_features_list_file)
     sg_metrics_files = read_input_files(args.sg_metrics_file)
 
-    output_ct_files_dict = dict()
+    output_files_dict = dict()
     
-    for crop_type in sg_input_files.keys() : 
-        sg_input_file = sg_input_files[crop_type]
-        trend_input_file = trend_input_files.get(crop_type)
-        sg_metrics_file = sg_metrics_files.get(crop_type, "")
-        
-        if trend_input_file is not None:
-            output_file, file_extension = os.path.splitext(args.output)
-            output_file = output_file + "_" + str(crop_type) + ".csv"
-            output_ct_files_dict[str(crop_type)] = output_file
-            
-            print("Merging SG with weather for crop type {} and file {}".format(crop_type, sg_input_file))
-            
-            command = []
-            command += ["otbcli", "Markers1CsvMerge"]
-            command += ["-il", sg_input_file, trend_input_file, args.weather_metrics_file]
-            if sg_metrics_file != "" : 
-                command += [sg_metrics_file]
-            command += ["-ignnodatecol", args.ignnodatecol]
-            command += ["-out", output_file]
+    for year in sg_input_files.keys() : 
+        sg_ct_input_files = sg_input_files[year]
+        trend_ct_input_files = trend_input_files[year]
+        sg_ct_metrics_files = sg_metrics_files[year]
+        ct_output_files_dict = dict()
+        for crop_type in sg_ct_input_files.keys() : 
+            if trend_ct_input_files is not None:
+                sg_input_file = sg_ct_input_files[crop_type]
+                trend_input_file = trend_ct_input_files.get(crop_type)
+                sg_metrics_file = sg_ct_metrics_files.get(crop_type, "")
+                
+                if trend_input_file is not None:
+                    output_file, file_extension = os.path.splitext(args.output)
+                    output_file = output_file + "_" + str(year) + "_" + str(crop_type) + ".csv"
+                    ct_output_files_dict[str(crop_type)] = output_file
+                    
+                    print("Merging SG with weather for crop type {} and file {}".format(crop_type, sg_input_file))
+                    
+                    command = []
+                    command += ["otbcli", "Markers1CsvMerge"]
+                    command += ["-il", sg_input_file, trend_input_file, args.weather_metrics_file]
+                    if sg_metrics_file != "" : 
+                        command += [sg_metrics_file]
+                    command += ["-ignnodatecol", args.ignnodatecol]
+                    command += ["-out", output_file]
 
-            run_command(command)
+                    run_command(command)
+                
+                else :
+                    print("WARNING: Ignoring crop type = {} and SG file {} for year {} as the trend features do not exist for this crop type".format(crop_type, sg_input_file, year))
+                
+            else :
+                print("WARNING: Ignoring crop type = {} for year {} as no trend features exist for this year".format(crop_type, year))
         
-        else :
-            print("WARNING: Ignoring crop type = {} and SG file {} as the trend features do not exist for this crop type".format(crop_type, sg_input_file))
-
+        output_files_dict[str(year)] = ct_output_files_dict
+        
     with open(args.output, 'w') as out_sg:  
         writer = csv.writer(out_sg)
-        writer.writerow(["crop_type", "features_file"])
-        for key, value in output_ct_files_dict.items():
-            writer.writerow([key, value])
+        writer.writerow(["year", "crop_type", "features_file"])
+        for year, dict_ct in output_files_dict.items():
+            output_ct_files_dict = dict_ct
+            for key, value in output_ct_files_dict.items():
+                writer.writerow([year, key, value])
     
 if __name__ == "__main__":
     main()

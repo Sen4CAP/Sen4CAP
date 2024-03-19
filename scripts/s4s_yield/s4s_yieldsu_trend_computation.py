@@ -60,13 +60,13 @@ def compute_trend_feature(input_file, year_to_process, output_file) :
         Interp = LinearRegression().fit(np.array(Years[:YearLoc]).reshape(YearLoc,1),np.array(HistoricalRecord.loc[i,][1:YearLoc+1]).reshape(YearLoc,1))
         Trend.append(int(Interp.predict(np.array([[year_to_process]]))))
 
-    TrendFeature=pd.DataFrame({'SUid':HistoricalRecord.SUid,'Trend':Trend })
+    TrendFeature=pd.DataFrame({'NewID':HistoricalRecord.SUid,'Trend':Trend })
     TrendFeature.to_csv(output_file, index=False)
 
 def main():
     parser = argparse.ArgumentParser(description="Yield SU Parcels Extraction")
     parser.add_argument('-i', '--input', help="Input file containing yearly yields for SU")
-    parser.add_argument('-y', '--year', type=int, help="Year where to compute")
+    parser.add_argument('-y', '--year', type=int, nargs="+", help="Year where to compute")
     parser.add_argument('-o', '--output', help="Output")
     
     args = parser.parse_args()
@@ -80,18 +80,24 @@ def main():
     crop_code_files = split_input_file(config.input, output_dir_path)
     print(crop_code_files)
 
-    output_ct_files_dict = dict()
-    for crop_type in crop_code_files.keys() : 
-        input_file = crop_code_files[crop_type]
-        crop_output_file = output_file + "_" + str(crop_type) + ".csv"
-        compute_trend_feature(input_file, config.year, crop_output_file)
-        output_ct_files_dict[str(crop_type)] = crop_output_file
+    output_files_dict = dict()
+    for year in config.year:
+        output_ct_files_dict = dict()
+        for crop_type in crop_code_files.keys() : 
+            input_file = crop_code_files[crop_type]
+            crop_output_file = output_file + "_" + str(year) + "_" + str(crop_type) + ".csv"
+            compute_trend_feature(input_file, year, crop_output_file)
+            output_ct_files_dict[str(crop_type)] = crop_output_file
     
+        output_files_dict[str(year)] = output_ct_files_dict
+        
     with open(args.output, 'w') as out_sg:  
-            writer = csv.writer(out_sg)
-            writer.writerow(["crop_code", "features_file"])
+        writer = csv.writer(out_sg)
+        writer.writerow(["year", "crop_code", "features_file"])
+        for year, dict_ct in output_files_dict.items(): 
+            output_ct_files_dict = dict_ct
             for key, value in output_ct_files_dict.items():
-                writer.writerow([key, value])
+                writer.writerow([year, key, value])
 
 if __name__ == "__main__":
     main()
