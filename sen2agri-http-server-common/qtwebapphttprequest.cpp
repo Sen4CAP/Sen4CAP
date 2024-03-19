@@ -71,7 +71,7 @@ QByteArray QtWebAppHttpRequest::getCookie(const QByteArray& name) const
     return m_httpRequest.getCookie(name);
 }
 
-QMap<QByteArray,QByteArray>& QtWebAppHttpRequest::getCookieMap()
+const QMap<QByteArray,QByteArray>& QtWebAppHttpRequest::getCookieMap()
 {
     return m_httpRequest.getCookieMap();
 }

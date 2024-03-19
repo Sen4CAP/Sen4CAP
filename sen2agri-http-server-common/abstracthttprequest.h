@@ -81,7 +81,7 @@ public:
     virtual QByteArray getCookie(const QByteArray& name) const  = 0;
 
     /** Get all cookies. */
-    virtual QMap<QByteArray,QByteArray>& getCookieMap()  = 0;
+    virtual const QMap<QByteArray,QByteArray>& getCookieMap()  = 0;
 
     /**
       Get the address of the connected client.
