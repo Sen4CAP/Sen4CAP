@@ -779,6 +779,7 @@ class CropMaskProcessor(ProcessorBase):
                 "true" if self.args.bm else "false",
                 "-out",
                 tile_crop_mask_uncompressed,
+                "uint16",
                 "-indays",
             ] + days
             if self.args.red_edge:
@@ -805,6 +806,7 @@ class CropMaskProcessor(ProcessorBase):
                 tile_spectral_features,
                 "-out",
                 tile_crop_mask_uncompressed,
+                "uint16",
             ]
             step_args += ["-model"] + models
             if not self.single_stratum:

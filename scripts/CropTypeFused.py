@@ -456,6 +456,7 @@ class CropTypeProcessor(ProcessorBase):
             -10000,
             "-out",
             tile_crop_type_map_uncompressed,
+            "uint16",
             "-indays",
         ] + days
         if self.args.red_edge:
