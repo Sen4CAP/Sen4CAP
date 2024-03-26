@@ -954,7 +954,6 @@ def write_tile_vrts(
             root.write(bands_vrt, pretty_print=True, encoding="utf-8")
         stratum_band_names.append(band_names)
 
-    print(stratum_band_names)
     return stratum_band_names
 
 
@@ -1877,37 +1876,46 @@ def main():
         mask_20m_vrt = f"mask_20m_{tile}.vrt"
 
         interpolation_no_data = -10000
-        interpolation_max_distance = 30
-        interpolation_window_radius = 15
+        # interpolation_max_distance = 30
+        # interpolation_window_radius = 15
+        interpolation_max_distance = 0
+        interpolation_window_radius = 0
+
+        common_temporal_resampling_args = (
+            ["-indates"]
+            + input_dates[tile]
+            + [
+                "-outdates",
+            ]
+            + output_dates_param
+            + [
+                "-bv",
+                str(0),
+                "-nan",
+                str(interpolation_no_data),
+            ]
+        )
+        if interpolation_max_distance:
+            common_temporal_resampling_args += [
+                "-maxdist",
+                str(interpolation_max_distance),
+            ]
+        if interpolation_window_radius:
+            common_temporal_resampling_args += [
+                "-winradius",
+                str(interpolation_window_radius),
+            ]
 
         if feature_set.need_s2_b2() and not os.path.exists(b2_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b2_vrt,
-                    "-mask",
-                    mask_10m_vrt,
-                    "-out",
-                    b2_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b2_vrt,
+                "-mask",
+                mask_10m_vrt,
+                "-out",
+                b2_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -1918,33 +1926,15 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b3() and not os.path.exists(b3_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b3_vrt,
-                    "-mask",
-                    mask_10m_vrt,
-                    "-out",
-                    b3_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b3_vrt,
+                "-mask",
+                mask_10m_vrt,
+                "-out",
+                b3_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -1955,33 +1945,15 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b4() and not os.path.exists(b4_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b4_vrt,
-                    "-mask",
-                    mask_10m_vrt,
-                    "-out",
-                    b4_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b4_vrt,
+                "-mask",
+                mask_10m_vrt,
+                "-out",
+                b4_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -1992,33 +1964,15 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b8() and not os.path.exists(b8_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b8_vrt,
-                    "-mask",
-                    mask_10m_vrt,
-                    "-out",
-                    b8_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b8_vrt,
+                "-mask",
+                mask_10m_vrt,
+                "-out",
+                b8_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2029,33 +1983,15 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b5() and not os.path.exists(b5_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b5_vrt,
-                    "-mask",
-                    mask_20m_vrt,
-                    "-out",
-                    b5_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b5_vrt,
+                "-mask",
+                mask_20m_vrt,
+                "-out",
+                b5_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2066,33 +2002,15 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b6() and not os.path.exists(b6_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b6_vrt,
-                    "-mask",
-                    mask_20m_vrt,
-                    "-out",
-                    b6_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b6_vrt,
+                "-mask",
+                mask_20m_vrt,
+                "-out",
+                b6_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2103,33 +2021,15 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b7() and not os.path.exists(b7_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b7_vrt,
-                    "-mask",
-                    mask_20m_vrt,
-                    "-out",
-                    b7_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b7_vrt,
+                "-mask",
+                mask_20m_vrt,
+                "-out",
+                b7_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2140,33 +2040,15 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b11() and not os.path.exists(b11_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b11_vrt,
-                    "-mask",
-                    mask_20m_vrt,
-                    "-out",
-                    b11_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b11_vrt,
+                "-mask",
+                mask_20m_vrt,
+                "-out",
+                b11_tif + tiling_suffix,
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2177,33 +2059,16 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b12() and not os.path.exists(b12_tif):
-            command = (
-                [
-                    "otbcli_TemporalResampling",
-                    "-in",
-                    b12_vrt,
-                    "-mask",
-                    mask_20m_vrt,
-                    "-out",
-                    b12_tif + tiling_suffix,
-                    "-indates",
-                ]
-                + input_dates[tile]
-                + [
-                    "-outdates",
-                ]
-                + output_dates_param
-                + [
-                    "-bv",
-                    str(0),
-                    "-nan",
-                    str(interpolation_no_data),
-                    "-maxdist",
-                    str(interpolation_max_distance),
-                    "-winradius",
-                    str(interpolation_window_radius),
-                ]
-            )
+            command = [
+                "otbcli_TemporalResampling",
+                "-in",
+                b12_vrt,
+                "-mask",
+                mask_20m_vrt,
+                "-out",
+                b12_tif + tiling_suffix,
+                "-indates",
+            ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
