@@ -2067,7 +2067,6 @@ def main():
                 mask_20m_vrt,
                 "-out",
                 b12_tif + tiling_suffix,
-                "-indates",
             ] + common_temporal_resampling_args
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
