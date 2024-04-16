@@ -59,6 +59,7 @@ class Config(object):
             self.date_filter = list(map(parse_date, args.date_filter))
         else:
             self.date_filter = None
+        self.stratum_filter = args.stratum_filter
         if args.stratum_start_dates:
             self.stratum_start_dates = list(map(parse_date, args.stratum_start_dates))
         else:
@@ -566,7 +567,7 @@ def get_product(name, l2a_path, created_timestamp, mask_path):
 def load_products(
     conn: connection, pool, site_id: int, season_start, season_end, tiles: List[Tile]
 ):
-    products_by_tile = {}
+    products_by_tile: dict[str, List[L2AProduct]] = {}
     for tile in tiles:
         query = SQL(
             """
@@ -600,7 +601,7 @@ order by product_l2a.created_timestamp, name;
             )
             result = cursor.fetchall()
 
-            products = [
+            products: List[L2AProduct] = [
                 p for p in pool.map(lambda r: get_product(*r), result, chunksize=1) if p
             ]
             products = sorted(products, key=lambda p: p.date)
@@ -623,15 +624,24 @@ class Stratum(object):
         self.tiles = tiles
 
 
-def get_site_strata(conn: connection, site_id: int) -> List[Stratum]:
+def get_site_strata(conn: connection, config: Config) -> List[Stratum]:
+    if config.stratum_filter:
+        filter = set(config.stratum_filter)
+    else:
+        filter = None
+
     query = SQL("select * from sp_get_site_strata(%s)")
     logging.debug(query.as_string(conn))
 
     srs_cache = {}
     strata = []
+
     with conn.cursor() as cursor:
-        cursor.execute(query, (site_id,))
+        cursor.execute(query, (config.site_id,))
         for stratum_id, geom, epsg_code, tiles in cursor:
+            if filter and not stratum_id in filter:
+                continue
+
             srs = srs_cache.get(epsg_code)
             if not srs:
                 srs = osr.SpatialReference()
@@ -1574,6 +1584,7 @@ def main():
     parser.add_argument("--tiles", help="tile filter", nargs="*")
     parser.add_argument("--features", help="feature filter", nargs="*")
     parser.add_argument("--date-filter", help="date filter", nargs="*")
+    parser.add_argument("--stratum-filter", help="stratum filter", type=int, nargs="*")
     parser.add_argument("--stratum-start-dates", help="stratum start dates", nargs="*")
     parser.add_argument("--stratum-end-dates", help="stratum end dates", nargs="*")
 
@@ -1698,20 +1709,26 @@ def main():
     with get_connection(config) as conn:
         tiles = load_tiles(conn, config.site_id, args.tiles)
 
+        strata = get_site_strata(conn, config)
+        if not strata:
+            stratum = Stratum(None, None, None, [t.tile_id for t in tiles])
+            strata.append(stratum)
+
+        if strata:
+            strata_tiles = set([t for s in strata for t in s.tiles])
+            tiles = [t for t in tiles if t.tile_id in strata_tiles]
+
+        tile_ids = set([t.tile_id for t in tiles])
         if os.path.exists("s2-products.pickle"):
             with open("s2-products.pickle", "rb") as file:
-                products_by_tile = pickle.load(file)
+                products_by_tile: dict[str, List[L2AProduct]] = pickle.load(file)
+                products_by_tile = dict([(t, p) for (t, p) in products_by_tile.items() if t in tile_ids])
         else:
             products_by_tile = load_products(
                 conn, pool_med_conc, config.site_id, season_start, season_end, tiles
             )
             with open("s2-products.pickle", "wb") as file:
                 pickle.dump(products_by_tile, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-        strata = get_site_strata(conn, config.site_id)
-        if not strata:
-            stratum = Stratum(None, None, None, [t.tile_id for t in tiles])
-            strata.append(stratum)
 
     if config.stratum_start_dates:
         assert len(strata) == len(config.stratum_start_dates)
