@@ -738,7 +738,7 @@ def write_tile_vrts(
             for name in s1_features:
                 band_names.append(name)
 
-        if stratum_start_date_idx and stratum_end_date_idx:
+        if stratum_start_date_idx is not None and stratum_end_date_idx is not None:
             for name in band_types:
                 for b, d in enumerate(
                     output_dates[stratum_start_date_idx:stratum_end_date_idx],
@@ -845,7 +845,7 @@ def write_tile_vrts(
                 band_files,
                 band_types,
             ):
-                if not stratum_start_date_idx or not stratum_end_date_idx:
+                if stratum_start_date_idx is None or stratum_end_date_idx is None:
                     continue
 
                 ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
@@ -883,8 +883,8 @@ def write_tile_vrts(
                     out_band += 1
 
             if (
-                stratum_start_date_idx
-                and stratum_end_date_idx
+                stratum_start_date_idx is not None
+                and stratum_end_date_idx is not None
                 and feature_set.want_vegetation_indices_statistics()
             ):
                 for p, fname in zip(
@@ -1722,7 +1722,9 @@ def main():
         if os.path.exists("s2-products.pickle"):
             with open("s2-products.pickle", "rb") as file:
                 products_by_tile: dict[str, List[L2AProduct]] = pickle.load(file)
-                products_by_tile = dict([(t, p) for (t, p) in products_by_tile.items() if t in tile_ids])
+                products_by_tile = dict(
+                    [(t, p) for (t, p) in products_by_tile.items() if t in tile_ids]
+                )
         else:
             products_by_tile = load_products(
                 conn, pool_med_conc, config.site_id, season_start, season_end, tiles
