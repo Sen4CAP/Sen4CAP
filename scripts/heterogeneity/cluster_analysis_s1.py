@@ -2,15 +2,9 @@
 
 import argparse
 import numpy as np
-from sklearn import cluster, mixture
 from osgeo import gdal,gdal_array
-# import matplotlib.pyplot as plt
-#import rasterio
 import glob
 import pandas as pd
-import subprocess, platform, os, glob,sys
-import numpy.ma as ma
-from numpy.linalg import norm
 import time
 
 gdal.UseExceptions()
@@ -72,6 +66,20 @@ def get_parcel_pixels(lpis_buffered_raster) :
 
 def check_lpis_buffered_raster(config):
     print('Start import of lpis buffered raster')
+    
+    Cluster_isolated = gdal.Open(config.smooted_raster,gdal.GA_ReadOnly)
+    ulx, xres, xskew, uly, yskew, yres  = Cluster_isolated.GetGeoTransform()
+    if xres == 20 : 
+        if config.lpis_buffered_raster.endswith("_S2.tif"):
+            config.lpis_buffered_raster = config.lpis_buffered_raster[:-len("_S2.tif")] + "_S1.tif"
+    elif xres == 10 : 
+        if config.lpis_buffered_raster.endswith("_S1.tif"):
+            config.lpis_buffered_raster = config.lpis_buffered_raster[:-len("_S1.tif")] + "_S2.tif"
+    else :
+        print("Error: unsupported resolution {} in the S1 processing {}. Should be 10 or 20. Exiting ...".format(xres, config.smooted_raster))
+        sys.exit(1)
+    
+    print("Input rasters resolution is {}m. Using LPIS raster {}".format(xres, config.lpis_buffered_raster))
     # ## extract cluster % of x parcels
 
     raster = gdal.Open(config.lpis_buffered_raster,gdal.GA_ReadOnly)
@@ -93,20 +101,22 @@ def check_lpis_buffered_raster(config):
         df_clout = df_cl[['NewID','Hete','clP_1','cl_1','clP_2','cl_2','clP_3','cl_3','clP_4','cl_4','Compact','CompactA','M5','M6','M7']]
         df_clout.to_csv(config.output,index=False)        
         exit(0)
-    
+
+def ensure_column_exists(df, column_name, def_val):    
+    if not column_name in df.columns:
+        df[column_name] = def_val
+    return df
+
 def import_data(config) : 
 
     check_lpis_buffered_raster(config)
     
-    area = 'Area_meters'
-
     print("Importing lpis data ...")
     # parcel identification
-    lpis_csv = pd.read_csv(config.lpis_csv)
-    lpis_csv.set_index('NewID', inplace=True) #used to get the Area_meters
+    area_metters_map = get_area_metters_map(config.lpis_csv)
 
     parcel_pixels = get_parcel_pixels(config.lpis_buffered_raster)
-    
+
     Cluster_isolated = gdal.Open(config.smooted_raster,gdal.GA_ReadOnly)
     Cluster_extract = Cluster_isolated.ReadAsArray()
 
@@ -118,11 +128,12 @@ def import_data(config) :
     # newid_l = newid_l[newid_l!=0]
 
     df_cl = pd.DataFrame(columns=['NewID','Hete'])
+    df_cl_list = []
 
     total_parcels_no = len(parcel_pixels.keys())
     print("Having a number of {} parcels".format(total_parcels_no))
     cnt = 0
-    updates = 0
+    parcels_in_perc_rng = 10*int(total_parcels_no / 100)
 
     for parcel_id in sorted(parcel_pixels.keys()):
         cl_i = parcel_pixels[parcel_id]
@@ -136,13 +147,18 @@ def import_data(config) :
             for c in range(1,max(val_poly1)+1): 
                 df_cl1[f'clP_{c}'] = v_countP[c] 
                 df_cl1[f'cl_{c}'] = v_count[c] 
-        if len(v_count) == 0: 
-            df_cl1['Hete'] = 0 
-            df_cl1['CompactA'] = 0
-        elif max(v_countP) < config.PerHetero: 
+        for idx in range(1,5):
+            df_cl1 = ensure_column_exists(df_cl1, f'clP_{idx}', 0)
+            df_cl1 = ensure_column_exists(df_cl1, f'cl_{idx}', 0)
+
+        if len(v_count) > 0 and max(v_countP) < config.PerHetero: 
             val_Connect = Cluster_connectE[cl_i.x,cl_i.y]
             df_cl1['Compact'] = np.nanmean(val_Connect) 
-            df_cl1['CompactA'] = np.nanmean(val_Connect)/ np.log(lpis_csv[area][parcel_id]) 
+            area = area_metters_map.get(parcel_id, None)
+            if area is None:
+                df_cl1['CompactA'] = np.nanmean(val_Connect)
+            else:
+                df_cl1['CompactA'] = np.nanmean(val_Connect)/ np.log(area) 
             df_cl1['Hete'] = 1 
             if sum(v_count > config.NPixClS1) >= 2: 
                 df_cl1['M6'] = 1 
@@ -153,14 +169,17 @@ def import_data(config) :
             df_cl1['Compact'] = 0
             df_cl1['CompactA'] = 0
             df_cl1['M6'] = 0  
-        df_cl = pd.concat([df_cl,df_cl1]) 
+        
+        df_cl_list.append(df_cl1)
 
-        finished = 100*(cnt/total_parcels_no)
-        if divmod(finished, 10) == (updates, 0):
-            updates += 1
-            print('Completed {}%'.format(int(finished)))    
+        if (cnt % parcels_in_perc_rng) == 0:
+            print("{}% parcels completed".format(10*int(cnt / parcels_in_perc_rng)))
+
         cnt = cnt + 1    
                 
+    df_results = pd.concat(df_cl_list)
+    df_cl = pd.concat([df_cl, df_results])
+
 #    print("Result: {}".format(df_cl))
     
     df_cl.loc[df_cl['Hete'].isin((0,3)),'M5'] = 0 
@@ -173,6 +192,11 @@ def import_data(config) :
     df_clout.to_csv(config.output,index=False)
     print(config.output)
 
+def get_area_metters_map(lpis_csv_file):
+    df = pd.read_csv(lpis_csv_file, usecols = ["NewID", "Area_meters"])
+    # create a mapping from MDB ID to Decl ID 
+    ret_dict = dict(zip(df["NewID"], df["Area_meters"]))
+    return ret_dict
 
 
 def main():

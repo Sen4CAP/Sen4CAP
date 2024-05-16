@@ -83,10 +83,18 @@ def get_c_index(index_n) :
         return 'POOR'
     else:
         return 'NO'
-        
+
+def get_lpis_infos_maps(lpis_csv_file):
+    df = pd.read_csv(lpis_csv_file, usecols = ["NewID", "ShapeInd", "lc"])
+    # create a mapping from MDB ID to Decl ID 
+    shapeind_dict = dict(zip(df["NewID"], df["ShapeInd"]))
+    lc_dict = dict(zip(df["NewID"], df["lc"]))
+    return shapeind_dict, lc_dict
+
 def period_analysis(config) : 
-    lpis_csv = pd.read_csv(config.lpis_csv)
-    lpis_csv.set_index('NewID', inplace=True)
+    shapeind_dict, lc_dict = get_lpis_infos_maps(config.lpis_csv)
+    # lpis_csv = pd.read_csv(config.lpis_csv)
+    # lpis_csv.set_index('NewID', inplace=True)
 
     dt_all = pd.DataFrame(columns=['NewID','M1','M2','M3','M4','period'])
 
@@ -167,10 +175,13 @@ def period_analysis(config) :
                 M3 = marker_infos.sum_m3
                 M4 = marker_infos.sum_m4
             
+        shape_ind = shapeind_dict.get(i, 0)
+        lc_val = lc_dict.get(i, 0)
+
         dt_out.append({
             'NewID' : i,
-            'LC': lpis_csv.lc[i],
-            'ShapeInd': lpis_csv.ShapeInd[i],
+            'LC': lc_val,
+            'ShapeInd': shape_ind,
             'M1' : M1,
             'M2' : M2,
             'M3' : M3,

@@ -2,15 +2,10 @@
 
 import argparse
 import numpy as np
-from sklearn import cluster, mixture
 from osgeo import gdal,gdal_array
-# import matplotlib.pyplot as plt
-#import rasterio
 import glob
 import pandas as pd
 import subprocess, platform, os, glob,sys
-import numpy.ma as ma
-from numpy.linalg import norm
 import time
 
 gdal.UseExceptions()
@@ -69,16 +64,23 @@ def get_parcel_pixels(lpis_buffered_raster) :
         x_idx = x_idx + 1
     return dict_parcel_pixels
 
+def ensure_column_exists(df, column_name, def_val):    
+    if not column_name in df.columns:
+        df[column_name] = def_val
+    return df
+
 def import_data(config) : 
     print("Importing data ...")
+
+    area_meters_dict, shapeind_dict, lc_dict = get_lpis_infos_maps(config.lpis_csv)
 
     area = 'Area_meters'
     img_ds = gdal.Open(config.ndvi_image,gdal.GA_ReadOnly)
     num_bands = img_ds.RasterCount
     
     # parcel identification
-    lpis_csv = pd.read_csv(config.lpis_csv)
-    lpis_csv.set_index('NewID', inplace=True) #used to get the Area_meters
+    # lpis_csv = pd.read_csv(config.lpis_csv, usecols = ["NewID", "Area_meters", "ShapeInd", "lc"])
+    # lpis_csv.set_index('NewID', inplace=True) #used to get the Area_meters
 
     #cluster raster 
     n = config.number_of_images
@@ -131,10 +133,12 @@ def import_data(config) :
     # newid_l = newid_l[newid_l!=0]
 
     df_cl = pd.DataFrame(columns=['NewID','Hete'])
+    df_cl_list = []
 
     total_parcels_no = len(parcel_pixels.keys())
     cnt = 0
-    updates = 0
+    parcels_in_perc_rng = 10*int(total_parcels_no / 100)
+
     for parcel_id in sorted(parcel_pixels.keys()):
         #start = time.time()
         #cl_i = np.where(imgC[0] == i)
@@ -155,14 +159,22 @@ def import_data(config) :
 
         v_count = np.bincount(val_poly1)
         df_cl1 = pd.DataFrame({'NewID':[parcel_id]})
-        df_cl1['ShapeInd'] = lpis_csv['ShapeInd'][parcel_id] 
-        df_cl1['LC'] = lpis_csv['lc'][parcel_id] 
+
+        shape_ind = shapeind_dict.get(parcel_id, 0)
+        df_cl1['ShapeInd'] = shape_ind
+        lc_val = lc_dict.get(parcel_id, 0)
+        df_cl1['LC'] = lc_val
+        # df_cl1['ShapeInd'] = lpis_csv['ShapeInd'][parcel_id] 
+        # df_cl1['LC'] = lpis_csv['lc'][parcel_id] 
         
         if sum(val_poly)>0 :
-
             for c in range(1,max(val_poly1)+1):
                 df_cl1[f'clP_{c}'] = v_countP[c]
                 df_cl1[f'cl_{c}'] = v_count[c]
+
+        for idx in range(1,5):
+            df_cl1 = ensure_column_exists(df_cl1, f'clP_{idx}', 0)
+            df_cl1 = ensure_column_exists(df_cl1, f'cl_{idx}', 0)
 
         if len(v_count) == 0:
             df_cl1['Hete'] = 3
@@ -193,6 +205,7 @@ def import_data(config) :
             df_cl1['HoleS2Part'] = sum((nNaN>0) & (nNaN<1))
 
             if len(v_countnoNa)!=0:
+                dist1_list = []
                 for ii in range(1,max(cluster_i)+1):
                     for j in reversed(range(1,max(cluster_i)+1)):
                         if j<=ii:
@@ -206,12 +219,17 @@ def import_data(config) :
                                 dist1['distNDVI'] = np.absolute(np.nanmean(m_polydG[m_polydG.label==ii]) - np.nanmean(m_polydG[m_polydG.label==j]))
                             else:
                                 dist1['distNDVI'] = 0
-                        
-                            dist = pd.concat([dist,dist1])
+                            dist1_list.append(dist1)
+                
+                dist1_df = pd.concat(dist1_list)
+                dist = pd.concat([dist,dist1_df])
                 df_cl1['distNDVI'] = round(np.nanmax(dist['distNDVI'])/1000,5)
 
             df_cl1['Compact'] = np.nanmean(val_Connect)
-            df_cl1['CompactA'] = (np.nanmean(val_Connect)/np.log(lpis_csv[area][parcel_id]))
+            area = area_meters_dict.get(parcel_id, 10)
+            df_cl1['CompactA'] = np.nanmean(val_Connect)/ np.log(area) 
+
+            # df_cl1['CompactA'] = (np.nanmean(val_Connect)/np.log(lpis_csv[area][parcel_id]))
             df_cl1['Hete'] = 1         
             
             if sum(v_count>config.NPixClS2) >= 2:
@@ -220,26 +238,24 @@ def import_data(config) :
                 df_cl1['M2'] = 0
 
         else:
-            dist = pd.DataFrame()
             df_cl1['Hete'] = 0
             df_cl1['distNDVI'] = 0
             df_cl1['M2'] = 0
             df_cl1['Compact'] = 0
             df_cl1['CompactA'] = 0
+            df_cl1['HoleS2'] = 0
+            df_cl1['HoleS2Part'] = 0
         
-        #end = time.time()
-        #print("Stage 2 took {}".format(end - start))
-        
-        df_cl = pd.concat([df_cl,df_cl1])
-        
+        df_cl_list.append(df_cl1)
+        #df_cl = pd.concat([df_cl,df_cl1])
 
-        finished = 100*(cnt/total_parcels_no)
-        if divmod(finished, 10) == (updates, 0):
-            updates += 1
-            print('Completed {}%'.format(int(finished)))    
+        if (cnt % parcels_in_perc_rng) == 0:
+            print("{}% parcels completed".format(10*int(cnt / parcels_in_perc_rng)))
+
         cnt = cnt + 1    
-        # end = time.time()
-        # print("Stage 3 took {}".format(end - start))
+
+    df_results = pd.concat(df_cl_list)
+    df_cl = pd.concat([df_cl, df_results])
 
     df_cl.loc[df_cl['Hete'].isin((0,3)),'M1'] = 0 
     df_cl.loc[df_cl['Hete'] == 1,'M1'] = 1
@@ -253,7 +269,13 @@ def import_data(config) :
     df_clout.to_csv(config.output,index=False)
     print(config.output)
 
-
+def get_lpis_infos_maps(lpis_csv_file):
+    df = pd.read_csv(lpis_csv_file, usecols = ["NewID", "Area_meters", "ShapeInd", "lc"])
+    # create a mapping from MDB ID to Decl ID 
+    area_meters_dict = dict(zip(df["NewID"], df["Area_meters"]))
+    shapeind_dict = dict(zip(df["NewID"], df["ShapeInd"]))
+    lc_dict = dict(zip(df["NewID"], df["lc"]))
+    return area_meters_dict, shapeind_dict, lc_dict
 
 def main():
     parser = argparse.ArgumentParser(

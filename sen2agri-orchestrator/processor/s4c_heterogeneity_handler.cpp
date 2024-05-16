@@ -552,15 +552,12 @@ QStringList S4CHeterogeneityHandler::GetS1ProductsListArgs(const QString &s1Rast
 QStringList S4CHeterogeneityHandler::GetS2ClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QStringList &inFiles,
                                                               const QString &tile, int periodIdx, const QString &out)
 {
-    // The S1 LPIS rasters are at 20m resolutions but during heterogeneity benchmarking the S1 AMP and COHE were created at 10m resolution
-//    const QMap<QString, QString> &tiledRasters = (sat == Satellite::Sentinel1 ?
-//                                                      cfg.lpisInfos.s1TiledRasters : cfg.lpisInfos.s2TiledRasters);
     const QMap<QString, QString> &tiledRasters = cfg.lpisInfos.s2TiledRasters;
     if (!tiledRasters.contains(tile)) {
         cfg.pCtx->MarkJobFailed(cfg.event.jobId);
-        Logger::error(QStringLiteral("Heterogeneity: Cannot find 5m buffered raster for tile %1 in LPIS %2")
+        throw std::runtime_error(QStringLiteral("Heterogeneity: Cannot find 5m buffered raster for tile %1 in LPIS %2")
                 .arg(tile)
-                .arg(cfg.lpisInfos.productPath));
+                .arg(cfg.lpisInfos.productPath).toStdString());
     }
     const QString &lpisRaster = tiledRasters[tile];
     QStringList args = {"--input-images"};
@@ -577,12 +574,13 @@ QStringList S4CHeterogeneityHandler::GetS2ClusterPrepTaskArgs(const S4CHeterogne
 QStringList S4CHeterogeneityHandler::GetS1ClusterPrepTaskArgs(const S4CHeterogneneityJobConfig &cfg, const QString &inS1CTDir,
                                                               const QString &tile, int periodIdx, const QString &out)
 {
-    const QMap<QString, QString> &tiledRasters = cfg.lpisInfos.s2TiledRasters;
+    // The S1 LPIS rasters are at 20m resolutions but during heterogeneity benchmarking the S1 AMP and COHE were created at 10m resolution
+    const QMap<QString, QString> &tiledRasters = cfg.lpisInfos.s1TiledRasters;
     if (!tiledRasters.contains(tile)) {
         cfg.pCtx->MarkJobFailed(cfg.event.jobId);
-        Logger::error(QStringLiteral("Heterogeneity: Cannot find 5m buffered raster for tile %1 in LPIS %2")
+        throw std::runtime_error(QStringLiteral("Heterogeneity: Cannot find 5m buffered raster for tile %1 in LPIS %2")
                 .arg(tile)
-                .arg(cfg.lpisInfos.productPath));
+                .arg(cfg.lpisInfos.productPath).toStdString());
     }
     const QString &lpisRaster = tiledRasters[tile];
     QStringList args = {"--input-dir", inS1CTDir};
@@ -732,6 +730,13 @@ void S4CHeterogeneityHandler::S4CHeterogneneityJobConfig::UpdateLpisInfos() {
 
 void S4CHeterogeneityHandler::S4CHeterogneneityJobConfig::UpdateOpticalPrdsTileBandMaps()
 {
+    const TileList &siteTiles = pCtx->GetSiteTiles(event.siteId, (int)Satellite::Sentinel2);
+    std::vector<QString> siteTileIds;
+    std::transform(siteTiles.begin(), siteTiles.end(),
+        std::back_inserter(siteTileIds), [](Tile const& t) {
+            return t.tileId;
+        }
+    );
     for (const ProductDetails &prd: l2aProductDetails) {
         std::unique_ptr<ProductHelper> prdHelper = ProductHelperFactory::GetProductHelper(prd);
         const QStringList &tileIds = prdHelper->GetTileIdsFromProduct();
@@ -742,6 +747,15 @@ void S4CHeterogeneityHandler::S4CHeterogneneityJobConfig::UpdateOpticalPrdsTileB
             continue;
         }
         const QString &tile = tileIds[0];
+        if (std::find_if(siteTiles.begin(), siteTiles.end(),
+                         [&](const Tile& t){return t.tileId == tile;}) == siteTiles.end()) {
+            Logger::error(QStringLiteral("Heterogeneity: The L2A product with name %1 has tile (%2) which is not present in site tiles. Ignoring it ...")
+                    .arg(prd.GetProduct().name)
+                    .arg(tileIds.size()));
+            continue;
+        }
+
+
         TileInfoMaps &tileInfoMaps = tileInfos[tile];
         for (QString s2Band: s2Bands) {
             if (s2Band == "NDVI") {
@@ -772,6 +786,15 @@ void S4CHeterogeneityHandler::S4CHeterogneneityJobConfig::UpdateOpticalPrdsTileB
         const QMap<QString, QString> &maskFiles = prdHelper->GetProductFilesByTile("MMONODFLG", true);
         Logger::info(QStringLiteral("Heterogeneity: NDVI tiles %1").arg(tileFiles.keys().join(",")));
         for (const QString &tile: tileFiles.keys()) {
+
+            if (std::find_if(siteTiles.begin(), siteTiles.end(),
+                             [&](const Tile& t){return t.tileId == tile;}) == siteTiles.end()) {
+                Logger::error(QStringLiteral("Heterogeneity: The L3B product with name %1 has NDVI for tile %2 which is not present in site tiles.  Ignoring it ...")
+                        .arg(prd.GetProduct().name)
+                        .arg(tile));
+                continue;
+            }
+
             TileInfoMaps &tileInfoMaps = tileInfos[tile];
             pos1 = tileFiles.find(tile);
             pos2 = maskFiles.find(tile);

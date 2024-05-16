@@ -81,6 +81,32 @@ def kmeans_missing(X, n_clusters, max_iter=10):
     return labels, centroids, X_hat
 
 def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs, num_clusters, out_file_cluster) :
+
+    L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}*_T{tile}_*.tif')
+    res = 10
+    if len(L2A_image) == 0:
+        input_dir_sar = os.path.join(input_dir, "sar")
+        L2A_image = glob.glob(f'{input_dir_sar}/SEN4CAP_L2A_PRD_S*_W{year}*_T{tile}_*.tif')
+        if len(L2A_image) == 0:
+            print("Error: cannot find any crop type weakly composites in {} or in {}. Exiting ...".format(input_dir, input_dir_sar))
+            sys.exit(1)
+         
+        input_dir = input_dir_sar
+
+    img_ds = gdal.Open(L2A_image[0],gdal.GA_ReadOnly)
+    ulx, xres, xskew, uly, yskew, yres  = img_ds.GetGeoTransform()
+    if xres == 20 : 
+        if lpis_buffered_raster.endswith("_S2.tif"):
+            lpis_buffered_raster = lpis_buffered_raster[:-len("_S2.tif")] + "_S1.tif"
+    elif xres == 10 : 
+        if lpis_buffered_raster.endswith("_S1.tif"):
+            lpis_buffered_raster = lpis_buffered_raster[:-len("_S1.tif")] + "_S2.tif"
+    else :
+        print("Error: unsupported resolution {} in the crop type weakly composites {}. Should be 10 or 20. Exiting ...".format(xres, L2A_image[0]))
+        sys.exit(1)
+        
+    print("Input rasters resolution is {}m. Using LPIS raster {}".format(xres, lpis_buffered_raster))
+    
     raster = gdal.Open(lpis_buffered_raster,gdal.GA_ReadOnly)
     imgR = raster.ReadAsArray()
 
@@ -92,9 +118,18 @@ def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs,
         print(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date:02d}_T{tile}_*.tif')
         L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date:02d}_T{tile}_*.tif')
         print("(1) L2_IMG = {}".format(L2A_image))
+        if len(L2A_image) == 0:
+            print("No weekly composite found for date {}{} and tile {}. Ignoring it".format(year, date, tile))
+            continue
         bands_list = [t[t.index(f'T{tile}_') + len(f'T{tile}_'):t.index(f'.tif')] for t in L2A_image]
         n_var += len(bands_list)
         print("Band_list = {}, n_var = {}".format(bands_list, n_var))
+    
+    if n_var == 0:
+        print("No bands found for period {}. Exiting but without error".format(period))
+        imgR[imgR!=0] = 0
+        write_geotiff(out_file_cluster,imgR,raster)
+        sys.exit(0)
     
     L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date_l[0]:02d}_T*_{bands_list[0]}.tif')
     print("(2) L2_IMG = {}".format(L2A_image))
@@ -108,6 +143,8 @@ def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs,
         print('imported date' + str(date))
         L2A_image = glob.glob(f'{input_dir}/SEN4CAP_L2A_PRD_S*_W{year}{date:02d}_T{tile}_*.tif')
         print("(3) L2_IMG = {}".format(L2A_image))
+        if len(L2A_image) == 0:
+            continue
         bands_list = [t[t.index(f'T{tile}_') + len(f'T{tile}_'):t.index(f'.tif')] for t in L2A_image]
         print("Band_list = {}".format(bands_list))
         for b in range(len(bands_list)):
@@ -132,7 +169,7 @@ def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs,
 
     t_missing = kmeans_missing(X = img,n_clusters=num_clusters,max_iter=10)
 
-    
+ 
     raster = gdal.Open(lpis_buffered_raster,gdal.GA_ReadOnly)
     imgR = raster.ReadAsArray()
 
