@@ -207,7 +207,7 @@ QStringList S4SPermanentCropHandler::GetExtractInputsTaskArgs(const S4SPermanent
                                  "--season-start",
                                  cfg.startDate.toString("yyyy-MM-dd"),
                                  "--season-end",
-                                 cfg.endDate.toString("yyyy-MM-dd")};
+                                 cfg.endDate.addDays(1).toString("yyyy-MM-dd")};    // add one day at the end of the season
     extractParcelsArgs += "--tiles";
     extractParcelsArgs.append(tileId);
 
