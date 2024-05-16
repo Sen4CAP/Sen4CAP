@@ -23,9 +23,6 @@ class S4SYieldHandler : public ProcessorHandler
                         ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, "end_date", S4S_YIELD_CFG_PREFIX));
 
             year = endDate.date().year();           // TODO: see if this is valid
-            // change to the beginning of the next day to avoid losing products that are in the same date as the end date
-            // We update this after the year extraction as adding 1 day might move to the next year
-            endDate = endDate.addDays(1);
 
 //            enableYieldModel = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters,
 //                                                                            "enable_yield_model", S4S_YIELD_CFG_PREFIX, true);
@@ -48,7 +45,7 @@ class S4SYieldHandler : public ProcessorHandler
 
 //            if (extractFeatures) {
                 const ProductList &weatherPrdsList = pCtx->GetProducts(event.siteId, (int)ProductType::ERA5WeatherProductTypeId,
-                                                                                   startDate, endDate);
+                                                                                   startDate, endDate.addDays(1));
                 if (weatherPrdsList.size() == 0) {
                     pCtx->MarkJobFailed(event.jobId);
                     throw std::runtime_error(QStringLiteral("Yield: No weather products were found in database for site %1 and interval %2 - %3.")
