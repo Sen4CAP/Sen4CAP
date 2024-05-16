@@ -88,6 +88,17 @@ def get_mapping(mapping_file, decl_newid, bs_newid):
             ret_dict = dict(zip(df[decl_newid], df[bs_newid]))
     return ret_dict
 
+def get_bs_markers_path(bs_path):
+    if os.path.isfile(bs_path) and bs_path.endswith('.csv'):
+        return bs_path
+    elif os.path.isdir(bs_path):
+        new_path = os.path.join(bs_path, "VECTOR_DATA", "L4E_BS_MarkersAll.csv")
+        if os.path.isfile(new_path):
+            return new_path
+    
+    print("Cannot determine BS markers file from provided input path {}".format(bs_path))
+    sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(
         description="Performs the bare soil calibration for S2"
@@ -106,7 +117,8 @@ def main():
     lpis_csv = pd.read_csv(args.lpis_csv)
     ids_map = get_mapping(args.mapping_file, args.decl_newid, args.markers_newid)
 
-    bs_markers = pd.read_csv(args.input_bs_markers, dtype={bs_markers_new_id_col: 'int'})
+    input_bs_markers = get_bs_markers_path(args.input_bs_markers)
+    bs_markers = pd.read_csv(input_bs_markers, dtype={bs_markers_new_id_col: 'int'})
     ret = extract_markers(lpis_csv, args.decl_newid, bs_markers, ids_map)
 
     ret = ret.astype({bs_markers_new_id_col: int})

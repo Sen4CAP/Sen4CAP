@@ -1,38 +1,13 @@
 #!/usr/bin/env python
 import argparse
-from glob import glob
-import json
-from json import JSONDecodeError
 import os
-import re
-from pyarrow import ipc
-import datetime as dt
 
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn import metrics
-import glob
 import pandas as pd
-import subprocess, platform, os, glob,sys
-
-import datetime
-from math import nan
-from datetime import date, datetime, time, timedelta
-import random
-import pickle
+import sys
 import time
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-from functools import partial
-from multiprocessing import Pool,cpu_count
-import requests
-from tqdm import tqdm
-from functools import partial
-# from multiprocessing.pool import ThreadPool as TP
-from multiprocessing import Pool as TP
-from multiprocessing import cpu_count
+LC_COL_NAME = "LC"
 
 class Config(object):
     def __init__(self, args):
@@ -113,19 +88,37 @@ def get_mapping(mapping_file, decl_newid, ref_newid):
             ret_dict = dict(zip(df[ref_newid], df[decl_newid]))
     return ret_dict
 
+def get_real_col_name(lpis_csv, standard_col_name) :
+    ret_col_name = standard_col_name
+    lpis_csv_col_names = list(lpis_csv.columns.values)
+    for col_name in lpis_csv_col_names:
+        if col_name.lower() == standard_col_name.lower() :
+            ret_col_name = col_name
+            print("{} was found in the csv header as {}".format(standard_col_name, ret_col_name))
+            break
+    return ret_col_name
+
 def get_ref_lc(ref_lpis, mapping_file) :
     lpis_csv = pd.read_csv(ref_lpis)
-    lpis_filtered = lpis_csv[["NewID", "LC"]]
-    lpis_filtered = lpis_filtered.rename(columns = {"LC":"LC_P1"}) 
+
+    ref_lc_col_name = get_real_col_name(lpis_csv, LC_COL_NAME)
+
+    lpis_filtered = lpis_csv[["NewID", ref_lc_col_name]]
+    lpis_filtered = lpis_filtered.rename(columns = {ref_lc_col_name:"LC_P1"}) 
     return lpis_filtered
 
 def map_ref_newids(df, mapping_file, decl_newid, ref_decl_newid) :
     ids_map = get_mapping(mapping_file, decl_newid, ref_decl_newid)
-    df["NewID"] = df["NewID"].replace(ids_map)
+    df["NewID"] = df["NewID"].map(ids_map)
+    df = df[df['NewID'].notna()]
+    # the map operation above is changing the type of the NewID to float 
+    df = df.astype({"NewID": int}) 
+
     return df
 
 def merge_input_data(config) :
     lpis_csv = pd.read_csv(config.input_lpis)
+    lc_col_name = get_real_col_name(lpis_csv, LC_COL_NAME)
     
     # if we are in the current year, then we need to use the LC from the reference year (the previous one)
     # but the LC in this ref LPIS are not the same as the ones in the current year, so we have to map them
@@ -138,10 +131,10 @@ def merge_input_data(config) :
         # map ids from ref LPIS to the current LPIS
         ref_lc = map_ref_newids(ref_lc, config.mapping_file, config.decl_newid, config.ref_decl_newid)
 
-        lpis_csv.rename(columns = {"LC":"LC_P2"}, inplace = True) 
+        lpis_csv.rename(columns = {lc_col_name:"LC_P2"}, inplace = True) 
         lpis_csv = pd.merge(lpis_csv, ref_lc, on = "NewID", how = 'inner' )
     else:
-        lpis_csv.rename(columns = {"LC":"LC_P1"}, inplace = True) 
+        lpis_csv.rename(columns = {lc_col_name:"LC_P1"}, inplace = True) 
 
     veg_all = pd.read_csv(config.input_veg_growth_markers)
     outliers_csv = pd.read_csv(config.input_outliers)
@@ -194,11 +187,24 @@ def main():
 
     time1 = time.time()
     
+    print("Merging input data ...")
     veg_all = merge_input_data(config)
 
+    print("Applying threshold values ...")
     veg_all = apply_threshold_values(veg_all, config)
 
+    print("Sorting by NewID ...")
     veg_all.sort_values('NewID', inplace = True)
+    
+    print("Removing CTnumL4A column ...")
+    ctnuml4a_col_name = get_real_col_name(veg_all, 'CTnumL4A')
+    veg_all = veg_all.drop(columns=[ctnuml4a_col_name])
+    
+    print("Renaming ctl4a column ...")
+    ctl4a_col_name = get_real_col_name(veg_all, 'ctl4a')
+    veg_all.rename(columns = {ctl4a_col_name:"CTL4A"}, inplace = True) 
+    
+    print("Writing to {} ...".format(args.output))    
     veg_all.to_csv(args.output,index=False)
     
     time2 = time.time()

@@ -6,7 +6,6 @@
 #include "logger.hpp"
 #include "processorhandlerhelper.h"
 #include "s4c_change_detection_handler.hpp"
-#include "s4c_baresoil_steps_builder.hpp"
 #include "stepexecutiondecorator.h"
 
 #include "products/generichighlevelproducthelper.h"
@@ -144,7 +143,7 @@ QStringList S4CChangeDetectionHandler::GetLpisFilteringTaskArgs(const S4CChangeD
     const QString &filteringIdsColName = isRefSite ? "NewID_ref" : "NewID";
     QStringList args = {
                 "--input", inFile,
-                "--columns-to-keep", "NewID", "LC", "PGrass", "CTnum", "CTnumL4A",
+                "--columns-to-keep", "NewID", "LC", "PGrass", "CTnum", "CTnumL4A", "ctl4a",
                 "--filtering-ids-file", filteringIdsFile,
                 "--filtering-ids-col-name", filteringIdsColName,
                 "--output", outPath
@@ -159,7 +158,9 @@ QStringList S4CChangeDetectionHandler::GetLaiOutliersTaskArgs(const S4CChangeDet
     const SiteConfig &siteConfig = (isRefSite ? cfg.refSiteCfg : cfg.currentSiteCfg);
     QStringList args = {    "--input", siteConfig.mdb1PrdPath,
                 "--output", outFile,
-                "--lpis-csv", lpisCsv
+                "--lpis-csv", lpisCsv,
+                "--start-date", siteConfig.startDateTime.toString("yyyy-MM-dd"),
+                "--end-date", siteConfig.endDateTime.toString("yyyy-MM-dd")
     };
 
     if (siteConfig.mdb1IdsMappingFile.length() > 0) {
@@ -173,11 +174,13 @@ QStringList S4CChangeDetectionHandler::GetLaiOutliersTaskArgs(const S4CChangeDet
 QStringList S4CChangeDetectionHandler::GetVegGrowthMarkersTaskArgs(const S4CChangeDetectionJobConfig &cfg, bool isRefSite,
                                                    const QString &lpisCsv, const QString &out)
 {
-    const QString &inFile = isRefSite ? cfg.refSiteCfg.mdbL4OptMainPrdPath : cfg.currentSiteCfg.mdbL4OptMainPrdPath;
+    const SiteConfig &siteConfig = (isRefSite ? cfg.refSiteCfg : cfg.currentSiteCfg);
     QStringList args =  {
-                "--input-mdb4", inFile,
+                "--input-mdb4", siteConfig.mdbL4OptMainPrdPath,
                 "--output", out,
-                "--lpis-csv", lpisCsv
+                "--lpis-csv", lpisCsv,
+                "--start-date", siteConfig.startDateTime.toString("yyyy-MM-dd"),
+                "--end-date", siteConfig.endDateTime.toString("yyyy-MM-dd")
     };
 
     return args;
@@ -281,7 +284,7 @@ void S4CChangeDetectionHandler::HandleTaskFinishedImpl(EventProcessingContext &c
             const QString &footPrint = GetProductFormatterFootprint(ctx, event);
             // Insert the product into the database
             GenericHighLevelProductHelper prdHelper(productFolder);
-            int prdId = ctx.InsertProduct({ ProductType::S4CBareSoilProductTypeId, event.processorId,
+            int prdId = ctx.InsertProduct({ ProductType::S4CChangeDetectionProductTypeId, event.processorId,
                                             event.siteId, event.jobId, productFolder, prdHelper.GetAcqDate(),
                                             prodName, quicklook, footPrint,
                                             std::experimental::nullopt, TileIdList(), ProductIdsList() });
@@ -386,7 +389,7 @@ ProcessorJobDefinitionParams S4CChangeDetectionHandler::GetProcessingDefinitionI
 
 QStringList S4CChangeDetectionHandler::GetProductFormatterArgs(TaskToSubmit &productFormatterTask,
                                                      const S4CChangeDetectionJobConfig &cfg, const QStringList &listFiles) {
-    QString strTimePeriod = cfg.currentSiteCfg.startDate.toString("yyyyMMddTHHmmss").append("_").append(cfg.currentSiteCfg.endDate.toString("yyyyMMddTHHmmss"));
+    QString strTimePeriod = cfg.currentSiteCfg.startDateTime.toString("yyyyMMddTHHmmss").append("_").append(cfg.currentSiteCfg.endDateTime.toString("yyyyMMddTHHmmss"));
     QStringList additionalArgs = {"-processor.generic.files"};
     additionalArgs += listFiles;
     return GetDefaultProductFormatterArgs(*(cfg.pCtx), productFormatterTask, cfg.event.jobId, cfg.event.siteId, "S4C_CHANGEDECT", strTimePeriod,

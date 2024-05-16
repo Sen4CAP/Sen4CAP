@@ -81,10 +81,12 @@ def save_to_csv(rows, path, headers):
 def extract_common_ids(config, conn, lpis_table_p1, lpis_table_p2, output_csv):
     with conn.cursor() as cursor:
         query = SQL("""
-            select t1."NewID" as "NewID_ref",
-                t2."NewID" as "NewID"
+            select t2."NewID" as "NewID", 
+                   t1."NewID" as "NewID_ref"
             from {} t1, {} t2
             where t1.ori_id = t2.ori_id 
+                  and t1.is_deleted = false 
+                  and t2.is_deleted = false
             -- or 
             -- t1.wkb_geometry = t2.wkb_geometry
             order by t1."NewID"

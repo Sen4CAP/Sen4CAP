@@ -9,8 +9,6 @@ from pyarrow import ipc
 import datetime as dt
 
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn import metrics
 import glob
 import pandas as pd
 import subprocess, platform, os, glob,sys
@@ -19,11 +17,7 @@ import datetime
 from math import nan
 from datetime import date, datetime, time, timedelta
 import random
-import pickle
 import time
-
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from functools import partial
 from multiprocessing import Pool,cpu_count
@@ -39,61 +33,58 @@ ID_COL_NAME = "NewID"
 
 markers_sar_main = ["s2_mean_ndvi"]
 
+def get_date_from_col_name(col) :
+    renamed_col = col
+    # remove any undesired prefix
+    if renamed_col.startswith("XX_"):
+        renamed_col = renamed_col[len("XX_"):]
+    
+    # get the date until the first _
+    idx = renamed_col.index('_s2')
+    date_time_obj = None
+    # If other markers are also needed, see also the MarkerColumnInfos class in services
+    if idx > 0:
+        date_str = renamed_col[:idx]
+        renamed_col = renamed_col[idx+1:]
+        if date_str.startswith("W") : 
+            date_str = date_str[len("W"):]
+            year = int(date_str[:4])
+            week = int(date_str[4:6])
+            date_time_obj = dt.date.fromisocalendar(year, week, 1)
+        else:
+            date_time_obj = dt.datetime.strptime(date_str, '%Y_%m_%d').date()
+
+    return date_time_obj
+
 class SelectedColumns(object):
-    def __init__(self, col_names, global_col_indices, id_col_global_idx, id_col_name = ID_COL_NAME):
+    def __init__(self, col_names, id_col_global_idx, id_col_name = ID_COL_NAME):
         
         # col_names.sort()
         self.columns = col_names
-        self.global_col_indices = global_col_indices
         self.id_col_global_idx = id_col_global_idx
         
         self.id_col_name = id_col_name
         
         self.mean_indices = []
-        self.all_dates = []
-        cur_idx = 1 # We start from 1 as on the first position in data will be always the ID (see get_all_global_col_indices)
+        cur_idx = 1 # We start from 1 as on the first position in data will be always the ID
         self.dict_cols_indices = dict()
         self.dict_cols_dates = dict()
         for col in col_names:
             for s1_marker_name in markers_sar_main:
                 if s1_marker_name in col:
-                    renamed_col = col
-                    # remove any undesired prefix
-                    if renamed_col.startswith("XX_"):
-                        renamed_col = renamed_col[len("XX_"):]
-                    # get the date until the first _
-                    idx = renamed_col.index('_s2')
-                    date_time_obj = None
+                    date_time_obj = get_date_from_col_name(col)
                     # If other markers are also needed, see also the MarkerColumnInfos class in services
-                    if idx > 0:
-                        date_str = renamed_col[:idx]
-                        renamed_col = renamed_col[idx+1:]
-                        if date_str.startswith("W") : 
-                            date_str = date_str[len("W"):]
-                            year = int(date_str[:4])
-                            week = int(date_str[4:6])
-                            date_time_obj = dt.date.fromisocalendar(year, week, 1)
-                        else:
-                            date_time_obj = dt.datetime.strptime(date_str, '%Y_%m_%d').date()
-
-                        self.update_col_infos(col, renamed_col, cur_idx, date_time_obj)
+                    if date_time_obj:
+                        self.update_col_infos(s1_marker_name, cur_idx, date_time_obj)
 
             cur_idx = cur_idx+1
 
         self.all_column_names = [self.id_col_name] + self.columns
-
-        print("Mean indices: {}".format(self.mean_indices))
             
     def get_all_columns(self) :
         return self.all_column_names
         
-    def get_all_global_col_indices(self) :
-        return [self.id_col_global_idx] + self.global_col_indices
-
-    def update_col_infos(self, col, renamed_column, cur_idx, date_time_obj) :
-        self.mean_indices.append(cur_idx)
-        self.all_dates.append(date_time_obj)
-
+    def update_col_infos(self, renamed_column, cur_idx, date_time_obj) :
         if renamed_column in self.dict_cols_indices.keys():
             self.dict_cols_indices[renamed_column].append(cur_idx)
             self.dict_cols_dates[renamed_column].append(date_time_obj)
@@ -101,41 +92,53 @@ class SelectedColumns(object):
             self.dict_cols_indices[renamed_column] = [cur_idx]
             self.dict_cols_dates[renamed_column] = [date_time_obj]
 
+def is_valid_date(date_time_obj, start_date, end_date) :
+    is_valid_date = True
+    if start_date :
+        if date_time_obj < start_date:
+            is_valid_date = False
+    if end_date :
+        if date_time_obj > end_date:
+            is_valid_date = False
+    return is_valid_date
 
-def get_selected_columns(columns) : 
+def get_selected_columns(columns, start_date, end_date) : 
     # print ("Schema: {}".format(reader.schema))
     col_names = []
     cur_idx = 0
-    global_col_indices = []
     id_col_global_idx = -1
     for name in columns:
         if name == ID_COL_NAME:
             id_col_global_idx = cur_idx
         else:
-            if "_MEAN" in name or "_mean_" in name:
-                col_names.append(name)
-                global_col_indices.append(cur_idx)
+            for s1_marker_name in markers_sar_main:
+                if s1_marker_name in name:
+                    date_time_obj = get_date_from_col_name(name)
+                    if is_valid_date(date_time_obj, start_date, end_date) :
+                        col_names.append(name)
         cur_idx = cur_idx+1
 
     # print("Selected columns: {}".format(col_names))
-    return SelectedColumns(col_names, global_col_indices, id_col_global_idx, ID_COL_NAME)
+    return SelectedColumns(col_names, id_col_global_idx, ID_COL_NAME)
 
-def handle_batch_record(selCols, all_cropfields, dict_curves):
+def handle_batch_record(selCols, all_cropfields, set_new_ids, dict_curves):
+    ignore_new_ids_filter = (len(set_new_ids) == 0)
     for cropfield_descr in all_cropfields:
         new_id = cropfield_descr[selCols.id_col_global_idx].astype(int)
-        # Get all indexes from S2 calibration data for this new id
-        for renamed_col in selCols.dict_cols_indices.keys():
-            vals = cropfield_descr[selCols.dict_cols_indices[renamed_col]] 
-            curve_i = area_curve(vals)
-            dict_curves[new_id] = curve_i
+        if ignore_new_ids_filter or new_id in set_new_ids:
+            # Get all indexes from S2 calibration data for this new id
+            for renamed_col in selCols.dict_cols_indices.keys():
+                vals = cropfield_descr[selCols.dict_cols_indices[renamed_col]] 
+                curve_i = area_curve(vals)
+                dict_curves[new_id] = curve_i
 
     return dict_curves
 
-def handle_ipc_file(input, training_S1) :
+def handle_ipc_file(input, set_new_ids, start_date, end_date) :
     reader = ipc.open_file(input)
     
     print("Having a number of {} columns ...".format(len(reader.schema.names)))
-    selCols = get_selected_columns(reader.schema.names)
+    selCols = get_selected_columns(reader.schema.names, start_date, end_date)
     all_column_names = selCols.get_all_columns()
     print ("Column names to select: {}".format(all_column_names))
             
@@ -154,7 +157,7 @@ def handle_ipc_file(input, training_S1) :
         batch_pd = rb.to_pandas()
         all_cropfields = batch_pd.to_numpy()
 
-        dict_curves = handle_batch_record(selCols, all_cropfields, dict_curves)
+        dict_curves = handle_batch_record(selCols, all_cropfields, set_new_ids, dict_curves)
 
         time2 = time.time()
         print("Execution for batch {}/{} for {} entries took: {} s"
@@ -163,11 +166,11 @@ def handle_ipc_file(input, training_S1) :
     veg_all = pd.DataFrame(dict_curves.items(), columns=['NewID', 'AreaVeg'])
     return veg_all
         
-def handle_file(input, output, training_S1):
+def handle_file(input, set_new_ids, start_date, end_date):
     lcinput = input.lower()
     if lcinput.endswith('.ipc'):
         print("Handling ipc file {}".format(input))
-        veg_all = handle_ipc_file(input, training_S1)
+        veg_all = handle_ipc_file(input, set_new_ids, start_date, end_date)
     else :
         print("Invalid file type received as input (unknow extension for {})".format(input))
         sys.exit(1)
@@ -184,19 +187,31 @@ def area_curve(v_m):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Performs the bare soil calibration for S2"
+        description="Performs the vegetation growth markes from MDB4 IPC file"
     )
     parser.add_argument("-i", "--input-mdb4", help="Input MDB4 markers file", required=True)
-    parser.add_argument("--lpis-csv", required=True, help="The LPIS CSV file")
+    parser.add_argument("-l", "--lpis-csv", required=True, help="The LPIS CSV file")
     parser.add_argument("-o", "--output", help="Output file containing S2 results", required=True)
+
+    parser.add_argument("--start-date", help="Start date", required=False)
+    parser.add_argument("--end-date", help="End date", required=False)
+
     
     args = parser.parse_args()
 
     time1 = time.time()
 
+    start_date = None
+    end_date = None
+    if args.start_date:
+        start_date = dt.datetime.strptime(args.start_date, "%Y-%m-%d").date()
+    if args.end_date:
+        end_date = dt.datetime.strptime(args.end_date, "%Y-%m-%d").date() + dt.timedelta(days=1)
+
     lpis_csv = pd.read_csv(args.lpis_csv)
-    
-    df_results_all = handle_file(args.input_mdb4, lpis_csv, [])
+    set_new_ids = set(lpis_csv["NewID"])
+
+    df_results_all = handle_file(args.input_mdb4, set_new_ids, start_date, end_date)
 
     df_results_all.to_csv(args.output, index=False)
 

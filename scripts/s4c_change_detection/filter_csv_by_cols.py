@@ -38,8 +38,20 @@ def main():
 
     columns_to_keep = list(args.columns_to_keep)
     reader = pd.read_csv(args.input, chunksize=CHUNKSIZE)
+
+    # replace the columns to keep elements to be at the same case sensitivity as the 
+    # values in the cvs colums
+
     first_df = True
     for df in reader:
+        if first_df:        
+            columns_to_keep_idx = 0
+            for col in columns_to_keep:
+                for column in df.columns:
+                    if column.lower() == col.lower() :
+                        columns_to_keep[columns_to_keep_idx] = column
+                columns_to_keep_idx = columns_to_keep_idx + 1
+
         # rename columns
         df_to_write = df[columns_to_keep]
         for key in mapping_cols.keys():

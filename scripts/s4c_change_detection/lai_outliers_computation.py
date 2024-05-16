@@ -9,8 +9,6 @@ from pyarrow import ipc
 import datetime as dt
 
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn import metrics
 import glob
 import pandas as pd
 import subprocess, platform, os, glob,sys
@@ -19,11 +17,7 @@ import datetime
 from math import nan
 from datetime import date, datetime, time, timedelta
 import random
-import pickle
 import time
-
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from functools import partial
 from multiprocessing import Pool,cpu_count
@@ -41,6 +35,7 @@ lai_marker = "mean_LAI"
 bands_forced_order = [lai_marker]
 
 ID_COL_NAME = "NewID"
+CTNUML4A_COL_NAME = "CTnumL4A"
 
 # bi_to_filter = ['FAPAR', 'FCOVER','LAI', 'NDVI']
 bi_to_filter = ['LAI']
@@ -54,30 +49,33 @@ class DateValueIndexes(object):
     def add_index(self, idx):
         self.idxs.append(idx)
 
+def get_date_from_col_name(col_name) :
+    idx = col_name.index('_')
+    date_time_obj = None
+    if idx > 0:
+        date_str = col_name[:idx]
+        date_time_obj = dt.datetime.strptime(date_str, '%Y%m%d').date()
+
+    return date_time_obj
+
 class SelectedColumns(object):
-    def __init__(self, col_names, global_col_indices, id_col_global_idx, id_col_name = ID_COL_NAME):
+    def __init__(self, col_names, id_col_global_idx, id_col_name = ID_COL_NAME):
         
-        # col_names.sort()
         self.columns = col_names
-        self.global_col_indices = global_col_indices
         self.id_col_global_idx = id_col_global_idx
         
         unique_dates = []
         self.id_col_name = id_col_name
         
-        self.mean_indices = []
-        cur_idx = 1 # We start from 1 as on the first position in data will be always the ID (see get_all_global_col_indices)
+        cur_idx = 1 # We start from 1 as on the first position in data will be always the ID
         self.dict_cols_indices = dict()
         self.dict_cols_dates = dict()
         for col in col_names:
             # get the date until the first _
             idx = col.index('_')
-            date_time_obj = None
-            if idx > 0:
-                date_str = col[:idx]
-                date_time_obj = dt.datetime.strptime(date_str, '%Y%m%d').date()
-                if not date_time_obj in unique_dates:
-                    unique_dates.append(date_time_obj)  
+            date_time_obj = get_date_from_col_name(col)
+            if date_time_obj and not date_time_obj in unique_dates:
+                unique_dates.append(date_time_obj)  
 
             if "mean_" in col:
                 for bi in bi_to_filter:
@@ -95,9 +93,6 @@ class SelectedColumns(object):
             print("Forces column order differ from the actual columns. Exiting ...")
             sys.exit(1)
 
-        print("Mean indices: {}".format(self.mean_indices))
-
-
     def update_dates_indexes(self) :
         self.cols_indexes = dict()
         for renamed_col in self.dict_cols_indices.keys():
@@ -113,12 +108,7 @@ class SelectedColumns(object):
     def get_all_columns(self) :
         return self.all_column_names
         
-    def get_all_global_col_indices(self) :
-        return [self.id_col_global_idx] + self.global_col_indices
-
     def update_col_infos(self, col, renamed_column, cur_idx, date_time_obj) :
-        self.mean_indices.append(cur_idx)
-
         if renamed_column in self.dict_cols_indices.keys():
             self.dict_cols_indices[renamed_column].append(cur_idx)
             self.dict_cols_dates[renamed_column].append(date_time_obj)
@@ -138,25 +128,37 @@ class ClassificationDataFrameMarkerWrapper(object) :
         self.df_marker = df_marker
         self.newid = newid
 
-def get_selected_columns(columns, tiles_filter) : 
+def is_valid_date(date_time_obj, start_date, end_date) :
+    is_valid_date = True
+    if start_date :
+        if date_time_obj < start_date:
+            is_valid_date = False
+    if end_date :
+        if date_time_obj > end_date:
+            is_valid_date = False
+    return is_valid_date
+
+def get_selected_columns(columns, start_date, end_date, tiles_filter) : 
     # print ("Schema: {}".format(reader.schema))
     col_names = []
     cur_idx = 0
-    global_col_indices = []
     id_col_global_idx = -1
     for name in columns:
         if name == ID_COL_NAME:
             id_col_global_idx = cur_idx
         else:
             if "_mean_" in name:
+                date_time_obj = get_date_from_col_name(name)
+                if not is_valid_date(date_time_obj, start_date, end_date) :
+                   continue     
+
                 for bi in bi_to_filter:
                     if bi in name:
                         col_names.append(name)
-                        global_col_indices.append(cur_idx)
         cur_idx = cur_idx+1
 
     # print("Selected columns: {}".format(col_names))
-    return SelectedColumns(col_names, global_col_indices, id_col_global_idx, ID_COL_NAME)
+    return SelectedColumns(col_names, id_col_global_idx, ID_COL_NAME)
 
 def handle_cropfield_entry(selCols, cropfield_descr, newid, ctnuml4a):
     nb_values = len(selCols.unique_dates) 
@@ -186,7 +188,7 @@ def handle_cropfield_entry_wrp(cropfield_entry_wrp):
     return handle_cropfield_entry(cropfield_entry_wrp.sel_cols, cropfield_entry_wrp.cropfield_descr, 
                                   cropfield_entry_wrp.newid, cropfield_entry_wrp.newid_exists)
 
-def handle_batch_record(selCols, all_cropfields, decl_ctnuml4a, ids_map, df_results_all, thread_pool):
+def handle_batch_record(selCols, all_cropfields, decl_ctnuml4a, ids_map, df_results_dict, thread_pool):
 
     for cropfield_descr in all_cropfields:
         newid_mdb = cropfield_descr[selCols.id_col_global_idx].astype(int)
@@ -200,23 +202,26 @@ def handle_batch_record(selCols, all_cropfields, decl_ctnuml4a, ids_map, df_resu
         if ctnuml4a is None:
             continue
         ret = handle_cropfield_entry(selCols, cropfield_descr, newid, ctnuml4a)
-        df_results_all = pd.concat([df_results_all,ret])
+        df_results_dict[newid] = ret
     
-    return df_results_all
+    return df_results_dict
 
-def handle_ipc_file(ipc_file, decl_ctnuml4a, ids_map, df_results_all) :
+def handle_ipc_file(ipc_file, decl_ctnuml4a, ids_map, start_date, end_date, df_results_all) :
+    time1 = time.time()
+
     pool_size = cpu_count()
     thread_pool = TP(pool_size)
 
     reader = ipc.open_file(ipc_file)
     
     print("Having a number of {} columns ...".format(len(reader.schema.names)))
-    selCols = get_selected_columns(reader.schema.names, [])
+    selCols = get_selected_columns(reader.schema.names, start_date, end_date, [])
     all_column_names = selCols.get_all_columns()
     print ("Column names to select: {}".format(all_column_names))
-            
+    
+    df_results_dict = dict()
+    batches_in_perc_rng = int(reader.num_record_batches / 100)
     for i in range(0, reader.num_record_batches):
-        time1 = time.time()
         b = reader.get_batch(i)
         schema = b.schema
         columns_to_select = []        
@@ -226,20 +231,28 @@ def handle_ipc_file(ipc_file, decl_ctnuml4a, ids_map, df_results_all) :
         # print("Columns: {}, num_cols = {}, rows = {}".format(b.schema, b.num_columns, b.num_rows))
         # print("{}".format(b.column(0)))
         rb = b.from_arrays(columns_to_select, all_column_names)
-        pd = rb.to_pandas()
-        all_cropfields = pd.to_numpy()
+        batch_pd = rb.to_pandas()
+        all_cropfields = batch_pd.to_numpy()
         
-        df_results_all = handle_batch_record(selCols, all_cropfields, decl_ctnuml4a, ids_map, df_results_all, thread_pool)
+        handle_batch_record(selCols, all_cropfields, decl_ctnuml4a, ids_map, df_results_dict, thread_pool)
 
-        time2 = time.time()
-        print("Execution for batch {}/{} for {} entries took: {} s"
-                .format(i, reader.num_record_batches, len(all_cropfields), time2 - time1))
+        if (i % batches_in_perc_rng) == 0:
+            print("{}% parcels completed".format(int(i / batches_in_perc_rng)))
+
+    if (reader.num_record_batches % 100) != 0 :
+       print("100% parcels completed")
 
     thread_pool.close()
+    df_results = pd.concat(df_results_dict.values())
+    df_results_all = pd.concat([df_results_all, df_results])
 
-    return df_results_all
+    time2 = time.time()
+    print("Execution for handling {} entries in {} IPC file batches took: {} s"
+            .format(len(all_cropfields), reader.num_record_batches, time2 - time1))
+
+    return df_results_all, df_results_dict
         
-def handle_file(input, decl_ctnuml4a, ids_map):
+def handle_file(input, decl_ctnuml4a, ids_map, start_date, end_date):
     lcinput = input.lower()
     df_results_all = pd.DataFrame()
     df_results_all['NewID'] = np.nan
@@ -247,17 +260,29 @@ def handle_file(input, decl_ctnuml4a, ids_map):
 
     if lcinput.endswith('.ipc'):
         print("Handling ipc file {}".format(input))
-        df_results_all = handle_ipc_file(input, decl_ctnuml4a, ids_map, df_results_all)
+        df_results_all, df_results_dict = handle_ipc_file(input, decl_ctnuml4a, ids_map, start_date, end_date, df_results_all)
     else :
         print("Invalid file type received as input (unknow extension for {})".format(input))
         sys.exit(1)
 
-    return df_results_all
+    return df_results_all, df_results_dict
 
+def get_real_col_name(lpis_csv, standard_col_name) :
+    ret_col_name = standard_col_name
+    lpis_csv_col_names = list(lpis_csv.columns.values)
+    for col_name in lpis_csv_col_names:
+        if col_name.lower() == standard_col_name.lower() :
+            ret_col_name = col_name
+            print("{} was found in the csv header as {}".format(standard_col_name, ret_col_name))
+            break
+    return ret_col_name
+    
 def get_ctnuml4a(lpis_csv):
-    df = lpis_csv[["NewID", "CTnumL4A"]]
+    ctnuml4a_col_name = get_real_col_name(lpis_csv, CTNUML4A_COL_NAME)
+    
+    df = lpis_csv[["NewID", ctnuml4a_col_name]]
     # df.set_index("NewID")
-    ret_dict = dict(zip(df['NewID'], df['CTnumL4A']))
+    ret_dict = dict(zip(df['NewID'], df[ctnuml4a_col_name]))
     return ret_dict
 
 def ref_dictionary_creation(df_results_all, ctnuml4a):
@@ -269,15 +294,10 @@ def ref_dictionary_creation(df_results_all, ctnuml4a):
         if val_plot.empty : 
             continue
         
-        # val_plot.to_csv("J:/Temp/Debug_Change_Detection/outputs/df11.csv", index=False)
         val_dates_ct = val_plot.groupby(['dates'],as_index=False)[lai_marker].mean()
-        # val_dates_ct.to_csv("J:/Temp/Debug_Change_Detection/outputs/df22.csv", index=False)
         val_dates_ct['std'] = val_plot.groupby(['dates'],as_index=False)[lai_marker].std()[lai_marker]
-        # val_dates_ct.to_csv("J:/Temp/Debug_Change_Detection/outputs/df33.csv", index=False)
         df_ref = val_dates_ct.loc[:,('dates',lai_marker,'std')]
-        # df_ref.to_csv("J:/Temp/Debug_Change_Detection/outputs/df44.csv", index=False)
         df_ref = df_ref.rename(columns={lai_marker:'mean','std':'std'})
-        # df_ref.to_csv("J:/Temp/Debug_Change_Detection/outputs/df55.csv", index=False)
         dict_ref[ct] = df_ref
 
     return dict_ref
@@ -331,24 +351,47 @@ def count_lai_outliers(df, df_ref, nb_stdev):
       
     return counts_df
 
-def compute_lai_outliers(df_results_all, decl_ctnuml4a, dict_ref) :
+def compute_lai_outliers(df_results_dict, decl_ctnuml4a, dict_ref) :
+    time1 = time.time()
+    print("Computing LAI Outliers ...")
+
     df_outliers_all = pd.DataFrame()
     df_outliers_all['NewID'] = np.nan
     df_outliers_all = df_outliers_all.astype({"NewID": int})    
 
+    outliers_list = []
+    
+    newids_cnt = len(decl_ctnuml4a.keys())
+    ids_in_perc_rng = int(newids_cnt / 100)
+    
+    i = 0
     for newid in decl_ctnuml4a:
-        result = df_results_all.loc[df_results_all['NewID'] == newid]
-        if result.empty:
-            continue
+        if newid in df_results_dict:
+            result = df_results_dict[newid]
+            if not result.empty:
+                result = result.rename(columns={lai_marker:'mean'})
+                ctnuml4a = decl_ctnuml4a[newid]
+                outlier = count_lai_outliers(result,dict_ref[ctnuml4a], 1.5)
+                outlier["NewID"] = newid
+        
+                # print(outlier)
+                outliers_list.append(outlier)
 
-        result = result.rename(columns={lai_marker:'mean'})
-        ctnuml4a = decl_ctnuml4a[newid]
-        outlier = count_lai_outliers(result,dict_ref[ctnuml4a], 1.5)
-        outlier["NewID"] = newid
-        # print(outlier)
-        df_outliers_all = pd.concat([df_outliers_all,outlier])
+        if (i % ids_in_perc_rng) == 0:
+            print("{}% lai outliers parcels completed".format(int(i / ids_in_perc_rng)))
+        
+        i = i + 1
 
+    if (newids_cnt % 100) != 0 :
+       print("100% lai outliers parcels completed")
+
+    df_outliers = pd.concat(outliers_list)
+    df_outliers_all = pd.concat([df_outliers_all, df_outliers])
     df_outliers_all.sort_values("NewID", inplace=True)
+
+    time2 = time.time()
+    print("Computing LAI Outliers Execution took: {} s" .format(time2 - time1))
+
     return df_outliers_all
 
 def get_mapping(mapping_file, decl_newid, mdb_newid):
@@ -363,7 +406,7 @@ def get_mapping(mapping_file, decl_newid, mdb_newid):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Performs the bare soil calibration for S2"
+        description="Performs the LAI Outliers from MDB 1 IPC file"
     )
     parser.add_argument("-i", "--input", help="Input MDB 1 IPC file", required=True)
     parser.add_argument("-o", "--output", help="Output csv file", required=True)
@@ -376,9 +419,12 @@ def main():
 
     args = parser.parse_args()
 
-    if args.start_date and args.end_date:
-        start_date = dateutil.parser.parse(args.start_date)
-        end_date = dateutil.parser.parse(args.end_date)
+    start_date = None
+    end_date = None
+    if args.start_date:
+        start_date = dt.datetime.strptime(args.start_date, "%Y-%m-%d").date()
+    if args.end_date:
+        end_date = dt.datetime.strptime(args.end_date, "%Y-%m-%d").date() + dt.timedelta(days=1)
 
     time1 = time.time()
 
@@ -387,12 +433,12 @@ def main():
     lpis_csv = pd.read_csv(args.lpis_csv)
     decl_ctnuml4a = get_ctnuml4a(lpis_csv)
     
-    df_results_all = handle_file(args.input, decl_ctnuml4a, ids_map)
+    df_results_all,df_results_dict = handle_file(args.input, decl_ctnuml4a, ids_map, start_date, end_date)
 
     ctnuml4a = sorted(set(decl_ctnuml4a.values()))
     dict_ref = ref_dictionary_creation(df_results_all, ctnuml4a)
 
-    df_stabs_all = compute_lai_outliers(df_results_all, decl_ctnuml4a, dict_ref)
+    df_stabs_all = compute_lai_outliers(df_results_dict, decl_ctnuml4a, dict_ref)
 
     df_stabs_all.to_csv(args.output, index=False)
 

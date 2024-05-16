@@ -28,14 +28,18 @@ class S4CChangeDetectionHandler : public ProcessorHandler
 
             const QString &startDateCfg = siteCfgKeyPrefix + "start_date";
             const QString &endDateCfg = siteCfgKeyPrefix + "end_date";
-            startDate = ProcessorHandlerHelper::GetDateTimeFromString(
+            startDateTime = ProcessorHandlerHelper::GetDateTimeFromString(
                         ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, startDateCfg, S4C_CHANGE_DETECTION_CFG_PREFIX));
-            endDate = ProcessorHandlerHelper::GetDateTimeFromString(
+            endDateTime = ProcessorHandlerHelper::GetDateTimeFromString(
                         ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters, endDateCfg, S4C_CHANGE_DETECTION_CFG_PREFIX));
-            year = endDate.date().year();           // TODO: see if this is valid
+
+            // normalize start/end dates to be inside the same season
+            UpdateStartEndDates(pContext, jobId);
+
+            year = endDateTime.date().year();           // TODO: see if this is valid
             // change to the beginning of the next day to avoid losing products that are in the same date as the end date
             // We update this after the year extraction as adding 1 day might move to the next year
-            endDate = endDate.addDays(1);
+            endDateTime = endDateTime.addDays(1);
             const TileList &tiles = pContext->GetSiteTiles(siteId, (int)Satellite::Sentinel2);
             if (tiles.size() == 0) {
                 pContext->MarkJobFailed(jobId);
@@ -46,37 +50,10 @@ class S4CChangeDetectionHandler : public ProcessorHandler
 
             lpisCsvPath = ExtractLpisPath(pContext, siteId, jobId, year);
 
-            const ProductList &mdb1PrdsList = pContext->GetProducts(siteId, (int)ProductType::S4MDB1ProductTypeId,
-                                                                               startDate, endDate);
-            if (mdb1PrdsList.size() == 0) {
-                pContext->MarkJobFailed(jobId);
-                throw std::runtime_error(QStringLiteral("Change Detection: No MDB1 products were found in database for site %1 and interval %2 - %3.")
-                                         .arg(siteShortName)
-                                         .arg(startDate.toString())
-                                         .arg(endDate.toString()).toStdString());
-            }
-            const ProductList &mdbL4APrdsList = pContext->GetProducts(siteId, (int)ProductType::S4MDBL4AOptMainProductTypeId,
-                                                                               startDate, endDate);
-            if (mdbL4APrdsList.size() == 0) {
-                pContext->MarkJobFailed(jobId);
-                throw std::runtime_error(QStringLiteral("Change Detection: No MDB L4A OPT Main products were found in database for site %1 and interval %2 - %3.")
-                                         .arg(siteShortName)
-                                         .arg(startDate.toString())
-                                         .arg(endDate.toString()).toStdString());
-            }
-            const ProductList &bsMarkersPrdsList = pContext->GetProducts(siteId, (int)ProductType::S4CBareSoilProductTypeId,
-                                                                               startDate, endDate);
-            if (bsMarkersPrdsList.size() == 0) {
-                pContext->MarkJobFailed(jobId);
-                throw std::runtime_error(QStringLiteral("Change Detection: No Bare Soil products were found in database for site %1 and interval %2 - %3.")
-                                         .arg(siteShortName)
-                                         .arg(startDate.toString())
-                                         .arg(endDate.toString()).toStdString());
-            }
-
-            mdb1PrdPath = mdb1PrdsList.at(mdb1PrdsList.size()-1).fullPath;
-            mdbL4OptMainPrdPath = mdbL4APrdsList.at(mdbL4APrdsList.size()-1).fullPath;
-            bareSoilPrdPath = bsMarkersPrdsList.at(bsMarkersPrdsList.size()-1).fullPath;
+            mdb1PrdPath = GetProduct(pContext, ProductType::S4MDB1ProductTypeId, jobId);
+            mdbL4OptMainPrdPath = GetProduct(pContext, ProductType::S4MDBL4AOptMainProductTypeId, jobId);
+            bareSoilPrdPath = GetProduct(pContext, ProductType::S4CBareSoilProductTypeId, jobId);
+            bareSoilPrdPath = QDir(bareSoilPrdPath + QDir::separator() + "VECTOR_DATA").filePath("L4E_BS_MarkersAll.csv");
 
             // check also for mapping files
             mdb1IdsMappingFile = ProcessorHandlerHelper::GetStringConfigValue(parameters, configParameters,
@@ -140,10 +117,79 @@ class S4CChangeDetectionHandler : public ProcessorHandler
             return i.value().csvPath;
         }
 
+        void UpdateStartEndDates(EventProcessingContext *pContext, int jobId) {
+            Season startDateSeason, endDateSeason;
+            QDate startDate = startDateTime.date();
+            QDate endDate = endDateTime.date();
+            const SeasonList &seasons = pContext->GetSiteSeasons(siteId);
+            for (const Season &season: seasons) {
+                if (startDate >= season.startDate && startDate < season.endDate.addDays(1)) {
+                    startDateSeason = season;
+                }
+                if (endDate >= season.startDate && endDate < season.endDate.addDays(1)) {
+                    endDateSeason = season;
+                }
+            }
+
+            Season processingSeason;
+            if (startDateSeason.startDate.isValid()) {
+                processingSeason = startDateSeason;
+                if(endDate > processingSeason.endDate.addDays(1)) {
+                    endDateTime = QDateTime(processingSeason.endDate);
+                }
+            } else if (endDateSeason.startDate.isValid()) {
+                processingSeason = endDateSeason;
+                if(startDate < processingSeason.startDate) {
+                    startDateTime = QDateTime(processingSeason.startDate);
+                }
+            } else {
+                pContext->MarkJobFailed(jobId);
+                throw std::runtime_error(
+                    QStringLiteral("Change Detection: Start date %1 and end date %2 are outside all seasons for site  = %3")
+                            .arg(startDateTime.toString())
+                            .arg(endDateTime.toString())
+                            .arg(siteId).toStdString());
+            }
+            seasonStartDateTime = QDateTime(processingSeason.startDate);
+            seasonEndDateTime = QDateTime(processingSeason.endDate);
+        }
+
+        static bool ComparePrdsByDates(const Product &prd1, const Product &prd2)
+        {
+            return ((prd1.created < prd2.created) ||
+                    (prd1.created == prd2.created && prd1.inserted < prd2.inserted));
+        }
+
+        QString GetProduct(EventProcessingContext *pContext, ProductType prdType, int jobId) {
+            QString prdPath;
+            ProductList prdsList = pContext->GetProducts(siteId, (int)prdType, startDateTime, endDateTime.addDays(1));
+            std::sort(prdsList.begin(), prdsList.end(), SiteConfig::ComparePrdsByDates);
+            if (prdsList.size() == 0) {
+                // if no product in the mentioned interval, try to get the one until the most recent after the end date but before the end of season
+                prdsList = pContext->GetProducts(siteId, (int)prdType, startDateTime, seasonEndDateTime.addDays(1));
+                std::sort(prdsList.begin(), prdsList.end(), SiteConfig::ComparePrdsByDates);
+                if (prdsList.size() == 0) {
+                    pContext->MarkJobFailed(jobId);
+                    throw std::runtime_error(QStringLiteral("Change Detection: No product of type %1 were found in database for site %2 and interval %3 - %4.")
+                                             .arg((int)prdType)
+                                             .arg(siteShortName)
+                                             .arg(startDateTime.toString())
+                                             .arg(endDateTime.toString()).toStdString());
+                } else {
+                    prdPath = prdsList.at(prdsList.size()-1).fullPath;
+                }
+            } else {
+                prdPath = prdsList.at(prdsList.size()-1).fullPath;
+            }
+            return prdPath;
+        }
+
         int siteId;
         QString siteShortName;
-        QDateTime startDate;
-        QDateTime endDate;
+        QDateTime startDateTime;
+        QDateTime endDateTime;
+        QDateTime seasonStartDateTime;
+        QDateTime seasonEndDateTime;
         QStringList siteTiles;
         QString mdb1PrdPath;
         QString mdbL4OptMainPrdPath;
