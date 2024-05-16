@@ -294,6 +294,8 @@ def maccs_launcher(demmaccs_context, dem_output_dir):
     common_gipps = glob.glob("{}/{}/{}*_L_*.*".format(demmaccs_context.gipp_base_dir, gipp_sat_dir, full_gipp_sat_prefix))
     if len(common_gipps) == 0:
         common_gipps = glob.glob("{}/{}/{}*_L_*.*".format(demmaccs_context.gipp_base_dir, gipp_sat_dir, gipp_sat_prefix))
+    if sat_id == SENTINEL2_SATELLITE_ID:
+        common_gipps += glob.glob("{}/{}/S2__*_L_*.*".format(demmaccs_context.gipp_base_dir, gipp_sat_dir))
     
     print ("common_gipps is {}".format(common_gipps))
     if not create_sym_links(common_gipps, working_dir, l2a_log):
