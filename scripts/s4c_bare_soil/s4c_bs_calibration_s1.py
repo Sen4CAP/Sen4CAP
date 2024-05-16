@@ -15,7 +15,7 @@ import re
 from pyarrow import ipc
 import datetime as dt
 import time
-
+import sys
 
 ID_COL_NAME = "NewID"
 
@@ -239,6 +239,13 @@ def handle_file(input, output, training_S1):
     else :
         print("Invalid file type received as input (unknow extension for {})".format(input))
         sys.exit(1)
+
+    num_id = len(training_S1.NewID.unique())
+    print(f'Number of unique parcels {num_id}')
+    print('END')
+    if num_id == 0:
+        print("ERROR: No parcels generated in the output. Please check that the input MDB4 product was created with the provided declarations set!")
+        sys.exit(2)
 
     training_S1.to_csv(output,index=False)
 

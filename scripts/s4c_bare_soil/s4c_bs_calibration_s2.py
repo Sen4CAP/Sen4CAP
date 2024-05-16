@@ -17,6 +17,8 @@ import time
 from functools import partial
 from multiprocessing import Pool,cpu_count
 from statistics import mean
+import math
+import sys
 
 ID_COL_NAME = "NewID"
 
@@ -109,7 +111,7 @@ class SelectedColumns(object):
 
         if set(bands_forced_order) != set(self.dict_cols_indices.keys()) :
             print("Forces column order differ from the actual columns. Exiting ...")
-            sys.exit(1)
+            sys.exit(2)
 
         print("Mean indices: {}".format(self.mean_indices))
             
@@ -162,7 +164,7 @@ def get_selected_columns(columns, tiles_filter) :
                         if band in name:
                             if len(tiles_filter) > 0:
                                 for tile in tiles_filter:
-                                    if band in name:
+                                    if tile in name:
                                         col_names.append(name)
                                         global_col_indices.append(cur_idx)
                             else :
@@ -177,6 +179,17 @@ def get_selected_columns(columns, tiles_filter) :
 
     # print("Selected columns: {}".format(col_names))
     return SelectedColumns(col_names, global_col_indices, id_col_global_idx, ID_COL_NAME)
+
+def compute_mean(input_arr) :
+    sum = 0.0
+    vald_cnt = 0
+    for i in range(len(input_arr)):
+        if not math.isnan(input_arr[i]):
+            sum += input_arr[i]
+            vald_cnt = vald_cnt + 1
+    if vald_cnt == 0:
+        return np.nan
+    return (sum / vald_cnt)
 
 def handle_cropfield_entry(selCols, cropfield_descr):
     nb_values = len(selCols.unique_dates) 
@@ -196,7 +209,7 @@ def handle_cropfield_entry(selCols, cropfield_descr):
                     values[i] = cropfield_descr[date_idx.idxs[0]]
                 else :
                     vals = cropfield_descr[date_idx.idxs]
-                    values[i] = mean(vals)
+                    values[i] = compute_mean(vals)
             else:
                 values[i] = None
             i = i + 1        
@@ -337,7 +350,7 @@ def handle_file(config, input, output, lpis_csv):
         traint_all = handle_json_file(input, output, config.tiles, traint_all)        
     else :
         print("Invalid file type received as input (unknow extension for {})".format(input))
-        sys.exit(1)
+        sys.exit(3)
 
     extract_calibration_data_s2(config, traint_all, lpis_csv, output)
 
@@ -387,9 +400,12 @@ def extract_calibration_data_s2(config, traint_all, lpis_csv, output) :
 
     num_id = len(df_training.NewID.unique())
     print(f'Number of unique parcels {num_id}')
-
     df_training.to_csv(output, index=False)
     print('END')
+    
+    if num_id == 0:
+        print("ERROR: No parcels generated in the output. Please check that the input MDB1 product was created with the provided declarations set!")
+        sys.exit(4)
 
 def main():
     parser = argparse.ArgumentParser(

@@ -157,7 +157,7 @@ def get_selected_columns(columns, tiles_filter) :
                         if band in name:
                             if len(tiles_filter) > 0:
                                 for tile in tiles_filter:
-                                    if band in name:
+                                    if tile in name:
                                         col_names.append(name)
                                         global_col_indices.append(cur_idx)
                             else :

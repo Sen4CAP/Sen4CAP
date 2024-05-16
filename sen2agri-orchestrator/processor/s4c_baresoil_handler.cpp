@@ -170,7 +170,7 @@ QStringList S4CBareSoilHandler::GetMarkersTaskArgs(const S4CBareSoilJobConfig &c
                 "--out-markers-s1", outputS1Markers,
                 "--out-markers-all", outputAllMarkers,
                 "--start-date", cfg.startDate.toString("yyyy-MM-dd"),
-                "--end-date", cfg.endDate.toString("yyyy-MM-dd"),
+                "--end-date", cfg.endDate.addDays(1).toString("yyyy-MM-dd"),
                 "--p-long", QString::number(cfg.markersLongPeriod),
                 "--p-short", QString::number(cfg.markersShortPeriod),
                 "--s2-periods", QString::number(cfg.markersS2PeriodsNo),
