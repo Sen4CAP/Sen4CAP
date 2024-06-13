@@ -471,10 +471,13 @@ QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters
 
 QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters, const ProductType &prdType) {
     QString prdTypeStr;
-    if (prdType != ProductType::InvalidProductTypeId && prdType != ProductType::L2AProductTypeId &&
-            prdType != ProductType::MaskedL2AProductTypeId) {
+    if (prdType != ProductType::InvalidProductTypeId) {
         // Try to extract the products from the key specific for this product type
-        prdTypeStr = ProductHelper::GetProductTypeShortName(prdType);
+        if (prdType == ProductType::L2AProductTypeId || prdType == ProductType::MaskedL2AProductTypeId) {
+            prdTypeStr = ProductHelper::GetProductTypeShortName(ProductType::L2AProductTypeId);
+        } else {
+            prdTypeStr = ProductHelper::GetProductTypeShortName(prdType);
+        }
     }
     if (prdTypeStr.size() > 0) {
         const QStringList &listProducts = GetInputProductNames(parameters, "input_" + prdTypeStr);
