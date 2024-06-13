@@ -36,10 +36,10 @@ void ProductHelper::SetProduct(const ProductDetails &product)
     m_bValid = true;
 }
 
-void ProductHelper::SetProduct(const QString &product)
+void ProductHelper::SetProduct(const QString &productFullPath)
 {
     Product prd;
-    prd.fullPath = product;
+    prd.fullPath = productFullPath;
     m_prdDetails.GetProductRef() = prd;
     m_bValid = false;
 }

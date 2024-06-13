@@ -19,7 +19,7 @@ public:
     ProductHelper(const QString &product);
     ProductHelper(const ProductDetails &prdWrp);
 
-    virtual void SetProduct(const QString &product);
+    virtual void SetProduct(const QString &productFullPath);
     virtual void SetProduct(const ProductDetails &product);
 
     virtual bool IsValid() { return m_bValid; }
