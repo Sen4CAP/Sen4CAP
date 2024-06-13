@@ -127,7 +127,7 @@ void MaskedL2AHandler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     if (ret == 0) {
         ctx.MarkJobFailed(evt.jobId);
         throw std::runtime_error(
-                    QStringLiteral("L3B Scheduled job with id %1 for site %2 marked as done as no products are available for now to process").
+                    QStringLiteral("MaskedL2A Scheduled job with id %1 for site %2 marked as done as no products are available for now to process").
                                          arg(evt.jobId).arg(evt.siteId).toStdString());
     } else if (ret == -1) {
         // custom job
