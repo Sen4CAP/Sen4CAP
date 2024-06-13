@@ -35,32 +35,32 @@ namespace std {
 
 QList<MarkerType> S4CMarkersDB1DataExtractStepsBuilder::allMarkerFileTypes =
 {
-    // L2A markers
-    {"L2AB01", ProductType::L2AProductTypeId, "B01", "B01"},
-    {"L2AB02", ProductType::L2AProductTypeId, "B02", "B02"},
-    {"L2AB03", ProductType::L2AProductTypeId, "B03", "B03"},
-    {"L2AB04", ProductType::L2AProductTypeId, "B04", "B04"},
-    {"L2AB05", ProductType::L2AProductTypeId, "B05", "B05"},
-    {"L2AB06", ProductType::L2AProductTypeId, "B06", "B06"},
-    {"L2AB07", ProductType::L2AProductTypeId, "B07", "B07"},
-    {"L2AB08", ProductType::L2AProductTypeId, "B08", "B08"},
-    {"L2AB8A", ProductType::L2AProductTypeId, "B8A", "B8A"},
-    {"L2AB09", ProductType::L2AProductTypeId, "B09", "B09"},
-    {"L2AB10", ProductType::L2AProductTypeId, "B10", "B10"},
-    {"L2AB11", ProductType::L2AProductTypeId, "B11", "B11"},
-    {"L2AB12", ProductType::L2AProductTypeId, "B12", "B12"},
+    // L2A markers. If resolution set to -1 or 0 means not used
+    {"L2AB01", ProductType::L2AProductTypeId, "B01", "B01", 60},
+    {"L2AB02", ProductType::L2AProductTypeId, "B02", "B02", 10},
+    {"L2AB03", ProductType::L2AProductTypeId, "B03", "B03", 10},
+    {"L2AB04", ProductType::L2AProductTypeId, "B04", "B04", 10},
+    {"L2AB05", ProductType::L2AProductTypeId, "B05", "B05", 20},
+    {"L2AB06", ProductType::L2AProductTypeId, "B06", "B06", 20},
+    {"L2AB07", ProductType::L2AProductTypeId, "B07", "B07", 20},
+    {"L2AB08", ProductType::L2AProductTypeId, "B08", "B08", 10},
+    {"L2AB8A", ProductType::L2AProductTypeId, "B8A", "B8A", 20},
+    {"L2AB09", ProductType::L2AProductTypeId, "B09", "B09", 60},
+    {"L2AB10", ProductType::L2AProductTypeId, "B10", "B10", 60},
+    {"L2AB11", ProductType::L2AProductTypeId, "B11", "B11", 20},
+    {"L2AB12", ProductType::L2AProductTypeId, "B12", "B12", 20},
 
     // L3B markers
-    {"NDVI", ProductType::L3BProductTypeId, "SNDVI", ""},
-    {"LAI", ProductType::L3BProductTypeId, "SLAIMONO", ""},
-    {"FAPAR", ProductType::L3BProductTypeId, "SFAPARMONO", ""},
-    {"FCOVER", ProductType::L3BProductTypeId, "SFCOVERMONO", ""},
-    {"NDWI", ProductType::L3BProductTypeId, "SNDWI", ""},
-    {"BRIGHTNESS", ProductType::L3BProductTypeId, "SBRIGHT", ""},
+    {"NDVI", ProductType::L3BProductTypeId, "SNDVI", "", -1},
+    {"LAI", ProductType::L3BProductTypeId, "SLAIMONO", "", -1},
+    {"FAPAR", ProductType::L3BProductTypeId, "SFAPARMONO", "", -1},
+    {"FCOVER", ProductType::L3BProductTypeId, "SFCOVERMONO", "", -1},
+    {"NDWI", ProductType::L3BProductTypeId, "SNDWI", "", -1},
+    {"BRIGHTNESS", ProductType::L3BProductTypeId, "SBRIGHT", "", -1},
 
     // S1 markers
-    {"AMP", ProductType::S4CS1L2AmpProductTypeId, "AMP", ""},
-    {"COHE", ProductType::S4CS1L2CoheProductTypeId, "COHE", ""}
+    {"AMP", ProductType::S4CS1L2AmpProductTypeId, "AMP", "", -1},
+    {"COHE", ProductType::S4CS1L2CoheProductTypeId, "COHE", "", -1}
 };
 
 QList<MetricType> S4CMarkersDB1DataExtractStepsBuilder::supportedMetrics = {
@@ -238,8 +238,12 @@ void S4CMarkersDB1DataExtractStepsBuilder::Initialize(const QString &parentProc,
 
 void S4CMarkersDB1DataExtractStepsBuilder::InitEnabledMarkersDescriptions(const QStringList &markersEnabled)
 {
+    bool l2aMskEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters,
+                        pCtx->GetConfigurationParameters("processor.l2a_msk.enabled", siteId),
+                        "processor.l2a_msk.enabled", "");
+
     // check the enabled markers
-    for (const auto &marker: allMarkerFileTypes) {
+    for (auto marker: allMarkerFileTypes) {
         bool markerEnabled = false;
         if (markersEnabled.size() > 0) {
             if (markersEnabled.contains(marker.marker)) {
@@ -250,6 +254,9 @@ void S4CMarkersDB1DataExtractStepsBuilder::InitEnabledMarkersDescriptions(const 
                                                                        marker.marker.toLower() + "_enabled", MDB1_CFG_PREFIX);
         }
         if (markerEnabled) {
+            if (l2aMskEnabled && marker.prdType == ProductType::L2AProductTypeId) {
+                marker.prdType = ProductType::MaskedL2AProductTypeId;
+            }
             enabledMarkers.push_back(marker);
             if (!enabledMarkersProductTypes.contains(marker.prdType)) {
                 enabledMarkersProductTypes.push_back(marker.prdType);
@@ -267,12 +274,12 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
                  arg(siteId).arg(enabledMarkers.size()).arg(enabledMarkersProductTypes.size()));
     if (enabledMarkers.size() > 0) {
         for (ProductType prdType: enabledMarkersProductTypes) {
-            std::unique_ptr<ProductHelper> prdHelper = ProductHelperFactory::GetProductHelper(prdType);
-            // Here we need to use the parameters from the parent processor and not the MDB1 parameters
 
+            // Here we need to use the parameters from the parent processor and not the MDB1 parameters
             const ProductList &prds = ProcessorHandler::GetInputProducts(*(pCtx), parameters, parentConfigParameters, siteId, prdType,
                                                                     m_parentProcCfgPrefix, &prdMinDate, &prdMaxDate);
-            if (prds.size() == 0) {
+            const QList<ProductDetails> &prdDetailsList = ProcessorHandlerHelper::GetProductDetails(prds, *pCtx);
+            if (prdDetailsList.size() == 0) {
                 Logger::info(QStringLiteral("MDB1: No products found in DB on site %1 for product type %2").
                              arg(siteId).arg((int)prdType));
                 continue;
@@ -280,8 +287,10 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
             for (const auto &marker: enabledMarkers) {
                 QList<PrdFileInfo> missingPrdFiles;
                 QList<PrdFileInfo> processedPrdFiles;
-                for (const Product &prd: prds) {
-                    prdHelper->SetProduct(prd.fullPath);
+                for (const ProductDetails &prdDetails: prdDetailsList) {
+                    std::unique_ptr<ProductHelper> prdHelper = ProductHelperFactory::GetProductHelper(prdType);
+                    const Product &prd = prdDetails.GetProduct();
+                    prdHelper->SetProduct(prdDetails);
                     const QDateTime &prdDate = prd.created;
                     if (!prdDate.isValid()) {
                         continue;
@@ -297,18 +306,25 @@ void S4CMarkersDB1DataExtractStepsBuilder::ExtractProductFiles()
                     if (marker.prdType == prdType) {
                         // get all files for the marker type
                         const QStringList &rasterFiles = prdHelper->GetProductFiles(marker.markerSubstrInFileName);
+                        QString msk;
+                        if (prdType == ProductType::MaskedL2AProductTypeId && marker.nRes > 0) {
+                            const QStringList &msks = prdHelper->GetProductMasks(marker.nRes == 10 ? "_10M" : "_20M");
+                            if (msks.length() > 0) {
+                                msk = msks[0];
+                            }
+                        }
                         for (const auto &rasterFile : rasterFiles) {
                             if (isScheduledJob) {
                                 // first check if the product wasn't already processed
                                 const QString &dataExtrDirName = GetDataExtractionDir(prdYear, marker.marker);
-                                IsDataExtractionPerformed(dataExtrDirName, rasterFile) ? processedPrdFiles.push_back({rasterFile, prdDate}) :
-                                                                                         missingPrdFiles.push_back({rasterFile, prdDate});
+                                IsDataExtractionPerformed(dataExtrDirName, rasterFile) ? processedPrdFiles.push_back({rasterFile, prdDate, msk}) :
+                                                                                         missingPrdFiles.push_back({rasterFile, prdDate, msk});
                                 if (!markerDataExtrDirInfos[marker.marker].contains(dataExtrDirName)) {
                                     markerDataExtrDirInfos[marker.marker].push_back(dataExtrDirName);
                                 }
                             } else {
                                 // custom job, just add the file to the file infos list
-                                fileInfos.push_back({marker, rasterFile, prdDate});
+                                fileInfos.push_back({marker, rasterFile, prdDate, msk});
                             }
                         }
                     }
@@ -424,12 +440,18 @@ QStringList S4CMarkersDB1DataExtractStepsBuilder::GetDataExtractionFromShpArgs(c
     QStringList retArgs = { "Markers1Extractor", "-field", uidField,
                             "-prdtype", ProductHelper::GetProductTypeShortName(inputFileInfo.markerInfo.prdType),
                             "-outdir", outDir, "-il", inputFileInfo.prdFileInfo.inFilePath };
+    if (inputFileInfo.prdFileInfo.inFileMsk.size() > 0) {
+        retArgs += "-ilmsk";
+        retArgs += inputFileInfo.prdFileInfo.inFileMsk;
+    }
+
     QString idsGeomShapePath;
     QMap<int, LpisInfos>::const_iterator i = lpisInfos.find(inputFileInfo.prdFileInfo.prdTime.date().year());
 
     switch(inputFileInfo.markerInfo.prdType) {
         case ProductType::L3BProductTypeId:
         case ProductType::L2AProductTypeId:
+        case ProductType::MaskedL2AProductTypeId:
             idsGeomShapePath = i.value().opticalIdsGeomShapePath;   // we can do that as we previously removed the products that do not have LPIS
             break;
         default:

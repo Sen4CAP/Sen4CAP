@@ -45,11 +45,14 @@ typedef struct {
     // band that will be used from the raster (if correctly mapped, otherwise
     // it will not be possible to extract the markers)
     QString bandDiscriminationInfo;
+    // If resolution set to -1 or 0 means not used
+    int nRes;
 } MarkerType;
 
-typedef struct {
+typedef struct PrdFileInfo {
     QString inFilePath;
     QDateTime prdTime;
+    QString inFileMsk;
 } PrdFileInfo;
 
 typedef struct {
