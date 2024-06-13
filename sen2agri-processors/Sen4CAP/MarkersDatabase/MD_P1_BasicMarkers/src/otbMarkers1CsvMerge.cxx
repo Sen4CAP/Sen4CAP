@@ -463,6 +463,9 @@ private:
         otbAppLogINFO("Writing results to file " << outFilePath);
 
         outFileStream.open(outFilePath, std::ios_base::trunc | std::ios_base::out);
+        if (!outFileStream.is_open()) {
+            otbAppLogFATAL(<<"Cannot open output file for writing!");
+        }
     }
 
     int WriteHeader(std::ofstream &fileStream, const OutputHeader &hdr) {
