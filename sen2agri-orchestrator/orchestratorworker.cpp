@@ -267,7 +267,8 @@ static StepArgumentList getStepArguments(const JobStepToRun &step)
                 .toStdString());
     }
 
-    const auto &argNode = parametersDoc.object()[QStringLiteral("arguments")];
+    const auto &argsObj = parametersDoc.object();
+    const auto &argNode = argsObj[QStringLiteral("arguments")];
     if (!argNode.isArray()) {
         throw std::runtime_error(
             QStringLiteral("Unexpected step parameter JSON schema: node 'arguments' should be an "
