@@ -20,7 +20,7 @@
 namespace stefanfrings {
 
 /** Alias type definition, for compatibility to different Qt versions */
-#if QT_VERSION >= 0x050000
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
     typedef qintptr tSocketDescriptor;
 #else
     typedef int tSocketDescriptor;
@@ -44,7 +44,10 @@ namespace stefanfrings {
   </pre></code>
   <p>
   The readTimeout value defines the maximum time to wait for a complete HTTP request.
-  @see HttpRequest for description of config settings maxRequestSize and maxMultiPartSize.
+  <p>
+  MaxRequestSize is the maximum size of a HTTP request. In case of
+  multipart/form-data requests (also known as file-upload), the maximum
+  size of the body must not exceed maxMultiPartSize.
 */
 class DECLSPEC HttpConnectionHandler : public QObject {
     Q_OBJECT

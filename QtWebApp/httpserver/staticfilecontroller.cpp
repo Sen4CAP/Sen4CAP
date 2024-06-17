@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QDateTime>
+#include <QThread>
 
 using namespace stefanfrings;
 
@@ -33,7 +34,8 @@ StaticFileController::StaticFileController(const QSettings *settings, QObject* p
     maxCachedFileSize=settings->value("maxCachedFileSize","65536").toInt();
     cache.setMaxCost(settings->value("cacheSize","1000000").toInt());
     cacheTimeout=settings->value("cacheTime","60000").toInt();
-    qDebug("StaticFileController: cache timeout=%i, size=%i",cacheTimeout,cache.maxCost());
+    long int cacheMaxCost=(long int)cache.maxCost();
+    qDebug("StaticFileController: cache timeout=%i, size=%li",cacheTimeout,cacheMaxCost);
 }
 
 
@@ -52,7 +54,7 @@ void StaticFileController::service(HttpRequest &request, HttpResponse &response)
         qDebug("StaticFileController: Cache hit for %s",path.data());
         setContentType(filename,response);
         response.setHeader("Cache-Control","max-age="+QByteArray::number(maxAge/1000));
-        response.write(document);
+        response.write(document,true);
     }
     else
     {
@@ -79,6 +81,7 @@ void StaticFileController::service(HttpRequest &request, HttpResponse &response)
         {
             setContentType(path,response);
             response.setHeader("Cache-Control","max-age="+QByteArray::number(maxAge/1000));
+            response.setHeader("Content-Length",QByteArray::number(file.size()));
             if (file.size()<=maxCachedFileSize)
             {
                 // Return the file content and store it also in the cache
