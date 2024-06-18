@@ -16,5 +16,3 @@ RUN dnf -y --setopt=install_weak_deps=False update && \
     dnf clean all && \
     gem install fpm && \
     dnf -y remove ruby-devel
-
-COPY entry.sh /

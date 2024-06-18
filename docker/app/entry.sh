@@ -13,5 +13,3 @@ mkdir -p Sen2AgriRPM
 
 mv Sen2AgriApp/rpm_binaries/*.rpm \
    Sen2AgriRPM
-
-rm -rf Sen2AgriApp

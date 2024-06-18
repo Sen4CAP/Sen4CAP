@@ -4,7 +4,8 @@ docker build \
     .
 
 docker run -it --rm \
-       -v $(realpath ../..):/sen2agri:z \
-       sen2agri-app-build /bin/bash entry.sh
+       -v $PWD/../..:/sen2agri:z \
+       -v $PWD/entry.sh:/entry.sh:z \
+       sen2agri-app-build /entry.sh
 
-sudo chown $USER:$USER ../packaging/Sen2AgriApp/rpm_binaries/*.rpm
+sudo chown $USER:$USER ../../packaging/Sen2AgriRPM/sen2agri-app-*.rpm
