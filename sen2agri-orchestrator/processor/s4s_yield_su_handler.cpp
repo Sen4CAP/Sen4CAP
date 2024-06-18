@@ -16,7 +16,7 @@ using namespace orchestrator::products;
 static QStringList YIELD_INPUT_MARKER_NAMES = {"LAI"};
 
 QList<std::reference_wrapper<TaskToSubmit>>
-S4SYieldSUHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit> &outAllTasksList,
+S4SYieldSUHandler::CreateTasks(const S4SYieldJobConfig & /* cfg */, QList<TaskToSubmit> &outAllTasksList,
                              const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder)
 {
     int curTaskIdx = 0;
@@ -384,7 +384,7 @@ QStringList S4SYieldSUHandler::GetCropTypesExtractionTaskArgs(int siteId, int ye
 }
 
 QStringList S4SYieldSUHandler::GetYieldModelTaskArgs(const S4SYieldJobConfig &cfg, const QString & cropCodesFile, const QString & inYieldFeatures,
-                                                     const QString &inPrevYearsYieldFeatures, const QString &outYieldEstimates, const QString &outYieldSUEstimates)
+                                                     const QString &inPrevYearsYieldFeatures, const QString &outYieldEstimates, const QString & /* outYieldSUEstimates */)
 {
     const QString &algo = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
                                                                                "algorithm", S4S_YIELD_SU_CFG_PREFIX);

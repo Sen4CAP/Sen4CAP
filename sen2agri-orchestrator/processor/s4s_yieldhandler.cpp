@@ -16,7 +16,7 @@ using namespace orchestrator::products;
 static QStringList YIELD_INPUT_MARKER_NAMES = {"LAI"};
 
 QList<std::reference_wrapper<TaskToSubmit>>
-S4SYieldHandler::CreateTasks(const S4SYieldJobConfig &cfg, QList<TaskToSubmit> &outAllTasksList,
+S4SYieldHandler::CreateTasks(const S4SYieldJobConfig & /* cfg */, QList<TaskToSubmit> &outAllTasksList,
                              const S4CMarkersDB1DataExtractStepsBuilder &dataExtrStepsBuilder)
 {
     int curTaskIdx = 0;

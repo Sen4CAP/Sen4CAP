@@ -135,12 +135,20 @@ class S4CChangeDetectionHandler : public ProcessorHandler
             if (startDateSeason.startDate.isValid()) {
                 processingSeason = startDateSeason;
                 if(endDate > processingSeason.endDate.addDays(1)) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                    endDateTime = processingSeason.endDate.startOfDay(QTimeZone::systemTimeZone());
+#else
                     endDateTime = QDateTime(processingSeason.endDate);
+#endif
                 }
             } else if (endDateSeason.startDate.isValid()) {
                 processingSeason = endDateSeason;
                 if(startDate < processingSeason.startDate) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+                    startDateTime = processingSeason.startDate.startOfDay(QTimeZone::systemTimeZone());
+#else
                     startDateTime = QDateTime(processingSeason.startDate);
+#endif
                 }
             } else {
                 pContext->MarkJobFailed(jobId);
@@ -150,8 +158,13 @@ class S4CChangeDetectionHandler : public ProcessorHandler
                             .arg(endDateTime.toString())
                             .arg(siteId).toStdString());
             }
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+            seasonStartDateTime = processingSeason.startDate.startOfDay(QTimeZone::systemTimeZone());
+            seasonEndDateTime = processingSeason.endDate.startOfDay(QTimeZone::systemTimeZone());
+#else
             seasonStartDateTime = QDateTime(processingSeason.startDate);
             seasonEndDateTime = QDateTime(processingSeason.endDate);
+#endif
         }
 
         static bool ComparePrdsByDates(const Product &prd1, const Product &prd2)
