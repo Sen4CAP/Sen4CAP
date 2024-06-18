@@ -6,10 +6,8 @@ export LD_LIBRARY_PATH=/opt/rh/rh-ruby23/root/usr/lib64
 
 cd sen2agri/packaging
 rm -rf Sen2AgriPlatform \
-       Sen2AgriApp \
        Sen2AgriProcessors
-rm -rf Sen2AgriRPM/sen2agri-app-*.rpm \
-       Sen2AgriRPM/sen2agri-downloaders-demmaccs-*.rpm \
+rm -rf Sen2AgriRPM/sen2agri-downloaders-demmaccs-*.rpm \
        Sen2AgriRPM/sen2agri-processors-*.rpm
 
 mkdir -p Sen2AgriRPM
@@ -22,14 +20,11 @@ then
     cp Sen2AgriPlatform/rpm_binaries/otb-*.rpm Sen2AgriRPM
 fi
 
-sudo yum -y install Sen2AgriRPM/otb-*.rpm
+yum -y install Sen2AgriRPM/otb-*.rpm
 
 ./Sen2AgriProcessorsBuild.sh
-./Sen2AgriAppBuild.sh
 
-mv Sen2AgriApp/rpm_binaries/*.rpm \
-   Sen2AgriProcessors/rpm_binaries/*.rpm \
+mv Sen2AgriProcessors/rpm_binaries/*.rpm \
    Sen2AgriRPM
 
-rm -rf Sen2AgriApp \
-       Sen2AgriProcessors
+rm -rf Sen2AgriProcessors
