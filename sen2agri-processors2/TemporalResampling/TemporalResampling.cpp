@@ -61,7 +61,7 @@ private:
         SetParameterDescription("outdates", "Output dates.");
 
         AddParameter(ParameterType_StringList, "inoffsets", "Input offsets");
-        SetParameterDescription("inoffsets", "Input offsets.");
+        SetParameterDescription("inoffsets", "Input offsets, to be subtracted.");
         MandatoryOff("inoffsets");
 
         AddParameter(ParameterType_Int, "bv", "Masked value");
