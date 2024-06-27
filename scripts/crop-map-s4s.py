@@ -4,6 +4,7 @@ from __future__ import print_function
 import argparse
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from enum import IntEnum
 import glob
 import json
 import logging
@@ -347,7 +348,21 @@ def run_containers_concurrently(client, pool, containers):
 
 class L2AProduct(object):
     def __init__(
-        self, date, b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12, mask_10m, mask_20m
+        self,
+        date,
+        b2,
+        b3,
+        b4,
+        b5,
+        b6,
+        b7,
+        b8,
+        b8a,
+        b11,
+        b12,
+        mask_10m,
+        mask_20m,
+        band_offsets,
     ):
         self.date = date
         self.b2 = b2
@@ -362,6 +377,7 @@ class L2AProduct(object):
         self.b12 = b12
         self.mask_10m = mask_10m
         self.mask_20m = mask_20m
+        self.band_offsets = band_offsets
 
 
 class ProcessorConfig:
@@ -472,6 +488,22 @@ from site_tiles
     return tiles
 
 
+class Sentinel2Band(IntEnum):
+    B1 = 0
+    B2 = 1
+    B3 = 2
+    B4 = 3
+    B5 = 4
+    B6 = 5
+    B7 = 6
+    B8 = 7
+    B8A = 8
+    B9 = 9
+    B10 = 10
+    B11 = 11
+    B12 = 12
+
+
 def get_maja_band_files(path):
     files = glob.glob(os.path.join(path, "*_FRE_*.tif"))
     b2 = next((p for p in files if p.endswith("_FRE_B2.tif")), None)
@@ -484,7 +516,8 @@ def get_maja_band_files(path):
     b8a = next((p for p in files if p.endswith("_FRE_B8A.tif")), None)
     b11 = next((p for p in files if p.endswith("_FRE_B11.tif")), None)
     b12 = next((p for p in files if p.endswith("_FRE_B12.tif")), None)
-    return (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12)
+    band_offsets = {}
+    return (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12, band_offsets)
 
 
 def get_sen2cor_band_files(path):
@@ -500,7 +533,18 @@ def get_sen2cor_band_files(path):
     b8a = next((p for p in files_20m if p.endswith("_B8A_20m.jp2")), None)
     b11 = next((p for p in files_20m if p.endswith("_B11_20m.jp2")), None)
     b12 = next((p for p in files_20m if p.endswith("_B12_20m.jp2")), None)
-    return (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12)
+
+    metadata = os.path.join(path, "../../../MTD_MSIL2A.xml")
+    parser = etree.XMLPullParser(["start"])
+    with open(metadata, "r") as file:
+        parser.feed(file.read())
+    band_offsets = {}
+    for event, elem in parser.read_events():
+        if elem.tag == "BOA_ADD_OFFSET":
+            band_id = int(elem.attrib["band_id"])
+            offset = int(elem.text)
+            band_offsets[band_id] = offset
+    return (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12, band_offsets)
 
 
 def get_band_files(l2a_path):
@@ -530,7 +574,7 @@ def get_product(name, l2a_path, created_timestamp, mask_path):
     if not res:
         print("Missing files for", l2a_path)
         return None
-    (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12) = res
+    (b2, b3, b4, b5, b6, b7, b8, b8a, b11, b12, band_offsets) = res
 
     if (
         not b2
@@ -560,6 +604,7 @@ def get_product(name, l2a_path, created_timestamp, mask_path):
         b12,
         mask_10m,
         mask_20m,
+        band_offsets,
     )
     return product
 
@@ -1870,7 +1915,7 @@ def main():
 
     containers = []
     tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
-    for tile in products_by_tile.keys():
+    for tile, products in products_by_tile.items():
         b2_vrt = f"S2_B02_{tile}.vrt"
         b3_vrt = f"S2_B03_{tile}.vrt"
         b4_vrt = f"S2_B04_{tile}.vrt"
@@ -1893,6 +1938,13 @@ def main():
 
         mask_10m_vrt = f"mask_10m_{tile}.vrt"
         mask_20m_vrt = f"mask_20m_{tile}.vrt"
+
+        band_offsets = [
+            (b, [-(p.band_offsets.get(b) or 0) for p in products]) for b in range(13)
+        ]
+        band_offsets_str = dict(
+            [(b, [str(o) for o in offsets]) for (b, offsets) in band_offsets]
+        )
 
         interpolation_no_data = -10000
         # interpolation_max_distance = 30
@@ -1926,15 +1978,20 @@ def main():
             ]
 
         if feature_set.need_s2_b2() and not os.path.exists(b2_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b2_vrt,
-                "-mask",
-                mask_10m_vrt,
-                "-out",
-                b2_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b2_vrt,
+                    "-mask",
+                    mask_10m_vrt,
+                    "-out",
+                    b2_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B2]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -1945,15 +2002,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b3() and not os.path.exists(b3_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b3_vrt,
-                "-mask",
-                mask_10m_vrt,
-                "-out",
-                b3_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b3_vrt,
+                    "-mask",
+                    mask_10m_vrt,
+                    "-out",
+                    b3_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B3]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -1964,15 +2026,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b4() and not os.path.exists(b4_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b4_vrt,
-                "-mask",
-                mask_10m_vrt,
-                "-out",
-                b4_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b4_vrt,
+                    "-mask",
+                    mask_10m_vrt,
+                    "-out",
+                    b4_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B4]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -1983,15 +2050,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b8() and not os.path.exists(b8_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b8_vrt,
-                "-mask",
-                mask_10m_vrt,
-                "-out",
-                b8_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b8_vrt,
+                    "-mask",
+                    mask_10m_vrt,
+                    "-out",
+                    b8_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B8]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2002,15 +2074,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b5() and not os.path.exists(b5_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b5_vrt,
-                "-mask",
-                mask_20m_vrt,
-                "-out",
-                b5_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b5_vrt,
+                    "-mask",
+                    mask_20m_vrt,
+                    "-out",
+                    b5_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B5]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2021,15 +2098,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b6() and not os.path.exists(b6_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b6_vrt,
-                "-mask",
-                mask_20m_vrt,
-                "-out",
-                b6_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b6_vrt,
+                    "-mask",
+                    mask_20m_vrt,
+                    "-out",
+                    b6_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B6]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2040,15 +2122,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b7() and not os.path.exists(b7_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b7_vrt,
-                "-mask",
-                mask_20m_vrt,
-                "-out",
-                b7_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b7_vrt,
+                    "-mask",
+                    mask_20m_vrt,
+                    "-out",
+                    b7_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B7]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2059,15 +2146,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b11() and not os.path.exists(b11_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b11_vrt,
-                "-mask",
-                mask_20m_vrt,
-                "-out",
-                b11_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b11_vrt,
+                    "-mask",
+                    mask_20m_vrt,
+                    "-out",
+                    b11_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B11]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
@@ -2078,15 +2170,20 @@ def main():
             )
             containers.append(container)
         if feature_set.need_s2_b12() and not os.path.exists(b12_tif):
-            command = [
-                "otbcli_TemporalResampling",
-                "-in",
-                b12_vrt,
-                "-mask",
-                mask_20m_vrt,
-                "-out",
-                b12_tif + tiling_suffix,
-            ] + common_temporal_resampling_args
+            command = (
+                [
+                    "otbcli_TemporalResampling",
+                    "-in",
+                    b12_vrt,
+                    "-mask",
+                    mask_20m_vrt,
+                    "-out",
+                    b12_tif + tiling_suffix,
+                    "-inoffsets",
+                ]
+                + band_offsets_str[Sentinel2Band.B12]
+                + common_temporal_resampling_args
+            )
             container = ContainerInfo(
                 image=PROCESSORS_NEW_IMAGE_NAME,
                 command=command,
