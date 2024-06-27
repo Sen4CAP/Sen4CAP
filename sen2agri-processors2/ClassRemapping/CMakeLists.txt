@@ -1,4 +1,3 @@
-find_package(OTB REQUIRED)
 include(${OTB_USE_FILE})
 
 otb_create_application(
