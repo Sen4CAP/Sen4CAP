@@ -29,7 +29,7 @@ from configparser import ConfigParser
 
 
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
-PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.1.0"
+PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.2.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
 ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.1.0"
 
