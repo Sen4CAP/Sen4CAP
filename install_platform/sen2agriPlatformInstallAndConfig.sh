@@ -432,9 +432,6 @@ function install_RPMs()
    ##install Sen2Agri Processors
    yum -y install ../rpm_binaries/sen2agri-processors-*.centos7.x86_64.rpm
 
-   ln -s /usr/lib64/libproj.so.0 /usr/lib64/libproj.so
-   ldconfig
-
    ##install Sen2Agri Services
    yum -y install ../rpm_binaries/sen2agri-app-*.centos7.x86_64.rpm
 
