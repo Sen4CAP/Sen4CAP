@@ -426,13 +426,6 @@ function install_RPMs()
    ##install a couple of packages
    yum -y install gdal-python python2-psycopg2 python-dateutil gd
 
-   ##install gdal 2.3 from the local repository
-   yum -y install ../rpm_binaries/gdal-local-*.centos7.x86_64.rpm
-
-   # Some GDAL Python tools will pick the wrong GDAL version, but
-   # we don't need them
-   rm -f /usr/local/bin/gdal_edit.py
-
    ##install Orfeo ToolBox
    yum -y install ../rpm_binaries/otb-*.rpm
 
