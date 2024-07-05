@@ -1236,7 +1236,8 @@ def run_training(
     processor_config: ProcessorConfig,
     strata: List[Stratum],
     stratum_band_names: List[str],
-):
+) -> List[str]:
+    confusion_matrices = []
     for stratum, band_names in zip(strata, stratum_band_names):
         band_names_lower = list(map(lambda x: x.lower(), band_names))
 
@@ -1254,6 +1255,7 @@ def run_training(
 
             model = "model.yaml"
             confusion_matrix = "confusion_matrix.txt"
+        confusion_matrices.append(confusion_matrix)
 
         command = [
             "otbcli_TrainVectorClassifier",
@@ -1298,6 +1300,7 @@ def run_training(
             res = container.run(client)
             if res and res["StatusCode"] != 0:
                 print(res)
+    return confusion_matrices
 
 
 def run_classification(
@@ -2640,7 +2643,7 @@ def main():
             stratum_band_names,
         )
         run_sample_augmentation(client, pool_no_conc, output_dir, volumes, env, strata)
-        run_training(
+        confusion_matrices = run_training(
             client,
             output_dir,
             volumes,
@@ -2717,7 +2720,8 @@ def main():
                     classified_pre_tif = f"classified_pre_{tile_id}.tif"
                     shutil.copy2(classified_pre_tif, args.output_path)
 
-            shutil.copy2(confusion_matrix, args.output_path)
+            for confusion_matrix in confusion_matrices:
+                shutil.copy2(confusion_matrix, args.output_path)
 
 
 if __name__ == "__main__":
