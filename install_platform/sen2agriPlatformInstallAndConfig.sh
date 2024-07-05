@@ -324,7 +324,7 @@ function install_and_config_postgresql()
    # NB: the container uses `trust`, not `peer` for local connections
 
    # Install `psql` and client libraries
-   yum -y install postgresql15
+   yum -y install postgresql16
 
    #------------DATABASE CREATION------------#
     #DB_NAME=$(head -q -n 1 ./config/db_name.conf 2>/dev/null)
@@ -689,7 +689,7 @@ disable_selinux
 disable_firewall
 
 ##install EPEL for dependencies, PGDG for the Postgres client libraries and
-yum -y install epel-release https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm yum-utils
+yum -y install epel-release https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm yum-utils
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum -y update epel-release pgdg-redhat-repo
 yum -y install docker-ce docker-ce-cli containerd.io docker-compose gdal jq
