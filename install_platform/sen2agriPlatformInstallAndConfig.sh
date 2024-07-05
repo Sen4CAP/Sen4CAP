@@ -406,8 +406,6 @@ function install_downloaders_demmacs()
    ##install Sen2Agri Downloaders  & Demmacs
    yum -y install ../rpm_binaries/sen2agri-downloaders-demmaccs-*.centos7.x86_64.rpm
 
-   ldconfig
-
    #reload daemon to update it with new services
    systemctl daemon-reload
 
