@@ -688,6 +688,7 @@ disable_firewall
 
 ##install EPEL for dependencies, PGDG for the Postgres client libraries and
 yum -y install epel-release https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm yum-utils
+dnf config-manager --disable pgdg12 pgdg13 pgdg14 pgdg15
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum -y update epel-release pgdg-redhat-repo
 yum -y install docker-ce docker-ce-cli containerd.io docker-compose gdal jq
