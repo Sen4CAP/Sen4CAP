@@ -1456,6 +1456,8 @@ begin
             $str$;
             raise notice '%', _statement;
             execute _statement;
+
+            _statement := $str$
                 INSERT INTO config_category VALUES (8, 'Executor', 8, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
                 INSERT INTO config_category VALUES (12, 'Dashboard', 9, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
                 INSERT INTO config_category VALUES (13, 'Monitoring Agent', 10, false) ON conflict(id) DO UPDATE SET allow_per_site_customization = false;
@@ -1466,7 +1468,6 @@ begin
                 INSERT INTO config_category VALUES (22, 'S4C L4A Crop Type', 22, true) ON conflict(id) DO UPDATE SET name = 'S4C L4A Crop Type';
                 INSERT INTO config_category VALUES (23, 'S1 L2 Pre-processor', 23, true) on conflict DO nothing;
                 INSERT INTO config_category VALUES (26, 'S4C Markers Database 1', 26, true)  ON conflict(id) DO UPDATE SET name = 'S4C Markers Database 1';
-            _statement := $str$
             $str$;
             raise notice '%', _statement;
             execute _statement;
@@ -2663,8 +2664,8 @@ begin
                 DELETE from config_metadata where key = 'processor.s4c_l4b.input_ndvi';
                 DELETE from config_metadata where key = 'processor.s4c_l4c.input_ndvi';
                
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
-                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, FALSE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_l3b', 'The list of L3B products', 'select', FALSE, 19, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
+                INSERT INTO config_metadata VALUES ('processor.s4c_l4c.input_l3b', 'The list of L3B products', 'select', FALSE, 20, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
                 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of L3B products', 'select', FALSE, 26, TRUE, 'Available L3B input files', '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_L3B[]","product_type_id":3,"satellite_ids":[1,2]}';
                 
                 INSERT INTO config_metadata VALUES ('processor.s4c_l4b.input_amp', 'The list of AMP products', 'select', FALSE, 19, TRUE, 'Available AMP input files', '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}') ON conflict(key) DO UPDATE SET values = '{"name":"inputFiles_AMP[]","product_type_id":10,"satellite_ids":[3]}'; 
