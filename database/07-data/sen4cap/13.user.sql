@@ -1,1 +1,0 @@
-select sp_adduser('sen4cap', 'sen4cap@c-s.ro', 'sen4cap', cast(1 as smallint));

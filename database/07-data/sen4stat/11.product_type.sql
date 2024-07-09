@@ -1,0 +1,14 @@
+﻿update product_type set description ='L2A Atmospheric correction', is_raster = true where id = 1;
+update product_type set description ='L1C product', is_raster = true where id = 7;
+update product_type set description ='Sentinel 1 L2 Amplitude product', is_raster = true where id = 10;
+update product_type set description ='Sentinel 1 L2 Coherence product', is_raster = true where id = 11;
+update product_type set description ='L2A product with validity mask', is_raster = true where id = 26;
+update product_type set description ='ERA5 dayily weather averages', is_raster = true where id = 29;
+update product_type set description ='L3 Yield Features', is_raster = false where id = 28;
+update product_type set description ='L4 Permanent crops', is_raster = false where id = 27;
+update product_type set description ='FMask product', is_raster = true where id = 25;
+update product_type set description ='L3 Composite product', is_raster = true where id = 2;
+update product_type set description ='L3 Basic Features', is_raster = false where id = 17;
+update product_type set description ='L3 Vegetation Status', is_raster = true where id = 3;
+update product_type set description ='Parcels product', is_raster = false where id = 14;
+update product_type set description ='Crop Type Mapping product', is_raster = true where id = 32;

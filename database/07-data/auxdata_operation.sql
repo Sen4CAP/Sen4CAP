@@ -1,4 +1,4 @@
-
+-- Sen4CAP
 -- Declarations operations
 INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async)
             VALUES 	(1, 1, 1, 'Upload', '{executor.module.path.lpis_list_columns}', 8, '{"parameters": [{"name": "file", "command": "-p", "type": "java.io.File", "required": true, "refFileId": 1}]}', '{"columns":"string[]"}', false);
@@ -25,3 +25,27 @@ INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handl
 INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
             VALUES (8, 8, 1, 'Import', '{executor.module.path.l4c_practices_import}', 11, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 8},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name":"practice","command":"--practice","label":null,"type":"java.lang.String","required":"true", "defaultValue":"NA"}, {"name": "l4cPracticesRootPath","label": null,"type": "java.lang.String","value":"{processor.s4c_l4c.cfg_dir}", "required": true}]}', null, true);            
 
+-- Sen4Stat
+-- Declarations operations
+INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) VALUES (9, 9, 1, 'Upload', '{executor.module.path.lpis_list_columns}', 8, '{"parameters": [{"name": "file", "command": "-p", "type": "java.io.File", "required": true, "refFileId": 9}]}', '{"columns":"string[]"}', false);
+INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) VALUES (10, 9, 2, 'Import', '{executor.module.path.s4s_parcels_import}', 8, '{"parameters": [{"name": "lpisFile", "command": "--parcels-geom", "type": "java.io.File", "required": true, "refFileId": 9},{"name": "lutFile", "command": "--statistical-data", "type": "java.io.File", "required": false, "refFileId": 10}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name": "lpisRootPath","label": null,"type": "java.lang.String","value":"{processor.insitu.path}", "required": true}]}', null, true);
+
+
+-- Admin Units
+-- INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async)
+--            VALUES  (11, 11, 1, 'Upload', '{executor.module.path.s4s_admin_units_import}', 8, '{"parameters": [{"name": "file", "command": "--regions-file", "type": "java.io.File", "required": true, "refFileId": 11},{"name": "file", "command": "--provinces-file", "type": "java.io.File", "required": true, "refFileId": 12}, {"name": "file", "command": "--municipalities-file", "type": "java.io.File", "required": true, "refFileId": 13}, {"name": "file", "command": "--segments-file", "type": "java.io.File", "required": true, "refFileId": 14}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "adminUnitsRootPath","label": null,"type": "java.lang.String","value":"{processor.lpis.path}", "required": true}]}', null, true);
+
+-- SAFY params
+INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (15, 15, 1, 'Import', '{executor.module.path.s4s_yield_safy_import}', 17, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 15},{"name": "year","command":"--year","label": "Year","type": "java.lang.Integer","required": true}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "safyParamsImportRootPath","label": null,"type": "java.lang.String","value":"{processor.s4s_yield_feat.safy_params_upload_dir}", "required": true},{"name": "safyConfigTarget", "label": null,"type": "java.lang.String","value":"{processor.s4s_yield_feat.safy_params_path}", "required": true}]}', null, true);            
+
+-- Sen2Agri
+INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (16, 16, 1, 'Import', '{executor.module.path.s2a_insitu_import}', 5, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 16},{"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "insituImportRootPath","label": null,"type": "java.lang.String","value":"{processor.l4a.reference_data_dir}", "required": true}]}', null, true);
+INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (17, 16, 2, 'Import', '{executor.module.path.s2a_insitu_import}', 6, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 16},{"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "insituImportRootPath","label": null,"type": "java.lang.String","value":"{processor.l4a.reference_data_dir}", "required": true}]}', null, true);            
+            
+-- SU Yield Historical Data
+INSERT INTO auxdata_operation (id, auxdata_file_id, operation_order, name, handler_path, processor_id, parameters, output_type, async) 
+            VALUES (18, 17, 1, 'Import', '{executor.module.path.s4s_yield_su_historical_data_import}', 27, '{"parameters": [{"name": "file", "command": "--input-file", "type": "java.io.File", "required": true, "refFileId": 17}, {"name":"siteId","command":"--site-id","label":null,"type":"java.lang.Integer","required":"true"}, {"name": "suYieldHistDataImportRootPath","label": null,"type": "java.lang.String","value":"{processor.s4s_yield_su.historical_data_upload_dir}", "required": true},{"name": "suYieldHistDataTarget", "label": null,"type": "java.lang.String","value":"{processor.s4s_yield_su.historical_data_path}", "required": true}]}', null, true);            
+            

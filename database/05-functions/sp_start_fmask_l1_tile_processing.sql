@@ -123,6 +123,7 @@ begin
             where fmask_history.downloader_history_id = downloader_history.id
         )
         and downloader_history.status_id in (2, 5, 7) -- downloaded, processing
+        and downloader_history.product_name not like '%_MSIL2A_%'
         and site.enabled
         and fmask_enabled
         and case downloader_history.satellite_id
