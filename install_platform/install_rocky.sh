@@ -38,6 +38,7 @@ source ./common_functions.sh
 : ${SLURM_CONF_PATH:="/etc/slurm"}
 : ${SLURM_CLUSTER_NAME:="sen2agri"}
 : ${SLURM_MACHINE_NOCPUS:=$(cat /proc/cpuinfo | grep processor | wc -l)}
+: ${SRC_SLURM_CONFIG:="slurm_rocky.conf"}
 : ${SLURM_CONFIG:="slurm.conf"}
 : ${SLURM_CONFIG_DB:="slurmdbd.conf"}
 
@@ -53,8 +54,8 @@ MONITOR_AGENT_SERVICE_IDENTIFIER="sen2agri-monitor-agent"
 JAVA_VER=22
 
 #----------------SLURM MYSQL DATABASE CREATION---------------------------------------------#
-MYSQL_DB_CREATION="create database slurm_acct_db;create user slurm@localhost;
-set password for slurm@localhost = password('sen2agri');"
+MYSQL_DB_CREATION="create database slurm_acct_db;create user slurm;
+set password for slurm = password('sen2agri');"
 MYSQL_DB_ACCESS_GRANT="grant usage on *.* to slurm;grant all privileges on slurm_acct_db.* to slurm;flush privileges;"
 MYSQL_CMD=${MYSQL_DB_CREATION}${MYSQL_DB_ACCESS_GRANT}
 #------------------------------------------------------------------------------------------#
@@ -72,8 +73,8 @@ function parse_and_update_slurm_conf_file()
    ####  copy conf files to /etc/slurm
    ####################################
    mkdir -p ${SLURM_CONF_PATH}
-   cp $(find ./ -name ${SLURM_CONFIG}) ${SLURM_CONF_PATH}
-   cp $(find ./ -name ${SLURM_CONFIG_DB}) ${SLURM_CONF_PATH}
+   cp -f $(find ./ -name ${SRC_SLURM_CONFIG}) ${SLURM_CONF_PATH}/${SLURM_CONFIG}
+   cp -f $(find ./ -name ${SLURM_CONFIG_DB}) ${SLURM_CONF_PATH}
    chown slurm:slurm ${SLURM_CONF_PATH}/${SLURM_CONFIG_DB}
    chmod 600 ${SLURM_CONF_PATH}/${SLURM_CONFIG_DB}
 
@@ -83,7 +84,8 @@ function parse_and_update_slurm_conf_file()
 function create_slurm_data_base()
 {
    ##install expect
-   yum -y install expect expectk
+   # yum -y install expect expectk
+   dnf -y install expect
 
    ##install mysql (mariadb)
    yum -y install mariadb-server mariadb
@@ -196,10 +198,10 @@ function config_and_start_slurm_service()
    echo "SLURM NODE SERVICE: $(systemctl status slurmd | grep "Active")"
 
    ##start slurm service (slurm)
-   systemctl start slurm
+   # systemctl start slurm
 
    ##enable slurm service to start at boot
-   systemctl enable slurm
+   # systemctl enable slurm
 
    ##get status of slurm service service
    echo "SLURM SERVICE: $(systemctl status slurm | grep "Active")"
@@ -322,10 +324,10 @@ function config_docker()
     docker run --rm -u $(id -u $SYS_ACC_NAME):$(id -g $SYS_ACC_NAME) -v /etc/sen2agri/${SERVICES_CONFIGURATION_NAME}.conf:/etc/sen2agri/sen2agri.conf -v /var/lib/t-rex:/var/lib/t-rex sen4cap/data-preparation:0.2 t-rex-genconfig.py --stub /var/lib/t-rex/t-rex.toml
 
     cd docker
-    docker-compose up -d
+    docker compose up -d
 
     RETRIES=120
-    until docker-compose exec db pg_isready || [ $RETRIES -eq 0 ]; do
+    until docker compose exec db pg_isready || [ $RETRIES -eq 0 ]; do
         echo "Waiting for postgres, $RETRIES remaining attempts..."
         RETRIES=$((RETRIES-1))
         sleep 1
@@ -335,12 +337,12 @@ function config_docker()
     sleep 120
 
     RETRIES=120
-    until docker-compose exec db pg_isready || [ $RETRIES -eq 0 ]; do
+    until docker compose exec db pg_isready || [ $RETRIES -eq 0 ]; do
         echo "Waiting for postgres, $RETRIES remaining attempts..."
         RETRIES=$((RETRIES-1))
         sleep 1
     done
-
+    
     cd ..
 }
 #-----------------------------------------------------------#
@@ -450,7 +452,7 @@ function install_downloaders_demmacs()
    else 
       yum -y install ../rpm_binaries/sen2agri-downloaders-demmaccs-*.centos7.x86_64.rpm
    fi
-
+   
    #reload daemon to update it with new services
    systemctl daemon-reload
 
@@ -467,7 +469,7 @@ function install_RPMs()
    ##########################################################
 
    ##install a couple of packages
-   yum -y install gdal-python python2-psycopg2 python-dateutil gd
+   yum -y install python3-gdal gdal-python python3-psycopg2 python2-psycopg2 python-dateutil gd
 
    ##install Orfeo ToolBox
    yum -y install ../rpm_binaries/otb-*.rpm
@@ -763,7 +765,7 @@ function install_sen2agri_services()
         tr -d '\r' < /usr/share/sen2agri/${SERVICES_IDENTIFIER}/bin/start.sh > /usr/share/sen2agri/${SERVICES_IDENTIFIER}/bin/start.sh.tmp && cp -f /usr/share/sen2agri/${SERVICES_IDENTIFIER}/bin/start.sh.tmp /usr/share/sen2agri/${SERVICES_IDENTIFIER}/bin/start.sh && rm /usr/share/sen2agri/${SERVICES_IDENTIFIER}/bin/start.sh.tmp
         # ensure the execution flag
         chmod a+x /usr/share/sen2agri/${SERVICES_IDENTIFIER}/bin/start.sh
-
+     
         # it might happen that some files to be packaged with the wrong read rights
         chmod -R a+r /usr/share/sen2agri/${SERVICES_IDENTIFIER}/
 
@@ -838,7 +840,7 @@ yum -y install epel-release https://download.postgresql.org/pub/repos/yum/reporp
 dnf config-manager --disable pgdg12 pgdg13 pgdg14 pgdg15
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum -y update epel-release pgdg-redhat-repo
-yum -y install docker-ce docker-ce-cli containerd.io docker-compose gdal jq wget
+dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin unzip gdal jq wget 
 
 systemctl enable docker
 systemctl restart docker
