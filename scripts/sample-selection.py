@@ -579,6 +579,9 @@ order by random();
             training_pixels = defaultdict(lambda: 0)
             training_target = {}
 
+            PURPOSE_TRAINING = 0
+            PURPOSE_VALIDATION = 1
+
             smote_targets = {}
             with conn.cursor() as cursor:
                 query_args = (config.site_id, stratum.stratum_id or 0)
@@ -642,11 +645,11 @@ order by random();
                         pixels = training_pixels[crop_code]
                         if pixels < crop_target:
                             training_pixels[crop_code] = pixels + pix_10m
-                            purpose = 0  # training
+                            purpose = PURPOSE_TRAINING
                         else:
-                            purpose = 1  # validation
+                            purpose = PURPOSE_VALIDATION
                     else:
-                        purpose = 1  # validation
+                        purpose = PURPOSE_VALIDATION
 
                     tile_output = tile_outputs.get(tile_id)
                     if not tile_output:
@@ -670,7 +673,7 @@ order by random();
                         )
                         tile_outputs[tile_id] = tile_output
 
-                    if purpose == 0:
+                    if purpose == PURPOSE_TRAINING:
                         feature = ogr.Feature(training_feature_defn)
                         feature.SetFID(parcel_id)
                         feature.SetField("id", parcel_id)
