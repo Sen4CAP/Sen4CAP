@@ -514,6 +514,7 @@ order by site_id;"""
           and not multipart
           and not overlap
           --  and quality_control
+          and attributes.tile_id is not null
           and pix_10m >= pix_min
           and (monitored_land_covers is null
             or code_n1 = any (monitored_land_covers))
