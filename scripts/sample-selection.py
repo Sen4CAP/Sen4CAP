@@ -640,7 +640,7 @@ order by random();
                         assert crop_target
                         crop_target = math.ceil(crop_target)
                         pixels = training_pixels[crop_code]
-                        if pixels + pix_10m <= crop_target:
+                        if pixels < crop_target:
                             training_pixels[crop_code] = pixels + pix_10m
                             purpose = 0  # training
                         else:
