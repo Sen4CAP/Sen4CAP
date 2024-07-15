@@ -12,6 +12,7 @@ import glob
 import json
 import logging
 from lxml.builder import E
+import math
 import os
 import os.path
 from osgeo import gdal, ogr, osr
@@ -637,6 +638,7 @@ order by random();
                                 smote_targets[crop_code] = smote_target
 
                         assert crop_target
+                        crop_target = math.ceil(crop_target)
                         pixels = training_pixels[crop_code]
                         if pixels + pix_10m <= crop_target:
                             training_pixels[crop_code] = pixels + pix_10m
