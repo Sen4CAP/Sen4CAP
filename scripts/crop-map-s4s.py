@@ -1248,13 +1248,13 @@ def run_training(
             validation_samples = f"validation_samples_{stratum.stratum_id}.vrt"
 
             model = f"model_{stratum.stratum_id}.yaml"
-            confusion_matrix = f"confusion_matrix_{stratum.stratum_id}.txt"
+            confusion_matrix = f"confusion_matrix_pre_{stratum.stratum_id}.txt"
         else:
             training_samples_augmented = "training_samples_augmented.vrt"
             validation_samples = "validation_samples.vrt"
 
             model = "model.yaml"
-            confusion_matrix = "confusion_matrix.txt"
+            confusion_matrix = "confusion_matrix_pre.txt"
         confusion_matrices.append(confusion_matrix)
 
         command = [
@@ -1317,10 +1317,10 @@ def run_classification(
     for stratum in strata:
         if stratum.stratum_id:
             model = f"model_{stratum.stratum_id}.yaml"
-            confusion_matrix = f"confusion_matrix_{stratum.stratum_id}.txt"
+            confusion_matrix = f"confusion_matrix_pre_{stratum.stratum_id}.txt"
         else:
             model = "model.yaml"
-            confusion_matrix = "confusion_matrix.txt"
+            confusion_matrix = "confusion_matrix_pre.txt"
 
         if not os.path.exists(model) or not os.path.exists(confusion_matrix):
             continue
