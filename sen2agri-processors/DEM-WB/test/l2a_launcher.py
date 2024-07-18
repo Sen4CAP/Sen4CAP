@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 _____________________________________________________________________________
@@ -26,7 +26,7 @@ import sys
 import time
 import pipes
 import datetime
-import Queue
+import queue
 import threading
 import shutil
 import signal
@@ -466,7 +466,7 @@ class L2aMaster(object):
         self.num_workers = num_workers
         self.db_config = db_config
         self.node_id = node_id
-        self.master_q = Queue.Queue(maxsize=self.num_workers)
+        self.master_q = queue.Queue(maxsize=self.num_workers)
         self.workers = []
         self.launcher_log = launcher_log
         self.running_containers = set()
@@ -501,7 +501,7 @@ class L2aMaster(object):
                 # wait for a worker to finish
                 try:
                     msg_to_master = self.master_q.get(timeout=5)
-                except Queue.Empty:
+                except queue.Empty:
                     continue
                 if msg_to_master.message_type == CONTAINER_STATUS_MSG_TYPE:
                     if msg_to_master.is_running:
@@ -602,7 +602,7 @@ class L2aWorker(threading.Thread):
         super(L2aWorker, self).__init__()
         self.worker_id = worker_id
         self.master_q = master_q
-        self.worker_q = Queue.Queue(maxsize=1)
+        self.worker_q = queue.Queue(maxsize=1)
         self.launcher_log = LogHandler(
             launcher_log.path,
             launcher_log.name,
@@ -1202,7 +1202,7 @@ class Maja(L2aProcessor):
                     msg_text = message.find("text").get_text()
                     if msg_type == "W" or msg_type == "E":
                         self.update_rejection_reason(msg_text)
-			self.l2a_log.error(msg_text, print_msg = True)
+                    self.l2a_log.error(msg_text, print_msg = True)
                     if msg_type == "I" and re.search(
                         "code return: 0", msg_text, re.IGNORECASE
                     ):
