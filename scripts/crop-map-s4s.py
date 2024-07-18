@@ -1237,6 +1237,10 @@ def run_training(
     strata: List[Stratum],
     stratum_band_names: List[str],
 ) -> List[str]:
+    remapping_table = "remapping-table.csv"
+    if not os.path.exists(remapping_table):
+        remapping_table = None
+
     confusion_matrices = []
     for stratum, band_names in zip(strata, stratum_band_names):
         band_names_lower = list(map(lambda x: x.lower(), band_names))
@@ -1248,14 +1252,27 @@ def run_training(
             validation_samples = f"validation_samples_{stratum.stratum_id}.vrt"
 
             model = f"model_{stratum.stratum_id}.yaml"
-            confusion_matrix = f"confusion_matrix_pre_{stratum.stratum_id}.txt"
+
+            if remapping_table:
+                confusion_matrix_pre = f"confusion_matrix_pre_{stratum.stratum_id}.txt"
+                confusion_matrix = f"confusion_matrix_{stratum.stratum_id}.txt"
+            else:
+                confusion_matrix_pre = f"confusion_matrix_{stratum.stratum_id}.txt"
+                confusion_matrix = None
         else:
             training_samples_augmented = "training_samples_augmented.vrt"
             validation_samples = "validation_samples.vrt"
 
             model = "model.yaml"
-            confusion_matrix = "confusion_matrix_pre.txt"
-        confusion_matrices.append(confusion_matrix)
+
+            if remapping_table:
+                confusion_matrix_pre = "confusion_matrix_pre.txt"
+                confusion_matrix = "confusion_matrix.txt"
+            else:
+                confusion_matrix_pre = "confusion_matrix.txt"
+            confusion_matrix = None
+
+        confusion_matrices.append(confusion_matrix_pre)
 
         command = [
             "otbcli_TrainVectorClassifier",
@@ -1266,7 +1283,7 @@ def run_training(
             "-io.out",
             model,
             "-io.confmatout",
-            confusion_matrix,
+            confusion_matrix_pre,
             "-cfield",
             "crop_code",
             "-classifier",
@@ -1300,6 +1317,20 @@ def run_training(
             res = container.run(client)
             if res and res["StatusCode"] != 0:
                 print(res)
+
+        if confusion_matrix:
+            command = [
+                "remap-confusion-matrix.py",
+                "--confusion-matrix",
+                confusion_matrix_pre,
+                "--remapping-table",
+                remapping_table,
+                "--remapped-confusion-matrix",
+                confusion_matrix,
+            ]
+            run_command(command)
+            confusion_matrices.append(confusion_matrix)
+
     return confusion_matrices
 
 
