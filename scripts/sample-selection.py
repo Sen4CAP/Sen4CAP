@@ -613,21 +613,20 @@ order by random();
                         crop_target = None
                         if strategy == 1:
                             crop_target = sample_ratio_hi * crop_pixels
-                            if crop_code not in training_target:
-                                print(
-                                    "Target pixels for crop {}: {}".format(
-                                        crop_code, crop_target
-                                    )
-                                )
-                            training_target[crop_code] = crop_target
                         elif strategy == 2 or strategy == 3:
                             crop_target = sample_ratio_lo * crop_pixels
-                            if crop_code not in training_target:
-                                print(
-                                    "Target pixels for crop {}: {}".format(
-                                        crop_code, crop_target
-                                    )
+                        else:
+                            raise RuntimeError(
+                                f"Invalid strategy for crop {crop_code}: {strategy}"
+                            )
+
+                        crop_target = math.ceil(crop_target)
+                        if crop_code not in training_target:
+                            print(
+                                "Target pixels for crop {}: {}".format(
+                                    crop_code, crop_target
                                 )
+                            )
                             training_target[crop_code] = crop_target
 
                         if strategy == 3:
@@ -640,8 +639,6 @@ order by random();
                             if crop_code not in smote_targets:
                                 smote_targets[crop_code] = smote_target
 
-                        assert crop_target
-                        crop_target = math.ceil(crop_target)
                         pixels = training_pixels[crop_code]
                         if pixels < crop_target:
                             training_pixels[crop_code] = pixels + pix_10m
