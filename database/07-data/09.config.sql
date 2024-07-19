@@ -61,7 +61,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.http
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.mdb3-input-tables-extract.docker_image', NULL, 'sen4cap/data-preparation:0.1', '2021-02-19 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.mdb3-input-tables-extract.use_docker', NULL, '1', '2021-01-18 14:43:00.720811+00');
 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4s-crop-type-mapping.docker_image', NULL, 'sen4x/crop-map-s4s:0.2.0', '2022-08-22 14:43:00.720811+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.s4s-crop-type-mapping.docker_image', NULL, 'sen4x/crop-map-s4s:0.3.0', '2022-08-22 14:43:00.720811+00');
 
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('orchestrator.check_ancestors.disabled', NULL, 'true', '2023-03-17 14:43:00.720811+00');
 
@@ -169,11 +169,11 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.pa
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.temporal.offset', NULL, '6','2020-07-22 19:52:22.42305+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.work.dir', NULL, '/mnt/archive/s1_preprocessing_work_dir', '2017-10-24 14:56:57.501918+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.compute.amplitude', NULL, true, '2022-09-30 10:31:00.501+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.compute.coherence', NULL, true, '2022-09-30 10:31:00.501+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.compute.coherence', NULL, true, '2022-09-30 10:31:00.501+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.gpt.parallelism', NULL, '8', '2022-09-30 10:31:00.501+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.gpt.tile.cache.size', NULL, '256', '2022-09-30 10:31:00.501+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.join.amplitude.steps', NULL, false, '2022-09-30 10:31:00.501+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.join.coherence.steps', NULL, false, '2022-09-30 10:31:00.501+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.join.coherence.steps', NULL, false, '2022-09-30 10:31:00.501+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.acquisition.delay', NULL, '2', '2022-09-30 10:31:00.501+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.copy.locally', NULL, true, '2022-09-30 10:31:00.501+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.l2s1.crop.nodata', NULL, true, '2022-09-30 10:31:00.501+02');
@@ -502,18 +502,18 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.median_enabled', NULL, 'false', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.p25_enabled', NULL, 'false', '2020-12-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.p75_enabled', NULL, 'false', '2020-12-16 17:31:06.01191+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab02_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab03_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab04_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab05_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab06_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab07_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab08_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab8a_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab11_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab12_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab02_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab03_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab04_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab05_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab06_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab07_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab08_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab8a_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab11_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.l2ab12_enabled', NULL, 'false', '2021-05-16 17:31:06.01191+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.mdb3_enabled', NULL, 'false', '2021-10-01 17:31:06.01191+02');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.mdb3_input_tables', NULL, '/mnt/archive/marker_database_files/mdb1/{site}/{year}/input_tables.csv', '2021-05-16 17:31:06.01191+02'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb1.mdb3_input_tables', NULL, '/mnt/archive/marker_database_files/mdb1/{site}/{year}/input_tables.csv', '2021-05-16 17:31:06.01191+02');
 
 -- -----------------------------------------------------------
 -- FMask Specific Keys
@@ -679,8 +679,8 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4s_yie
 -- -----------------------------------------------------------
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.module.path.trex-updater', NULL, 't-rex-genconfig.py', '2021-10-11 22:39:08.407059+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('executor.processor.trex.slurm_qos', NULL, 'qostrex', '2021-10-11 17:44:38.29255+03');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.use_docker', NULL, '1', '2021-02-19 14:43:00.720811+00'); 
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.docker_image', NULL, 'sen4cap/data-preparation:0.1', '2021-02-19 14:43:00.720811+00'); 
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.use_docker', NULL, '1', '2021-02-19 14:43:00.720811+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.docker_image', NULL, 'sen4cap/data-preparation:0.1', '2021-02-19 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('general.orchestrator.trex-updater.docker_add_mounts', NULL, '/var/run/docker.sock:/var/run/docker.sock,/var/lib/t-rex:/var/lib/t-rex', '2021-02-19 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.trex.t-rex-container', NULL, 'docker_t-rex_1', '2021-10-11 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.trex.t-rex-output-file', NULL, '/var/lib/t-rex/t-rex.toml', '2021-10-11 11:09:43.978921+02');
@@ -889,7 +889,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_cha
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.bs_ids_mapping', NULL, '', '2023-03-31 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.sites_ids_mapping', NULL, '', '2023-03-31 11:09:43.978921+02');
 
--- Reference period Grassland changes 
+-- Reference period Grassland changes
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_grassland_ttdayss2_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_grassland_ttdayss2_incr', NULL, 2, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_grassland_ratiostab_min_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
@@ -898,7 +898,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_cha
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_grassland_ratiostab_max_incr', NULL, 1.5, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_grassland_consecstab_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_grassland_consecstab_incr', NULL, 1, '2023-10-03 11:09:43.978921+02');
--- Reference period Permanent crops changes 
+-- Reference period Permanent crops changes
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_permcrops_ttdayss2_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_permcrops_ttdayss2_incr', NULL, 3, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_permcrops_areaveg_thr', NULL, 50, '2023-10-03 11:09:43.978921+02');
@@ -909,7 +909,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_cha
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_arableland_ttdayss2_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.ref_arableland_ttdayss2_incr', NULL, 1, '2023-10-03 11:09:43.978921+02');
 
--- Current year Grassland changes 
+-- Current year Grassland changes
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.grassland_ttdayss2_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.grassland_ttdayss2_incr', NULL, 2, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.grassland_ratiostab_min_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
@@ -918,7 +918,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_cha
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.grassland_ratiostab_max_incr', NULL, 1.5, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.grassland_consecstab_thr', NULL, 1, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.grassland_consecstab_incr', NULL, 1, '2023-10-03 11:09:43.978921+02');
--- Current year Permanent crops changes 
+-- Current year Permanent crops changes
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.permcrops_ttdayss2_thr', NULL, 0, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.permcrops_ttdayss2_incr', NULL, 3, '2023-10-03 11:09:43.978921+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_change_detection.permcrops_areaveg_thr', NULL, 25, '2023-10-03 11:09:43.978921+02');
