@@ -469,7 +469,7 @@ function install_RPMs()
    ##########################################################
 
    ##install a couple of packages
-   yum -y install python3-gdal gdal-python python3-psycopg2 python2-psycopg2 python-dateutil gd
+   yum -y install python3-gdal python3-psycopg2 python-dateutil gd
 
    ##install Orfeo ToolBox
    yum -y install ../rpm_binaries/otb-*.rpm
