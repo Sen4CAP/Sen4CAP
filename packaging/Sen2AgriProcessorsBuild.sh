@@ -92,10 +92,10 @@ function build_SEN2AGRI_downloaders_demmacs_RPM_Package()
    ##downloaders/demmaccs services will be installed in folder : usr/lib/systemd/system
    mkdir -p ${DOWNL_DEM_INSTALL_PATH}/usr/lib/systemd/system
 
-   ##downloaders/demmaccs common *.py scripts will reside to  /usr/lib/python2.7/site-packages/
+   ##downloaders/demmaccs common *.py scripts will reside to  /usr/lib/python3.9/site-packages/
 
    ##create folder tree into install folder : usr/
-   mkdir -p ${DOWNL_DEM_INSTALL_PATH}/usr/lib/python2.7/site-packages
+   mkdir -p ${DOWNL_DEM_INSTALL_PATH}/usr/lib/python3.9/site-packages
 
    ###########################################
    #DOWNLOADERS
@@ -138,7 +138,7 @@ function build_SEN2AGRI_downloaders_demmacs_RPM_Package()
    ###########################################
    #DOWNLOADERS DEMMACCS COMMON
    ###########################################
-   cp -f ${SOURCES_DIR_PATH}/python-libs/*.py  ${DOWNL_DEM_INSTALL_PATH}/usr/lib/python2.7/site-packages
+   cp -f ${SOURCES_DIR_PATH}/python-libs/*.py  ${DOWNL_DEM_INSTALL_PATH}/usr/lib/python3.9/site-packages
 
    ###########################################
    #PACKAGE BUILD
