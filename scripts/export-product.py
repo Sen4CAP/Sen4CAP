@@ -52,6 +52,10 @@ class Config(object):
         self.user = parser.get("Database", "UserName")
         self.password = parser.get("Database", "Password")
 
+        # work around Docker networking scheme
+        if self.host == "127.0.0.1" or self.host == "::1" or self.host == "localhost":
+            self.host = "172.17.0.1"
+
         self.filter = args.filter
 
 
