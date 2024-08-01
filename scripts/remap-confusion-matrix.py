@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-import argparse
+# Python 3.8 compat
+from __future__ import annotations
 
+import argparse
 
 REFERENCE_LABELS = "#Reference labels (rows):"
 PRODUCED_LABELS = "#Produced labels (columns):"
