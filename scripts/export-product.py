@@ -52,7 +52,6 @@ class Config(object):
         self.user = parser.get("Database", "UserName")
         self.password = parser.get("Database", "Password")
 
-        self.ogr2ogr_path = args.ogr2ogr_path
         self.filter = args.filter
 
 
@@ -78,9 +77,9 @@ def get_product_info(conn, product_id):
         return row
 
 
-def get_export_table_command(ogr2ogr_path, destination, source, *options):
+def get_export_table_command(destination, source, *options):
     command = []
-    command += [ogr2ogr_path]
+    command += ["ogr2ogr"]
     command += [destination, source]
     command += options
     return command
@@ -143,7 +142,6 @@ def export_crop_type(
 
     name = os.path.splitext(os.path.basename(gpkg_path))[0]
     command = get_export_table_command(
-        config.ogr2ogr_path,
         gpkg_path,
         pg_path,
         "-nln",
@@ -185,14 +183,10 @@ def export_crop_type(
     )
     query = query.as_string(conn)
 
-    command = get_export_table_command(
-        config.ogr2ogr_path, csv_path, pg_path, "-sql", query, "-gt", 100000
-    )
+    command = get_export_table_command(csv_path, pg_path, "-sql", query, "-gt", 100000)
     commands.append(command)
 
-    command = get_export_table_command(
-        config.ogr2ogr_path, lut_path, pg_path, lut_table, "-gt", 100000
-    )
+    command = get_export_table_command(lut_path, pg_path, lut_table, "-gt", 100000)
     commands.append(command)
 
     pool.map(run_command, commands)
@@ -301,7 +295,6 @@ def export_agricultural_practices(
         outputs.append(file)
         table_name = os.path.splitext(name)[0].lower()
         command = get_export_table_command(
-            config.ogr2ogr_path,
             file,
             pg_path,
             "-nln",
@@ -332,9 +325,6 @@ def main():
     )
     parser.add_argument("-p", "--product-id", type=int, help="product id")
     parser.add_argument("-w", "--working-path", help="working path")
-    parser.add_argument(
-        "-g", "--ogr2ogr-path", default="ogr2ogr", help="The path to ogr2ogr"
-    )
     parser.add_argument("--filter", help="additional SQL filter")
     parser.add_argument("output", help="output path")
 

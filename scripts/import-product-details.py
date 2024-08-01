@@ -45,7 +45,6 @@ class Config(object):
         self.user = parser.get("Database", "UserName")
         self.password = parser.get("Database", "Password")
 
-        self.ogr2ogr_path = args.ogr2ogr_path
 
 
 def get_product_info(conn, product_id):
@@ -79,9 +78,9 @@ def get_practice(name):
         return None
 
 
-def get_import_table_command(ogr2ogr_path, destination, source, *options):
+def get_import_table_command(destination, source, *options):
     command = []
-    command += [ogr2ogr_path]
+    command += ["ogr2ogr"]
     command += options
     command += [destination, source]
     return command
@@ -114,7 +113,6 @@ def import_crop_type(config, conn, pg_path, product_id, path):
         drop_table(conn, table_name)
 
         command = get_import_table_command(
-            config.ogr2ogr_path,
             pg_path,
             file,
             "-nln",
@@ -175,7 +173,6 @@ def import_agricultural_practices(config, conn, pg_path, product_id, path):
         drop_table(conn, table_name)
 
         command = get_import_table_command(
-            config.ogr2ogr_path,
             pg_path,
             file,
             "-nln",
@@ -294,9 +291,6 @@ def main():
         help="configuration file location",
     )
     parser.add_argument("-p", "--product-id", type=int, help="product id")
-    parser.add_argument(
-        "-g", "--ogr2ogr-path", default="ogr2ogr", help="The path to ogr2ogr"
-    )
 
     args = parser.parse_args()
 
