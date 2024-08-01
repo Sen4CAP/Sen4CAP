@@ -1,0 +1,1 @@
+../../scripts/import-product-details.py

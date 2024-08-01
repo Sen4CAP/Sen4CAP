@@ -1,0 +1,1 @@
+../../scripts/export-product-launcher.py
