@@ -1,4 +1,4 @@
-FROM sen4x/gdal-py:3.3.2
+FROM sen4x/gdal-py:3.9.1
 
 COPY crop-type-parcels2.py /usr/local/bin
 COPY remap-confusion-matrix.py /usr/local/bin
