@@ -1270,7 +1270,7 @@ def run_training(
                 confusion_matrix = "confusion_matrix.txt"
             else:
                 confusion_matrix_pre = "confusion_matrix.txt"
-            confusion_matrix = None
+                confusion_matrix = None
 
         confusion_matrices.append(confusion_matrix_pre)
 
