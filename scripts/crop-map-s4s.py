@@ -31,7 +31,7 @@ from configparser import ConfigParser
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.2.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
-ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.1.0"
+ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.1.4"
 
 
 def parse_date(str):
@@ -1169,24 +1169,21 @@ def run_sample_augmentation(
 
             if not os.path.exists(output):
                 command = [
-                    "otbcli_SampleAugmentation",
-                    "-in",
+                    "erdy",
+                    "sample-augmentation",
                     training_samples,
-                    "-out",
                     output,
-                    "-label",
+                    "--label",
                     crop_code,
-                    "-samples",
+                    "--samples",
                     str(target),
-                    "-field",
+                    "--field",
                     "crop_code",
-                    "-exclude",
+                    "--exclude",
                     "id",
                     "pix_10m",
                     "strategy",
                     "originfid",
-                    "-strategy",
-                    "smote",
                 ]
                 commands.append(command)
             smote_outputs.append(output)
@@ -1196,7 +1193,7 @@ def run_sample_augmentation(
     containers = []
     for command in commands:
         container = ContainerInfo(
-            image=OTB_IMAGE_NAME,
+            image=ERDY_IMAGE_NAME,
             command=command,
             working_dir=output_dir,
             volumes=volumes,
