@@ -1,4 +1,4 @@
-FROM rockylinux:9
+FROM almalinux:9
 
 LABEL name="sen2agri-app-build" \
     maintainer="Laurentiu Nicola <laurentiu.nicola@c-s.ro>"

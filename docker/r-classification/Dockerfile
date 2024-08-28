@@ -1,4 +1,4 @@
-FROM rockylinux:9
+FROM almalinux:9
 
 LABEL name='r-classification' \
     maintainer='Laurentiu Nicola <laurentiu.nicola@c-s.ro>'
