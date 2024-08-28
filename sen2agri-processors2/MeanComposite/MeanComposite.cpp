@@ -166,10 +166,10 @@ void CompositeFilter<TInputImageType, TOutputImageType>::ThreadedGenerateData(
 
 namespace Wrapper
 {
-class Composite2 : public Application
+class MeanComposite : public Application
 {
 public:
-    typedef Composite2 Self;
+    typedef MeanComposite Self;
     typedef Application Superclass;
     typedef itk::SmartPointer<Self> Pointer;
     typedef itk::SmartPointer<const Self> ConstPointer;
@@ -189,7 +189,7 @@ public:
 private:
     void DoInit() override
     {
-        SetName("Composite2");
+        SetName("MeanComposite");
         SetDescription("Computes a composite of multiple images");
 
         SetDocLongDescription("Computes a mean composite of multiple images.");
@@ -251,4 +251,4 @@ private:
 } // namespace Wrapper
 } // namespace otb
 
-OTB_APPLICATION_EXPORT(otb::Wrapper::Composite2)
+OTB_APPLICATION_EXPORT(otb::Wrapper::MeanComposite)

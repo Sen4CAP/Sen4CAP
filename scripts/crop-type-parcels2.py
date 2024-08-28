@@ -947,7 +947,7 @@ class WeeklyCompositeS4S(object):
             ]
 
             command = []
-            command += ["otbcli", "Composite2"]
+            command += ["otbcli", "MeanComposite"]
             command += ["-progress", "false"]
             command += [
                 "-out",
