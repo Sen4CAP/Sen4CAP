@@ -1,1 +1,1 @@
-tar -czh . | docker build -t sen4x/crop-map-s4s:0.4.0 -
+tar -czh . | docker build -t sen4x/crop-map-s4s:0.3.0 -

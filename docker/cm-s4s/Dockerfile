@@ -1,4 +1,4 @@
-FROM sen4x/gdal-py:3.9.1
+FROM sen4x/gdal-py:3.3.2
 
 COPY export-product-launcher.py /usr/local/bin
 COPY export-product.py /usr/local/bin
