@@ -731,10 +731,10 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4s_cro
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4s_crop_mapping.start_date',  NULL, '', '2023-10-04 15:27:41.861613+02');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4s_crop_mapping.end_date',  NULL, '', '2023-03-04 15:27:41.861613+02');
 
-insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.pix-min', null, '3', '2021-08-30 13:56:07.537023+03');
-insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.pix-best', null, '10', '2021-08-30 13:56:07.537023+03');
+insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.pix-min', null, '1', '2021-08-30 13:56:07.537023+03');
+insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.pix-best', null, '1', '2021-08-30 13:56:07.537023+03');
 insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.pix-ratio-min', null, '0.0002', '2021-08-30 13:56:07.537023+03');
-insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.poly-min', null, '10', '2021-08-30 13:56:07.537023+03');
+insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.poly-min', null, '1', '2021-08-30 13:56:07.537023+03');
 insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.pix-ratio-hi', null, '0.05', '2021-08-30 13:56:07.537023+03');
 insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.pix-ratio-lo', null, '0.01', '2021-08-30 13:56:07.537023+03');
 insert into config(key, site_id, value, last_updated) values ('processor.s4s_crop_mapping.monitored-land-covers', null, '{1,2,3,4,5,6,7,8,9}', '2021-08-30 13:56:07.537023+03');
