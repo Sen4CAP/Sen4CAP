@@ -403,7 +403,7 @@ class FmaskProcessor(object):
         if (command_return == 0) and os.path.isdir(self.fmask.output_path):
             return True
         else:
-            self.lin.should_retry = False
+            self.lin.should_retry = True
             rejection_reason = "Can NOT run Fmask script, error code: {}.".format(command_return)
             self.update_rejection_reason(rejection_reason)
             self.fmask_log.error(rejection_reason)
@@ -423,7 +423,7 @@ class FmaskProcessor(object):
             self.move_to_destination()
         else:
             self.lin.processing_status = DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
-            self.lin.should_retry = False #TBD
+            self.lin.should_retry = True #TBD
 
     def run(self):
         preprocess_successful = False
@@ -800,13 +800,6 @@ class Tile(object):
             )
             log.error(rejection_reason, print_msg = True)
             return False, rejection_reason
-
-        if not os.path.exists(self.path):
-            rejection_reason = "Aborting processing for product with downloaded history id {} because the path is incorrect".format(
-                self.downloader_history_id
-            )
-            log.error(rejection_reason, print_msg = True)
-            return False ,rejection_reason
 
         return True, None
 
