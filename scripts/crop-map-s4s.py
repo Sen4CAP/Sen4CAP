@@ -28,7 +28,8 @@ import shutil
 from configparser import ConfigParser
 
 
-OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
+OTB_NEW_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
+OTB_OLD_IMAGE_NAME = "docker.io/sen4x/otb:6.6.1"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.2.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
 ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.2.1"
@@ -1209,6 +1210,7 @@ def run_training(
     stratum_band_names: List[str],
     training_map_augmented: Dict[Optional[int], List[str]],
     validation_map: Dict[Optional[int], List[str]],
+    use_old_otb: bool,
 ) -> List[str]:
     remapping_table = "remapping-table.csv"
     if not os.path.exists(remapping_table):
@@ -1278,7 +1280,7 @@ def run_training(
         if not os.path.exists(model):
             print(" ".join(command))
             container = ContainerInfo(
-                image=OTB_IMAGE_NAME,
+                image=OTB_OLD_IMAGE_NAME if use_old_otb else OTB_NEW_IMAGE_NAME,
                 command=command,
                 working_dir=output_dir,
                 volumes=volumes,
@@ -1311,6 +1313,7 @@ def run_classification(
     volumes: Dict[str, Dict[str, str]],
     env: Dict[str, str],
     strata: List[Stratum],
+    use_old_otb: bool,
 ):
     tiling_suffix = "?&gdal:co:TILED=YES&gdal:co:COMPRESS=DEFLATE&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
 
@@ -1374,7 +1377,7 @@ def run_classification(
     containers = []
     for command in commands:
         container = ContainerInfo(
-            image=OTB_IMAGE_NAME,
+            image=OTB_OLD_IMAGE_NAME if use_old_otb else OTB_NEW_IMAGE_NAME,
             command=command,
             working_dir=output_dir,
             volumes=volumes,
@@ -1626,6 +1629,12 @@ def main():
     parser.add_argument("--stratum-filter", help="stratum filter", type=int, nargs="*")
     parser.add_argument("--stratum-start-dates", help="stratum start dates", nargs="*")
     parser.add_argument("--stratum-end-dates", help="stratum end dates", nargs="*")
+    parser.add_argument(
+        "--use-old-otb",
+        help="use old OTB, for > 2 GB models",
+        default=False,
+        action="store_true",
+    )
 
     args = parser.parse_args()
 
@@ -2652,6 +2661,7 @@ def main():
             stratum_band_names,
             training_map_augmented,
             validation_map,
+            args.use_old_otb,
         )
 
         remapping_table_name = "remapping-table.csv"
@@ -2662,7 +2672,9 @@ def main():
             remapping_table = None
             remapping_enabled = False
 
-        run_classification(client, pool_med_conc, output_dir, volumes, env, strata)
+        run_classification(
+            client, pool_med_conc, output_dir, volumes, env, strata, args.use_old_otb
+        )
 
         if strata[0].stratum_id:
             rasterize_stratum_masks(tiles, strata, strata_for_tile)
