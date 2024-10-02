@@ -1318,17 +1318,11 @@ def run_classification(
     for stratum in strata:
         if stratum.stratum_id:
             model = f"model_{stratum.stratum_id}.yaml"
-            confusion_matrix = f"confusion_matrix_pre_{stratum.stratum_id}.txt"
         else:
             model = "model.yaml"
-            confusion_matrix = "confusion_matrix_pre.txt"
 
-        if not os.path.exists(model) or not os.path.exists(confusion_matrix):
+        if not os.path.exists(model):
             continue
-
-        with open(confusion_matrix, "rt", encoding="utf-8") as file:
-            line = file.readline()
-            num_classes = line.count(",") + 1
 
         remapping_table_name = "remapping-table.csv"
         if os.path.exists(remapping_table_name):
@@ -1374,10 +1368,6 @@ def run_classification(
                     model,
                     "-confmap",
                     confidence_map_tif + tiling_suffix,
-                    "-probamap",
-                    probability_map_tif + tiling_suffix,
-                    "-nbclasses",
-                    str(num_classes),
                 ]
                 commands.append(command)
 
