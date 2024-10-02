@@ -1239,36 +1239,41 @@ def run_training(
 
         confusion_matrices.append(confusion_matrix_pre)
 
-        command = [
-            "otbcli_TrainVectorClassifier",
-            "-io.vd",
-            training_samples_augmented,
-            "-valid.vd",
-            validation_samples,
-            "-io.out",
-            model,
-            "-io.confmatout",
-            confusion_matrix_pre,
-            "-cfield",
-            "crop_code",
-            "-classifier",
-            "rf",
-            "-classifier.rf.max",
-            str(processor_config.max_depth),
-            "-classifier.rf.min",
-            str(processor_config.min_samples),
-            "-classifier.rf.nbtrees",
-            str(processor_config.num_trees),
-            # "-classifier.rf.ra",
-            # "0",
-            # "-classifier.rf.cat",
-            # "10",
-            # "-classifier.rf.var",
-            # "0",
-            # "-classifier.rf.acc",
-            # "0.01",
-            "-feat",
-        ] + band_names_lower
+        training_samples_augmented = training_map_augmented[stratum.stratum_id]
+        validation_samples = validation_map[stratum.stratum_id]
+        command = (
+            [
+                "otbcli_TrainVectorClassifier",
+                "-io.out",
+                model,
+                "-io.confmatout",
+                confusion_matrix_pre,
+                "-cfield",
+                "crop_code",
+                "-classifier",
+                "rf",
+                "-classifier.rf.max",
+                str(processor_config.max_depth),
+                "-classifier.rf.min",
+                str(processor_config.min_samples),
+                "-classifier.rf.nbtrees",
+                str(processor_config.num_trees),
+                # "-classifier.rf.ra",
+                # "0",
+                # "-classifier.rf.cat",
+                # "10",
+                # "-classifier.rf.var",
+                # "0",
+                # "-classifier.rf.acc",
+                # "0.01",
+                "-feat",
+            ]
+            + band_names_lower
+            + ["-io.vd"]
+            + training_samples_augmented
+            + ["-valid.vd"]
+            + validation_samples
+        )
 
         if not os.path.exists(model):
             print(" ".join(command))
