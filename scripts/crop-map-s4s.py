@@ -31,7 +31,7 @@ from configparser import ConfigParser
 OTB_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.2.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
-ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.1.4"
+ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.2.1"
 
 
 def parse_date(str):
@@ -1050,30 +1050,37 @@ def run_sample_extraction(
                 training_samples = f"training_samples_{tile_id}.sqlite"
                 validation_samples = f"validation_samples_{tile_id}.sqlite"
 
-            if (
-                (
-                    not os.path.exists(training_samples)
-                    or not os.path.exists(validation_samples)
-                )
-                and os.path.exists(training_points)
-                and os.path.exists(validation_points)
+            points = []
+            outputs = []
+
+            if os.path.exists(training_points) and not os.path.exists(training_samples):
+                points.append(training_points)
+                outputs.append(training_samples)
+
+            if os.path.exists(validation_points) and not os.path.exists(
+                validation_samples
             ):
-                command = [
-                    "erdy",
-                    "sample-extraction",
-                    bands_vrt,
-                    "--points",
-                    training_points,
-                    validation_points,
-                    "--outputs",
-                    training_samples,
-                    validation_samples,
-                    "--num-threads",
-                    "4",
-                    "-f",
-                    "SQLite",
-                    "--fields",
-                ] + band_names_lower
+                points.append(validation_points)
+                outputs.append(validation_samples)
+
+            if points:
+                command = (
+                    [
+                        "erdy",
+                        "sample-extraction",
+                        "--num-threads",
+                        "2",
+                        bands_vrt,
+                        "--points",
+                    ]
+                    + points
+                    + ["--outputs"]
+                    + outputs
+                    + [
+                        "--fields",
+                    ]
+                    + band_names_lower
+                )
                 commands.append(command)
 
     containers = []
@@ -1088,7 +1095,8 @@ def run_sample_extraction(
         containers.append(container)
     run_containers_concurrently(client, pool, containers)
 
-    commands = []
+    training_map: dict[Optional[int], list[str]] = {}
+    validation_map: dict[Optional[int], list[str]] = {}
     for stratum in strata:
         training_files = []
         validation_files = []
@@ -1111,32 +1119,10 @@ def run_sample_extraction(
             if os.path.exists(validation_samples):
                 validation_files.append(validation_samples)
 
-        if stratum.stratum_id:
-            training_samples = f"training_samples_{stratum.stratum_id}.vrt"
-            validation_samples = f"validation_samples_{stratum.stratum_id}.vrt"
-        else:
-            training_samples = "training_samples.vrt"
-            validation_samples = "validation_samples.vrt"
+        training_map[stratum.stratum_id] = training_files
+        validation_map[stratum.stratum_id] = validation_files
 
-        command = [
-            "ogrmerge.py",
-            "-overwrite_ds",
-            "-single",
-            "-o",
-            training_samples,
-        ] + training_files
-        commands.append(command)
-
-        command = [
-            "ogrmerge.py",
-            "-overwrite_ds",
-            "-single",
-            "-o",
-            validation_samples,
-        ] + validation_files
-        commands.append(command)
-
-    pool.map(run_command, commands, chunksize=1)
+    return (training_map, validation_map)
 
 
 def run_sample_augmentation(
@@ -1146,19 +1132,22 @@ def run_sample_augmentation(
     volumes: Dict[str, Dict[str, str]],
     env: Dict[str, str],
     strata: List[Stratum],
+    training_map: Dict[Optional[int], List[str]],
 ):
     commands = []
-    stratum_smote_outputs = []
+    stratum_smote_outputs: list[list[str]] = []
+    training_map_augmented: dict[Optional[int], list[str]] = {}
     for stratum in strata:
         if stratum.stratum_id:
-            training_samples = f"training_samples_{stratum.stratum_id}.vrt"
             smote_targets_json = f"smote_targets_{stratum.stratum_id}.json"
         else:
-            training_samples = "training_samples.vrt"
             smote_targets_json = "smote_targets.json"
 
         with open(smote_targets_json, "rt", encoding="utf-8") as file:
             smote_targets: Dict[str, int] = json.load(file)
+
+        training_files = training_map[stratum.stratum_id]
+        training_map_augmented[stratum.stratum_id] = training_files.copy()
 
         smote_outputs = []
         for crop_code, target in smote_targets.items():
@@ -1171,7 +1160,6 @@ def run_sample_augmentation(
                 command = [
                     "erdy",
                     "sample-augmentation",
-                    training_samples,
                     output,
                     "--label",
                     crop_code,
@@ -1189,9 +1177,11 @@ def run_sample_augmentation(
                     "pix_10m",
                     "strategy",
                     "originfid",
-                ]
+                    "--inputs",
+                ] + training_files
                 commands.append(command)
             smote_outputs.append(output)
+            training_map_augmented[stratum.stratum_id].append(output)
 
         stratum_smote_outputs.append(smote_outputs)
 
@@ -1206,28 +1196,7 @@ def run_sample_augmentation(
         containers.append(container)
     run_containers_concurrently(client, pool, containers)
 
-    commands = []
-    for stratum, smote_outputs in zip(strata, stratum_smote_outputs):
-        if stratum.stratum_id:
-            training_samples_augmented = (
-                f"training_samples_augmented_{stratum.stratum_id}.vrt"
-            )
-            training_samples = f"training_samples_{stratum.stratum_id}.vrt"
-        else:
-            training_samples_augmented = "training_samples_augmented.vrt"
-            training_samples = "training_samples.vrt"
-
-        command = [
-            "ogrmerge.py",
-            "-overwrite_ds",
-            "-single",
-            "-o",
-            training_samples_augmented,
-            training_samples,
-        ] + smote_outputs
-        commands.append(command)
-
-    pool.map(run_command, commands, chunksize=1)
+    return training_map_augmented
 
 
 def run_training(
@@ -1238,6 +1207,8 @@ def run_training(
     processor_config: ProcessorConfig,
     strata: List[Stratum],
     stratum_band_names: List[str],
+    training_map_augmented: Dict[Optional[int], List[str]],
+    validation_map: Dict[Optional[int], List[str]],
 ) -> List[str]:
     remapping_table = "remapping-table.csv"
     if not os.path.exists(remapping_table):
@@ -1248,11 +1219,6 @@ def run_training(
         band_names_lower = list(map(lambda x: x.lower(), band_names))
 
         if stratum.stratum_id:
-            training_samples_augmented = (
-                f"training_samples_augmented_{stratum.stratum_id}.vrt"
-            )
-            validation_samples = f"validation_samples_{stratum.stratum_id}.vrt"
-
             model = f"model_{stratum.stratum_id}.yaml"
 
             if remapping_table:
@@ -1262,9 +1228,6 @@ def run_training(
                 confusion_matrix_pre = f"confusion_matrix_{stratum.stratum_id}.txt"
                 confusion_matrix = None
         else:
-            training_samples_augmented = "training_samples_augmented.vrt"
-            validation_samples = "validation_samples.vrt"
-
             model = "model.yaml"
 
             if remapping_table:
@@ -2665,9 +2628,9 @@ def main():
         stratum_band_names = write_tile_vrts(
             strata, feature_set, s1_features, output_dates, stratum_date_filters
         )
-        run_sample_extraction(
+        (training_map, validation_map) = run_sample_extraction(
             client,
-            pool_lo_conc,
+            pool_med_conc,
             output_dir,
             volumes,
             env,
@@ -2675,7 +2638,15 @@ def main():
             strata,
             stratum_band_names,
         )
-        run_sample_augmentation(client, pool_no_conc, output_dir, volumes, env, strata)
+        training_map_augmented = run_sample_augmentation(
+            client,
+            pool_no_conc,
+            output_dir,
+            volumes,
+            env,
+            strata,
+            training_map,
+        )
         confusion_matrices = run_training(
             client,
             output_dir,
@@ -2684,6 +2655,8 @@ def main():
             processor_config,
             strata,
             stratum_band_names,
+            training_map_augmented,
+            validation_map,
         )
 
         remapping_table_name = "remapping-table.csv"
