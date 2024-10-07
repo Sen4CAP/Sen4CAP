@@ -1723,6 +1723,14 @@ def main():
         os.chdir(args.working_path)
     output_dir = os.path.abspath(".")
 
+    env = {
+        "GDAL_MAX_DATASET_POOL_SIZE": "1000",
+        "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
+        "GDAL_PAM_ENABLED": "NO",
+    }
+    for key, value in env.items():
+        os.environ[key] = value
+
     client = docker.from_env(timeout=600)
     pool_hi_conc = Pool()
     pool_med_conc = Pool(min(os.cpu_count() or 1, 4))
@@ -1914,11 +1922,6 @@ def main():
         days = [(p.date - season_start).days for p in products]
         input_dates[tile] = list(map(str, days))
 
-    env = {
-        "GDAL_MAX_DATASET_POOL_SIZE": "1000",
-        "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
-        "GDAL_PAM_ENABLED": "NO",
-    }
     commands = []
     for tile, products in products_by_tile.items():
         if len(products) == 0:
