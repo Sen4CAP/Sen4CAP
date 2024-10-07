@@ -32,7 +32,7 @@ OTB_NEW_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 OTB_OLD_IMAGE_NAME = "docker.io/sen4x/otb:6.6.1"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.2.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
-ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.2.1"
+ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.2.3"
 
 
 def parse_date(str):
@@ -1202,6 +1202,7 @@ def run_sample_augmentation(
 
 def run_training(
     client,
+    pool,
     output_dir: str,
     volumes: Dict[str, Dict[str, str]],
     env: Dict[str, str],
@@ -1224,22 +1225,26 @@ def run_training(
             model = f"model_{stratum.stratum_id}.yaml"
 
             if remapping_table:
-                confusion_matrix_pre = f"confusion_matrix_pre_{stratum.stratum_id}.txt"
-                confusion_matrix = f"confusion_matrix_{stratum.stratum_id}.txt"
+                confusion_matrix_pre_json = (
+                    "confusion_matrix_pre_{stratum.stratum_id}.json"
+                )
+                confusion_matrix_json = "confusion_matrix_{stratum.stratum_id}.json"
             else:
-                confusion_matrix_pre = f"confusion_matrix_{stratum.stratum_id}.txt"
-                confusion_matrix = None
+                confusion_matrix_pre_json = (
+                    f"confusion_matrix_{stratum.stratum_id}.json"
+                )
+                confusion_matrix_json = None
         else:
             model = "model.yaml"
 
             if remapping_table:
-                confusion_matrix_pre = "confusion_matrix_pre.txt"
-                confusion_matrix = "confusion_matrix.txt"
+                confusion_matrix_pre_json = "confusion_matrix_pre.json"
+                confusion_matrix_json = "confusion_matrix.json"
             else:
-                confusion_matrix_pre = "confusion_matrix.txt"
-                confusion_matrix = None
+                confusion_matrix_pre_json = "confusion_matrix.json"
+                confusion_matrix_json = None
 
-        confusion_matrices.append(confusion_matrix_pre)
+        confusion_matrices.append(confusion_matrix_pre_json)
 
         training_samples_augmented = training_map_augmented[stratum.stratum_id]
         validation_samples = validation_map[stratum.stratum_id]
@@ -1248,8 +1253,6 @@ def run_training(
                 "otbcli_TrainVectorClassifier",
                 "-io.out",
                 model,
-                "-io.confmatout",
-                confusion_matrix_pre,
                 "-cfield",
                 "crop_code",
                 "-classifier",
@@ -1273,8 +1276,6 @@ def run_training(
             + band_names_lower
             + ["-io.vd"]
             + training_samples_augmented
-            + ["-valid.vd"]
-            + validation_samples
         )
 
         if not os.path.exists(model):
@@ -1290,18 +1291,87 @@ def run_training(
             if res and res["StatusCode"] != 0:
                 print(res)
 
-        if confusion_matrix:
+        commands = []
+        for validation_file in validation_samples:
+            predictions = validation_file.replace("validation_samples_", "predictions_")
+
+            if os.path.exists(predictions):
+                continue
+
             command = [
-                "remap-confusion-matrix.py",
-                "--confusion-matrix",
-                confusion_matrix_pre,
+                "otbcli_VectorClassifier",
+                "-model",
+                model,
+                "-out",
+                predictions,
+                "-in",
+                validation_file,
+                "-feat",
+            ] + band_names_lower
+            commands.append(command)
+
+        containers = []
+        for command in commands:
+            container = ContainerInfo(
+                image=OTB_OLD_IMAGE_NAME if use_old_otb else OTB_NEW_IMAGE_NAME,
+                command=command,
+                working_dir=output_dir,
+                volumes=volumes,
+                environment=env,
+            )
+            containers.append(container)
+        run_containers_concurrently(client, pool, containers)
+
+        command = [
+            "erdy",
+            "compute-confusion-matrix",
+            "--output",
+            confusion_matrix_pre_json,
+            "--reference",
+            "crop_code",
+            "--prediction",
+            "predicted",
+            "--inputs",
+        ]
+        for validation_file in validation_samples:
+            predictions = validation_file.replace("validation_samples_", "predictions_")
+            if os.path.exists(predictions):
+                command.append(predictions)
+
+        container = ContainerInfo(
+            image=ERDY_IMAGE_NAME,
+            command=command,
+            working_dir=output_dir,
+            volumes=volumes,
+            environment=env,
+        )
+        res = container.run(client)
+        if res and res["StatusCode"] != 0:
+            print(res)
+
+        if confusion_matrix_json:
+            command = [
+                "erdy",
+                "remap-confusion-matrix",
                 "--remapping-table",
                 remapping_table,
-                "--remapped-confusion-matrix",
-                confusion_matrix,
+                "--output",
+                confusion_matrix_json,
+                "--input",
+                confusion_matrix_pre_json,
             ]
-            run_command(command)
-            confusion_matrices.append(confusion_matrix)
+            container = ContainerInfo(
+                image=ERDY_IMAGE_NAME,
+                command=command,
+                working_dir=output_dir,
+                volumes=volumes,
+                environment=env,
+            )
+            res = container.run(client)
+            if res and res["StatusCode"] != 0:
+                print(res)
+
+            confusion_matrices.append(confusion_matrix_json)
 
     return confusion_matrices
 
@@ -2653,6 +2723,7 @@ def main():
         )
         confusion_matrices = run_training(
             client,
+            pool_med_conc,
             output_dir,
             volumes,
             env,
