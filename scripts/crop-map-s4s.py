@@ -1275,8 +1275,10 @@ def run_training(
             ]
             + band_names_lower
             + ["-io.vd"]
-            + training_samples_augmented
         )
+        for file in training_samples_augmented:
+            if os.path.exists(file):
+                command.append(file)
 
         if not os.path.exists(model):
             print(" ".join(command))
