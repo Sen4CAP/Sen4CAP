@@ -33,16 +33,18 @@ def get_type_for_column(args, field_name):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Converts a CSV file to the Apache Arrow format")
-    parser.add_argument('-i', '--input', help="The input CSV file")
-    parser.add_argument('-o', '--output', help="The output IPC file")
-    parser.add_argument('-c', '--int8-columns', default="", help="Int8 columns")
-    parser.add_argument('-s', '--int16-columns', default="", help="Int16 columns")
-    parser.add_argument('-g', '--int32-columns', default="", help="Int32 columns")
-    parser.add_argument('-f', '--float-columns', default="", help="Float columns")
-    parser.add_argument('-b', '--bool-columns', default="", help="Boolean columns")
-    parser.add_argument('-n', '--nullable-columns', default="", help="Nullable columns")
-    parser.add_argument('-t', '--text-columns', default="", help="Text columns")
+    parser = argparse.ArgumentParser(
+        description="Converts a CSV file to the Apache Arrow format"
+    )
+    parser.add_argument("-i", "--input", help="The input CSV file")
+    parser.add_argument("-o", "--output", help="The output IPC file")
+    parser.add_argument("-c", "--int8-columns", default="", help="Int8 columns")
+    parser.add_argument("-s", "--int16-columns", default="", help="Int16 columns")
+    parser.add_argument("-g", "--int32-columns", default="", help="Int32 columns")
+    parser.add_argument("-f", "--float-columns", default="", help="Float columns")
+    parser.add_argument("-b", "--bool-columns", default="", help="Boolean columns")
+    parser.add_argument("-n", "--nullable-columns", default="", help="Nullable columns")
+    parser.add_argument("-t", "--text-columns", default="", help="Text columns")
 
     args = parser.parse_args()
 
@@ -65,9 +67,8 @@ def main():
     # pyarrow.lib.ArrowInvalid: In CSV column #105: CSV conversion error to null: invalid value <our good float value>
     reader = csv.open_csv(
         args.input,
-        convert_options=csv.ConvertOptions(
-            column_types=arrow_column_types
-        )
+        read_options=csv.ReadOptions(block_size=512 * 1024 * 1024),
+        convert_options=csv.ConvertOptions(column_types=arrow_column_types),
     )
 
     outdir = os.path.dirname(args.output)
@@ -86,15 +87,14 @@ def main():
         writer.write_batch(b)
 
         idCol = b.column(0)
-        idxFile.write(struct.pack('>i', currentBatch))
-        idxFile.write(struct.pack('>i', idCol[0].as_py()))
-        idxFile.write(struct.pack('>i', idCol[len(idCol) - 1].as_py()))
+        idxFile.write(struct.pack(">i", currentBatch))
+        idxFile.write(struct.pack(">i", idCol[0].as_py()))
+        idxFile.write(struct.pack(">i", idCol[len(idCol) - 1].as_py()))
         currentBatch += 1
         # print("Written index for batch = {}, start = {}, end = {}".format(currentBatch - 1, idCol[0].as_py(), idCol[len(idCol) - 1].as_py()))
     writer.close()
     idxFile.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-
