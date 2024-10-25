@@ -41,7 +41,7 @@ source ./common_functions.sh
 : ${SLURM_CONFIG:="slurm.conf"}
 : ${SLURM_CONFIG_DB:="slurmdbd.conf"}
 
-# Default services identifiers 
+# Default services identifiers
 SERVICES_IDENTIFIER="sen2agri-services"
 EXECUTOR_SERVICE_IDENTIFIER="sen2agri-executor"
 EXECUTOR_TIMER_IDENTIFIER="sen2agri-executor.timer"
@@ -310,7 +310,7 @@ function config_docker()
     docker pull sen4cap/data-preparation:0.2
     docker pull sen4cap/data-preparation:0.3
     docker pull sen4cap/grassland_mowing:3.0.0
-    
+
     docker pull sen4x/l2a-processors:0.2.3
     docker pull sen4x/sen2cor:2.10.01-ubuntu-20.04
     docker pull sen4x/maja:${MAJA_VER}-centos-7
@@ -379,18 +379,18 @@ function install_and_config_postgresql()
     populate_from_scripts "$(find ./ -name "database")/09-privileges"
     populate_from_scripts "$(find ./ -name "database")/10-triggers"
     populate_from_scripts "$(find ./ -name "database")/11-customizations"
-    
+
     filter_required_components
-   
+
 }
 #-----------------------------------------------------------#
 function populate_from_scripts()
 {
     local curPath=$1
-    # check first if it contains any sql files 
+    # check first if it contains any sql files
     count=`ls -1 ${curPath}/*.sql 2>/dev/null | wc -l`
     #for each sql scripts found in this folder
-    if [ ${count} != 0 ]; then 
+    if [ ${count} != 0 ]; then
         for scriptName in "${curPath}"/*.sql ; do
             scriptToExecute=${scriptName}
             ## perform execution of each sql script
@@ -445,9 +445,9 @@ function install_downloaders_demmacs()
    yum -y install wget python-lxml bzip2 python-beautifulsoup4 python-dateutil java-1.8.0-openjdk
 
    ##install Sen2Agri Downloaders  & Demmacs
-   if [ -f ../rpm_binaries/${SERVICES_CONFIGURATION_NAME}-downloaders-demmaccs-*.centos7.x86_64.rpm ] ; then 
+   if [ -f ../rpm_binaries/${SERVICES_CONFIGURATION_NAME}-downloaders-demmaccs-*.centos7.x86_64.rpm ] ; then
       yum -y install ../rpm_binaries/${SERVICES_CONFIGURATION_NAME}-downloaders-demmaccs-*.centos7.x86_64.rpm
-   else 
+   else
       yum -y install ../rpm_binaries/sen2agri-downloaders-demmaccs-*.centos7.x86_64.rpm
    fi
 
@@ -476,9 +476,9 @@ function install_RPMs()
    yum -y install ../rpm_binaries/sen2agri-processors-*.centos7.x86_64.rpm
 
    ##install Sen2Agri Services
-   if [ -f ../rpm_binaries/${SERVICES_CONFIGURATION_NAME}-app-*.centos7.x86_64.rpm ] ; then 
+   if [ -f ../rpm_binaries/${SERVICES_CONFIGURATION_NAME}-app-*.centos7.x86_64.rpm ] ; then
       yum -y install ../rpm_binaries/${SERVICES_CONFIGURATION_NAME}-app-*.centos7.x86_64.rpm
-   else 
+   else
       yum -y install ../rpm_binaries/sen2agri-app-*.centos7.x86_64.rpm
    fi
 
@@ -617,13 +617,13 @@ function check_paths()
 
             echo "Copying UserConfiguration into maja gipp location ..."
             cp -fR ./config/maja/UserConfiguration ${l1c_processor_gipp_destination}
-            
+
         else
             echo "Cannot find $l1c_processor_name GIPP files in the distribution, please copy them to $l1c_processor_gipp_destination"
         fi
     fi
 
-    if [ "$INSTALL_CCI_LC" == "1" ] ; then 
+    if [ "$INSTALL_CCI_LC" == "1" ] ; then
         echo "Creating /mnt/archive/reference_data"
         mkdir -p /mnt/archive/reference_data
         echo "Copying reference data"
@@ -643,11 +643,11 @@ function updateInstalledConfigurationParams()
 
     if [ "${SERVICES_CONFIGURATION_NAME}" != "sen2agri" ]; then
         # Updating the systemd services
-        find /usr/lib/systemd/system/ -name "${SERVICES_CONFIGURATION_NAME}*" -exec basename {} ';' | while read name ; do 
+        find /usr/lib/systemd/system/ -name "${SERVICES_CONFIGURATION_NAME}*" -exec basename {} ';' | while read name ; do
             echo "Updating  /usr/lib/systemd/system/${name} ... "
             sed -i -e "s|for Sen2Agri|for ${SERVICES_CONFIGURATION_NAME}|g" /usr/lib/systemd/system/${name}
             sed -i -e "s|/sen2agri-|/${SERVICES_CONFIGURATION_NAME}-|g" /usr/lib/systemd/system/${name}
-            
+
         done
         # sed -i -e "s|Services for Sen2Agri|Services for ${SERVICES_CONFIGURATION_NAME}|g" /usr/lib/systemd/system/${SERVICES_CONFIGURATION_NAME}-services.service
         # sed -i -e "s|/usr/share/sen2agri/sen2agri-services/bin/start.sh|/usr/share/sen2agri/${SERVICES_CONFIGURATION_NAME}-services/bin/start.sh|g" /usr/lib/systemd/system/${SERVICES_CONFIGURATION_NAME}-services.service
@@ -661,9 +661,9 @@ function updateInstalledConfigurationParams()
 
 function update_website()
 {
-    echo "TODO: Update site accordingly ..."    
+    echo "TODO: Update site accordingly ..."
     echo "Updating /etc/sen2agri/${SERVICES_CONFIGURATION_NAME}.conf ... "
-    echo "TODO: Update icons and other staff in website ..."    
+    echo "TODO: Update icons and other staff in website ..."
 
 }
 
@@ -711,7 +711,7 @@ function install_java()
         echo "No java found."
         install_java="1"
     fi
-    
+
     if [[ "$_java" ]]; then
         version=$("$_java" -version 2>&1 | awk -F '"' '/version/ {print $2}')
         echo "Java version is "$version" "
@@ -773,17 +773,17 @@ function install_sen2agri_services()
         if ! grep -qF "gdal.auxdata.path" ${SERVICE_PROPERTIES_FILE}; then
             echo "gdal.auxdata.path=/mnt/archive/snap_tmp" >> ${SERVICE_PROPERTIES_FILE}
         fi
-        
-        # Update the site title 
+
+        # Update the site title
         echo "Updating site title ..."
         sed -i -e "s|site.title = .*|site.title = $PROJECT_NAME|g" ${SERVICE_PROPERTIES_FILE}
         if [ -d "/usr/share/sen2agri/${SERVICES_IDENTIFIER}/static/assets/dist/img_${CONFIGURATION_NAME}" ] ; then
             echo "Copying logo images ..."
             cp -fR /usr/share/sen2agri/${SERVICES_IDENTIFIER}/static/assets/dist/img_${CONFIGURATION_NAME}/*.png /usr/share/sen2agri/${SERVICES_IDENTIFIER}/static/assets/dist/img
-        else 
+        else
             echo "No special logo images found in /usr/share/sen2agri/${SERVICES_IDENTIFIER}/static/assets/dist/img_${CONFIGURATION_NAME}. Using the default ones from Sen4CAP ..."
         fi
-        
+
     fi
     chown -R "${SYS_ACC_NAME}": /usr/share/sen2agri/${SERVICES_IDENTIFIER}/static/
 }
@@ -838,7 +838,7 @@ yum -y install epel-release https://download.postgresql.org/pub/repos/yum/reporp
 dnf config-manager --disable pgdg12 pgdg13 pgdg14 pgdg15
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 yum -y update epel-release pgdg-redhat-repo
-yum -y install docker-ce docker-ce-cli containerd.io docker-compose gdal jq wget
+yum -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin jq wget
 
 systemctl enable docker
 systemctl restart docker
@@ -911,7 +911,7 @@ systemctl enable sen2agri-fmask.timer
 systemctl start sen2agri-fmask.timer
 
 systemctl enable sen2agri-era5-downloader
-systemctl enable sen2agri-era5-downloader.timer 
+systemctl enable sen2agri-era5-downloader.timer
 systemctl start sen2agri-era5-downloader
-systemctl start sen2agri-era5-downloader.timer 
+systemctl start sen2agri-era5-downloader.timer
 
