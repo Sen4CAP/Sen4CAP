@@ -130,7 +130,9 @@ void HttpRequest::readHeader(QTcpSocket* socket)
         }
         else if (boundary.isEmpty() && expectedBodySize+currentSize>maxSize)
         {
-            qWarning("HttpRequest: expected body is too large");
+            qWarning("HttpRequest: expected body is too large "
+                     "(expected body size = %d, current size = %d, max_size = %d)",
+                     expectedBodySize, currentSize, maxSize);
             status=abort_size;
         }
         else if (!boundary.isEmpty() && expectedBodySize>maxMultiPartSize)
