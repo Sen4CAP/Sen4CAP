@@ -100,17 +100,21 @@ def do_clustering(input_images, lpis_buffered_raster, period, num_imgs, num_clus
             date_l.append(i + (period-1)*num_imgs)
         
     # date_l = [i + (period-1)*num_imgs for i in range(1,num_imgs+1)]
-    if len(date_l) == 0 : 
-        print("Cannot compute dates list from the given parameters (num_imgs = {}, num_bands = {}, period = {})".format(num_imgs, num_bands, period))
-        # write a image with only zeroes in order to avoid further steps failure. This kind of images will be ignored further in the analysis
-        img = np.zeros((img_ds.RasterYSize,img_ds.RasterXSize),
-                    gdal_array.GDALTypeCodeToNumericTypeCode(img_ds.GetRasterBand(1).DataType))
-        print(img.shape)
-        ds = gdal.Open(lpis_buffered_raster)
-        write_geotiff(out_file_cluster,img,ds)
-        
-        sys.exit(0)
-
+    if len(date_l) < num_clusters : 
+        if len(date_l) < 2:
+            print("Cannot compute dates list from the given parameters (num_imgs = {}, num_bands = {}, period = {}, len(date_l) = {}, num_clusters= {})".format(num_imgs, num_bands, period, len(date_l), num_clusters))
+            # write a image with only zeroes in order to avoid further steps failure. This kind of images will be ignored further in the analysis
+            img = np.zeros((img_ds.RasterYSize,img_ds.RasterXSize),
+                        gdal_array.GDALTypeCodeToNumericTypeCode(img_ds.GetRasterBand(1).DataType))
+            print(img.shape)
+            ds = gdal.Open(lpis_buffered_raster)
+            write_geotiff(out_file_cluster,img,ds)
+            
+            sys.exit(0)
+        else:
+            print("Setting num_clusters from {} to {}".format(num_clusters, len(date_l)))
+            num_clusters = len(date_l)
+            
     n_var = len(input_images)*len(date_l)
 
     img = np.zeros((img_ds.RasterYSize,img_ds.RasterXSize,n_var),
@@ -179,6 +183,10 @@ def main():
 
     args = parser.parse_args()
     
+    if args.number_of_clusters < 2:
+        print("Provided number of clusters is less than 2 {}. Exiting ...".format( args.number_of_clusters))
+        sys.exit(1)
+        
     do_clustering(args.input_images, args.lpis_buffered_raster, args.period, args.number_of_images, args.number_of_clusters, args.output)
     
 if __name__ == "__main__":

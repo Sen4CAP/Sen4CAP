@@ -138,6 +138,7 @@ def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs,
     img = np.zeros((img_ds.RasterYSize,img_ds.RasterXSize,n_var),
                 gdal_array.GDALTypeCodeToNumericTypeCode(img_ds.GetRasterBand(1).DataType))
 
+    cur_n_var = 0
     for cur_date in range(len(date_l)):
         date = date_l[cur_date]
         print('imported date' + str(date))
@@ -154,7 +155,10 @@ def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs,
             
             img_ds = gdal.Open(L2A_image[0],gdal.GA_ReadOnly)
             img_dsA = img_ds.ReadAsArray()
-            img[:, :,(cur_date*len(bands_list))+b] = img_dsA
+            # img[:, :,(cur_date*len(bands_list))+b] = img_dsA
+            # correction 2024-08-19 - correction for asymetric number of elements in bands_list
+            img[:, :, cur_n_var ] = img_dsA
+            cur_n_var = cur_n_var + 1
 
         #L2A_image = glob.glob(f'{input_dir}/S2*{date}T*.SAFE/*V1-0/*FRE_{bands_n}.tif')
     print('all images imported for month :'+ str(period))
@@ -167,9 +171,15 @@ def do_clustering(input_dir, tile, year, lpis_buffered_raster, period, num_imgs,
     #img[img==-10000] = np.nan
     #img[img==0] = np.nan
 
+    # correction 2024-08-20 - protection for empty image caused by an empty LPIS raster for this tile
+    if len(img) == 0:
+        print("No valid data found for period {}. Exiting but without error".format(period))
+        imgR[imgR!=0] = 0
+        write_geotiff(out_file_cluster,imgR,raster)
+        sys.exit(0)
+
     t_missing = kmeans_missing(X = img,n_clusters=num_clusters,max_iter=10)
 
- 
     raster = gdal.Open(lpis_buffered_raster,gdal.GA_ReadOnly)
     imgR = raster.ReadAsArray()
 

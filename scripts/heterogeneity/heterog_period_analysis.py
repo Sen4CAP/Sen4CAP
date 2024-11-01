@@ -141,6 +141,9 @@ def period_analysis(config) :
      
         for p in range(pm_period_start,pm_period_end+1):
             pm = range(p,p+config.group_items_cnt)
+            if not (p in dt_i.periods_dict) :
+                # print ("Ignoring period {} for id {} as it was not found ...".format(p, i))
+                continue
             marker_infos = dt_i.periods_dict[p]
             sum_markers = marker_infos.sum_all
             if sum_markers == sum_markers_ref :

@@ -249,7 +249,7 @@ def import_data(config) :
         df_cl_list.append(df_cl1)
         #df_cl = pd.concat([df_cl,df_cl1])
 
-        if (cnt % parcels_in_perc_rng) == 0:
+        if (parcels_in_perc_rng > 0) and (cnt % parcels_in_perc_rng) == 0:
             print("{}% parcels completed".format(10*int(cnt / parcels_in_perc_rng)))
 
         cnt = cnt + 1    
