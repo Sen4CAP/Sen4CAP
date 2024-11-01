@@ -92,9 +92,10 @@ class SelectedColumns(object):
         self.all_column_names = [self.id_col_name] + self.columns
 
         self.update_dates_indexes()
-
-        if set(bands_forced_order) != set(self.dict_cols_indices.keys()) :
-            print("Forces column order differ from the actual columns. Exiting ...")
+        
+        self.filtered_bands_forced_order = self.get_filtered_ordered_columns()
+        if set(self.filtered_bands_forced_order) != set(self.dict_cols_indices.keys()) :
+            print("Forced column order differ from the actual columns. Exiting ...")
             sys.exit(1)
 
         print("Mean indices: {}".format(self.mean_indices))
@@ -127,6 +128,15 @@ class SelectedColumns(object):
         else :
             self.dict_cols_indices[renamed_column] = [cur_idx]
             self.dict_cols_dates[renamed_column] = [date_time_obj]
+
+    def get_filtered_ordered_columns(self) :
+        ret = []
+        for band in bands_forced_order:
+            if band in self.dict_cols_indices.keys():
+                ret.append(band)
+        if len(ret) == 0:
+            print("None of the expected columns was found in the extracted columns")
+        return ret
 
 class CropFieldEntryWrapper(object) : 
     def __init__(self, sel_cols, cropfield_descr, newid, newid_exists):
@@ -182,7 +192,7 @@ def handle_cropfield_entry(selCols, cropfield_descr, newid, newid_exists):
     if not newid_exists:
         df_marker['NewID'] = newid
     # iterated each renamed unique column 
-    for renamed_col in bands_forced_order:
+    for renamed_col in selCols.filtered_bands_forced_order:
         date_idxs = selCols.cols_indexes[renamed_col]
         i = 0
         for date in selCols.unique_dates:

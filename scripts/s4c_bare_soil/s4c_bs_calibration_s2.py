@@ -36,6 +36,7 @@ class Config(object):
 
         self.tiles = args.tiles 
 
+        self.s2_pix_thr = args.s2_pix_thr
         self.thr_bs_ndvi = args.thr_bs_ndvi
         self.thr_nbs_ndvi = args.thr_nbs_ndvi
         self.thr_bs_ndwi = args.thr_bs_ndwi
@@ -109,8 +110,9 @@ class SelectedColumns(object):
 
         self.update_dates_indexes()
 
-        if set(bands_forced_order) != set(self.dict_cols_indices.keys()) :
-            print("Forces column order differ from the actual columns. Exiting ...")
+        self.filtered_bands_forced_order = self.get_filtered_ordered_columns()
+        if set(self.filtered_bands_forced_order) != set(self.dict_cols_indices.keys()) :
+            print("Forced column order differ from the actual columns. Exiting ...")
             sys.exit(2)
 
         print("Mean indices: {}".format(self.mean_indices))
@@ -142,6 +144,15 @@ class SelectedColumns(object):
         else :
             self.dict_cols_indices[renamed_column] = [cur_idx]
             self.dict_cols_dates[renamed_column] = [date_time_obj]
+
+    def get_filtered_ordered_columns(self) :
+        ret = []
+        for band in bands_forced_order:
+            if band in self.dict_cols_indices.keys():
+                ret.append(band)
+        if len(ret) == 0:
+            print("None of the expected columns was found in the extracted columns")
+        return ret
 
 class CropFieldEntryWrapper(object) : 
     def __init__(self, sel_cols, cropfield_descr):
@@ -198,7 +209,7 @@ def handle_cropfield_entry(selCols, cropfield_descr):
     traint_i['dates'] = selCols.unique_dates
     traint_i['NewID'] = cropfield_descr[selCols.id_col_global_idx].astype(int)
     # iterated each renamed unique column 
-    for renamed_col in bands_forced_order:
+    for renamed_col in selCols.filtered_bands_forced_order:
         date_idxs = selCols.cols_indexes[renamed_col]
         i = 0
         for date in selCols.unique_dates:
@@ -222,12 +233,19 @@ def handle_cropfield_entry_wrp(cropfield_entry_wrp):
     return handle_cropfield_entry(cropfield_entry_wrp.sel_cols, cropfield_entry_wrp.cropfield_descr)
 
 def handle_batch_record(selCols, all_cropfields, thread_pool):
-    traint_all = pd.DataFrame()
+    
+    # ret_list = []
+    # for cropfield_descr in all_cropfields:
+    #     ret = handle_cropfield_entry(selCols, cropfield_descr); 
+    #     ret_list.append(ret)
+    # return ret_list
+
     crop_field_entries_wrps = []
     for cropfield_descr in all_cropfields:
         crop_field_entries_wrps.append(CropFieldEntryWrapper(selCols, cropfield_descr))
-
-    return pd.concat(thread_pool.map(partial(handle_cropfield_entry_wrp), crop_field_entries_wrps ))
+    
+    return thread_pool.map(partial(handle_cropfield_entry_wrp), crop_field_entries_wrps )
+    # return pd.concat(ret)
     #for ret_df in all_df:
 #    traint_all = pd.concat([traint_all, all_df])
     
@@ -250,6 +268,7 @@ def handle_ipc_file(input, out, tiles_filter, out_traint_all) :
         columns_schema_indexes.append(schema.get_field_index(name))
 
     rowcnt = 0
+    out_traint_all_list = []
     for i in range(0, reader.num_record_batches):
         time1 = time.time()
         b = reader.get_batch(i)
@@ -263,14 +282,15 @@ def handle_ipc_file(input, out, tiles_filter, out_traint_all) :
         all_cropfields = batch_pd.to_numpy()
         
         traint_all1 = handle_batch_record(selCols, all_cropfields, thread_pool)
-
-        out_traint_all = pd.concat([out_traint_all, traint_all1])
+        out_traint_all_list.extend(traint_all1)
 
         time2 = time.time()
         print("Execution for batch {}/{} for {} entries took: {} s"
                 .format(i, reader.num_record_batches, len(all_cropfields), time2 - time1))
 
     thread_pool.close()
+    traint_all1 = pd.concat(out_traint_all_list)
+    out_traint_all = pd.concat([out_traint_all, traint_all1])
 
     return out_traint_all
         
@@ -358,7 +378,8 @@ def extract_calibration_data_s2(config, traint_all, lpis_csv, output) :
     # Normally, this is not needed when using arrow IPC
     traint_all = traint_all.groupby(['NewID','dates']).mean().reset_index()
 
-    calibration_id = lpis_csv[(lpis_csv['S2Pix']>=50)& (lpis_csv['eaa']==1)]
+    # calibration_id = lpis_csv[(lpis_csv['S2Pix']>=config.s2_pix_thr)& (lpis_csv['eaa']==1)]
+    calibration_id = lpis_csv[(lpis_csv['S2Pix']>=config.s2_pix_thr)]
     len(calibration_id)
 
     # traint_all['mean_NDWI'] = (traint_all[f'mean_L2A_B8'] - traint_all[f'mean_L2A_B11']) / (traint_all[f'mean_L2A_B11']+traint_all[f'mean_L2A_B8'])
@@ -416,6 +437,8 @@ def main():
     parser.add_argument("-l", "--lpis", help="LPIS product path", required=True)
     parser.add_argument("-t", "--tiles", help="tiles filter", required=True, nargs="*")
 
+    parser.add_argument("--s2-pix-thr", help="Minimum parcel pixels", required=False, type = int, default=50)
+    
     parser.add_argument("--thr-bs-ndvi", help="Threshold bare soil NDVI", required=False, type = float, default=0.15)
     parser.add_argument("--thr-nbs-ndvi", help="Threshold non bare soil NDVI", required=False, type = float, default=0.45)
     
