@@ -74,7 +74,7 @@ QList<MetricType> S4CMarkersDB1DataExtractStepsBuilder::supportedMetrics = {
 };
 
 S4CMarkersDB1DataExtractStepsBuilder::S4CMarkersDB1DataExtractStepsBuilder() :
-    dataExtractionRootDir(MDB1_DEF_DATA_EXTR_ROOT), m_bUseLpisTileRasters(false)
+    pCtx(NULL), dataExtractionRootDir(MDB1_DEF_DATA_EXTR_ROOT), m_bUseLpisTileRasters(false)
 {
     m_parcelsPrdDescr = {"NewID", ".*_buf_5m.shp", ".*_(\\d{4,5})_buf_10m.shp", ".*_(\\d{2}[A-Z]{3})_S2.tif", ".*_(\\d{2}[A-Z]{3})_S1.tif"};
     // parcelsPrdDescr = {"NewID", ".*_buf_5m.shp", ".*_(\\d{4,5})_buf_10m.shp", ".*_(\d{2}[A-Z]{3})_10m.tif", ".*_(\d{2}[A-Z]{3})_10m.tif"};   // sen4stat
@@ -124,9 +124,22 @@ bool S4CMarkersDB1DataExtractStepsBuilder::HasAnyMarkerEnabled(const ProductType
     return false;
 }
 
+bool S4CMarkersDB1DataExtractStepsBuilder::HasProductsOfType(ProductType prdType)
+{
+    Q_ASSERT(pCtx);    // shouls be initialized first
+    for (const auto & fileInfo: fileInfos) {
+        if (fileInfo.markerInfo.prdType == prdType) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void S4CMarkersDB1DataExtractStepsBuilder::CreateTasks(const MarkerType &marker, QList<TaskToSubmit> &outAllTasksList, int &curTaskIdx,
                                                        const QList<int> &parentTaskIdxs) const
 {
+    Q_ASSERT(pCtx);    // shouls be initialized first
+
     QList<std::reference_wrapper<const TaskToSubmit>> parentsRefs;
     for(int idx: parentTaskIdxs) {
         if (idx < outAllTasksList.size()) {
@@ -150,6 +163,8 @@ void S4CMarkersDB1DataExtractStepsBuilder::CreateTasks(const MarkerType &marker,
 void S4CMarkersDB1DataExtractStepsBuilder::CreateSteps(const MarkerType &marker, QList<TaskToSubmit> &allTasksList,
                                                        NewStepList &steps, int &curTaskIdx, QStringList &dataExtrDirs) const
 {
+    Q_ASSERT(pCtx);    // shouls be initialized first
+
     // If scheduled job, append any existing marker extraction dirs
     if(isScheduledJob) {
         dataExtrDirs += markerDataExtrDirInfos[marker.marker];

@@ -82,6 +82,8 @@ public:
 
     void SetParcelsProductDescriptor(const ParcelsProductDescriptor &descr) { m_parcelsPrdDescr = descr; }
 
+    bool HasProductsOfType(ProductType prdType);
+
 private:
     void InitEnabledMarkersDescriptions(const QStringList &markersEnabled);
 

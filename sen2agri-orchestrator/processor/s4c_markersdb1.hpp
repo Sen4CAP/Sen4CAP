@@ -7,7 +7,7 @@
 
 typedef struct MDB1JobPayload {
     MDB1JobPayload(EventProcessingContext *pContext, const JobSubmittedEvent &evt,
-                   const QDateTime &minDate, const QDateTime &maxDate)
+                   const QDateTime &minDate, const QDateTime &maxDate, bool hasAMPPrds)
         : event(evt), minDate(minDate), maxDate(maxDate) {
         pCtx = pContext;
         parameters = QJsonDocument::fromJson(evt.parametersJson.toUtf8()).object();
@@ -17,6 +17,11 @@ typedef struct MDB1JobPayload {
         isScheduledJob = ProcessorHandlerHelper::GetParameterValueAsInt(parameters, "scheduled_job", jobVal) && (jobVal == 1);
         ampvvvhEnabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "amp_vvvh_enabled", MDB1_CFG_PREFIX) &&
                          ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "amp_enabled", MDB1_CFG_PREFIX);
+        // on Custom jobs if no AMP products where selected, the extraction of AMP VVVH should be disabled
+        // otherwise the step fill fail
+        if (!isScheduledJob && !hasAMPPrds) {
+            ampvvvhEnabled = false;
+        }
         mdb3M1M5Enabled = ProcessorHandlerHelper::GetBoolConfigValue(parameters, configParameters, "mdb3_enabled", MDB1_CFG_PREFIX);
     }
     EventProcessingContext *pCtx;

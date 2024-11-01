@@ -119,7 +119,8 @@ void S4CMarkersDB1Handler::HandleJobSubmittedImpl(EventProcessingContext &ctx,
     dataExtrStepsBuilder.Initialize(processorDescr.shortName, ctx, parameters, evt.siteId, evt.jobId);
 
     MDB1JobPayload jobCfg(&ctx, evt, dataExtrStepsBuilder.GetDataExtractionMinDate(),
-                          dataExtrStepsBuilder.GetDataExtractionMaxDate());
+                          dataExtrStepsBuilder.GetDataExtractionMaxDate(),
+                          dataExtrStepsBuilder.HasProductsOfType(ProductType::S4CS1L2AmpProductTypeId));
 
     QList<TaskToSubmit> allTasksList;
     CreateTasks(allTasksList, jobCfg, dataExtrStepsBuilder);
