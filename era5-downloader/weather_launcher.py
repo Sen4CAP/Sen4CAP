@@ -14,7 +14,7 @@ from l2a_commons import MASTER_ID
 from osgeo import ogr
 
 OUTPUT_DIR = "/mnt/archive/{site_name}/era5_weather"
-CONTAINER_IMAGE = "sen4x/era5-weather:0.0.1"
+CONTAINER_IMAGE = "sen4x/era5-weather:0.0.3"
 SCRIPT_PATH = "/usr/share/weather/weather.py"
 WRK_DIR = "/mnt/archive/{site_name}/era5_weather/working_dir/"
 LAUNCHER_LOG_DIR = "/var/log/sen2agri/"
