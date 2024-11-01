@@ -13,13 +13,20 @@ HttpServer::HttpServer(PersistenceManagerDBProvider &persistenceManager, const Q
     const auto &params =
         persistenceManager.GetConfigurationParameters(m_httpSrvCfgPrefix);
 
+
     std::experimental::optional<int> port;
+    std::experimental::optional<int> maxRequestSize;
     QString listenPortKey = m_httpSrvCfgPrefix + "listen-port";
+    QString maxReqSizeKey = m_httpSrvCfgPrefix + "max-request-size";
     for (const auto &p : params) {
         if (!p.siteId) {
             if (p.key == listenPortKey) {
                 port = p.value.toInt();
             }
+            if (p.key == maxReqSizeKey) {
+                maxRequestSize = p.value.toInt();
+            }
+
         }
     }
 
@@ -28,6 +35,9 @@ HttpServer::HttpServer(PersistenceManagerDBProvider &persistenceManager, const Q
                                  "with the listening port");
     }
     m_listenerSettings.setValue(QStringLiteral("port"), *port);
+    if (maxRequestSize) {
+        m_listenerSettings.setValue(QStringLiteral("maxRequestSize"), *maxRequestSize);
+    }
 }
 
 HttpServer::~HttpServer() {
