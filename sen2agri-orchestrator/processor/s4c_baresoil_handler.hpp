@@ -65,6 +65,7 @@ class S4CBareSoilHandler : public ProcessorHandler
             calibNBSNdtiThr = ProcessorHandlerHelper::GetFloatConfigValue(parameters, configParameters, "calib_nbs_ndti_thr", S4C_BARE_SOIL_CFG_PREFIX, 0.25);
 
             calibNBSFcoverThr = ProcessorHandlerHelper::GetFloatConfigValue(parameters, configParameters, "calib_nbs_fcover_thr", S4C_BARE_SOIL_CFG_PREFIX, 0.01);
+            calibS2PixThr = ProcessorHandlerHelper::GetFloatConfigValue(parameters, configParameters, "calib_s2_pix_thr", S4C_BARE_SOIL_CFG_PREFIX, 50);
 
             modelEstimatorsNo = ProcessorHandlerHelper::GetIntConfigValue(parameters, configParameters, "model_estimator_no", S4C_BARE_SOIL_CFG_PREFIX, 30);
 
@@ -127,6 +128,7 @@ class S4CBareSoilHandler : public ProcessorHandler
         float calibNBSNdtiThr;
 
         float calibNBSFcoverThr;
+        int calibS2PixThr;
 
         int modelEstimatorsNo;
 

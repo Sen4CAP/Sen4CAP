@@ -113,6 +113,7 @@ QStringList S4CBareSoilHandler::GetS2CalibrationTaskArgs(const S4CBareSoilJobCon
                 "--thr-bs-ndti", QString::number(cfg.calibBSNdtiThr),
                 "--thr-nbs-ndti", QString::number(cfg.calibNBSNdtiThr),
                 "--thr-nbs-fcover", QString::number(cfg.calibNBSFcoverThr),
+                "--s2-pix-thr", QString::number(cfg.calibS2PixThr),
                 "--tiles"
     };
     args += cfg.siteTiles;
