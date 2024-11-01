@@ -485,7 +485,9 @@ QStringList ProcessorHandler::GetInputProductNames(const QJsonObject &parameters
             return listProducts;
         }
     }
-    const QStringList &listProducts = GetInputProductNames(parameters, "input_products");
+    // if we got here check for the default input_products or input_L2A
+    const QString &key = parameters.contains("input_L2A") ? "input_L2A" : "input_products";
+    const QStringList &listProducts = GetInputProductNames(parameters, key);
     return prdTypeStr.size() > 0 ? FilterProducts(listProducts, prdType) : listProducts;
 }
 
