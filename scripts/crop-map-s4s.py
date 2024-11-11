@@ -3,6 +3,8 @@ from __future__ import print_function
 
 import argparse
 from collections import defaultdict
+import dataclasses
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from enum import IntEnum
 import glob
@@ -1608,30 +1610,61 @@ def merge_strata(
     run_containers_concurrently(client, pool, containers)
 
 
-def write_stack_vrt_fast(files: List[str], destination: str):
+@dataclass
+class TileInfo:
+    raster_size: Tuple[int, int]
+    geo_transform: Tuple[float, float, float, float, float, float]
+    projection: str
+    block_size: List[int]
+    data_type: int
+
+    @staticmethod
+    def from_dataset(path):
+        ds = gdal.Open(path)
+        raster_size = (ds.RasterXSize, ds.RasterYSize)
+        geo_transform = ds.GetGeoTransform()
+        projection = ds.GetProjectionRef()
+        band = ds.GetRasterBand(1)
+        block_size = band.GetBlockSize()
+        data_type = band.DataType
+        return TileInfo(raster_size, geo_transform, projection, block_size, data_type)
+
+    @staticmethod
+    def from_template(path):
+        ds = gdal.Open(path)
+        raster_size = (ds.RasterXSize, ds.RasterYSize)
+        geo_transform = ds.GetGeoTransform()
+        projection = ds.GetProjectionRef()
+        band = ds.GetRasterBand(1)
+        block_size = band.GetBlockSize()
+        data_type = band.DataType
+        return TileInfo(raster_size, geo_transform, projection, block_size, data_type)
+
+
+def write_stack_vrt_fast(tile_info: TileInfo, files: List[str], destination: str):
     if not files:
         return
 
-    ds = gdal.Open(files[0])
-    assert ds.RasterCount == 1
-
-    raster_x_size, raster_y_size = ds.RasterXSize, ds.RasterYSize
-    gt = ds.GetGeoTransform()
-    band = ds.GetRasterBand(1)
-    block_x_size, block_y_size = band.GetBlockSize()
-    data_type_name = gdal.GetDataTypeName(band.DataType)
+    data_type_name = gdal.GetDataTypeName(tile_info.data_type)
 
     vrt_dataset = E.VRTDataset(
         {
-            "rasterXSize": str(raster_x_size),
-            "rasterYSize": str(raster_y_size),
+            "rasterXSize": str(tile_info.raster_size[0]),
+            "rasterYSize": str(tile_info.raster_size[1]),
         },
-        E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, ds.GetProjectionRef()),
+        E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, tile_info.projection),
         E.GeoTransform(
-            "{}, {}, {}, {}, {}, {}".format(gt[0], gt[1], gt[2], gt[3], gt[4], gt[5])
+            "{}, {}, {}, {}, {}, {}".format(
+                tile_info.geo_transform[0],
+                tile_info.geo_transform[1],
+                tile_info.geo_transform[2],
+                tile_info.geo_transform[3],
+                tile_info.geo_transform[4],
+                tile_info.geo_transform[5],
+            )
         ),
-        E.BlockXSize(str(block_x_size)),
-        E.BlockYSize(str(block_y_size)),
+        E.BlockXSize(str(tile_info.block_size[0])),
+        E.BlockYSize(str(tile_info.block_size[1])),
     )
 
     out_band = 1
@@ -1640,19 +1673,19 @@ def write_stack_vrt_fast(files: List[str], destination: str):
             {
                 "dataType": data_type_name,
                 "band": str(out_band),
-                "blockXSize": str(block_x_size),
-                "blockYSize": str(block_y_size),
+                "blockXSize": str(tile_info.block_size[0]),
+                "blockYSize": str(tile_info.block_size[1]),
             },
             E.SimpleSource(
                 E.SourceFilename({"relativeToVRT": "0"}, file),
                 E.SourceBand("1"),
                 E.SourceProperties(
                     {
-                        "RasterXSize": str(raster_x_size),
-                        "RasterYSize": str(raster_y_size),
+                        "RasterXSize": str(tile_info.raster_size[0]),
+                        "RasterYSize": str(tile_info.raster_size[1]),
                         "DataType": data_type_name,
-                        "BlockXSize": str(block_x_size),
-                        "BlockYSize": str(block_y_size),
+                        "BlockXSize": str(tile_info.block_size[0]),
+                        "BlockYSize": str(tile_info.block_size[1]),
                     }
                 ),
             ),
@@ -1924,6 +1957,9 @@ def main():
         days = [(p.date - season_start).days for p in products]
         input_dates[tile] = list(map(str, days))
 
+    l2a_block_size_10m = None
+    l2a_block_size_20m = None
+    l2a_data_type = None
     commands = []
     for tile, products in products_by_tile.items():
         if len(products) == 0:
@@ -1946,13 +1982,16 @@ def main():
         masks_10m = [p.mask_10m for p in products]
         masks_20m = [p.mask_20m for p in products]
 
+        tile_info_masks_10m = None
         if (
             feature_set.need_s2_b2()
             or feature_set.need_s2_b3()
             or feature_set.need_s2_b4()
             or feature_set.need_s2_b8()
         ):
-            write_stack_vrt_fast(masks_10m, mask_10m_vrt)
+            tile_info_masks_10m = TileInfo.from_dataset(masks_10m[0])
+            write_stack_vrt_fast(tile_info_masks_10m, masks_10m, mask_10m_vrt)
+        tile_info_masks_20m = None
         if (
             feature_set.need_s2_b5()
             or feature_set.need_s2_b6()
@@ -1960,7 +1999,8 @@ def main():
             or feature_set.need_s2_b11()
             or feature_set.need_s2_b12()
         ):
-            write_stack_vrt_fast(masks_20m, mask_20m_vrt)
+            tile_info_masks_20m = TileInfo.from_dataset(masks_20m[0])
+            write_stack_vrt_fast(tile_info_masks_20m, masks_20m, mask_20m_vrt)
 
         b2_vrt = f"S2_B02_{tile}.vrt"
         b3_vrt = f"S2_B03_{tile}.vrt"
@@ -1972,24 +2012,87 @@ def main():
         b11_vrt = f"S2_B11_{tile}.vrt"
         b12_vrt = f"S2_B12_{tile}.vrt"
 
+        if l2a_block_size_10m is None:
+            if feature_set.need_s2_b2():
+                path = b2s[0]
+            elif feature_set.need_s2_b3():
+                path = b3s[0]
+            elif feature_set.need_s2_b4():
+                path = b4s[0]
+            elif feature_set.need_s2_b8():
+                path = b8s[0]
+            ds = gdal.Open(path)
+            band = ds.GetRasterBand(1)
+            l2a_block_size_10m = band.GetBlockSize()
+            l2a_data_type = band.DataType
+            del ds
+
+        if l2a_block_size_20m is None:
+            if feature_set.need_s2_b5():
+                path = b5s[0]
+            elif feature_set.need_s2_b6():
+                path = b6s[0]
+            elif feature_set.need_s2_b7():
+                path = b7s[0]
+            elif feature_set.need_s2_b11():
+                path = b11s[0]
+            elif feature_set.need_s2_b12():
+                path = b12s[0]
+            ds = gdal.Open(path)
+            band = ds.GetRasterBand(1)
+            l2a_block_size_20m = band.GetBlockSize()
+            del ds
+
+        if tile_info_masks_10m is not None:
+            tile_info_10m = dataclasses.replace(
+                tile_info_masks_10m,
+                block_size=l2a_block_size_10m,
+                data_type=l2a_data_type,
+            )
+        if tile_info_masks_20m is not None:
+            tile_info_20m = dataclasses.replace(
+                tile_info_masks_20m,
+                block_size=l2a_block_size_20m,
+                data_type=l2a_data_type,
+            )
+
         if feature_set.need_s2_b2():
-            write_stack_vrt_fast(b2s, b2_vrt)
+            if not tile_info_10m:
+                tile_info_10m = TileInfo.from_dataset(b2s[0])
+            write_stack_vrt_fast(tile_info_10m, b2s, b2_vrt)
         if feature_set.need_s2_b3():
-            write_stack_vrt_fast(b3s, b3_vrt)
+            if not tile_info_10m:
+                tile_info_10m = TileInfo.from_dataset(b3s[0])
+            write_stack_vrt_fast(tile_info_10m, b3s, b3_vrt)
         if feature_set.need_s2_b4():
-            write_stack_vrt_fast(b4s, b4_vrt)
+            if not tile_info_10m:
+                tile_info_10m = TileInfo.from_dataset(b4s[0])
+            write_stack_vrt_fast(tile_info_10m, b4s, b4_vrt)
         if feature_set.need_s2_b8():
-            write_stack_vrt_fast(b8s, b8_vrt)
+            if not tile_info_10m:
+                tile_info_10m = TileInfo.from_dataset(b8s[0])
+            write_stack_vrt_fast(tile_info_10m, b8s, b8_vrt)
+
         if feature_set.need_s2_b5():
-            write_stack_vrt_fast(b5s, b5_vrt)
+            if not tile_info_20m:
+                tile_info_20m = TileInfo.from_dataset(b5s[0])
+            write_stack_vrt_fast(tile_info_20m, b5s, b5_vrt)
         if feature_set.need_s2_b6():
-            write_stack_vrt_fast(b6s, b6_vrt)
+            if not tile_info_20m:
+                tile_info_20m = TileInfo.from_dataset(b6s[0])
+            write_stack_vrt_fast(tile_info_20m, b6s, b6_vrt)
         if feature_set.need_s2_b7():
-            write_stack_vrt_fast(b7s, b7_vrt)
+            if not tile_info_20m:
+                tile_info_20m = TileInfo.from_dataset(b7s[0])
+            write_stack_vrt_fast(tile_info_20m, b7s, b7_vrt)
         if feature_set.need_s2_b11():
-            write_stack_vrt_fast(b11s, b11_vrt)
+            if not tile_info_20m:
+                tile_info_20m = TileInfo.from_dataset(b11s[0])
+            write_stack_vrt_fast(tile_info_20m, b11s, b11_vrt)
         if feature_set.need_s2_b12():
-            write_stack_vrt_fast(b12s, b12_vrt)
+            if not tile_info_20m:
+                tile_info_20m = TileInfo.from_dataset(b12s[0])
+            write_stack_vrt_fast(tile_info_20m, b12s, b12_vrt)
 
     containers = []
     tiling_suffix = "?&gdal:co:TILED=YES&streaming:type=tiled&streaming:sizemode=height&streaming:sizevalue=256"
