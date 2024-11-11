@@ -10,14 +10,11 @@ import logging
 import multiprocessing.dummy
 import os
 import os.path
-from osgeo import osr
-from osgeo import ogr
-import pipes
+from osgeo import gdal, ogr, osr
 import psycopg2
 from psycopg2.sql import SQL, Literal, Identifier
 import psycopg2.extras
 import psycopg2.extensions
-import subprocess
 import sys
 
 
@@ -62,7 +59,6 @@ class RasterizeDatasetCommand(object):
         self,
         input,
         output,
-        tile,
         resolution,
         sql,
         field,
@@ -74,7 +70,6 @@ class RasterizeDatasetCommand(object):
     ):
         self.input = input
         self.output = output
-        self.tile = tile
         self.resolution = resolution
         self.sql = sql
         self.field = field
@@ -85,18 +80,22 @@ class RasterizeDatasetCommand(object):
         self.dst_ymax = dst_ymax
 
     def run(self):
-        command = []
-        command += ["gdal_rasterize", "-q"]
-        command += ["-a", self.field]
-        command += ["-a_srs", self.srs]
-        command += ["-te", self.dst_xmin, self.dst_ymin, self.dst_xmax, self.dst_ymax]
-        command += ["-tr", self.resolution, self.resolution]
-        command += ["-sql", self.sql]
-        command += ["-ot", "Int32"]
-        command += ["-co", "COMPRESS=DEFLATE"]
-        command += ["-co", "PREDICTOR=2"]
-        command += [self.input, self.output]
-        run_command(command)
+        options = gdal.RasterizeOptions(
+            attribute="parcel_id",
+            outputBounds=[
+                int(self.dst_xmin),
+                int(self.dst_ymin),
+                int(self.dst_xmax),
+                int(self.dst_ymax),
+            ],
+            outputSRS=self.srs,
+            xRes=self.resolution,
+            yRes=self.resolution,
+            SQLStatement=self.sql,
+            outputType=gdal.gdalconst.GDT_Int32,
+            creationOptions=["COMPRESS=DEFLATE", "PREDICTOR=2"],
+        )
+        gdal.Rasterize(self.output, self.input, options=options)
 
 
 class ComputeClassCountsCommand:
@@ -109,7 +108,7 @@ class ComputeClassCountsCommand:
         client = docker.from_env()
         volumes = {
             self.input: {"bind": self.input, "mode": "ro"},
-            output_dir: {"bind": output_dir, "mode": "rw"},
+            output_dir: {"bind": output_dir, "mode": "z"},
         }
         command = []
         command += ["otbcli", "ComputeClassCounts"]
@@ -134,7 +133,7 @@ class MergeClassCountsCommand:
         # inputs should be in the same directory
         output_dir = os.path.dirname(self.output)
         client = docker.from_env()
-        volumes = {output_dir: {"bind": output_dir, "mode": "rw"}}
+        volumes = {output_dir: {"bind": output_dir, "mode": "z"}}
         command = []
         command += ["merge-counts"]
         command += [self.output]
@@ -147,13 +146,6 @@ class MergeClassCountsCommand:
             command=command,
         )
         client.close()
-
-
-def run_command(args, env=None):
-    args = list(map(str, args))
-    cmd_line = " ".join(map(pipes.quote, args))
-    logging.debug(cmd_line)
-    subprocess.call(args, env=env)
 
 
 def get_esri_wkt(epsg_code):
@@ -514,18 +506,17 @@ class DataPreparation(object):
             self.site_name, self.year
         )
 
-        cmd = []
-        cmd += ["ogr2ogr"]
-        cmd += [
+        options = gdal.VectorTranslateOptions(
+            accessMode="overwrite",
+            layerCreationOptions=["UNLOGGED=YES", "SPATIAL_INDEX=NONE"],
+            layerName=strata_table_staging,
+            geometryType="geometry",
+        )
+        gdal.VectorTranslate(
             self.get_ogr_connection_string(),
             os.path.realpath(strata),
-        ]
-        cmd += ["-overwrite"]
-        cmd += ["-lco", "UNLOGGED=YES"]
-        cmd += ["-lco", "SPATIAL_INDEX=NONE"]
-        cmd += ["-nln", strata_table_staging]
-        cmd += ["-nlt", "MULTIPOLYGON"]
-        run_command(cmd)
+            options=options,
+        )
 
         with self.get_connection() as conn:
             drop_table_columns(conn, "public", strata_table_staging, ["ogc_fid"])
@@ -589,17 +580,17 @@ from {}
         del ds
 
         print("Importing parcels")
-        cmd = []
-        cmd += ["ogr2ogr"]
-        cmd += [
+        options = gdal.VectorTranslateOptions(
+            accessMode="overwrite",
+            layerCreationOptions=["UNLOGGED=YES", "SPATIAL_INDEX=NONE"],
+            layerName=self.parcels_table_staging,
+            geometryType="geometry",
+        )
+        gdal.VectorTranslate(
             self.get_ogr_connection_string(),
             parcels_adj,
-        ]
-        cmd += ["-overwrite"]
-        cmd += ["-lco", "SPATIAL_INDEX=NONE"]
-        cmd += ["-nln", self.parcels_table_staging]
-        cmd += ["-nlt", "MULTIPOLYGON"]
-        run_command(cmd)
+            options=options,
+        )
 
         print("Preparing parcels")
         with self.get_connection() as conn:
@@ -683,7 +674,7 @@ tile_id text
                 query = SQL(
                     """
 create temporary table site_municipalities as
-with polygons_srid as (
+with polygons_srid as materialized (
          select Find_SRID('public', {}, 'wkb_geometry') as srid
      ),
      polygons_extent as (
@@ -717,7 +708,7 @@ where ST_Intersects(municipality.geom, polygons_extent_4326.geog);
                 query = SQL(
                     """
 create temporary table site_stratum as
-with polygons_srid as (
+with polygons_srid as materialized (
          select Find_SRID('public', {}, 'wkb_geometry') as srid
      )
 select
@@ -826,15 +817,15 @@ from {} polygons;"""
                 print("Computing polygon-tile membership")
                 query = SQL(
                     """
-with site_tiles as (select tile_id
+with site_tiles as materialized (select tile_id
                     from sp_get_site_tiles(%s :: smallint, 1 :: smallint)),
-     srid as (select Find_SRID('public', %s, 'wkb_geometry') as epsg_code),
+     srid as materialized (select Find_SRID('public', %s, 'wkb_geometry') as epsg_code),
      site_tile_geom as materialized (select site_tiles.tile_id,
                                ST_Transform(geom, srid.epsg_code) as geom
                         from site_tiles
                                  inner join srid on true
                                  inner join shape_tiles_s2 on shape_tiles_s2.tile_id = site_tiles.tile_id),
-     intersection_area as (select polygons.parcel_id,
+     intersection_area as materialized (select polygons.parcel_id,
                                   site_tile_geom.tile_id,
                                   ST_Area(ST_Intersection(polygons.wkb_geometry, site_tile_geom.geom)) as area
                            from site_tile_geom
@@ -843,11 +834,11 @@ with site_tiles as (select tile_id
                                     inner join {} attributes
                                                on attributes.parcel_id = polygons.parcel_id
                            where attributes.geom_valid),
-     ranked_intersections as (select intersection_area.parcel_id,
+     ranked_intersections as materialized (select intersection_area.parcel_id,
                                      intersection_area.tile_id,
                                      row_number() over (partition by parcel_id order by area desc, tile_id asc) as rn
                               from intersection_area),
-     polygon_tiles as (select ranked_intersections.parcel_id, ranked_intersections.tile_id
+     polygon_tiles as materialized (select ranked_intersections.parcel_id, ranked_intersections.tile_id
                        from ranked_intersections
                        where ranked_intersections.rn = 1)
 update {} attributes
@@ -876,17 +867,19 @@ where polygon_tiles.parcel_id = attributes.parcel_id;
         statistical_data_staging_id = Identifier(self.statistical_data_table_staging)
 
         print("Importing statistical data")
-        cmd = []
-        cmd += ["ogr2ogr"]
-        cmd += [
+        options = gdal.VectorTranslateOptions(
+            accessMode="overwrite",
+            layerCreationOptions=["UNLOGGED=YES", "SPATIAL_INDEX=NONE"],
+            layerName=self.statistical_data_table_staging,
+        )
+        statistical_data_ds = gdal.OpenEx(
+            statistical_data, open_options=["AUTODETECT_TYPE=YES"]
+        )
+        gdal.VectorTranslate(
             self.get_ogr_connection_string(),
-            os.path.realpath(statistical_data),
-        ]
-        cmd += ["-overwrite"]
-        cmd += ["-lco", "UNLOGGED=YES"]
-        cmd += ["-nln", self.statistical_data_table_staging]
-        cmd += ["-oo", "AUTODETECT_TYPE=YES"]
-        run_command(cmd)
+            statistical_data_ds,
+            options=options,
+        )
 
         print("Preparing entries")
         with self.get_connection() as conn:
@@ -1020,8 +1013,6 @@ create table {} (
         base = self.parcels_table
 
         with self.get_connection() as conn:
-            srid = get_site_srid(conn, self.parcels_table)
-
             for tile in self.tiles:
                 zone_srs = osr.SpatialReference()
                 zone_srs.ImportFromEPSG(tile.epsg_code)
@@ -1038,12 +1029,11 @@ create table {} (
 
                 sql = SQL(
                     """
-select polygons.parcel_id, ST_Buffer(ST_Transform(wkb_geometry, {}), -10)
+select polygons.parcel_id,
+       ST_Buffer(ST_Transform(wkb_geometry, {}), -10)
 from {} polygons
 inner join {} attributes on attributes.parcel_id = polygons.parcel_id
-where attributes.geom_valid
-  and attributes.tile_id = {};
-"""
+where attributes.geom_valid and attributes.tile_id = {}"""
                 )
                 sql = sql.format(
                     Literal(tile.epsg_code),
@@ -1056,7 +1046,6 @@ where attributes.geom_valid
                 rasterize_dataset = RasterizeDatasetCommand(
                     self.get_ogr_connection_string(),
                     output,
-                    tile.tile_id,
                     10,
                     sql,
                     "parcel_id",
@@ -1110,7 +1099,10 @@ where attributes.geom_valid
 
         def work(w):
             (c, cost) = w
-            c.run()
+            try:
+                c.run()
+            except Exception as e:
+                print(e)
             q.put(cost)
 
         res = self.pool.map_async(work, commands)
@@ -1271,24 +1263,28 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
                     )
                     sql = sql.as_string(conn)
 
-                    command = []
-                    command += ["ogr2ogr"]
-                    command += ["-overwrite"]
-                    command += ["-sql", sql]
-                    command += [output]
-                    command += [self.get_ogr_connection_string()]
-                    commands.append((command, 1))
+                    options = gdal.VectorTranslateOptions(
+                        accessMode="overwrite",
+                        SQLStatement=sql,
+                    )
+                    commands.append(
+                        (output, self.get_ogr_connection_string(), options, 1)
+                    )
 
         q = multiprocessing.dummy.Queue()
 
         def work(w):
-            (c, cost) = w
-            run_command(c)
+            (dest, src, options, cost) = w
+            gdal.VectorTranslate(
+                dest,
+                src,
+                options=options,
+            )
             q.put(cost)
 
         res = self.pool.map_async(work, commands)
 
-        total = sum([cost for (_, cost) in commands])
+        total = sum([cost for (_, _, _, cost) in commands])
         progress = 0
         sys.stdout.write("Exporting data: 0.00%")
         sys.stdout.flush()
@@ -1309,7 +1305,7 @@ values(%s, %s, %s, %s, %s, %s, %s);"""
             with conn.cursor() as cursor:
                 query = SQL(
                     """
-with tiles as (
+with tiles as materialized (
     select tile_id, ST_Transform(geom, %s) as geom
     from shape_tiles_s2
     where tile_id = any(%s)
@@ -1339,7 +1335,7 @@ from tiles;"""
                 with conn.cursor() as cursor:
                     query = SQL(
                         """
-    with tile as (
+    with tile as materialized (
         select ST_Transform(geom, %s) as geom
         from shape_tiles_s2
         where tile_id = %s
@@ -1387,7 +1383,7 @@ from tiles;"""
             with conn.cursor() as cursor:
                 query = SQL(
                     """
-with tile as (
+with tile as materialized (
     select ST_Transform(geom, %s) as geom
     from shape_tiles_s2
     where tile_id = %s
@@ -1519,6 +1515,8 @@ def read_counts_csv(path):
 
 
 def main():
+    ogr.UseExceptions()
+
     parser = argparse.ArgumentParser(description="Imports parcels")
     parser.add_argument(
         "-c",
