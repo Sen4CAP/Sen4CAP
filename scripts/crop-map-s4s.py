@@ -1226,9 +1226,9 @@ def run_training(
 
             if remapping_table:
                 confusion_matrix_pre_json = (
-                    "confusion_matrix_pre_{stratum.stratum_id}.json"
+                    f"confusion_matrix_pre_{stratum.stratum_id}.json"
                 )
-                confusion_matrix_json = "confusion_matrix_{stratum.stratum_id}.json"
+                confusion_matrix_json = f"confusion_matrix_{stratum.stratum_id}.json"
             else:
                 confusion_matrix_pre_json = (
                     f"confusion_matrix_{stratum.stratum_id}.json"
