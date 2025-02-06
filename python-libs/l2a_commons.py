@@ -256,16 +256,14 @@ def get_footprint(image_filename):
 
     geo_transform = dataset.GetGeoTransform()
 
-    spacing_x = geo_transform[1]
-    spacing_y = geo_transform[5]
-
     extent = GetExtent(geo_transform, size_x, size_y)
 
     source_srs = osr.SpatialReference()
     source_srs.ImportFromWkt(dataset.GetProjection())
-    epsg_code = source_srs.GetAttrValue("AUTHORITY", 1)
+    source_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     target_srs = osr.SpatialReference()
     target_srs.ImportFromEPSG(4326)
+    target_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
     wgs84_extent = ReprojectCoords(extent, source_srs, target_srs)
     return (wgs84_extent, extent)
