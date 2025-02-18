@@ -243,28 +243,32 @@ def main():
     crop_code_field = ogr.FieldDefn("crop_code", ogr.OFTInteger)
     pix_10m_field = ogr.FieldDefn("pix_10m", ogr.OFTInteger)
     strategy_field = ogr.FieldDefn("strategy", ogr.OFTInteger)
+    crop_pixels_field = ogr.FieldDefn("crop_pixels", ogr.OFTInteger)
+    total_pixels_field = ogr.FieldDefn("total_pixels", ogr.OFTInteger)
+    polygon_num_field = ogr.FieldDefn("polygon_num", ogr.OFTInteger)
+    pixel_ratio_field = ogr.FieldDefn("pixel_ratio", ogr.OFTReal)
+
+    fields = [
+        parcel_id_field,
+        code_n1_field,
+        code_n2_field,
+        code_n3_field,
+        code_n4_field,
+        code_lc_field,
+        crop_code_field,
+        pix_10m_field,
+        strategy_field,
+        crop_pixels_field,
+        total_pixels_field,
+        polygon_num_field,
+        pixel_ratio_field,
+    ]
 
     training_feature_defn = ogr.FeatureDefn()
-    training_feature_defn.AddFieldDefn(parcel_id_field)
-    training_feature_defn.AddFieldDefn(code_n1_field)
-    training_feature_defn.AddFieldDefn(code_n2_field)
-    training_feature_defn.AddFieldDefn(code_n3_field)
-    training_feature_defn.AddFieldDefn(code_n4_field)
-    training_feature_defn.AddFieldDefn(code_lc_field)
-    training_feature_defn.AddFieldDefn(crop_code_field)
-    training_feature_defn.AddFieldDefn(pix_10m_field)
-    training_feature_defn.AddFieldDefn(strategy_field)
-
     validation_feature_defn = ogr.FeatureDefn()
-    validation_feature_defn.AddFieldDefn(parcel_id_field)
-    validation_feature_defn.AddFieldDefn(code_n1_field)
-    validation_feature_defn.AddFieldDefn(code_n2_field)
-    validation_feature_defn.AddFieldDefn(code_n3_field)
-    validation_feature_defn.AddFieldDefn(code_n4_field)
-    validation_feature_defn.AddFieldDefn(code_lc_field)
-    validation_feature_defn.AddFieldDefn(crop_code_field)
-    validation_feature_defn.AddFieldDefn(pix_10m_field)
-    validation_feature_defn.AddFieldDefn(strategy_field)
+    for field in fields:
+        training_feature_defn.AddFieldDefn(field)
+        validation_feature_defn.AddFieldDefn(field)
 
     polygon_class_statistics_commands = []
     sample_selection_commands = []
@@ -651,17 +655,6 @@ order by random();
                     tile_output = tile_outputs.get(tile_id)
                     if not tile_output:
                         tile = tiles[tile_id]
-                        fields = [
-                            parcel_id_field,
-                            code_n1_field,
-                            code_n2_field,
-                            code_n3_field,
-                            code_n4_field,
-                            code_lc_field,
-                            crop_code_field,
-                            pix_10m_field,
-                            strategy_field,
-                        ]
                         tile_output = create_tile_outputs(
                             driver,
                             stratum.stratum_id,
@@ -672,33 +665,28 @@ order by random();
 
                     if purpose == PURPOSE_TRAINING:
                         feature = ogr.Feature(training_feature_defn)
-                        feature.SetFID(parcel_id)
-                        feature.SetField("id", parcel_id)
-                        feature.SetField("code_n1", code_n1)
-                        feature.SetField("code_n2", code_n2)
-                        feature.SetField("code_n3", code_n3)
-                        feature.SetField("code_n4", code_n4)
-                        feature.SetField("code_lc", code_lc)
-                        feature.SetField("crop_code", crop_code)
-                        feature.SetField("pix_10m", pix_10m)
-                        feature.SetField("strategy", strategy)
-                        feature.SetGeometry(geom)
-
-                        tile_output.training_layer.CreateFeature(feature)
                     else:
                         feature = ogr.Feature(validation_feature_defn)
-                        feature.SetFID(parcel_id)
-                        feature.SetField("id", parcel_id)
-                        feature.SetField("code_n1", code_n1)
-                        feature.SetField("code_n2", code_n2)
-                        feature.SetField("code_n3", code_n3)
-                        feature.SetField("code_n4", code_n4)
-                        feature.SetField("code_lc", code_lc)
-                        feature.SetField("crop_code", crop_code)
-                        feature.SetField("pix_10m", pix_10m)
-                        feature.SetField("strategy", strategy)
-                        feature.SetGeometry(geom)
 
+                    feature.SetFID(parcel_id)
+                    feature.SetField("id", parcel_id)
+                    feature.SetField("code_n1", code_n1)
+                    feature.SetField("code_n2", code_n2)
+                    feature.SetField("code_n3", code_n3)
+                    feature.SetField("code_n4", code_n4)
+                    feature.SetField("code_lc", code_lc)
+                    feature.SetField("crop_code", crop_code)
+                    feature.SetField("pix_10m", pix_10m)
+                    feature.SetField("strategy", strategy)
+                    feature.SetField("crop_pixels", crop_pixels)
+                    feature.SetField("total_pixels", total_pixels)
+                    feature.SetField("polygon_num", polygon_num)
+                    feature.SetField("pixel_ratio", pixel_ratio)
+                    feature.SetGeometry(geom)
+
+                    if purpose == PURPOSE_TRAINING:
+                        tile_output.training_layer.CreateFeature(feature)
+                    else:
                         tile_output.validation_layer.CreateFeature(feature)
 
             if stratum.stratum_id:
