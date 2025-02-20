@@ -1034,9 +1034,9 @@ def run_sample_extraction(
             tile_id = tile.tile_id
             if stratum.stratum_id:
                 bands_vrt = f"bands_{stratum.stratum_id}_{tile_id}.vrt"
-                training_points = f"training_points_{stratum.stratum_id}_{tile_id}.shp"
+                training_points = f"training_points_{stratum.stratum_id}_{tile_id}.gpkg"
                 validation_points = (
-                    f"validation_points_{stratum.stratum_id}_{tile_id}.shp"
+                    f"validation_points_{stratum.stratum_id}_{tile_id}.gpkg"
                 )
 
                 training_samples = (
@@ -1047,8 +1047,8 @@ def run_sample_extraction(
                 )
             else:
                 bands_vrt = f"bands_{tile_id}.vrt"
-                training_points = f"training_points_{tile_id}.shp"
-                validation_points = f"validation_points_{tile_id}.shp"
+                training_points = f"training_points_{tile_id}.gpkg"
+                validation_points = f"validation_points_{tile_id}.gpkg"
 
                 training_samples = f"training_samples_{tile_id}.sqlite"
                 validation_samples = f"validation_samples_{tile_id}.sqlite"
@@ -2719,10 +2719,10 @@ def main():
                 pass
 
             if not strata[0]:
-                training_polygons = f"training_polygons_{tile_id}.shp"
+                training_polygons = f"training_polygons_{tile_id}.gpkg"
                 if os.path.exists(training_polygons):
                     tile_inputs_training[tile_id] = training_polygons
-                validation_polygons = f"validation_polygons_{tile_id}.shp"
+                validation_polygons = f"validation_polygons_{tile_id}.gpkg"
                 if os.path.exists(validation_polygons):
                     tile_inputs_validation[tile_id] = validation_polygons
             else:
@@ -2746,9 +2746,9 @@ def main():
                     broceliande_validation_vrt,
                 ]
                 for stratum_id in strata:
-                    training_polygons = f"training_polygons_{stratum_id}_{tile_id}.shp"
+                    training_polygons = f"training_polygons_{stratum_id}_{tile_id}.gpkg"
                     validation_polygons = (
-                        f"validation_polygons_{stratum_id}_{tile_id}.shp"
+                        f"validation_polygons_{stratum_id}_{tile_id}.gpkg"
                     )
                     if os.path.exists(training_polygons):
                         training_command.append(training_polygons)

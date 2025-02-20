@@ -162,11 +162,11 @@ def create_tile_outputs(
 ) -> TileOutput:
     tile_id = tile.id
     if stratum_id:
-        training_polygons = f"training_polygons_{stratum_id}_{tile_id}.shp"
-        validation_polygons = f"validation_polygons_{stratum_id}_{tile_id}.shp"
+        training_polygons = f"training_polygons_{stratum_id}_{tile_id}.gpkg"
+        validation_polygons = f"validation_polygons_{stratum_id}_{tile_id}.gpkg"
     else:
-        training_polygons = f"training_polygons_{tile_id}.shp"
-        validation_polygons = f"validation_polygons_{tile_id}.shp"
+        training_polygons = f"training_polygons_{tile_id}.gpkg"
+        validation_polygons = f"validation_polygons_{tile_id}.gpkg"
 
     if os.path.exists(training_polygons):
         driver.DeleteDataSource(training_polygons)
@@ -178,12 +178,12 @@ def create_tile_outputs(
     training_layer = training_dataset.CreateLayer(
         "polygons",
         tile.spatial_ref,
-        ogr.wkbMultiPolygon,
+        ogr.wkbUnknown,
     )
     validation_layer = validation_dataset.CreateLayer(
         "polygons",
         tile.spatial_ref,
-        ogr.wkbMultiPolygon,
+        ogr.wkbUnknown,
     )
 
     for field in fields:
@@ -232,7 +232,7 @@ def main():
 
     config = Config(args)
 
-    driver = ogr.GetDriverByName("ESRI Shapefile")
+    driver = ogr.GetDriverByName("GPKG")
 
     parcel_id_field = ogr.FieldDefn("id", ogr.OFTInteger)
     code_n1_field = ogr.FieldDefn("code_n1", ogr.OFTInteger)
@@ -263,12 +263,6 @@ def main():
         polygon_num_field,
         pixel_ratio_field,
     ]
-
-    training_feature_defn = ogr.FeatureDefn()
-    validation_feature_defn = ogr.FeatureDefn()
-    for field in fields:
-        training_feature_defn.AddFieldDefn(field)
-        validation_feature_defn.AddFieldDefn(field)
 
     polygon_class_statistics_commands = []
     sample_selection_commands = []
@@ -664,9 +658,9 @@ order by random();
                         tile_outputs[tile_id] = tile_output
 
                     if purpose == PURPOSE_TRAINING:
-                        feature = ogr.Feature(training_feature_defn)
+                        feature = ogr.Feature(tile_output.training_layer.GetLayerDefn())
                     else:
-                        feature = ogr.Feature(validation_feature_defn)
+                        feature = ogr.Feature(tile_output.validation_layer.GetLayerDefn())
 
                     feature.SetFID(parcel_id)
                     feature.SetField("id", parcel_id)
@@ -720,17 +714,17 @@ order by random();
                     )
 
                     tile_output.training_points = (
-                        f"training_points_{stratum.stratum_id}_{tile_id}.shp"
+                        f"training_points_{stratum.stratum_id}_{tile_id}.gpkg"
                     )
                     tile_output.validation_points = (
-                        f"validation_points_{stratum.stratum_id}_{tile_id}.shp"
+                        f"validation_points_{stratum.stratum_id}_{tile_id}.gpkg"
                     )
                 else:
                     training_stats = f"training_statistics_{tile_id}.xml"
                     validation_stats = f"validation_statistics_{tile_id}.xml"
 
-                    tile_output.training_points = f"training_points_{tile_id}.shp"
-                    tile_output.validation_points = f"validation_points_{tile_id}.shp"
+                    tile_output.training_points = f"training_points_{tile_id}.gpkg"
+                    tile_output.validation_points = f"validation_points_{tile_id}.gpkg"
 
                 command = [
                     "otbcli_PolygonClassStatistics",
