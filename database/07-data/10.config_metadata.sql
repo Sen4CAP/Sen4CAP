@@ -592,25 +592,25 @@ INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.input_l3b', 'The list of
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.lai_enabled', 'LAI markers extraction enabled', 'bool', true, 26, true, 'Extract LAI markers', NULL, true);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.ndvi_enabled', 'NDVI markers extraction enabled', 'bool', true, 26, true, 'Extract NDVI markers', NULL, true);
 INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.amp_vvvh_enabled', 'AMP VV/VH markers extraction enabled', 'bool', true, 26, true, 'Extract Amplitude VV/VH markers', NULL, true);
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.valid_pixels_enabled', 'Number of valid pixels per parcels extraction enabled', 'bool', true, 26, FALSE, 'Extract number of valid pixels per parcel', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.invalid_pixels_enabled', 'Number of invalid pixels per parcels extraction enabled', 'bool', true, 26, FALSE, 'Extract number of invalid pixels per parcel', NULL, true); 
--- INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.stdev_enabled', 'Stdev per parcel extraction enabled', 'bool', true, 26, FALSE, 'Stdev per parcel extraction enabled', NULL); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.minmax_enabled', 'Min/Max per parcel extraction enabled', 'bool', true, 26, true, 'Min/Max per parcel extraction enabled', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.median_enabled', 'Median per parcels extraction enabled', 'bool', true, 26, true, 'Median per parcels extraction enabled', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.p25_enabled', 'P25 per parcels extraction enabled', 'bool', true, 26, true, 'P25 per parcels extraction enabled', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.p75_enabled', 'P75 per parcels extraction enabled', 'bool', true, 26, true, 'P75 per parcels extraction enabled', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab02_enabled', 'Reflectance band B02 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B02 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab03_enabled', 'Reflectance band B03 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B03 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab04_enabled', 'Reflectance band B04 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B04 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab05_enabled', 'Reflectance band B05 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B05 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab06_enabled', 'Reflectance band B06 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B06 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab07_enabled', 'Reflectance band B07 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B07 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab08_enabled', 'Reflectance band B08 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B08 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab8a_enabled', 'Reflectance band B8A markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B8A markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab11_enabled', 'Reflectance band B11 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B11 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab12_enabled', 'Reflectance band B12 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B12 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_enabled', 'MDB3 markers extraction enabled', 'bool', true, 26, true, 'Extract MDB3 markers', NULL, true); 
-INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'string', true, 26, false, 'MDB3 input tables location', NULL); 
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.valid_pixels_enabled', 'Number of valid pixels per parcels extraction enabled', 'bool', true, 26, FALSE, 'Extract number of valid pixels per parcel', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.invalid_pixels_enabled', 'Number of invalid pixels per parcels extraction enabled', 'bool', true, 26, FALSE, 'Extract number of invalid pixels per parcel', NULL, true);
+-- INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.stdev_enabled', 'Stdev per parcel extraction enabled', 'bool', true, 26, FALSE, 'Stdev per parcel extraction enabled', NULL);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.minmax_enabled', 'Min/Max per parcel extraction enabled', 'bool', true, 26, true, 'Min/Max per parcel extraction enabled', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.median_enabled', 'Median per parcels extraction enabled', 'bool', true, 26, true, 'Median per parcels extraction enabled', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.p25_enabled', 'P25 per parcels extraction enabled', 'bool', true, 26, true, 'P25 per parcels extraction enabled', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.p75_enabled', 'P75 per parcels extraction enabled', 'bool', true, 26, true, 'P75 per parcels extraction enabled', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab02_enabled', 'Reflectance band B02 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B02 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab03_enabled', 'Reflectance band B03 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B03 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab04_enabled', 'Reflectance band B04 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B04 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab05_enabled', 'Reflectance band B05 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B05 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab06_enabled', 'Reflectance band B06 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B06 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab07_enabled', 'Reflectance band B07 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B07 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab08_enabled', 'Reflectance band B08 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B08 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab8a_enabled', 'Reflectance band B8A markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B8A markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab11_enabled', 'Reflectance band B11 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B11 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.l2ab12_enabled', 'Reflectance band B12 markers extraction enabled', 'bool', true, 26, true, 'Extract reflectance band B12 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_enabled', 'MDB3 markers extraction enabled', 'bool', true, 26, true, 'Extract MDB3 markers', NULL, true);
+INSERT INTO config_metadata VALUES ('processor.s4c_mdb1.mdb3_input_tables', 'MDB3 input tables location', 'string', true, 26, false, 'MDB3 input tables location', NULL);
 
 -- -----------------------------------------------------------
 -- Fmask Specific Keys
@@ -699,6 +699,8 @@ insert into config_metadata values ('processor.s4s_crop_mapping.pix-ratio-hi', '
 insert into config_metadata values ('processor.s4s_crop_mapping.pix-ratio-lo', 'Minimum crop to total pixel ratio for strategy 2', 'float', true, 30, true, 'Minimum crop to total pixel ratio for strategy 2', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.monitored-land-covers', 'Land cover class filter', 'string', true, 30, true, 'Land cover class filter', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.monitored-crops', 'Crop class filter', 'string', true, 30, true, 'Crop class filter', null);
+insert into config_metadata values ('processor.s4s_crop_mapping.monitored-crops-remapped-pre', 'Pre-remapped monitored crop class filter', 'string', true, 30, true, 'Pre-remapped monitored crop class filter', null);
+insert into config_metadata values ('processor.s4s_crop_mapping.excluded-crops-remapped-pre', 'Pre-remapped excluded crop class filter', 'string', true, 30, true, 'Pre-remapped excluded crop class filter', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.smote-ratio', 'Synthetic sample ratio', 'float', true, 30, true, 'Synthetic sample ratio', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.sample-ratio-hi', 'Training pixel ratio for strategy 1', 'float', true, 30, true, 'Training pixel ratio for strategy 1', null);
 insert into config_metadata values ('processor.s4s_crop_mapping.sample-ratio-lo', 'Training pixel ratio for strategies 2 and 3', 'float', true, 30, true, 'Training pixel ratio for strategies 2 and 3', null);
@@ -920,7 +922,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.mdb1_ids_map
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.bs_ids_mapping', 'Current BS NewID mapping file', 'string', true, 40, true, 'Current BS NewID mapping file', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.sites_ids_mapping', 'Sites NewIDs mapping file', 'string', true, 40, true, 'Sites NewIDs mapping file', null);
 
--- Reference period Grassland changes 
+-- Reference period Grassland changes
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_grassland_ttdayss2_thr', 'Reference Grassland TTdaysS2 Threshold', 'string', true, 40, true, 'Reference Grassland TTdaysS2 Threshold', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_grassland_ttdayss2_incr', 'Reference Grassland TTdaysS2 Increment', 'string', true, 40, true, 'Reference Grassland TTdaysS2 Increment', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_grassland_ratiostab_min_thr', 'Reference Grassland Ratio Stability Threshold Min', 'string', true, 40, true, 'Reference Grassland Ratio Stability Threshold Min', null);
@@ -929,7 +931,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_grasslan
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_grassland_ratiostab_max_incr', 'Reference Grassland Ratio Stability Max Increment', 'string', true, 40, true, 'Reference Grassland Ratio Stability Max Increment', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_grassland_consecstab_thr', 'Reference Grassland ConsecC Stability Threshold', 'string', true, 40, true, 'Reference Grassland ConsecC Stability Threshold', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_grassland_consecstab_incr', 'Reference Grassland ConsecC Stability Increment', 'string', true, 40, true, 'Reference Grassland ConsecC Stability Increment', null);
--- Reference period Permanent crops changes 
+-- Reference period Permanent crops changes
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_permcrops_ttdayss2_thr', 'Reference Permanent Crops TTdaysS2 Threshold', 'string', true, 40, true, 'Reference Permanent Crops TTdaysS2 Threshold', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_permcrops_ttdayss2_incr', 'Reference Permanent Crops TTdaysS2 Increment', 'string', true, 40, true, 'Reference Permanent Crops TTdaysS2 Increment', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_permcrops_areaveg_thr', 'Reference Permanent Crops AreaVeg Threshold', 'string', true, 40, true, 'Reference Permanent Crops AreaVeg Threshold', null);
@@ -940,7 +942,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_permcrop
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_arableland_ttdayss2_thr', 'Reference Arable land TTdaysS2 Threshold', 'string', true, 40, true, 'Reference Arable land TTdaysS2 Threshold', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.ref_arableland_ttdayss2_incr', 'Reference Arable land TTdaysS2 Increment', 'string', true, 40, true, 'Reference Arable land TTdaysS2 Increment', null);
 
--- Current year Grassland changes 
+-- Current year Grassland changes
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.grassland_ttdayss2_thr', 'Grassland TTdaysS2 Threshold', 'string', true, 40, true, 'Grassland TTdaysS2 Threshold', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.grassland_ttdayss2_incr', 'Grassland TTdaysS2 Increment', 'string', true, 40, true, 'Grassland TTdaysS2 Increment', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.grassland_ratiostab_min_thr', 'Grassland Ratio Stability Threshold Min', 'string', true, 40, true, 'Grassland Ratio Stability Threshold Min', null);
@@ -949,7 +951,7 @@ INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.grassland_ra
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.grassland_ratiostab_max_incr', 'Grassland Ratio Stability Max Increment', 'string', true, 40, true, 'Grassland Ratio Stability Max Increment', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.grassland_consecstab_thr', 'Grassland ConsecC Stability Threshold', 'string', true, 40, true, 'Grassland ConsecC Stability Threshold', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.grassland_consecstab_incr', 'Grassland ConsecC Stability Increment', 'string', true, 40, true, 'Grassland ConsecC Stability Increment', null);
--- Current year Permanent crops changes 
+-- Current year Permanent crops changes
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.permcrops_ttdayss2_thr', 'Permanent Crops TTdaysS2 Threshold', 'string', true, 40, true, 'Permanent Crops TTdaysS2 Threshold', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.permcrops_ttdayss2_incr', 'Permanent Crops TTdaysS2 Increment', 'string', true, 40, true, 'Permanent Crops TTdaysS2 Increment', null);
 INSERT INTO config_metadata VALUES ('processor.s4c_change_detection.permcrops_areaveg_thr', 'Permanent Crops AreaVeg Threshold', 'string', true, 40, true, 'Permanent Crops AreaVeg Threshold', null);
