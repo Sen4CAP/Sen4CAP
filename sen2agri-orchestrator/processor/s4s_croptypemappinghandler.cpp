@@ -52,10 +52,9 @@ NewStepList S4SCropTypeMappingHandler::CreateSteps(EventProcessingContext &ctx,
 }
 
 QStringList S4SCropTypeMappingHandler::GetCropTypeTaskArgs(const CropTypeJobConfig &cfg,
-                                                    const QString &prdTargetDir,
-                                                    const QString &workingPath)
+                                                           const QString &prdTargetDir,
+                                                           const QString &workingPath)
 {
-
     QStringList cropTypeArgs = { "-s",
                                  QString::number(cfg.event.siteId),
                                  "--season-start",
@@ -65,21 +64,103 @@ QStringList S4SCropTypeMappingHandler::GetCropTypeTaskArgs(const CropTypeJobConf
                                  "--working-path",
                                  workingPath,
                                  "--output-path",
-                                 prdTargetDir};
-    int remappingId = ProcessorHandlerHelper::GetIntConfigValue(cfg.parameters, cfg.configParameters,
-                                                                                 "crop_remapping_set_id", S4S_CTM_CFG_PREFIX, -1);
-    if (remappingId >= 0) {
-        cropTypeArgs += {"--remapping-set-id", QString::number(remappingId)};
+                                 prdTargetDir };
+
+    cropTypeArgs +=
+        { "--pix-min",
+          QString::number(ProcessorHandlerHelper::GetIntConfigValue(
+              cfg.parameters, cfg.configParameters, "pix-min", S4S_CTM_CFG_PREFIX, 1)) };
+    cropTypeArgs +=
+        { "--pix-best",
+          QString::number(ProcessorHandlerHelper::GetIntConfigValue(
+              cfg.parameters, cfg.configParameters, "pix-best", S4S_CTM_CFG_PREFIX, 1)) };
+    cropTypeArgs +=
+        { "--pix-ratio-min", QString::number(ProcessorHandlerHelper::GetFloatConfigValue(
+                                 cfg.parameters, cfg.configParameters, "pix-ratio-min",
+                                 S4S_CTM_CFG_PREFIX, 0.0002f)) };
+    cropTypeArgs +=
+        { "--poly-min",
+          QString::number(ProcessorHandlerHelper::GetIntConfigValue(
+              cfg.parameters, cfg.configParameters, "poly-min", S4S_CTM_CFG_PREFIX, 1)) };
+    cropTypeArgs +=
+        { "--pix-ratio-hi",
+          QString::number(ProcessorHandlerHelper::GetFloatConfigValue(
+              cfg.parameters, cfg.configParameters, "pix-ratio-hi", S4S_CTM_CFG_PREFIX, 0.05f)) };
+    cropTypeArgs +=
+        { "--pix-ratio-lo",
+          QString::number(ProcessorHandlerHelper::GetFloatConfigValue(
+              cfg.parameters, cfg.configParameters, "pix-ratio-lo", S4S_CTM_CFG_PREFIX, 0.01f)) };
+    cropTypeArgs +=
+        { "--smote-ratio",
+          QString::number(ProcessorHandlerHelper::GetFloatConfigValue(
+              cfg.parameters, cfg.configParameters, "smote-ratio", S4S_CTM_CFG_PREFIX, 0.0075f)) };
+    cropTypeArgs +=
+        { "--sample-ratio-hi", QString::number(ProcessorHandlerHelper::GetFloatConfigValue(
+                                   cfg.parameters, cfg.configParameters, "sample-ratio-hi",
+                                   S4S_CTM_CFG_PREFIX, 0.25f)) };
+    cropTypeArgs +=
+        { "--sample-ratio-lo", QString::number(ProcessorHandlerHelper::GetFloatConfigValue(
+                                   cfg.parameters, cfg.configParameters, "sample-ratio-lo",
+                                   S4S_CTM_CFG_PREFIX, 0.75f)) };
+
+    QString monitoredLandCovers = ProcessorHandlerHelper::GetStringConfigValue(
+        cfg.parameters, cfg.configParameters, "monitored-land-covers", S4S_CTM_CFG_PREFIX);
+    if (!monitoredLandCovers.isEmpty()) {
+        cropTypeArgs.append("--monitored-land-covers");
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        cropTypeArgs += monitoredLandCovers.split(',', Qt::SkipEmptyParts);
+#else
+        cropTypeArgs += monitoredLandCovers.split(',', QString::SkipEmptyParts);
+#endif
     }
 
-    const QString &featuresStr = ProcessorHandlerHelper::GetStringConfigValue(cfg.parameters, cfg.configParameters,
-                                                                                 "features-filter", S4S_CTM_CFG_PREFIX);
+    QString monitoredCrops = ProcessorHandlerHelper::GetStringConfigValue(
+        cfg.parameters, cfg.configParameters, "monitored-crops", S4S_CTM_CFG_PREFIX);
+    if (!monitoredCrops.isEmpty()) {
+        cropTypeArgs.append("--monitored-crops");
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        cropTypeArgs += monitoredCrops.split(',', Qt::SkipEmptyParts);
+#else
+        cropTypeArgs += monitoredCrops.split(',', QString::SkipEmptyParts);
+#endif
+    }
+
+    QString monitoredCropsRemappedPre = ProcessorHandlerHelper::GetStringConfigValue(
+        cfg.parameters, cfg.configParameters, "monitored-crops-remapped-pre", S4S_CTM_CFG_PREFIX);
+    if (!monitoredCropsRemappedPre.isEmpty()) {
+        cropTypeArgs.append("--monitored-crops-remapped-pre");
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        cropTypeArgs += monitoredCropsRemappedPre.split(',', Qt::SkipEmptyParts);
+#else
+        cropTypeArgs += monitoredCropsRemappedPre.split(',', QString::SkipEmptyParts);
+#endif
+    }
+
+    QString excludedCropsRemappedPre = ProcessorHandlerHelper::GetStringConfigValue(
+        cfg.parameters, cfg.configParameters, "excluded-crops-remapped-pre", S4S_CTM_CFG_PREFIX);
+    if (!excludedCropsRemappedPre.isEmpty()) {
+        cropTypeArgs.append("--excluded-crops-remapped-pre");
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+        cropTypeArgs += excludedCropsRemappedPre.split(',', Qt::SkipEmptyParts);
+#else
+        cropTypeArgs += excludedCropsRemappedPre.split(',', QString::SkipEmptyParts);
+#endif
+    }
+
+    int remappingId = ProcessorHandlerHelper::GetIntConfigValue(
+        cfg.parameters, cfg.configParameters, "crop_remapping_set_id", S4S_CTM_CFG_PREFIX, -1);
+    if (remappingId >= 0) {
+        cropTypeArgs += { "--remapping-set-id", QString::number(remappingId) };
+    }
+
+    const QString &featuresStr = ProcessorHandlerHelper::GetStringConfigValue(
+        cfg.parameters, cfg.configParameters, "features-filter", S4S_CTM_CFG_PREFIX);
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     const QStringList &featuresFilter = featuresStr.split(',', Qt::SkipEmptyParts);
 #else
     const QStringList &featuresFilter = featuresStr.split(',', QString::SkipEmptyParts);
 #endif
-    if(featuresFilter.size() > 0) {
+    if (featuresFilter.size() > 0) {
         cropTypeArgs.append("--features");
         cropTypeArgs += featuresFilter;
     }
@@ -217,5 +298,3 @@ ProcessorJobDefinitionParams S4SCropTypeMappingHandler::GetProcessingDefinitionI
 
     return params;
 }
-
-

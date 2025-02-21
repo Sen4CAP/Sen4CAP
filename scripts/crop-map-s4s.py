@@ -1715,6 +1715,75 @@ def main():
     parser.add_argument("--season-start", help="season start date")
     parser.add_argument("--season-end", help="season end date")
     parser.add_argument("--year", help="in-situ data or classification year", type=int)
+    parser.add_argument(
+        "--pix-min", type=int, default=1, help="Minimum number of pixels of polygons"
+    )
+    parser.add_argument(
+        "--pix-best",
+        type=int,
+        default=1,
+        help="Minimum number of pixels of polygons used for training",
+    )
+    parser.add_argument(
+        "--pix-ratio-min",
+        type=float,
+        default=0.0002,
+        help="Minimum crop to total pixel ratio",
+    )
+    parser.add_argument(
+        "--poly-min", type=int, default=1, help="Minimum number of polygons for crops"
+    )
+    parser.add_argument(
+        "--pix-ratio-hi",
+        type=float,
+        default=0.05,
+        help="Minimum crop to total pixel ratio for strategy 1",
+    )
+    parser.add_argument(
+        "--pix-ratio-lo",
+        type=float,
+        default=0.01,
+        help="Minimum crop to total pixel ratio for strategy 2",
+    )
+    parser.add_argument(
+        "--smote-ratio", type=float, default=0.0075, help="Synthetic sample ratio"
+    )
+    parser.add_argument(
+        "--sample-ratio-hi",
+        type=float,
+        default=0.25,
+        help="Training pixel ratio for strategy 1",
+    )
+    parser.add_argument(
+        "--sample-ratio-lo",
+        type=float,
+        default=0.75,
+        help="Training pixel ratio for strategies 2 and 3",
+    )
+    parser.add_argument(
+        "--monitored-land-covers",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Land cover class filter",
+    )
+    parser.add_argument(
+        "--monitored-crops", type=int, nargs="+", default=None, help="Crop class filter"
+    )
+    parser.add_argument(
+        "--monitored-crops-remapped-pre",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Pre-remapped monitored crops",
+    )
+    parser.add_argument(
+        "--excluded-crops-remapped-pre",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Pre-remapped excluded crops",
+    )
     parser.add_argument("--remapping-set-id", help="remapping set id", type=int)
     parser.add_argument(
         "--broceliande", help="Broceliande mode", default=False, action="store_true"
@@ -1769,7 +1838,6 @@ def main():
     client = docker.from_env(timeout=600)
     pool_hi_conc = Pool()
     pool_med_conc = Pool(min(os.cpu_count() or 1, 4))
-    pool_lo_conc = Pool(min(os.cpu_count() or 1, 2))
     pool_no_conc = Pool(1)
 
     config = Config(args)
@@ -1806,7 +1874,39 @@ def main():
             str(args.site_id),
             "--year",
             str(classification_year),
+            "--pix-min",
+            str(args.pix_min),
+            "--pix-best",
+            str(args.pix_best),
+            "--pix-ratio-min",
+            str(args.pix_ratio_min),
+            "--poly-min",
+            str(args.poly_min),
+            "--pix-ratio-hi",
+            str(args.pix_ratio_hi),
+            "--pix-ratio-lo",
+            str(args.pix_ratio_lo),
+            "--smote-ratio",
+            str(args.smote_ratio),
+            "--sample-ratio-hi",
+            str(args.sample_ratio_hi),
+            "--sample-ratio-lo",
+            str(args.sample_ratio_lo),
         ]
+        if args.monitored_land_covers:
+            command += ["--monitored-land-covers"] + list(
+                map(str, args.monitored_land_covers)
+            )
+        if args.monitored_crops:
+            command += ["--monitored-crops"] + list(map(str, args.monitored_crops))
+        if args.monitored_crops_remapped_pre:
+            command += ["--monitored-crops-remapped-pre"] + list(
+                map(str, args.monitored_crops_remapped_pre)
+            )
+        if args.excluded_crops_remapped_pre:
+            command += ["--excluded-crops-remapped-pre"] + list(
+                map(str, args.excluded_crops_remapped_pre)
+            )
         if args.remapping_set_id:
             command += ["--remapping-set-id", str(args.remapping_set_id)]
         if args.debug:

@@ -11,7 +11,6 @@ import docker
 import glob
 import json
 import logging
-from lxml.builder import E
 import math
 import os
 import os.path
@@ -217,6 +216,75 @@ def main():
     required_args.add_argument(
         "-s", "--site-id", type=int, required=True, help="site ID to filter by"
     )
+    parser.add_argument(
+        "--pix-min", type=int, default=1, help="Minimum number of pixels of polygons"
+    )
+    parser.add_argument(
+        "--pix-best",
+        type=int,
+        default=1,
+        help="Minimum number of pixels of polygons used for training",
+    )
+    parser.add_argument(
+        "--pix-ratio-min",
+        type=float,
+        default=0.0002,
+        help="Minimum crop to total pixel ratio",
+    )
+    parser.add_argument(
+        "--poly-min", type=int, default=1, help="Minimum number of polygons for crops"
+    )
+    parser.add_argument(
+        "--pix-ratio-hi",
+        type=float,
+        default=0.05,
+        help="Minimum crop to total pixel ratio for strategy 1",
+    )
+    parser.add_argument(
+        "--pix-ratio-lo",
+        type=float,
+        default=0.01,
+        help="Minimum crop to total pixel ratio for strategy 2",
+    )
+    parser.add_argument(
+        "--smote-ratio", type=float, default=0.0075, help="Synthetic sample ratio"
+    )
+    parser.add_argument(
+        "--sample-ratio-hi",
+        type=float,
+        default=0.25,
+        help="Training pixel ratio for strategy 1",
+    )
+    parser.add_argument(
+        "--sample-ratio-lo",
+        type=float,
+        default=0.75,
+        help="Training pixel ratio for strategies 2 and 3",
+    )
+    parser.add_argument(
+        "--monitored-land-covers",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Land cover class filter",
+    )
+    parser.add_argument(
+        "--monitored-crops", type=int, nargs="+", default=None, help="Crop class filter"
+    )
+    parser.add_argument(
+        "--monitored-crops-remapped-pre",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Pre-remapped monitored crops",
+    )
+    parser.add_argument(
+        "--excluded-crops-remapped-pre",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Pre-remapped excluded crops",
+    )
     parser.add_argument("--remapping-set-id", help="remapping set id", type=int)
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true")
     parser.add_argument("--working-path", help="working path")
@@ -269,10 +337,6 @@ def main():
 
     with get_connection(config) as conn:
         site_name = get_site_name(conn, config.site_id)
-
-        sample_ratio_hi = 0.25
-        sample_ratio_lo = 0.75
-        smote_ratio = 0.0075
 
         parcels_table = "in_situ_polygons_{}_{}".format(site_name, args.year)
         attributes_table = "polygon_attributes_{}_{}".format(site_name, args.year)
@@ -352,10 +416,10 @@ order by site_id;"""
             ).format(Literal(args.remapping_set_id))
             remapped_code_filter = SQL(
                 """
-                and (monitored_crops_remapped_pre is null
-                  or crop_remapping_set_detail.remapped_code_pre = any (monitored_crops_remapped_pre))
-                and (excluded_crops_remapped_pre is null
-                  or crop_remapping_set_detail.remapped_code_pre <> all (excluded_crops_remapped_pre))
+                and (%(monitored_crops_remapped_pre)s is null
+                  or crop_remapping_set_detail.remapped_code_pre = any (%(monitored_crops_remapped_pre)s))
+                and (%(excluded_crops_remapped_pre)s is null
+                  or crop_remapping_set_detail.remapped_code_pre <> all (%(excluded_crops_remapped_pre)s))
                 """
             )
 
@@ -395,151 +459,61 @@ order by site_id;"""
 
         query = SQL(
             """
-    with site_config as (
-        select key,
-               value
-        from v_site_config
-        where site_id = %s
-    ),
-    config (
-        pix_min,
-        pix_best,
-        pix_ratio_min,
-        poly_min,
-        pix_ratio_hi,
-        pix_ratio_lo,
-        monitored_land_covers,
-        monitored_crops,
-        monitored_crops_remapped_pre,
-        excluded_crops_remapped_pre,
-        smote_ratio,
-        sample_ratio_hi,
-        sample_ratio_lo
-    ) as (
-        select
-                (
-                    select value :: int as pix_min
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.pix-min'
-                ),
-                (
-                    select value :: int as pix_best
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.pix-best'
-                ),
-                (
-                    select value :: float as pix_ratio_min
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.pix-ratio-min'
-                ),
-                (
-                    select value :: int as poly_min
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.poly-min'
-                ),
-                (
-                    select value :: float as pix_ratio_hi
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.pix-ratio-hi'
-                ),
-                (
-                    select value :: float as pix_ratio_lo
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.pix-ratio-lo'
-                ),
-                (
-                    select nullif(value, '') :: int[] as monitored_land_covers
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.monitored-land-covers'
-                ),
-                (
-                    select nullif(value, '') :: int[] as monitored_crops
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.monitored-crops'
-                ),
-                (
-                    select nullif(value, '') :: int[] as monitored_crops_remapped_pre
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.monitored-crops-remapped-pre'
-                ),
-                (
-                    select nullif(value, '') :: int[] as excluded_crops_remapped_pre
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.excluded-crops-remapped-pre'
-                ),
-                (
-                    select value :: float as smote_ratio
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.smote-ratio'
-                ),
-                (
-                    select value :: float as sample_ratio_hi
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.sample-ratio-hi'
-                ),
-                (
-                    select value :: float as sample_ratio_lo
-                    from site_config
-                    where key = 'processor.s4s_crop_mapping.sample-ratio-lo'
-                )
-    ),
-    eligible_polygons as (
-        select polygons.parcel_id
-             , ST_Multi(ST_Buffer(polygons.wkb_geometry, -10)) as wkb_geometry
-             , attributes.pix_10m
-             , {} as crop_code
-             , crop_list_n4.code_n4
-             , crop_list_n3.code_n3
-             , crop_list_n2.code_n2
-             , crop_list_n2.code_n1
-             , case crop_list_n2.code_n1
-                   when 1 then 1
-                   when 2 then 2
-                   else 3
-               end as land_cover_class
-             , sum(pix_10m) over (partition by {}) as crop_pixels
-             , sum(pix_10m) over () as total_pixels
-             , count(*) over (partition by {}) as polygon_num
-             , attributes.tile_id as tile_id
-        from config,
-             {} polygons
-                 inner join {} attributes using (parcel_id)
-                 inner join {} statistical_data using (parcel_id)
-                 inner join crop_list_n4 on crop_list_n4.code_n4 = statistical_data.crop_code
-                 inner join crop_list_n3 using (code_n3)
-                 inner join crop_list_n2 using (code_n2)
-                 {}
-        where geom_valid
-          and not multipart
-          and not overlap
-          --  and quality_control
-          and attributes.tile_id is not null
-          and pix_10m >= pix_min
-          and (monitored_land_covers is null
-            or code_n1 = any (monitored_land_covers))
-          and (monitored_crops is null
-            or crop_code = any (monitored_crops))
-          and stratum_crop_id = %s
-          {}
-    ),
-    eligible_polygons_with_attr as (
-        select *,
-               crop_pixels :: float / total_pixels as pixel_ratio
-        from eligible_polygons
-    ),
-    selected_polygons as (
-        select eligible_polygons_with_attr.*,
-               case
-                   when pix_10m < pix_best then 4
-                   when pixel_ratio >= pix_ratio_hi then 1
-                   when pixel_ratio >= pix_ratio_lo then 2
-                   else 3
-                   end as strategy
-        from config,
-             eligible_polygons_with_attr
-        where pixel_ratio >= pix_ratio_min
-          and polygon_num >= poly_min
-    )
+with eligible_polygons as (
+    select polygons.parcel_id
+            , ST_Multi(ST_Buffer(polygons.wkb_geometry, -10)) as wkb_geometry
+            , attributes.pix_10m
+            , {} as crop_code
+            , crop_list_n4.code_n4
+            , crop_list_n3.code_n3
+            , crop_list_n2.code_n2
+            , crop_list_n2.code_n1
+            , case crop_list_n2.code_n1
+                when 1 then 1
+                when 2 then 2
+                else 3
+            end as land_cover_class
+            , sum(pix_10m) over (partition by {}) as crop_pixels
+            , sum(pix_10m) over () as total_pixels
+            , count(*) over (partition by {}) as polygon_num
+            , attributes.tile_id as tile_id
+    from {} polygons
+        inner join {} attributes using (parcel_id)
+        inner join {} statistical_data using (parcel_id)
+        inner join crop_list_n4 on crop_list_n4.code_n4 = statistical_data.crop_code
+        inner join crop_list_n3 using (code_n3)
+        inner join crop_list_n2 using (code_n2)
+        {}
+    where geom_valid
+      and not multipart
+      and not overlap
+      --  and quality_control
+      and attributes.tile_id is not null
+      and pix_10m >= %(pix_min)s
+      and (%(monitored_land_covers)s is null
+      or code_n1 = any (%(monitored_land_covers)s))
+      and (%(monitored_crops)s is null
+      or crop_code = any (%(monitored_crops)s))
+      and stratum_crop_id = %(stratum_id)s
+      {}
+),
+eligible_polygons_with_attr as (
+    select *,
+            crop_pixels :: float / total_pixels as pixel_ratio
+    from eligible_polygons
+),
+selected_polygons as (
+    select eligible_polygons_with_attr.*,
+            case
+                when pix_10m < %(pix_best)s then 4
+                when pixel_ratio >= %(pix_ratio_hi)s then 1
+                when pixel_ratio >= %(pix_ratio_lo)s then 2
+                else 3
+            end as strategy
+    from eligible_polygons_with_attr
+    where pixel_ratio >= %(pix_ratio_min)s
+      and polygon_num >= %(poly_min)s
+)
 select selected_polygons.parcel_id,
        ST_AsBinary(selected_polygons.wkb_geometry),
        selected_polygons.pix_10m,
@@ -582,7 +556,20 @@ order by random();
 
             smote_targets = {}
             with conn.cursor() as cursor:
-                query_args = (config.site_id, stratum.stratum_id or 0)
+                query_args = {
+                    "site_id": config.site_id,
+                    "stratum_id": stratum.stratum_id or 0,
+                    "pix_min": args.pix_min,
+                    "pix_best": args.pix_best,
+                    "pix_ratio_min": args.pix_ratio_min,
+                    "poly_min": args.poly_min,
+                    "pix_ratio_hi": args.pix_ratio_hi,
+                    "pix_ratio_lo": args.pix_ratio_lo,
+                    "monitored_land_covers": args.monitored_land_covers,
+                    "monitored_crops": args.monitored_crops,
+                    "monitored_crops_remapped_pre": args.monitored_crops_remapped_pre,
+                    "excluded_crops_remapped_pre": args.excluded_crops_remapped_pre,
+                }
 
                 cursor.execute(query, query_args)
                 for (
@@ -610,9 +597,9 @@ order by random();
                     if strategy != 4:
                         crop_target = None
                         if strategy == 1:
-                            crop_target = sample_ratio_hi * crop_pixels
+                            crop_target = args.sample_ratio_hi * crop_pixels
                         elif strategy == 2 or strategy == 3:
-                            crop_target = sample_ratio_lo * crop_pixels
+                            crop_target = args.sample_ratio_lo * crop_pixels
                         else:
                             raise RuntimeError(
                                 f"Invalid strategy for crop {crop_code}: {strategy}"
@@ -630,8 +617,8 @@ order by random();
                         if strategy == 3:
                             smote_target = int(
                                 round(
-                                    smote_ratio * total_pixels
-                                    - sample_ratio_lo * crop_pixels
+                                    args.smote_ratio * total_pixels
+                                    - args.sample_ratio_lo * crop_pixels
                                 )
                             )
                             if crop_code not in smote_targets:
@@ -660,7 +647,9 @@ order by random();
                     if purpose == PURPOSE_TRAINING:
                         feature = ogr.Feature(tile_output.training_layer.GetLayerDefn())
                     else:
-                        feature = ogr.Feature(tile_output.validation_layer.GetLayerDefn())
+                        feature = ogr.Feature(
+                            tile_output.validation_layer.GetLayerDefn()
+                        )
 
                     feature.SetFID(parcel_id)
                     feature.SetField("id", parcel_id)
