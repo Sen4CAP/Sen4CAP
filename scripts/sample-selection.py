@@ -153,6 +153,17 @@ class TileOutput(object):
         self.validation_points: Optional[str] = None
 
 
+class CropStatistics(object):
+    def __init__(self):
+        self.training_polygons = 0
+        self.validation_polygons = 0
+        self.estimated_training_pixels = 0
+        self.estimated_validation_pixels = 0
+        self.training_samples = 0
+        self.validation_samples = 0
+        self.smote_samples = 0
+
+
 def create_tile_outputs(
     driver: ogr.Driver,
     stratum_id: Optional[int],
@@ -544,9 +555,12 @@ order by random();
         )
         logging.debug(query.as_string(conn))
 
+        statistics = defaultdict(lambda: defaultdict(lambda: CropStatistics()))
+        stratum_tile_outputs = defaultdict(lambda: {})
         for stratum in strata:
-            tile_outputs: Dict[str, TileOutput] = {}
-            print(f"Stratum {stratum.stratum_id or 0}: ", stratum.tiles)
+            stratum_id = stratum.stratum_id or 0
+            tile_outputs: Dict[str, TileOutput] = stratum_tile_outputs[stratum_id]
+            print(f"Stratum {stratum_id}: ", stratum.tiles)
 
             training_pixels = defaultdict(lambda: 0)
             training_target = {}
@@ -554,11 +568,12 @@ order by random();
             PURPOSE_TRAINING = 0
             PURPOSE_VALIDATION = 1
 
+            stratum_statistics = statistics[stratum_id]
             smote_targets = {}
             with conn.cursor() as cursor:
                 query_args = {
                     "site_id": config.site_id,
-                    "stratum_id": stratum.stratum_id or 0,
+                    "stratum_id": stratum_id,
                     "pix_min": args.pix_min,
                     "pix_best": args.pix_best,
                     "pix_ratio_min": args.pix_ratio_min,
@@ -594,6 +609,7 @@ order by random();
                     transform = transforms[tile_id]
                     geom.Transform(transform)
 
+                    crop_statistics = stratum_statistics[crop_code]
                     if strategy != 4:
                         crop_target = None
                         if strategy == 1:
@@ -623,6 +639,7 @@ order by random();
                             )
                             if crop_code not in smote_targets:
                                 smote_targets[crop_code] = smote_target
+                                crop_statistics.smote_samples = smote_target
 
                         pixels = training_pixels[crop_code]
                         if pixels < crop_target:
@@ -669,8 +686,12 @@ order by random();
 
                     if purpose == PURPOSE_TRAINING:
                         tile_output.training_layer.CreateFeature(feature)
+                        crop_statistics.training_polygons += 1
+                        crop_statistics.estimated_training_pixels += pix_10m
                     else:
                         tile_output.validation_layer.CreateFeature(feature)
+                        crop_statistics.validation_polygons += 1
+                        crop_statistics.estimated_validation_pixels += pix_10m
 
             if stratum.stratum_id:
                 smote_targets_json = f"smote_targets_{stratum.stratum_id}.json"
@@ -801,6 +822,46 @@ order by random();
     run_containers_concurrently(client, pool, containers)
 
     client.close()
+
+    def get_sample_counts(dataset_path):
+        ds = gdal.OpenEx(dataset_path)
+        lyr = ds.ExecuteSQL("select crop_code, count(*) from output group by crop_code")
+        for feat in lyr:
+            crop_code = feat.GetField(0)
+            count = feat.GetField(1)
+            yield crop_code, count
+
+    for stratum_id, tile_outputs in stratum_tile_outputs.items():
+        crop_statistics = statistics[stratum_id]
+
+        for tile_output in tile_outputs.values():
+            for crop_code, count in get_sample_counts(tile_output.training_points):
+                crop_statistics[crop_code].training_samples += count
+            for crop_code, count in get_sample_counts(tile_output.validation_points):
+                crop_statistics[crop_code].validation_samples += count
+
+    statistics_json = defaultdict(lambda: {})
+    stratum_items = list(statistics.items())
+    stratum_items.sort(key=lambda x: x[0])
+    for stratum_id, stratum_statistics in stratum_items:
+        crop_items = list(stratum_statistics.items())
+        crop_items.sort(key=lambda x: str(x[0]))
+
+        crop_statistics = {}
+        for crop_code, stats in crop_items:
+            crop_statistics[crop_code] = {
+                "training_polygons": stats.training_polygons,
+                "validation_polygons": stats.validation_polygons,
+                "estimated_training_pixels": stats.estimated_training_pixels,
+                "estimated_validation_pixels": stats.estimated_validation_pixels,
+                "training_samples": stats.training_samples,
+                "validation_samples": stats.validation_samples,
+                "smote_samples": stats.smote_samples,
+            }
+        statistics_json[stratum_id] = crop_statistics
+
+    with open("polygon-statistics.json", "w") as f:
+        json.dump(statistics_json, f, indent=2)
 
 
 if __name__ == "__main__":
