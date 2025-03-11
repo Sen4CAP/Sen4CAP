@@ -1241,12 +1241,12 @@ class Maja(L2aProcessor):
                         )
                         if len(res) == 1:
                             self.l2a.cloud_coverage_assessment = float(res[0])
-                        else:
-                            self.l2a_log.warning(
-                                "Can NOT extract cloud coverage from: {}".format(
-                                    maja_log_path
-                                )
-                            )
+                            break
+
+                if self.l2a.cloud_coverage_assessment is None:
+                    self.l2a_log.warning(
+                        "Can NOT extract cloud coverage from: {}".format(maja_log_path)
+                    )
             else:
                 self.l2a_log.error("Can NOT find MAJA log: {}", format(maja_log_path))
 
