@@ -1751,7 +1751,10 @@ class Maja(L2aProcessor):
                     self.lin.should_retry = False
                     break
 
-            if self.l2a.cloud_coverage_assessment > MAX_CLOUD_COVERAGE:
+            if (
+                self.l2a.cloud_coverage_assessment is not None
+                and self.l2a.cloud_coverage_assessment > MAX_CLOUD_COVERAGE
+            ):
                 self.update_rejection_reason(
                     "Cloud coverage {} is above the maximum threshold of: {}".format(
                         self.l2a.cloud_coverage_assessment, MAX_CLOUD_COVERAGE
