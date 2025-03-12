@@ -213,7 +213,10 @@ def create_tile_outputs(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Select polygons for S4S/Crop Type")
+    parser = argparse.ArgumentParser(
+        description="Select polygons for S4S/Crop Type",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument(
         "-c",
         "--config-file",

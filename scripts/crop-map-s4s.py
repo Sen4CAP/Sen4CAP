@@ -1699,7 +1699,8 @@ def write_stack_vrt_fast(tile_info: TileInfo, files: List[str], destination: str
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run S4S/Crop Type feature extraction and classification"
+        description="Run S4S/Crop Type feature extraction and classification",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "-c",
