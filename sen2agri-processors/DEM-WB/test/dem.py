@@ -16,24 +16,23 @@ _____________________________________________________________________________
 _____________________________________________________________________________
 
 """
-try:
-    import argparse
-    import datetime
-    import re
-    import glob
-    from osgeo import gdal, osr
-    import logging
-    import lxml.etree
-    from lxml.builder import E
-    import math
-    import os
-    from os.path import isdir, join
-    import pipes
-    import subprocess
-    import sys
-    import time
-except Exception as e:
-    print(e)
+
+import argparse
+import datetime
+import re
+import glob
+from osgeo import gdal, osr
+import logging
+import lxml.etree
+from lxml.builder import E
+import math
+import os
+from os.path import isdir, join
+import shlex
+import shutil
+import subprocess
+import sys
+import time
 
 print("Starting DEM script")
 
@@ -61,7 +60,7 @@ def GetExtent(gt, cols, rows):
 def run_command(cmd_array, log_path="", log_filename="", fake_command=False):
     start = time.time()
     cmd_array = list(map(str, cmd_array))
-    cmd_str = " ".join(map(pipes.quote, cmd_array))
+    cmd_str = " ".join(map(shlex.quote, cmd_array))
     logging.debug("Running command: {}".format(cmd_str))
     res = 0
     if not fake_command:
@@ -941,9 +940,10 @@ def process_WB(context):
         empty_shp = os.path.join(context.swbd_directory, "empty.shp")
         swbd_tiles.append(empty_shp)
 
+    ogrmerge = shutil.which("ogrmerge") or shutil.which("ogrmerge.py")
     run_command(
         [
-            "ogrmerge.py",
+            ogrmerge,
             "-overwrite_ds",
             "-single",
             "-a_srs",
