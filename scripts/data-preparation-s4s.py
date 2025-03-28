@@ -577,6 +577,9 @@ from {}
         layer = ds.GetLayer()
         srs = layer.GetSpatialRef()
         is_projected = srs.IsProjected()
+        if not is_projected:
+            logging.error("Input geometries must be in a projected CRS")
+            sys.exit(1)
         del ds
 
         print("Importing parcels")
@@ -873,7 +876,7 @@ where polygon_tiles.parcel_id = attributes.parcel_id;
             layerName=self.statistical_data_table_staging,
         )
         statistical_data_ds = gdal.OpenEx(
-            statistical_data, open_options=["AUTODETECT_TYPE=YES"]
+            statistical_data, gdal.OF_VECTOR, open_options=["AUTODETECT_TYPE=YES"]
         )
         gdal.VectorTranslate(
             self.get_ogr_connection_string(),
