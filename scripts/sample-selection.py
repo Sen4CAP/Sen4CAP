@@ -330,7 +330,12 @@ def main():
     polygon_num_field = ogr.FieldDefn("polygon_num", ogr.OFTInteger)
     pixel_ratio_field = ogr.FieldDefn("pixel_ratio", ogr.OFTReal)
 
-    fields = [
+    tile_fields = [
+        parcel_id_field,
+        code_lc_field,
+        crop_code_field,
+    ]
+    all_fields = [
         parcel_id_field,
         code_n1_field,
         code_n2_field,
@@ -389,6 +394,25 @@ order by site_id;"""
 
             insitu_path = insitu_path.replace("{site}", site_short_name)
             insitu_path = insitu_path.replace("{year}", str(args.year))
+
+        polygons = "polygons.gpkg"
+        if os.path.exists(polygons):
+            driver.DeleteDataSource(polygons)
+        polygon_dataset = driver.CreateDataSource("polygons.gpkg")
+        full_training_layer = polygon_dataset.CreateLayer(
+            "training",
+            site_srs,
+            ogr.wkbUnknown,
+        )
+        full_validation_layer = polygon_dataset.CreateLayer(
+            "validation",
+            site_srs,
+            ogr.wkbUnknown,
+        )
+
+        for field in all_fields:
+            full_training_layer.CreateField(field)
+            full_validation_layer.CreateField(field)
 
         tile_rasters = glob.glob(os.path.join(insitu_path, "*_10m.tif"))
         tiles: Dict[str, Tile] = {}
@@ -475,7 +499,7 @@ order by site_id;"""
             """
 with eligible_polygons as (
     select polygons.parcel_id
-            , ST_Multi(ST_Buffer(polygons.wkb_geometry, -10)) as wkb_geometry
+            , ST_Buffer(polygons.wkb_geometry, -10) as wkb_geometry
             , attributes.pix_10m
             , {} as crop_code
             , crop_list_n4.code_n4
@@ -529,7 +553,7 @@ selected_polygons as (
       and polygon_num >= %(poly_min)s
 )
 select selected_polygons.parcel_id,
-       ST_AsBinary(selected_polygons.wkb_geometry),
+       ST_AsBinary(selected_polygons.wkb_geometry) as wkb_geometry,
        selected_polygons.pix_10m,
        selected_polygons.crop_code,
        selected_polygons.code_n4,
@@ -609,8 +633,9 @@ order by random();
                 ) in cursor:
                     geom = ogr.CreateGeometryFromWkb(bytes(geometry))
                     geom.AssignSpatialReference(site_srs)
-                    transform = transforms[tile_id]
-                    geom.Transform(transform)
+
+                    geom_in_tile = geom.Clone()
+                    geom_in_tile.Transform(transforms[tile_id])
 
                     crop_statistics = stratum_statistics[crop_code]
                     if strategy != 4:
@@ -660,39 +685,49 @@ order by random();
                             driver,
                             stratum.stratum_id,
                             tile,
-                            fields,
+                            tile_fields,
                         )
                         tile_outputs[tile_id] = tile_output
 
                     if purpose == PURPOSE_TRAINING:
                         feature = ogr.Feature(tile_output.training_layer.GetLayerDefn())
+                        full_feature = ogr.Feature(full_training_layer.GetLayerDefn())
                     else:
                         feature = ogr.Feature(
                             tile_output.validation_layer.GetLayerDefn()
                         )
+                        full_feature = ogr.Feature(full_validation_layer.GetLayerDefn())
 
-                    feature.SetFID(parcel_id)
                     feature.SetField("id", parcel_id)
-                    feature.SetField("code_n1", code_n1)
-                    feature.SetField("code_n2", code_n2)
-                    feature.SetField("code_n3", code_n3)
-                    feature.SetField("code_n4", code_n4)
                     feature.SetField("code_lc", code_lc)
                     feature.SetField("crop_code", crop_code)
-                    feature.SetField("pix_10m", pix_10m)
-                    feature.SetField("strategy", strategy)
-                    feature.SetField("crop_pixels", crop_pixels)
-                    feature.SetField("total_pixels", total_pixels)
-                    feature.SetField("polygon_num", polygon_num)
-                    feature.SetField("pixel_ratio", pixel_ratio)
-                    feature.SetGeometry(geom)
+                    feature.SetGeometryDirectly(geom_in_tile)
+
+                    full_feature.SetField("id", parcel_id)
+                    full_feature.SetField("code_n1", code_n1)
+                    full_feature.SetField("code_n2", code_n2)
+                    full_feature.SetField("code_n3", code_n3)
+                    full_feature.SetField("code_n4", code_n4)
+                    full_feature.SetField("code_lc", code_lc)
+                    full_feature.SetField("crop_code", crop_code)
+                    full_feature.SetField("pix_10m", pix_10m)
+                    full_feature.SetField("strategy", strategy)
+                    full_feature.SetField("crop_pixels", crop_pixels)
+                    full_feature.SetField("total_pixels", total_pixels)
+                    full_feature.SetField("polygon_num", polygon_num)
+                    full_feature.SetField("pixel_ratio", pixel_ratio)
+                    full_feature.SetGeometryDirectly(geom)
 
                     if purpose == PURPOSE_TRAINING:
                         tile_output.training_layer.CreateFeature(feature)
+                        full_training_layer.CreateFeature(full_feature)
+
                         crop_statistics.training_polygons += 1
                         crop_statistics.estimated_training_pixels += pix_10m
                     else:
                         tile_output.validation_layer.CreateFeature(feature)
+                        full_validation_layer.CreateFeature(full_feature)
+
                         crop_statistics.validation_polygons += 1
                         crop_statistics.estimated_validation_pixels += pix_10m
 
