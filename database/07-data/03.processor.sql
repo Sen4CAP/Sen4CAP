@@ -61,7 +61,7 @@ VALUES
 INSERT INTO processor
 (id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required)
 VALUES
-(13, 'S2A L3D LAI Fitted Reprocessing','s2a_l3d', 'S2A L3d &mdash; LAI Fitted Reprocessing', false, '{1,2}', null, true, false, false, false);
+(13, 'S2A L3D LAI Fitted Reprocessing','s2a_l3d', 'S2A L3D &mdash; LAI Fitted Reprocessing', false, '{1,2}', null, true, false, false, false);
 
 INSERT INTO processor
 (id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required, description)
@@ -88,29 +88,29 @@ INSERT INTO processor
 VALUES
 (18, 'Era5 weather','era5_weather', 'Era5 weather', true, null, null, false, false, false, false);
 
-INSERT INTO processor 
-(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required) 
-VALUES 
+INSERT INTO processor
+(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required)
+VALUES
 (19, 'Zarr converter', 'zarr', 'Zarr converter', false, null, null, false, false, false, false);
 
-INSERT INTO processor 
-(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required) 
-VALUES 
+INSERT INTO processor
+(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required)
+VALUES
 (20, 'L4 Crop Mapping', 's4s_crop_mapping', 'L4 Crop Mapping', false, '{1,2,3}', null, true, false, true, false);
 
-INSERT INTO processor 
-(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required) 
-VALUES 
+INSERT INTO processor
+(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required)
+VALUES
 (21, 'T-Rex Updater', 't_rex_updater', 'T-Rex Updater', true, null, null, false, false, false, false);
 
-INSERT INTO processor 
-(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required) 
-VALUES 
+INSERT INTO processor
+(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required)
+VALUES
 (22, 'L3 S1 Composite', 'l3_s1_comp', 'L3 S1 Composite', false, '{3}', '{3}', true, false, false, false);
 
-INSERT INTO processor 
-(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required) 
-VALUES 
+INSERT INTO processor
+(id, name, short_name, label, required, supported_satellite_ids, mandatory_satellite_ids, is_admin_ui_visible, is_service_ui_visible, lpis_required, additional_config_required)
+VALUES
 (23, 'L3 Indicators Composite', 'l3_ind_comp', 'L3 Indicators Composite', false, '{1,2}', '{1}', true, false, false, false);
 
 INSERT INTO processor

@@ -1,10 +1,10 @@
 COPY public.crop_remapping_set_detail (crop_remapping_set_id, original_code, remapped_code_pre, description_pre, remapped_code_post, description_post) FROM stdin;
+1	1121	1121	Maize	112	Maize
 1	1111	1111	Winter wheat	111	Wheat
 1	1112	1112	Spring wheat	111	Wheat
 1	1113	1113	Hard wheat	111	Wheat
 1	1114	1114	Soft wheat	111	Wheat
 1	1115	1115	Triticale	111	Wheat
-1	1121	1121	Maize	112	Maize
 1	1131	1131	Rice	113	Rice
 1	1141	1141	Sorghum	114	Sorghum
 1	1151	1151	Barley two-row	115	Barley
@@ -14,23 +14,23 @@ COPY public.crop_remapping_set_detail (crop_remapping_set_id, original_code, rem
 1	1181	1181	Millets	118	Millets
 1	1192	1192	Other cereals	119	Other cereals
 1	1193	1193	Quinoa	119	Other cereals
-1	1211	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1212	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1213	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1214	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1215	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1216	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1217	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1218	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1219	121	Leafy or stem vegetables	121	Leafy or stem vegetables
-1	1221	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
-1	1222	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
-1	1223	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
-1	1224	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
-1	1225	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
-1	1226	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
-1	1227	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
-1	1229	122	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1211	1211	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1212	1212	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1213	1213	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1214	1214	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1215	1215	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1216	1216	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1217	1217	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1218	1218	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1219	1219	Leafy or stem vegetables	121	Leafy or stem vegetables
+1	1221	1221	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1222	1222	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1223	1223	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1224	1224	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1225	1225	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1226	1226	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1227	1227	Fruit-bearing vegetables	122	Fruit-bearing vegetables
+1	1229	1229	Fruit-bearing vegetables	122	Fruit-bearing vegetables
 1	1231	1231	Carrots	123	Root, bulb or tuberous vegetables
 1	1232	1232	Turnips	123	Root, bulb or tuberous vegetables
 1	1233	1233	Garlic	123	Root, bulb or tuberous vegetables
@@ -53,9 +53,9 @@ COPY public.crop_remapping_set_detail (crop_remapping_set_id, original_code, rem
 1	1521	1521	Sweet potatoes	152	Sweet potatoes
 1	1531	1531	Cassava	153	Cassava
 1	1541	1541	Yams	154	Yams
-1	1611	161	Spice crops	161	Spice crops
-1	1612	161	Spice crops	161	Spice crops
-1	1613	161	Spice crops	161	Spice crops
+1	1611	1611	Spice crops	161	Spice crops
+1	1612	1612	Spice crops	161	Spice crops
+1	1613	1613	Spice crops	161	Spice crops
 1	1621	1621	Hops	162	Hops
 1	1711	1711	Beans	17	Leguminous crops
 1	1721	1721	Broad beans	17	Leguminous crops
@@ -67,62 +67,62 @@ COPY public.crop_remapping_set_detail (crop_remapping_set_id, original_code, rem
 1	1781	1781	Pigeon peas	17	Leguminous crops
 1	1811	1811	Sugar beet	181	Sugar beet
 1	1821	1821	Sugar cane	182	Sugar cane
-1	1831	1141	Sorghum	114	Sorghum
+1	1831	1831	Sorghum	114	Sorghum
 1	1911	1911	Alfalfa	17	Leguminous crops
 1	1912	1912	Vetches	17	Leguminous crops
-1	1919	3	Grassland and meadows	3	Grassland and meadows
+1	1919	1919	Grassland and meadows	3	Grassland and meadows
 1	1921	1921	Cotton	192	Fibre crops
 1	1922	1922	Jute, kenaf and other similar crops	192	Fibre crops
 1	1923	1923	Flax, hemp and other similar crops	192	Fibre crops
 1	1931	1931	Medicinal, aromatic, pesticidal or similar crops	1931	Medicinal, aromatic, pesticidal or similar crops
 1	1941	1941	Flowers crops	1941	Flowers crops
 1	1991	1991	Tobacco	1991	Tobacco
-1	2111	21	Fruits trees	21	Fruits trees
-1	2112	21	Fruits trees	21	Fruits trees
-1	2121	21	Fruits trees	21	Fruits trees
-1	2122	21	Fruits trees	21	Fruits trees
-1	2123	21	Fruits trees	21	Fruits trees
-1	2124	21	Fruits trees	21	Fruits trees
-1	2125	21	Fruits trees	21	Fruits trees
-1	2129	21	Fruits trees	21	Fruits trees
-1	2131	21	Fruits trees	21	Fruits trees
-1	2132	21	Fruits trees	21	Fruits trees
-1	2133	21	Fruits trees	21	Fruits trees
-1	2134	21	Fruits trees	21	Fruits trees
-1	2136	21	Fruits trees	21	Fruits trees
-1	2137	21	Fruits trees	21	Fruits trees
-1	2139	21	Fruits trees	21	Fruits trees
-1	2211	22	Vineyards	22	Vineyards
-1	2311	23	Olive groves	23	Olive groves
-1	2411	24	Trees	24	Trees
-1	2412	24	Trees	24	Trees
-1	2413	24	Trees	24	Trees
-1	2414	24	Trees	24	Trees
-1	2415	24	Trees	24	Trees
-1	2416	24	Trees	24	Trees
-1	2419	24	Trees	24	Trees
-1	2911	291	Succulent plant	291	Succulent plant
-1	2912	291	Succulent plant	291	Succulent plant
-1	3111	3	Grassland and meadows	3	Grassland and meadows
-1	3112	3	Grassland and meadows	3	Grassland and meadows
-1	3113	3	Grassland and meadows	3	Grassland and meadows
-1	3199	3	Grassland and meadows	3	Grassland and meadows
-1	5111	5	Shrub land	5	Shrub land
-1	6111	61	Conifers	6	Forest
-1	6211	62	Deciduous	6	Forest
-1	6221	62	Deciduous	6	Forest
-1	6311	63	Conifers and deciduous	6	Forest
-1	6999	69	Forest	6	Forest
-1	7111	71	Sparsely vegetated	7	Bare soil
-1	7211	72	Bare soils	7	Bare soil
-1	8111	81	Urban	8	Build-up surface
-1	8211	82	Industrial and commercial	8	Build-up surface
-1	8311	83	Transport	8	Build-up surface
-1	8411	84	Greenhouses	8	Build-up surface
-1	8511	85	Other build-up surface	8	Build-up surface
-1	9111	911	Seas	9	Water bodies
-1	9121	912	Lagoons and estuaries	9	Water bodies
-1	9122	912	Lagoons and estuaries	9	Water bodies
+1	2111	2111	Fruits trees	21	Fruits trees
+1	2112	2112	Fruits trees	21	Fruits trees
+1	2121	2121	Fruits trees	21	Fruits trees
+1	2122	2122	Fruits trees	21	Fruits trees
+1	2123	2123	Fruits trees	21	Fruits trees
+1	2124	2124	Fruits trees	21	Fruits trees
+1	2125	2125	Fruits trees	21	Fruits trees
+1	2129	2129	Fruits trees	21	Fruits trees
+1	2131	2131	Fruits trees	21	Fruits trees
+1	2132	2132	Fruits trees	21	Fruits trees
+1	2133	2133	Fruits trees	21	Fruits trees
+1	2134	2134	Fruits trees	21	Fruits trees
+1	2136	2136	Fruits trees	21	Fruits trees
+1	2137	2137	Fruits trees	21	Fruits trees
+1	2139	2139	Fruits trees	21	Fruits trees
+1	2211	2211	Vineyards	22	Vineyards
+1	2311	2311	Olive groves	23	Olive groves
+1	2411	2411	Trees	24	Trees
+1	2412	2412	Trees	24	Trees
+1	2413	2413	Trees	24	Trees
+1	2414	2414	Trees	24	Trees
+1	2415	2415	Trees	24	Trees
+1	2416	2416	Trees	24	Trees
+1	2419	2419	Trees	24	Trees
+1	2911	2911	Succulent plant	291	Succulent plant
+1	2912	2912	Succulent plant	291	Succulent plant
+1	3111	3111	Grassland and meadows	3	Grassland and meadows
+1	3112	3112	Grassland and meadows	3	Grassland and meadows
+1	3113	3113	Grassland and meadows	3	Grassland and meadows
+1	3199	3199	Grassland and meadows	3	Grassland and meadows
+1	5111	5111	Shrub land	5	Shrub land
+1	6111	6111	Conifers	6	Forest
+1	6211	6211	Deciduous	6	Forest
+1	6221	6221	Deciduous	6	Forest
+1	6311	6311	Conifers and deciduous	6	Forest
+1	6999	6999	Forest	6	Forest
+1	7111	7111	Sparsely vegetated	7	Bare soil
+1	7211	7211	Bare soils	7	Bare soil
+1	8111	8111	Urban	8	Build-up surface
+1	8211	8211	Industrial and commercial	8	Build-up surface
+1	8311	8311	Transport	8	Build-up surface
+1	8411	8411	Greenhouses	8	Build-up surface
+1	8511	8511	Other build-up surface	8	Build-up surface
+1	9111	9111	Seas	9	Water bodies
+1	9121	9121	Lagoons and estuaries	9	Water bodies
+1	9122	9122	Lagoons and estuaries	9	Water bodies
 1	9211	9211	Permanent non-current inland waters (reservoirs, swamps, lakes,...)	9	Water bodies
 1	9212	9212	Permanent rivers and streams	9	Water bodies
 1	9213	9213	Other permanent inland waters	9	Water bodies
