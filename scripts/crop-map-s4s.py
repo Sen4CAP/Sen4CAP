@@ -18,11 +18,11 @@ import os
 import os.path
 from osgeo import gdal, ogr, osr
 import pickle
-import pipes
 import psycopg2
 from psycopg2.sql import SQL
 import psycopg2.extras
 from psycopg2.extensions import connection
+import shlex
 import subprocess
 import docker
 import shutil
@@ -34,7 +34,7 @@ OTB_NEW_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 OTB_OLD_IMAGE_NAME = "docker.io/sen4x/otb:6.6.1"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.2.0"
 MISC_IMAGE_NAME = "sen4x/s4s-interim-ct:latest"
-ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.2.3"
+ERDY_IMAGE_NAME = "docker.io/lnicola/erdy:0.2.4"
 
 
 def parse_date(str):
@@ -86,7 +86,7 @@ def get_connection(config) -> connection:
 
 def run_command(args, env=None, retry=False):
     args = list(map(str, args))
-    cmd_line = " ".join(map(pipes.quote, args))
+    cmd_line = " ".join(map(shlex.quote, args))
     print(cmd_line)
 
     retries = 5 if retry else 1
@@ -318,7 +318,7 @@ class ContainerInfo:
             status = container.wait()
 
             status_code = status["StatusCode"]
-            command_string = " ".join(map(pipes.quote, self.command))
+            command_string = " ".join(map(shlex.quote, self.command))
             if status_code != 0:
                 print(f"Command {command_string} failed with status code {status_code}")
                 if self.outputs:
@@ -332,7 +332,7 @@ class ContainerInfo:
 
             return status
         except Exception as exc:
-            command_string = " ".join(map(pipes.quote, self.command))
+            command_string = " ".join(map(shlex.quote, self.command))
             print(f"Cannot run {command_string}: {exc}")
 
             if self.outputs:
@@ -687,7 +687,7 @@ def get_site_strata(conn: connection, config: Config) -> List[Stratum]:
     with conn.cursor() as cursor:
         cursor.execute(query, (config.site_id,))
         for stratum_id, geom, epsg_code, tiles in cursor:
-            if filter and not stratum_id in filter:
+            if filter and stratum_id not in filter:
                 continue
 
             srs = srs_cache.get(epsg_code)
