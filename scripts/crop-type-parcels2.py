@@ -1256,6 +1256,7 @@ def process_radar(args, volumes, pool):
 
     wgs84_srs = osr.SpatialReference()
     wgs84_srs.ImportFromEPSG(4326)
+    wgs84_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
     transform = osr.CoordinateTransformation(wgs84_srs, input_srs)
     tiles_input_srs = {}
