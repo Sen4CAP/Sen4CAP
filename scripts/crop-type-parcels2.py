@@ -25,7 +25,7 @@ import tempfile
 
 
 SEN4CAP_PROCESSORS_IMAGE_NAME = "sen4cap/processors:3.0.0"
-PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.1.0"
+PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.3.0"
 
 
 SATELLITE_ID_SENTINEL2 = 1
@@ -908,28 +908,12 @@ class WeeklyCompositeS4S(object):
     def __init__(
         self,
         output,
-        temp,
         tile_ref,
-        xmin,
-        xmax,
-        ymin,
-        ymax,
-        force_input_epsg,
-        tile_epsg_code,
-        tile_extent,
         inputs,
         volumes,
     ):
         self.output = output
-        self.temp = temp
         self.tile_ref = tile_ref
-        self.xmin = xmin
-        self.xmax = xmax
-        self.ymin = ymin
-        self.ymax = ymax
-        self.force_input_epsg = force_input_epsg
-        self.tile_epsg_code = tile_epsg_code
-        self.tile_extent = tile_extent
         self.inputs = inputs
         self.volumes = volumes
 
@@ -941,10 +925,7 @@ class WeeklyCompositeS4S(object):
         env["OTB_MAX_RAM_HINT"] = str(1024)
 
         if not os.path.exists(self.output):
-            self.inputs = filter(os.path.exists, self.inputs)
-            inputs = [
-                get_otb_extended_filename_skipgeom(input) for input in self.inputs
-            ]
+            inputs = list(filter(os.path.exists, self.inputs))
 
             command = []
             command += ["otbcli", "MeanComposite"]
@@ -969,12 +950,6 @@ class WeeklyCompositeS4S(object):
                 command=command,
                 environment=env,
             )
-
-            # command = []
-            # command += ["optimize_gtiff.py"]
-            # command += ["--no-data", 0]
-            # command += [self.output]
-            # run_command(command, env)
 
         if self.tile_ref:
             command = get_statistics_invocation(self.output, self.tile_ref)
@@ -1338,18 +1313,11 @@ def process_radar(args, volumes, pool):
         else:
             composite = WeeklyCompositeS4S(
                 output,
-                temp,
                 tile_ref,
-                xmin,
-                xmax,
-                ymin,
-                ymax,
-                force_input_epsg,
-                epsg_code,
-                tile_extent,
                 hdrs,
                 volumes,
             )
+
         weekly_composites.append(composite)
         tile_vrt_bands = vrt_bands[group.tile_id]
         vrt_raster_band = E.VRTRasterBand(
