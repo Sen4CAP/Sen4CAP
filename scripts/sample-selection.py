@@ -863,11 +863,14 @@ order by random();
 
     def get_sample_counts(dataset_path):
         ds = gdal.OpenEx(dataset_path)
-        lyr = ds.ExecuteSQL("select crop_code, count(*) from output group by crop_code")
-        for feat in lyr:
-            crop_code = feat.GetField(0)
-            count = feat.GetField(1)
-            yield crop_code, count
+        if ds:
+            lyr = ds.ExecuteSQL(
+                "select crop_code, count(*) from output group by crop_code"
+            )
+            for feat in lyr:
+                crop_code = feat.GetField(0)
+                count = feat.GetField(1)
+                yield crop_code, count
 
     for stratum_id, tile_outputs in stratum_tile_outputs.items():
         crop_statistics = statistics[stratum_id]
