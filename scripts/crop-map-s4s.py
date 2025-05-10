@@ -782,9 +782,6 @@ def write_tile_vrts(
             f"Stratum {stratum.stratum_id}: start date {stratum_start_date}, end date {stratum_end_date}, start {stratum_start_date_idx}, end {stratum_end_date_idx}"
         )
         band_names = []
-        if feature_set.want_s1_features():
-            for name in s1_features:
-                band_names.append(name)
 
         if stratum_start_date_idx is not None and stratum_end_date_idx is not None:
             for name in band_types:
@@ -799,6 +796,10 @@ def write_tile_vrts(
                 for fname in ["NDVI", "NDWI", "BRIGHTNESS"]:
                     for name in ["MIN", "MAX", "MEAN", "MEDIAN", "STDDEV"]:
                         band_names.append(f"{fname}_{name}")
+
+        if feature_set.want_s1_features():
+            for name in s1_features:
+                band_names.append(name)
 
         for tile in stratum.tiles:
             b2_tif = f"S2_B02_{tile}.tif"
@@ -833,7 +834,7 @@ def write_tile_vrts(
                 ds = gdal.Open(b4_tif, gdal.gdalconst.GA_ReadOnly)
             elif feature_set.need_s2_b8():
                 ds = gdal.Open(b8_tif, gdal.gdalconst.GA_ReadOnly)
-            elif feature_set.want_s1_features:
+            elif feature_set.want_s1_features():
                 ds = gdal.Open(f"S1_{tile}.vrt", gdal.gdalconst.GA_ReadOnly)
             else:
                 raise NotImplementedError("feature combination")
@@ -972,37 +973,38 @@ def write_tile_vrts(
             if feature_set.want_s1_features():
                 s1_vrt = f"S1_{tile}.vrt"
                 ds = gdal.Open(s1_vrt, gdal.gdalconst.GA_ReadOnly)
-                for b in range(1, ds.RasterCount + 1):
-                    band = ds.GetRasterBand(b)
-                    data_type = gdal.GetDataTypeName(band.DataType)
-                    band_name = band.GetDescription()
-                    if band_name not in s1_features:
-                        print(f"Dropping feature {band_name}")
-                        continue
-                    vrt_raster_band = E.VRTRasterBand(
-                        {
-                            "dataType": data_type,
-                            "band": str(out_band),
-                            "blockXSize": str(block_size),
-                            "blockYSize": str(block_size),
-                        },
-                        E.Description(band_name),
-                        E.SimpleSource(
-                            E.SourceFilename({"relativeToVRT": "1"}, s1_vrt),
-                            E.SourceBand(str(b)),
-                            E.SourceProperties(
-                                {
-                                    "RasterXSize": str(raster_size),
-                                    "RasterYSize": str(raster_size),
-                                    "DataType": data_type,
-                                    "BlockXSize": str(block_size),
-                                    "BlockYSize": str(block_size),
-                                }
+                if ds:
+                    for b in range(1, ds.RasterCount + 1):
+                        band = ds.GetRasterBand(b)
+                        data_type = gdal.GetDataTypeName(band.DataType)
+                        band_name = band.GetDescription()
+                        if band_name not in s1_features:
+                            print(f"Dropping feature {band_name}")
+                            continue
+                        vrt_raster_band = E.VRTRasterBand(
+                            {
+                                "dataType": data_type,
+                                "band": str(out_band),
+                                "blockXSize": str(block_size),
+                                "blockYSize": str(block_size),
+                            },
+                            E.Description(band_name),
+                            E.SimpleSource(
+                                E.SourceFilename({"relativeToVRT": "1"}, s1_vrt),
+                                E.SourceBand(str(b)),
+                                E.SourceProperties(
+                                    {
+                                        "RasterXSize": str(raster_size),
+                                        "RasterYSize": str(raster_size),
+                                        "DataType": data_type,
+                                        "BlockXSize": str(block_size),
+                                        "BlockYSize": str(block_size),
+                                    }
+                                ),
                             ),
-                        ),
-                    )
-                    vrt_dataset.append(vrt_raster_band)
-                    out_band += 1
+                        )
+                        vrt_dataset.append(vrt_raster_band)
+                        out_band += 1
 
             root = etree.ElementTree(vrt_dataset)
             if stratum.stratum_id:
@@ -1610,6 +1612,11 @@ def merge_strata(
     run_containers_concurrently(client, pool, containers)
 
 
+def dominant_year(start: date, end: date) -> int:
+    midpoint = start + (end - start) / 2
+    return midpoint.year
+
+
 @dataclass
 class TileInfo:
     raster_size: Tuple[int, int]
@@ -1822,7 +1829,7 @@ def main():
 
     season_start = parse_date(args.season_start)
     season_end = parse_date(args.season_end)
-    classification_year = args.year or season_start.year
+    classification_year = dominant_year(season_start, season_end)
 
     if args.working_path:
         os.chdir(args.working_path)
