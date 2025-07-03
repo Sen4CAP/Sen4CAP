@@ -3026,6 +3026,9 @@ def main():
             polygons = "polygons.gpkg"
             if os.path.exists(polygons):
                 shutil.copy2(polygons, args.output_path)
+            polygon_statistics = "polygon-statistics.json"
+            if os.path.exists(polygon_statistics):
+                shutil.copy2(polygon_statistics, args.output_path)
 
 
 if __name__ == "__main__":
