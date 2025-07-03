@@ -317,6 +317,7 @@ def main():
     driver = ogr.GetDriverByName("GPKG")
 
     parcel_id_field = ogr.FieldDefn("id", ogr.OFTInteger)
+    stratum_id_field = ogr.FieldDefn("stratum_id", ogr.OFTInteger)
     code_n1_field = ogr.FieldDefn("code_n1", ogr.OFTInteger)
     code_n2_field = ogr.FieldDefn("code_n2", ogr.OFTInteger)
     code_n3_field = ogr.FieldDefn("code_n3", ogr.OFTInteger)
@@ -337,6 +338,7 @@ def main():
     ]
     all_fields = [
         parcel_id_field,
+        stratum_id_field,
         code_n1_field,
         code_n2_field,
         code_n3_field,
@@ -704,6 +706,7 @@ order by random();
                     feature.SetGeometryDirectly(geom_in_tile)
 
                     full_feature.SetField("id", parcel_id)
+                    full_feature.SetField("stratum_id", stratum.stratum_id)
                     full_feature.SetField("code_n1", code_n1)
                     full_feature.SetField("code_n2", code_n2)
                     full_feature.SetField("code_n3", code_n3)
