@@ -3023,6 +3023,10 @@ def main():
             for confusion_matrix in confusion_matrices:
                 shutil.copy2(confusion_matrix, args.output_path)
 
+            polygons = "polygons.gpkg"
+            if os.path.exists(polygons):
+                shutil.copy2(polygons, args.output_path)
+
 
 if __name__ == "__main__":
     main()
