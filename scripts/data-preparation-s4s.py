@@ -603,6 +603,21 @@ from {}
                 parcels_table_staging_id = Identifier(self.parcels_table_staging)
                 parcel_attributes_table_id = Identifier(self.parcel_attributes_table)
 
+                print("Deleting NULL geometries")
+                query = SQL(
+                    """
+delete
+from {}
+where wkb_geometry is null;
+"""
+                ).format(parcels_table_staging_id)
+                logging.debug(query.as_string(conn))
+                cursor.execute(query)
+                rows = cursor.rowcount
+                conn.commit()
+                if rows and rows > 0:
+                    logging.warning("Deleted %d rows with NULL geometries", rows)
+
                 print("Fixing up types")
                 query = SQL(
                     """
