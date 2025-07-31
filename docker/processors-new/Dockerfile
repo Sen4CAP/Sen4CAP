@@ -1,4 +1,4 @@
-FROM docker.io/orfeotoolbox/otb:9.0.0_ubuntu24 AS builder
+FROM docker.io/orfeotoolbox/otb:9.1.1_ubuntu24 AS builder
 RUN apt-get update && \
     apt-get dist-upgrade -y && \
     apt-get clean && \
