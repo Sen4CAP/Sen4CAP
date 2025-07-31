@@ -12,7 +12,6 @@ RUN mkdir /build && \
     cmake --build . --parallel $(nproc) && \
     cmake --install . --prefix /install
 
-FROM builder
-RUN apt-get purge -y --autoremove gcc cmake
+FROM docker.io/orfeotoolbox/otb:9.1.1_ubuntu24
 COPY --from=build /install/bin/* /app/otb/bin/
 COPY --from=build /install/usr/lib/otb/applications/* /app/otb/lib/otb/applications/
