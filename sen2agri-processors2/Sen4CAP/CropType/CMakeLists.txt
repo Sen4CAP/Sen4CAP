@@ -1,0 +1,5 @@
+add_subdirectory(BackscatterTemporalFeatures)
+add_subdirectory(ClassStatistics)
+add_subdirectory(ClassStatisticsRatio)
+add_subdirectory(CoherenceMonthlyFeatures)
+add_subdirectory(StandardDeviation)

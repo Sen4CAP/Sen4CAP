@@ -1,0 +1,6 @@
+add_subdirectory(ClassRemapping)
+add_subdirectory(MeanComposite)
+add_subdirectory(S4SCMSpectralIndices)
+add_subdirectory(S4SCMSpectralIndicesStatistics)
+add_subdirectory(S4SCMRedEdgeFeatures)
+add_subdirectory(TemporalResampling)
