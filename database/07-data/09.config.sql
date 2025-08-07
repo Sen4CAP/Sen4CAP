@@ -519,7 +519,7 @@ INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.s4c_mdb
 -- FMask Specific Keys
 -- -----------------------------------------------------------
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.enabled', NULL, 'false', '2021-02-10 15:58:31.878939+00');
-INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'sen4x/fmask_extractor:0.1.2', '2021-03-18 14:43:00.720811+00');
+INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.extractor_image', NULL, 'sen4x/fmask_extractor:0.1.8', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.gdal_image', NULL, 'osgeo/gdal:ubuntu-full-3.3.1', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.image', NULL, 'sen4x/fmask:4.4-ubuntu-20.04', '2021-03-18 14:43:00.720811+00');
 INSERT INTO config(key, site_id, value, last_updated) VALUES ('processor.fmask.optical.cog-tiffs', NULL, '1', '2021-03-18 14:43:00.720811+00');

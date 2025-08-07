@@ -291,7 +291,9 @@ def translate(input_img,
             cmd.append("-v")
             cmd.append("/usr/share/zoneinfo:/usr/share/zoneinfo")
             cmd.append("-v")
-            cmd.append("{}:{}".format(os.path.abspath(input_img), os.path.abspath(input_img)))
+            # try to catch sidecar files like the .tfw that Fmask writes when close to the date line
+            input_img_dir = os.path.dirname(os.path.abspath(input_img))
+            cmd.append("{}:{}".format(input_img_dir, input_img_dir))
             cmd.append("-v")
             cmd.append("{}:{}".format(os.path.abspath(output_dir), os.path.abspath(output_dir)))
             cmd.append("-v")

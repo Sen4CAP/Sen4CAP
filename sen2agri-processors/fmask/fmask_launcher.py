@@ -456,13 +456,16 @@ class FmaskProcessor(object):
         self.fmask_log.info("Successful processing = {}".format(process_successful), print_msg = True)
 
         #checking the presence of fmask file
-        fmask_file_pattern = "*_Fmask4.tif"
+        fmask_file_pattern = "*_Fmask4.t*"
         fmask_file_path = os.path.join(self.fmask.output_path, fmask_file_pattern)
         fmask_files = glob.glob(fmask_file_path)
-        if len(fmask_files) == 1:
-            
+        fmask_file_ok = False
+        for fmask_file in fmask_files:
+            if not fmask_file.endswith(".tif"):
+                continue
+
             #compute footprint
-            self.get_fmask_footprint(fmask_files[0])
+            self.get_fmask_footprint(fmask_file)
 
             #compute quicklook image
             guid = get_guid(8)
@@ -470,7 +473,7 @@ class FmaskProcessor(object):
             container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
             notification = ContainerStatusMsg(container_name, True)
             self.master_q.put(notification)
-            translate_ok = translate(input_img = fmask_files[0],
+            translate_ok = translate(input_img = fmask_file,
                     output_dir = self.fmask.output_path,
                     output_img_name = DEFAULT_QUICKLOOK_IMAGE_NAME,
                     output_img_format = output_format,
@@ -488,9 +491,9 @@ class FmaskProcessor(object):
 
             #fmask image translations
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
-                output_img_name = os.path.basename(fmask_files[0])[:-4] + "_20m.tif"
+                output_img_name = os.path.basename(fmask_file)[:-4] + "_20m.tif"
             elif self.lin.satellite_id == LANDSAT8_SATELLITE_ID:
-                output_img_name = os.path.basename(fmask_files[0])[:-4] + "_30m.tif"
+                output_img_name = os.path.basename(fmask_file)[:-4] + "_30m.tif"
             container_name = "gdal_" + str(self.lin.product_id)
                          
             if self.context.cog_tiffs:
@@ -499,12 +502,12 @@ class FmaskProcessor(object):
                 output_format = "GTiff"
             #for S2 create a 10m resample copy 
             if self.lin.satellite_id == SENTINEL2_SATELLITE_ID:
-                resampled_img_name = os.path.basename(fmask_files[0])[:-4] + "_10m.tif"
+                resampled_img_name = os.path.basename(fmask_file)[:-4] + "_10m.tif"
                 guid = get_guid(8)
                 container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
                 notification = ContainerStatusMsg(container_name, True)
                 self.master_q.put(notification)
-                translate(input_img = fmask_files[0],
+                translate(input_img = fmask_file,
                       output_dir = self.fmask.output_path,
                       output_img_name = resampled_img_name,
                       output_img_format = output_format,
@@ -522,7 +525,7 @@ class FmaskProcessor(object):
                 container_name = "gdal_{}_{}".format(self.lin.product_id, guid)
                 notification = ContainerStatusMsg(container_name, True)
                 self.master_q.put(notification)
-                translate(input_img = fmask_files[0],
+                translate(input_img = fmask_file,
                         output_dir = self.fmask.output_path,
                         output_img_name = output_img_name,
                         output_img_format = output_format,
@@ -533,15 +536,19 @@ class FmaskProcessor(object):
                 )
                 notification = ContainerStatusMsg(container_name, False)
                 self.master_q.put(notification)
-                os.remove(fmask_files[0])
+                os.remove(fmask_file)
             else:
-                shutil.move(fmask_files[0], output_img_name)
+                shutil.move(fmask_file, output_img_name)
             fmask_file_ok = True
-        else:
+
+        if not fmask_file_ok:
             rejection_reason = "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason)
-            fmask_file_ok = False
+
+        for fmask_file in fmask_files:
+            if fmask_file.endswith(".tfw"):
+                os.remove(fmask_file)
 
         self.manage_prods_status(
             preprocess_successful, process_successful, fmask_file_ok

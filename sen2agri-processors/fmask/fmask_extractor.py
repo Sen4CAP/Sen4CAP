@@ -189,16 +189,18 @@ def fmask_launcher(fmask_context):
         fmask_log.info("FMask for {} finished in: {}. Location: {}".format(fmask_context.input, datetime.timedelta(seconds=(time.time() - start)), fmask_context.output), print_msg = True)
     # move the fmask output to the output directory.
     # only the valid files should be moved
-    fmask_out_file = glob.glob("{}/*_Fmask4.tif".format(fmask_out_location))
+    # pick up any .tfw that might be there
+    fmask_out_files = glob.glob("{}/*_Fmask4.t*".format(fmask_out_location))
     new_fmask_out_file = ""
+    res = ""
     try:
         # move the FMask file
         fmask_log.info("Searching for FMask file in: {}".format(fmask_out_location), print_msg = True)
-        if len(fmask_out_file) >= 1:
-            if len(fmask_out_file) > 1:
-                fmask_log.warning("More than one FMask files found in {}. Only the first one will be kept. FMask files list: {}.".format(fmask_working_dir, fmask_out_file), print_msg = True)
-            fmask_log.info("FMask file found in: {} : {}".format(fmask_working_dir, fmask_out_file[0]), print_msg = True)
-            basename = os.path.basename(fmask_out_file[0])
+        for fmask_out_file in fmask_out_files:
+            if fmask_out_file.endswith(".aux.xml"):
+                continue
+            fmask_log.info("FMask file found in: {} : {}".format(fmask_working_dir, fmask_out_file), print_msg = True)
+            basename = os.path.basename(fmask_out_file)
             new_fmask_out_file = "{}/{}".format(fmask_context.output[:len(fmask_context.output) - 1] if fmask_context.output.endswith("/") else fmask_context.output, basename)
             if os.path.isdir(new_fmask_out_file):
                 fmask_log.info("The directory {} already exists. Trying to delete it in order to move the new created directory by FMask".format(new_fmask_out_file), print_msg = True)
@@ -208,17 +210,19 @@ def fmask_launcher(fmask_context):
                 os.remove(new_fmask_out_file)
             else: #the destination does not exist, so move the files
                 pass
-            fmask_log.info("Moving {} to {}".format(fmask_out_file[0], new_fmask_out_file), print_msg = True)
-            shutil.move(fmask_out_file[0], new_fmask_out_file)
+            fmask_log.info("Moving {} to {}".format(fmask_out_file, new_fmask_out_file), print_msg = True)
+            shutil.move(fmask_out_file, new_fmask_out_file)
+            if fmask_out_file.endswith(".tif"):
+                res = new_fmask_out_file
         else:
             fmask_log.error("No FMask file found in: {}.".format(fmask_working_dir), print_msg = True)
         fmask_log.info("Erasing the FMask working directory: rmtree: {}".format(fmask_working_dir), print_msg = True)
         shutil.rmtree(fmask_working_dir)
     except Exception as e:
-        new_fmask_out_file = ""
+        res = ""
         fmask_log.error("FMask product failure: Exception caught when moving fmask files  to the output directory {}: {}".format(fmask_context.output, e), print_msg = True)
  
-    return new_fmask_out_file
+    return res
 
 def signal_handler(signum, frame):
     global fmask_context, log_filename
