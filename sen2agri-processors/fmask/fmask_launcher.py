@@ -456,13 +456,12 @@ class FmaskProcessor(object):
         self.fmask_log.info("Successful processing = {}".format(process_successful), print_msg = True)
 
         #checking the presence of fmask file
-        fmask_file_pattern = "*_Fmask4.t*"
+        fmask_file_pattern = "*_Fmask4.tif"
         fmask_file_path = os.path.join(self.fmask.output_path, fmask_file_pattern)
         fmask_files = glob.glob(fmask_file_path)
         fmask_file_ok = False
-        for fmask_file in fmask_files:
-            if not fmask_file.endswith(".tif"):
-                continue
+        if len(fmask_files) == 1:
+            fmask_file = fmask_files[0]
 
             #compute footprint
             self.get_fmask_footprint(fmask_file)
@@ -545,10 +544,6 @@ class FmaskProcessor(object):
             rejection_reason = "Can NOT find Fmask4.tif file in: {} ".format(self.fmask.output_path)
             self.update_rejection_reason(rejection_reason)
             self.launcher_log.error(rejection_reason)
-
-        for fmask_file in fmask_files:
-            if fmask_file.endswith(".tfw"):
-                os.remove(fmask_file)
 
         self.manage_prods_status(
             preprocess_successful, process_successful, fmask_file_ok

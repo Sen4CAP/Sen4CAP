@@ -20,6 +20,7 @@ from __future__ import print_function
 import argparse
 import glob
 import os
+from osgeo import gdal
 import time
 import datetime
 import shutil
@@ -188,19 +189,41 @@ def fmask_launcher(fmask_context):
     else:
         fmask_log.info("FMask for {} finished in: {}. Location: {}".format(fmask_context.input, datetime.timedelta(seconds=(time.time() - start)), fmask_context.output), print_msg = True)
     # move the fmask output to the output directory.
-    # only the valid files should be moved
-    # pick up any .tfw that might be there
-    fmask_out_files = glob.glob("{}/*_Fmask4.t*".format(fmask_out_location))
     new_fmask_out_file = ""
     res = ""
     try:
+        fmask_out_files = [f for f in glob.glob("{}/*_Fmask4.t*".format(fmask_out_location))]
+        tfw_file = next((f for f in fmask_out_files if f.endswith(".tfw")), None)
+        tif_file = next((f for f in fmask_out_files if f.endswith(".tif")), None)
+        reference_file = next(iter(glob.glob(f"{fmask_out_location}/../IMG_DATA/*_B02.jp2")), None)
+
         # move the FMask file
         fmask_log.info("Searching for FMask file in: {}".format(fmask_out_location), print_msg = True)
-        for fmask_out_file in fmask_out_files:
-            if fmask_out_file.endswith(".aux.xml"):
-                continue
-            fmask_log.info("FMask file found in: {} : {}".format(fmask_working_dir, fmask_out_file), print_msg = True)
-            basename = os.path.basename(fmask_out_file)
+        if tif_file:
+            fmask_log.info("FMask file found in: {} : {}".format(fmask_working_dir, tif_file), print_msg = True)
+
+            if tfw_file:
+                with open(tfw_file, "rt") as f:
+                    fmask_log.info("Copying GeoTransform from worldfile")
+                    gt = [float(x.rstrip()) for x in f.readlines()]
+                    gt = [gt[4], gt[0], gt[2], gt[5], gt[1], gt[3]]
+                    gt[0] -= (gt[1] + gt[2]) * 0.5
+                    gt[3] -= (gt[4] + gt[5]) * 0.5
+                    ds = gdal.Open(tif_file, gdal.GA_Update)
+                    if ds:
+                        ds.SetGeoTransform(gt)
+                        if reference_file:
+                            reference_ds = gdal.Open(reference_file)
+                            if reference_ds:
+                                fmask_log.info("Copying projection from input band")
+                                ds.SetSpatialRef(reference_ds.GetSpatialRef())
+                                del reference_ds
+                        band = ds.GetRasterBand(1)
+                        band.SetColorInterpretation(gdal.GCI_GrayIndex)
+                        band.SetColorTable(None)
+                        del ds
+
+            basename = os.path.basename(tif_file)
             new_fmask_out_file = "{}/{}".format(fmask_context.output[:len(fmask_context.output) - 1] if fmask_context.output.endswith("/") else fmask_context.output, basename)
             if os.path.isdir(new_fmask_out_file):
                 fmask_log.info("The directory {} already exists. Trying to delete it in order to move the new created directory by FMask".format(new_fmask_out_file), print_msg = True)
@@ -210,10 +233,9 @@ def fmask_launcher(fmask_context):
                 os.remove(new_fmask_out_file)
             else: #the destination does not exist, so move the files
                 pass
-            fmask_log.info("Moving {} to {}".format(fmask_out_file, new_fmask_out_file), print_msg = True)
-            shutil.move(fmask_out_file, new_fmask_out_file)
-            if fmask_out_file.endswith(".tif"):
-                res = new_fmask_out_file
+            fmask_log.info("Moving {} to {}".format(tif_file, new_fmask_out_file), print_msg = True)
+            shutil.move(tif_file, new_fmask_out_file)
+            res = tif_file
         else:
             fmask_log.error("No FMask file found in: {}.".format(fmask_working_dir), print_msg = True)
         fmask_log.info("Erasing the FMask working directory: rmtree: {}".format(fmask_working_dir), print_msg = True)
