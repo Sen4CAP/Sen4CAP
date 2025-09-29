@@ -1636,17 +1636,6 @@ class TileInfo:
         data_type = band.DataType
         return TileInfo(raster_size, geo_transform, projection, block_size, data_type)
 
-    @staticmethod
-    def from_template(path):
-        ds = gdal.Open(path)
-        raster_size = (ds.RasterXSize, ds.RasterYSize)
-        geo_transform = ds.GetGeoTransform()
-        projection = ds.GetProjectionRef()
-        band = ds.GetRasterBand(1)
-        block_size = band.GetBlockSize()
-        data_type = band.DataType
-        return TileInfo(raster_size, geo_transform, projection, block_size, data_type)
-
 
 def write_stack_vrt_fast(tile_info: TileInfo, files: List[str], destination: str):
     if not files:
