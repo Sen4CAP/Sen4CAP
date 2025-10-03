@@ -4,7 +4,7 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-FROM builder as build
+FROM builder AS build
 COPY src /src
 RUN mkdir /build && \
     cd /build && \
