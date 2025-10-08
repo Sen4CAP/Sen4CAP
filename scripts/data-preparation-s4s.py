@@ -440,6 +440,8 @@ class DataPreparation(object):
         )
 
     def find_overlaps(self, srid, tile_counts, total):
+        if total == 0:
+            return
         q = multiprocessing.dummy.Queue()
         res = self.pool.map_async(
             lambda t: self.get_overlapping_parcels(srid, q, t), self.tiles
@@ -467,6 +469,8 @@ class DataPreparation(object):
         self.mark_overlapping_parcels(parcels)
 
     def find_duplicates(self, srid, tile_counts, total):
+        if total == 0:
+            return
         q = multiprocessing.dummy.Queue()
         res = self.pool.map_async(
             lambda t: self.get_duplicate_parcels(srid, q, t), self.tiles

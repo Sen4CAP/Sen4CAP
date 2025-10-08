@@ -496,6 +496,9 @@ class DataPreparation:
         )
 
     def find_overlaps(self, srid, tile_counts, total):
+        if total == 0:
+            return
+
         try:
             q = multiprocessing.dummy.Queue()
             res = self.pool.map_async(
@@ -525,6 +528,9 @@ class DataPreparation:
             sys.exit(1)
 
     def find_duplicates(self, srid, tile_counts, total):
+        if total == 0:
+            return
+
         try:
             q = multiprocessing.dummy.Queue()
             res = self.pool.map_async(
