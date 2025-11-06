@@ -2,33 +2,33 @@
 from __future__ import print_function
 
 import argparse
-from collections import defaultdict
 import dataclasses
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
-from enum import IntEnum
 import glob
 import json
 import logging
-from typing import Dict, List, Optional, Tuple
-from lxml import etree
-from lxml.builder import E
-from multiprocessing.dummy import Pool
 import os
 import os.path
-from osgeo import gdal, ogr, osr
 import pickle
-import psycopg2
-from psycopg2.sql import SQL
-import psycopg2.extras
-from psycopg2.extensions import connection
 import shlex
-import subprocess
-import docker
 import shutil
-
+import subprocess
+from collections import defaultdict
 from configparser import ConfigParser
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from enum import IntEnum
+from multiprocessing.dummy import Pool
+from typing import Dict, List, Optional, Tuple
 
+import psycopg2
+import psycopg2.extras
+from lxml import etree
+from lxml.builder import E
+from osgeo import gdal, ogr, osr
+from psycopg2.extensions import connection
+from psycopg2.sql import SQL
+
+import docker
 
 OTB_NEW_IMAGE_NAME = "docker.io/orfeotoolbox/otb:8.1.1"
 OTB_OLD_IMAGE_NAME = "docker.io/sen4x/otb:6.6.1"
@@ -443,11 +443,17 @@ from config;
         return ProcessorConfig(additional_mounts, max_depth, min_samples, num_trees)
 
 
+def geotransform_for_tile(geom, epsg_code, pixel_size=10):
+    xmin, xmax, ymin, ymax = geom.GetEnvelope()
+    return [round(xmin), pixel_size, 0.0, round(ymax), 0.0, -pixel_size]
+
+
 class Tile(object):
     def __init__(self, tile_id: str, epsg_code: int, geom: ogr.Geometry):
         self.tile_id = tile_id
         self.epsg_code = epsg_code
         self.geom = geom
+        self.geo_transform = geotransform_for_tile(geom, epsg_code)
 
 
 def load_tiles(
@@ -664,7 +670,7 @@ class Stratum(object):
         stratum_id: Optional[int],
         geom,
         epsg_code: Optional[int],
-        tiles: List[str],
+        tiles: List[Tile],
     ) -> None:
         self.stratum_id = stratum_id
         self.geom = geom
@@ -672,7 +678,9 @@ class Stratum(object):
         self.tiles = tiles
 
 
-def get_site_strata(conn: connection, config: Config) -> List[Stratum]:
+def get_site_strata(
+    conn: connection, config: Config, tiles: List[Tile]
+) -> List[Stratum]:
     if config.stratum_filter:
         filter = set(config.stratum_filter)
     else:
@@ -684,9 +692,10 @@ def get_site_strata(conn: connection, config: Config) -> List[Stratum]:
     srs_cache = {}
     strata = []
 
+    tile_dict = dict([(t.tile_id, t) for t in tiles])
     with conn.cursor() as cursor:
         cursor.execute(query, (config.site_id,))
-        for stratum_id, geom, epsg_code, tiles in cursor:
+        for stratum_id, geom, epsg_code, stratum_tiles in cursor:
             if filter and stratum_id not in filter:
                 continue
 
@@ -700,7 +709,8 @@ def get_site_strata(conn: connection, config: Config) -> List[Stratum]:
             geom = ogr.CreateGeometryFromWkb(geom)
             geom.AssignSpatialReference(srs)
 
-            stratum = Stratum(stratum_id, geom, epsg_code, tiles)
+            tiles_for_stratum = [tile_dict[t] for t in stratum_tiles]
+            stratum = Stratum(stratum_id, geom, epsg_code, tiles_for_stratum)
             strata.append(stratum)
 
     return strata
@@ -801,51 +811,47 @@ def write_tile_vrts(
             for name in s1_features:
                 band_names.append(name)
 
+        wkt_cache: Dict[int, str] = {}
         for tile in stratum.tiles:
-            b2_tif = f"S2_B02_{tile}.tif"
-            b3_tif = f"S2_B03_{tile}.tif"
-            b4_tif = f"S2_B04_{tile}.tif"
-            b8_tif = f"S2_B08_{tile}.tif"
+            tile_id = tile.tile_id
+            gt = tile.geo_transform
 
-            b5_10m_vrt = f"S2_B05_10m_{tile}.vrt"
-            b6_10m_vrt = f"S2_B06_10m_{tile}.vrt"
-            b7_10m_vrt = f"S2_B07_10m_{tile}.vrt"
-            b11_10m_vrt = f"S2_B11_10m_{tile}.vrt"
-            b12_10m_vrt = f"S2_B12_10m_{tile}.vrt"
+            b2_tif = f"S2_B02_{tile_id}.tif"
+            b3_tif = f"S2_B03_{tile_id}.tif"
+            b4_tif = f"S2_B04_{tile_id}.tif"
+            b8_tif = f"S2_B08_{tile_id}.tif"
 
-            ndvi = f"S2_NDVI_{tile}.tif"
-            ndwi = f"S2_NDWI_{tile}.tif"
-            brightness = f"S2_BRIGHTNESS_{tile}.tif"
+            b5_10m_vrt = f"S2_B05_10m_{tile_id}.vrt"
+            b6_10m_vrt = f"S2_B06_10m_{tile_id}.vrt"
+            b7_10m_vrt = f"S2_B07_10m_{tile_id}.vrt"
+            b11_10m_vrt = f"S2_B11_10m_{tile_id}.vrt"
+            b12_10m_vrt = f"S2_B12_10m_{tile_id}.vrt"
 
-            ndvi_statistics = f"S2_NDVI_STATISTICS_{tile}.tif"
-            ndwi_statistics = f"S2_NDWI_STATISTICS_{tile}.tif"
-            brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile}.tif"
+            ndvi = f"S2_NDVI_{tile_id}.tif"
+            ndwi = f"S2_NDWI_{tile_id}.tif"
+            brightness = f"S2_BRIGHTNESS_{tile_id}.tif"
 
-            ndre = f"S2_NDRE_{tile}.tif"
-            repi = f"S2_REPI_{tile}.tif"
-            psri = f"S2_PSRI_{tile}.tif"
-            cire = f"S2_CIRE_{tile}.tif"
+            ndvi_statistics = f"S2_NDVI_STATISTICS_{tile_id}.tif"
+            ndwi_statistics = f"S2_NDWI_STATISTICS_{tile_id}.tif"
+            brightness_statistics = f"S2_BRIGHTNESS_STATISTICS_{tile_id}.tif"
 
-            if feature_set.need_s2_b2():
-                ds = gdal.Open(b2_tif, gdal.gdalconst.GA_ReadOnly)
-            elif feature_set.need_s2_b3():
-                ds = gdal.Open(b3_tif, gdal.gdalconst.GA_ReadOnly)
-            elif feature_set.need_s2_b4():
-                ds = gdal.Open(b4_tif, gdal.gdalconst.GA_ReadOnly)
-            elif feature_set.need_s2_b8():
-                ds = gdal.Open(b8_tif, gdal.gdalconst.GA_ReadOnly)
-            elif feature_set.want_s1_features():
-                ds = gdal.Open(f"S1_{tile}.vrt", gdal.gdalconst.GA_ReadOnly)
-            else:
-                raise NotImplementedError("feature combination")
+            ndre = f"S2_NDRE_{tile_id}.tif"
+            repi = f"S2_REPI_{tile_id}.tif"
+            psri = f"S2_PSRI_{tile_id}.tif"
+            cire = f"S2_CIRE_{tile_id}.tif"
 
-            gt = ds.GetGeoTransform()
+            if tile.epsg_code not in wkt_cache:
+                spatial_ref = osr.SpatialReference()
+                spatial_ref.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+                spatial_ref.ImportFromEPSG(tile.epsg_code)
+                wkt_cache[tile.epsg_code] = spatial_ref.ExportToWkt()
+            wkt = wkt_cache[tile.epsg_code]
             vrt_dataset = E.VRTDataset(
                 {
                     "rasterXSize": str(raster_size),
                     "rasterYSize": str(raster_size),
                 },
-                E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, ds.GetProjectionRef()),
+                E.SRS({"dataAxisToSRSAxisMapping": "1,2"}, wkt),
                 E.GeoTransform(
                     "{}, {}, {}, {}, {}, {}".format(
                         gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]
@@ -897,8 +903,6 @@ def write_tile_vrts(
                 if stratum_start_date_idx is None or stratum_end_date_idx is None:
                     continue
 
-                ds = gdal.Open(p, gdal.gdalconst.GA_ReadOnly)
-                assert ds.RasterCount == len(output_dates)
                 for b, d in enumerate(
                     output_dates[stratum_start_date_idx:stratum_end_date_idx],
                     start=stratum_start_date_idx + 1,
@@ -971,7 +975,7 @@ def write_tile_vrts(
                         out_band += 1
 
             if feature_set.want_s1_features():
-                s1_vrt = f"S1_{tile}.vrt"
+                s1_vrt = f"S1_{tile_id}.vrt"
                 ds = gdal.Open(s1_vrt, gdal.gdalconst.GA_ReadOnly)
                 if ds:
                     for b in range(1, ds.RasterCount + 1):
@@ -1008,9 +1012,9 @@ def write_tile_vrts(
 
             root = etree.ElementTree(vrt_dataset)
             if stratum.stratum_id:
-                bands_vrt = f"bands_{stratum.stratum_id}_{tile}.vrt"
+                bands_vrt = f"bands_{stratum.stratum_id}_{tile_id}.vrt"
             else:
-                bands_vrt = f"bands_{tile}.vrt"
+                bands_vrt = f"bands_{tile_id}.vrt"
             root.write(bands_vrt, pretty_print=True, encoding="utf-8")
         stratum_band_names.append(band_names)
 
@@ -1410,24 +1414,31 @@ def run_classification(
             remapping_table = None
 
         for tile in stratum.tiles:
+            tile_id = tile.tile_id
             if stratum.stratum_id:
-                bands_vrt = f"bands_{stratum.stratum_id}_{tile}.vrt"
-                confidence_map_tif = f"confidence_map_{stratum.stratum_id}_{tile}.tif"
-                probability_map_tif = f"probability_map_{stratum.stratum_id}_{tile}.tif"
+                bands_vrt = f"bands_{stratum.stratum_id}_{tile_id}.vrt"
+                confidence_map_tif = (
+                    f"confidence_map_{stratum.stratum_id}_{tile_id}.tif"
+                )
+                probability_map_tif = (
+                    f"probability_map_{stratum.stratum_id}_{tile_id}.tif"
+                )
                 if remapping_table:
                     classified_pre_tif = (
-                        f"classified_pre_{stratum.stratum_id}_{tile}.tif"
+                        f"classified_pre_{stratum.stratum_id}_{tile_id}.tif"
                     )
                 else:
-                    classified_pre_tif = f"classified_{stratum.stratum_id}_{tile}.tif"
+                    classified_pre_tif = (
+                        f"classified_{stratum.stratum_id}_{tile_id}.tif"
+                    )
             else:
-                bands_vrt = f"bands_{tile}.vrt"
-                confidence_map_tif = f"confidence_map_{tile}.tif"
-                probability_map_tif = f"probability_map_{tile}.tif"
+                bands_vrt = f"bands_{tile_id}.vrt"
+                confidence_map_tif = f"confidence_map_{tile_id}.tif"
+                probability_map_tif = f"probability_map_{tile_id}.tif"
                 if remapping_table:
-                    classified_pre_tif = f"classified_pre_{tile}.tif"
+                    classified_pre_tif = f"classified_pre_{tile_id}.tif"
                 else:
-                    classified_pre_tif = f"classified_{tile}.tif"
+                    classified_pre_tif = f"classified_{tile_id}.tif"
 
             if os.path.exists(bands_vrt) and (
                 not os.path.exists(classified_pre_tif)
@@ -1967,14 +1978,13 @@ def main():
     with get_connection(config) as conn:
         tiles = load_tiles(conn, config.site_id, args.tiles)
 
-        strata = get_site_strata(conn, config)
+        strata = get_site_strata(conn, config, tiles)
         if not strata:
-            stratum = Stratum(None, None, None, [t.tile_id for t in tiles])
+            stratum = Stratum(None, None, None, tiles)
             strata.append(stratum)
 
         if strata:
-            strata_tiles = set([t for s in strata for t in s.tiles])
-            tiles = [t for t in tiles if t.tile_id in strata_tiles]
+            tiles = list(set([t for s in strata for t in s.tiles]))
 
         tile_ids = set([t.tile_id for t in tiles])
         if os.path.exists("s2-products.pickle"):
@@ -2110,6 +2120,7 @@ def main():
         b12_vrt = f"S2_B12_{tile}.vrt"
 
         if l2a_block_size_10m is None:
+            path = None
             if feature_set.need_s2_b2():
                 path = b2s[0]
             elif feature_set.need_s2_b3():
@@ -2118,13 +2129,15 @@ def main():
                 path = b4s[0]
             elif feature_set.need_s2_b8():
                 path = b8s[0]
-            ds = gdal.Open(path)
-            band = ds.GetRasterBand(1)
-            l2a_block_size_10m = band.GetBlockSize()
-            l2a_data_type = band.DataType
-            del ds
+            if path:
+                ds = gdal.Open(path)
+                band = ds.GetRasterBand(1)
+                l2a_block_size_10m = band.GetBlockSize()
+                l2a_data_type = band.DataType
+                del ds
 
         if l2a_block_size_20m is None:
+            path = None
             if feature_set.need_s2_b5():
                 path = b5s[0]
             elif feature_set.need_s2_b6():
@@ -2135,10 +2148,11 @@ def main():
                 path = b11s[0]
             elif feature_set.need_s2_b12():
                 path = b12s[0]
-            ds = gdal.Open(path)
-            band = ds.GetRasterBand(1)
-            l2a_block_size_20m = band.GetBlockSize()
-            del ds
+            if path:
+                ds = gdal.Open(path)
+                band = ds.GetRasterBand(1)
+                l2a_block_size_20m = band.GetBlockSize()
+                del ds
 
         if tile_info_masks_10m is not None:
             tile_info_10m = dataclasses.replace(
@@ -2804,7 +2818,8 @@ def main():
 
     strata_for_tile: defaultdict[str, List[Optional[int]]] = defaultdict(lambda: [])
     for stratum in strata:
-        for tile_id in stratum.tiles:
+        for tile in stratum.tiles:
+            tile_id = tile.tile_id
             strata_for_tile[tile_id].append(stratum.stratum_id)
 
     if args.broceliande:
