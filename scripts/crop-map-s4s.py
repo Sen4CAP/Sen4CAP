@@ -3010,6 +3010,8 @@ def main():
                 containers.append(container)
             run_containers_concurrently(client, pool_med_conc, containers)
 
+        run_command(["product-report.py"])
+
         if args.output_path:
             for tile in tiles:
                 tile_id = tile.tile_id
@@ -3033,6 +3035,9 @@ def main():
             polygon_statistics = "polygon-statistics.json"
             if os.path.exists(polygon_statistics):
                 shutil.copy2(polygon_statistics, args.output_path)
+            classification_report = "classification_report.xlsx"
+            if os.path.exists(classification_report):
+                shutil.copy2(classification_report, args.output_path)
 
 
 if __name__ == "__main__":
