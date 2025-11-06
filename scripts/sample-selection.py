@@ -317,7 +317,6 @@ def main():
     driver = ogr.GetDriverByName("GPKG")
 
     parcel_id_field = ogr.FieldDefn("id", ogr.OFTInteger)
-    stratum_id_field = ogr.FieldDefn("stratum_id", ogr.OFTInteger)
     code_n1_field = ogr.FieldDefn("code_n1", ogr.OFTInteger)
     code_n2_field = ogr.FieldDefn("code_n2", ogr.OFTInteger)
     code_n3_field = ogr.FieldDefn("code_n3", ogr.OFTInteger)
@@ -338,7 +337,6 @@ def main():
     ]
     all_fields = [
         parcel_id_field,
-        stratum_id_field,
         code_n1_field,
         code_n2_field,
         code_n3_field,
@@ -396,25 +394,6 @@ order by site_id;"""
 
             insitu_path = insitu_path.replace("{site}", site_short_name)
             insitu_path = insitu_path.replace("{year}", str(args.year))
-
-        polygons = "polygons.gpkg"
-        if os.path.exists(polygons):
-            driver.DeleteDataSource(polygons)
-        polygon_dataset = driver.CreateDataSource("polygons.gpkg")
-        full_training_layer = polygon_dataset.CreateLayer(
-            "training",
-            site_srs,
-            ogr.wkbUnknown,
-        )
-        full_validation_layer = polygon_dataset.CreateLayer(
-            "validation",
-            site_srs,
-            ogr.wkbUnknown,
-        )
-
-        for field in all_fields:
-            full_training_layer.CreateField(field)
-            full_validation_layer.CreateField(field)
 
         tile_rasters = glob.glob(os.path.join(insitu_path, "*_10m.tif"))
         tiles: Dict[str, Tile] = {}
@@ -587,6 +566,29 @@ order by random();
         statistics = defaultdict(lambda: defaultdict(lambda: CropStatistics()))
         stratum_tile_outputs = defaultdict(lambda: {})
         for stratum in strata:
+            if stratum.stratum_id:
+                polygons = f"polygons_{stratum.stratum_id}.gpkg"
+            else:
+                polygons = "polygons.gpkg"
+
+            if os.path.exists(polygons):
+                driver.DeleteDataSource(polygons)
+            polygon_dataset = driver.CreateDataSource(polygons)
+            full_training_layer = polygon_dataset.CreateLayer(
+                "training",
+                site_srs,
+                ogr.wkbUnknown,
+            )
+            full_validation_layer = polygon_dataset.CreateLayer(
+                "validation",
+                site_srs,
+                ogr.wkbUnknown,
+            )
+
+            for field in all_fields:
+                full_training_layer.CreateField(field)
+                full_validation_layer.CreateField(field)
+
             stratum_id = stratum.stratum_id or 0
             tile_outputs: Dict[str, TileOutput] = stratum_tile_outputs[stratum_id]
             print(f"Stratum {stratum_id}: ", stratum.tiles)
@@ -706,7 +708,6 @@ order by random();
                     feature.SetGeometryDirectly(geom_in_tile)
 
                     full_feature.SetField("id", parcel_id)
-                    full_feature.SetField("stratum_id", stratum.stratum_id)
                     full_feature.SetField("code_n1", code_n1)
                     full_feature.SetField("code_n2", code_n2)
                     full_feature.SetField("code_n3", code_n3)
