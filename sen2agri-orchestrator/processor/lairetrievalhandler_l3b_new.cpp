@@ -95,6 +95,7 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
         }
     }
     outAllTasksList.append(TaskToSubmit{"product-formatter", {}});
+    outAllTasksList.append(TaskToSubmit{"l3b-composite-duplicate-dates", {}});
     if(jobCtx.bRemoveTempFiles) {
         outAllTasksList.append(TaskToSubmit{ "files-remover", {} });
     }
@@ -145,9 +146,13 @@ void LaiRetrievalHandlerL3BNew::CreateTasksForNewProduct(const L3BJobContext &jo
     }
     int productFormatterIdx = nCurTaskIdx++;
     outAllTasksList[productFormatterIdx].parentTasks.append(productFormatterParentsRefs);
+
+    int compositeDuplicatedDates = nCurTaskIdx++;
+    outAllTasksList[compositeDuplicatedDates].parentTasks.append(outAllTasksList[productFormatterIdx]);
+
     if(jobCtx.bRemoveTempFiles) {
         // cleanup-intermediate-files -> product formatter
-        outAllTasksList[nCurTaskIdx].parentTasks.append(outAllTasksList[productFormatterIdx]);
+        outAllTasksList[nCurTaskIdx].parentTasks.append(outAllTasksList[compositeDuplicatedDates]);
     }
 }
 
@@ -260,6 +265,11 @@ NewStepList LaiRetrievalHandlerL3BNew::GetStepsForNewProduct(const L3BJobContext
                                                                              prdTilesInfosList, tileResultFileInfos);
     steps.append(CreateTaskStep(laiMonoProductFormatterTask, "ProductFormatter", productFormatterArgs));
 
+    TaskToSubmit &compositeDuplicatedDatesTask = allTasksList[curTaskIdx++];
+    const QString &outCompositeFile = laiMonoProductFormatterTask.GetFilePath(PRODUCT_FORMATTER_OUT_PROPS_FILE);
+    const QStringList &compositeDuplicatedDatesArgs = GetCompositeDuplicateDatesArgs(outCompositeFile);
+    steps.append(CreateTaskStep(compositeDuplicatedDatesTask, "CompositeDuplicatedDates", compositeDuplicatedDatesArgs));
+
     if(jobCtx.bRemoveTempFiles) {
         TaskToSubmit &cleanupTemporaryFilesTask = allTasksList[curTaskIdx++];
         // add also the cleanup step
@@ -368,6 +378,7 @@ int LaiRetrievalHandlerL3BNew::GetStepsForMonoDateBI(const L3BJobContext &jobCtx
     const auto & correctedBIFileName = biDomainFlagsTask.GetFilePath(indexNameCaps + "_corrected_mono_date.tif");
     const QStringList &outDomainFlagsArgs = GetGenerateOutputDomainFlagsArgs(tileResultFileInfo.tileFile, BIFileName,
                                                                 jobCtx.laiCfgFile, indexName,
+                                                                tileResultFileInfo.inPrdExtMsk,
                                                                 domainFlagsFileName,  correctedBIFileName,
                                                                 jobCtx.resolutionStr);
     steps.append(CreateTaskStep(biDomainFlagsTask, "Generate" + indexNameCaps + "InDomainQualityFlags", outDomainFlagsArgs));
@@ -700,9 +711,9 @@ QStringList LaiRetrievalHandlerL3BNew::GetGenerateInputDomainFlagsArgs(const QSt
 
 QStringList LaiRetrievalHandlerL3BNew::GetGenerateOutputDomainFlagsArgs(const QString &xmlFile, const QString &laiRasterFile,
                                                             const QString &laiBandsCfg, const QString &indexName,
-                                                            const QString &outFlagsFileName,  const QString &outCorrectedLaiFile,
-                                                            const QString &outRes)  {
-    return { "GenerateDomainQualityFlags",
+                                                            const QString &extMsk, const QString &outFlagsFileName,
+                                                            const QString &outCorrectedLaiFile, const QString &outRes)  {
+    QStringList args = { "GenerateDomainQualityFlags",
         "-xml", xmlFile,
         "-in", laiRasterFile,
         "-laicfgs", laiBandsCfg,
@@ -711,6 +722,11 @@ QStringList LaiRetrievalHandlerL3BNew::GetGenerateOutputDomainFlagsArgs(const QS
         "-out", outCorrectedLaiFile,
         "-outres", outRes,
     };
+    if(extMsk.size() > 0) {
+        args += "-extmsk";
+        args += extMsk;
+    }
+    return args;
 }
 
 QStringList LaiRetrievalHandlerL3BNew::GetQuantifyImageArgs(const QString &inFileName, const QString &outFileName)  {
@@ -809,6 +825,10 @@ QStringList LaiRetrievalHandlerL3BNew::GetLaiMonoProductFormatterArgs(TaskToSubm
 
     return GetDefaultProductFormatterArgs(*jobCtx.pCtx, productFormatterTask, jobCtx.event.jobId, jobCtx.event.siteId, "L3B", "",
                                          "vegetation", additionalArgs, false, executionInfosPath);
+}
+
+QStringList LaiRetrievalHandlerL3BNew::GetCompositeDuplicateDatesArgs(const QString &outCompositeFile) {
+    return {"-i", outCompositeFile};
 }
 
 const QString& LaiRetrievalHandlerL3BNew::GetDefaultCfgVal(std::map<QString, QString> &configParameters, const QString &key, const QString &defVal) {
@@ -976,12 +996,17 @@ int LaiRetrievalHandlerL3BNew::UpdateJobSubmittedParamsFromSchedReq(const L3BJob
 ProductList LaiRetrievalHandlerL3BNew::GetL2AProductsNotProcessedProductProvenance(const L3BJobContext &jobCtx,
                                                                   const QDateTime &startDate, const QDateTime &endDate) {
 
+    ProductType l2ProdType = ProductType::L2AProductTypeId;
+    if(IsL2AValidityMaskEnabled(*jobCtx.pCtx, jobCtx.parameters, jobCtx.event.siteId)) {
+        l2ProdType = ProductType::MaskedL2AProductTypeId;
+    }
+
     // Get the list of L2A products already processed products as L3B
     const ProductList &existingPrds = jobCtx.pCtx->GetParentProductsInProvenance(jobCtx.event.siteId,
-                                                {ProductType::L2AProductTypeId}, ProductType::L3BProductTypeId, startDate, endDate);
+                                                {l2ProdType}, ProductType::L3BProductTypeId, startDate, endDate);
     // Get the list of L2A products NOT processed products as L3B
     const ProductList &missingPrds = jobCtx.pCtx->GetParentProductsNotInProvenance(jobCtx.event.siteId,
-                                            {ProductType::L2AProductTypeId}, ProductType::L3BProductTypeId, startDate, endDate);
+                                            {l2ProdType}, ProductType::L3BProductTypeId, startDate, endDate);
 
     std::unordered_map<int, int> mapPresence;
     std::for_each(existingPrds.begin(), existingPrds.end(), [&mapPresence](const Product &prd) {

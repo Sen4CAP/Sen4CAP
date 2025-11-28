@@ -140,7 +140,7 @@ private:
     QStringList GetGenerateInputDomainFlagsArgs(const QString &xmlFile,  const QString &laiBandsCfg,
                                                 const QString &outFlagsFileName, const QString &outRes);
     QStringList GetGenerateOutputDomainFlagsArgs(const QString &xmlFile, const QString &laiRasterFile,
-                                                const QString &laiBandsCfg, const QString &indexName,
+                                                const QString &laiBandsCfg, const QString &indexName, const QString &extMsk,
                                                 const QString &outFlagsFileName,  const QString &outCorrectedLaiFile, const QString &outRes);
 
     QStringList GetSpectralIndicatorsExtractionArgs(const QString &inputProduct, const QString &indicator, const QString &msksFlagsFile,
@@ -150,6 +150,7 @@ private:
     QStringList GetQuantifyImageArgs(const QString &inFileName, const QString &outFileName);
     QStringList GetMonoDateMskFlagsArgs(const QString &inputProduct, const QString &extMsk, const QString &monoDateMskFlgsFileName, const QString &monoDateMskFlgsResFileName, const QString &resStr);
     QStringList GetLaiMonoProductFormatterArgs(TaskToSubmit &productFormatterTask, const L3BJobContext &jobCtx, const QList<TileInfos> &prdTilesInfosList, const QList<TileResultFiles> &tileResultFilesList);
+    QStringList GetCompositeDuplicateDatesArgs(const QString &outCompositeFile);
     NewStepList GetStepsForNewProduct(const L3BJobContext &jobCtx,
                                        const QList<TileInfos> &prdTilesList, QList<TaskToSubmit> &allTasksList, int tasksStartIdx);
     int GetStepsForStatusFlags(const L3BJobContext &jobCtx, QList<TaskToSubmit> &allTasksList, int curTaskIdx,
