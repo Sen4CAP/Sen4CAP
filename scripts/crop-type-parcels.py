@@ -2,26 +2,24 @@
 from __future__ import print_function
 
 import argparse
-from collections import defaultdict
 import csv
-from datetime import datetime, timedelta
-import dateutil.parser
-from glob import glob
 import multiprocessing
 import multiprocessing.dummy
 import os
 import os.path
-from osgeo import ogr
-from osgeo import osr
-from osgeo import gdal
-from gdal import gdalconst
-from lxml import etree
-from lxml.builder import E
 import pipes
 import subprocess
 import sys
 import tempfile
+from collections import defaultdict
+from datetime import datetime, timedelta
+from glob import glob
 
+import dateutil.parser
+from gdal import gdalconst
+from lxml import etree
+from lxml.builder import E
+from osgeo import gdal, ogr, osr
 
 SATELLITE_ID_SENTINEL2 = 1
 SATELLITE_ID_LANDSAT = 2
@@ -278,7 +276,7 @@ def process_optical(args, pool, satellite_id):
     product_map = defaultdict(lambda: defaultdict(list))
     with open(args.optical_products, "rb") as file:
         reader = csv.reader(file)
-        next(reader)
+        next(reader, None)
         for site_id, name, full_path, tile, created_timestamp in reader:
             site_id = int(site_id)
             # created_timestamp = datetime.fromisoformat(created_timestamp)

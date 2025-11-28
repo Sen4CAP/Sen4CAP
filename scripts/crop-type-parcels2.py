@@ -2,27 +2,25 @@
 from __future__ import print_function
 
 import argparse
-from collections import defaultdict
 import csv
-from datetime import datetime, timedelta
-
-import docker
-from glob import glob
 import multiprocessing
 import multiprocessing.dummy
 import os
 import os.path
-from osgeo import ogr
-from osgeo import osr
-from osgeo import gdal
-from osgeo.gdal import gdalconst
-from lxml import etree
-from lxml.builder import E
 import pipes
 import subprocess
 import sys
 import tempfile
+from collections import defaultdict
+from datetime import datetime, timedelta
+from glob import glob
 
+from lxml import etree
+from lxml.builder import E
+from osgeo import gdal, ogr, osr
+from osgeo.gdal import gdalconst
+
+import docker
 
 SEN4CAP_PROCESSORS_IMAGE_NAME = "sen4cap/processors:3.0.0"
 PROCESSORS_NEW_IMAGE_NAME = "sen4x/processors-new:0.3.0"
@@ -752,7 +750,7 @@ def get_radar_products(file):
     products = []
     with open(file, "rt") as file:
         reader = csv.reader(file)
-        next(reader)
+        next(reader, None)
         for (
             dt,
             tile_id,
