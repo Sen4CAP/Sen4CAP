@@ -4,17 +4,17 @@ import os
 import pipes
 import signal
 import errno
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import argparse
 from psycopg2.sql import SQL
-from db_commons import DBConfig, handle_retries
+from db_commons import DBConfig, handle_retries, db_get_processing_context
 from db_commons import DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE, DATABASE_DOWNLOADER_STATUS_PROCESSING_ERR_VALUE
 from l2a_commons import LogHandler, run_command, stop_containers, get_guid, get_docker_gid, create_recursive_dirs
 from l2a_commons import MASTER_ID
 from osgeo import ogr
 
 OUTPUT_DIR = "/mnt/archive/{site_name}/era5_weather"
-CONTAINER_IMAGE = "sen4x/era5-weather:0.0.3"
+CONTAINER_IMAGE = "sen4x/era5-weather:0.0.4"
 SCRIPT_PATH = "/usr/share/weather/weather.py"
 WRK_DIR = "/mnt/archive/{site_name}/era5_weather/working_dir/"
 LAUNCHER_LOG_DIR = "/var/log/sen2agri/"
@@ -28,12 +28,23 @@ ERR_ERA5_DOWNLOAD = 2 #era5 file from cds can NOT be downloaded
 ERR_DAILY_DATA_PROCESSING = 3 #when computing the daily average there are some errors
 ERR_DAILY_DATA_WRITING = 4 #when writing the daily average data to file there are some errors
 ERR_INVALID_PARAMETERS = 5 #command line parameters are wrong
-MAX_NB_RETRIES = 3
+ERR_ERA5_CREDENTIALS_FILE = 6       # no dotrc file found
+ERR_ERA5_HTTP_ERROR = 7             # connect error
+ERR_ERA5_CLIENT_UNKNONW_ERROR = 8   # CDS client unknown error
 
+MAX_NB_RETRIES = 72          # retries are made at an hour level so we have 24*3 days = 72
+
+DB_PROCESSOR_NAME = "era5_weather"
+DATABASE_ERA5_CONTAINER_IMAGE = "processor.era5_weather.docker_image"
+DATABASE_ERA5_RETRY_DAYS = "processor.era5_weather.retry_days"
 
 class SiteContext:
     def __init__(self, site_info, log):
         self.log = log
+        
+        self.docker_image = CONTAINER_IMAGE
+        self.max_retries = MAX_NB_RETRIES
+        
         self.is_valid = self.check_site_info(site_info)
         if self.is_valid:
             self.site_id = site_info[0]
@@ -81,6 +92,43 @@ class SiteContext:
         poly.AddGeometry(ring)
         return poly.ExportToWkt()
 
+class ProcessingContext(object):
+    def __init__(self):
+        self.docker_image = {"default": CONTAINER_IMAGE}
+        self.max_retries = {"default": MAX_NB_RETRIES}
+
+    def add_parameter(self, row):
+        if len(row) == 3 and row[0] is not None and row[2] is not None:
+            parameter = row[0]
+            site = row[1]
+            value = row[2]
+            if parameter == DATABASE_ERA5_CONTAINER_IMAGE:
+                if site is not None:
+                    self.docker_image[site] = value
+                else:
+                    self.docker_image["default"] = value
+            elif parameter == DATABASE_ERA5_RETRY_DAYS:
+                if site is not None:
+                    self.max_retries[site] = (24 * int(value))
+                else:
+                    self.max_retries["default"] = (24 * int(value))
+    
+    def get_site_context(self, site, launcher_log):
+        site_context = SiteContext(site, launcher_log)
+        site_id = site_context.site_id
+        
+        if site_id in self.docker_image:
+            site_context.docker_image = self.docker_image[site_id]
+        else:
+            site_context.docker_image = self.docker_image["default"]
+
+        if site_id in self.max_retries:
+            site_context.max_retries = self.max_retries[site_id]
+        else:
+            site_context.max_retries = self.max_retries["default"]
+            
+        return site_context
+        
 def process_date(site_context, date, log):
     docker_gid = get_docker_gid()
     script_command = []
@@ -109,7 +157,7 @@ def process_date(site_context, date, log):
     container_name = "weather-{}-{}-{}".format(site_context.short_name, date.strftime(DATE_FORMAT) ,guid)
     script_command.append("--name")
     script_command.append(container_name)
-    script_command.append(CONTAINER_IMAGE)
+    script_command.append(site_context.docker_image)
 
     #actual weather.py command
     script_command.append(SCRIPT_PATH)
@@ -298,7 +346,7 @@ def db_downloader_history_entry_exists(db_config, site_id, name, log):
 
 
         #check product
-        cursor.execute("""select id, no_of_retries, status_id from downloader_history where downloader_history.site_id = %(site_id)s :: smallint and downloader_history.product_name = %(product_name)s :: character varying;""",
+        cursor.execute("""select id, no_of_retries, status_id, created_timestamp from downloader_history where downloader_history.site_id = %(site_id)s :: smallint and downloader_history.product_name = %(product_name)s :: character varying;""",
             {
                "site_id" : site_id,
                "product_name" : name, 
@@ -306,13 +354,13 @@ def db_downloader_history_entry_exists(db_config, site_id, name, log):
         )
         result = cursor.fetchone()
         if result is None:
-            return None, None, None
+            return None, None, None, None
         else:
-            return result[0], result[1], result[2]
+            return result[0], result[1], result[2], result[3]
 
     with db_config.connect() as connection:
-        id, no_retries, status = handle_retries(connection, _run, log)
-        return id, no_retries, status
+        id, no_retries, status, created_timestamp = handle_retries(connection, _run, log)
+        return id, no_retries, status, created_timestamp
 
 
 parser = argparse.ArgumentParser(description="Launcher for Weather script")
@@ -330,12 +378,15 @@ running_containers = []
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
+processing_context = ProcessingContext()
+db_get_processing_context(db_config, processing_context, DB_PROCESSOR_NAME, launcher_log)
+
 #determine the sites enabled for processings
 enabled_sites = db_get_enabled_sites(db_config, launcher_log)
 launcher_log.info("Nb. of sites enabled: {}".format(str(len(enabled_sites))), print_msg=True)
 if len(enabled_sites) > 0:
     for site in enabled_sites:
-        site_context = SiteContext(site, launcher_log) #parse the site info obtained from the db
+        site_context = processing_context.get_site_context(site, launcher_log) #parse the site info obtained from the db
         if site_context.is_valid: #if the site infomration is valid proceed
             site_context.print_info()
             site_output_dir = OUTPUT_DIR.replace("{site_name}",site_context.short_name)
@@ -357,21 +408,38 @@ if len(enabled_sites) > 0:
                 daily_data_file_name = OUTPUT_FILE_NAME.replace("{date}", date.strftime(DATE_FORMAT))
                 daily_data_file_path = os.path.join(site_output_dir, daily_data_file_name)
                 if not db_product_entry_exists(db_config, site_context.site_id, daily_data_file_name, launcher_log):    
-                    dh_id, dh_retries, dh_status = db_downloader_history_entry_exists(db_config, site_context.site_id, daily_data_file_name, launcher_log)
+                    do_process = False
+                    no_processing_msg = ""
+                    dh_id, dh_retries, dh_status, dh_created_timestamp = db_downloader_history_entry_exists(db_config, site_context.site_id, daily_data_file_name, launcher_log)
                     if dh_id is None:
                         # initial processing of an era5 product
                         nb_retries = 0
                         do_process = True
                     else:        
-                        # reprocessing of an era5 product            
-                        if dh_status != DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE and dh_retries < MAX_NB_RETRIES:
-                            # product was processed previously with an error and the number of retries is small than 3
-                            nb_retries = dh_retries + 1
-                            do_process = True
+                        # reprocessing of an era5 product  
+                        # launcher_log.info("{}, {}".format(dh_retries, type(dh_retries)), print_msg=True)
+                        # launcher_log.info("{} , {}".format(site_context.max_retries, type(site_context.max_retries)), print_msg=True)
+                        # os._exit(1)
+                        if dh_status != DATABASE_DOWNLOADER_STATUS_PROCESSED_VALUE and dh_retries < site_context.max_retries:
+                            # product was processed previously with an error and the number of retries is small than site_context.max_retries
+                            deadline = dh_created_timestamp + timedelta(hours=1)
+                            now = datetime.now(timezone.utc)
+                            
+                            if now > deadline:
+                                nb_retries = dh_retries + 1
+                                do_process = True
+                            else:
+                                do_process = False
+                                delta = deadline - now
+                                seconds_remaining = abs(int(delta.total_seconds()))
+                                no_processing_msg = "Era5 product with downloader history id {} waiting to be retried in {} seconds".format(dh_id, seconds_remaining)
                         else:
                             # product was processed previously 3 more times, no additional reprocessing will be done
                             nb_retries = dh_retries
                             do_process = False
+                            no_processing_msg = "Era5 product with downloader history id {} was already processed {} which is >= than the maximum allowed nb retries of {}, no additional reprocessing".format(
+                            dh_id, dh_retries, site_context.max_retries
+                            )
                     if do_process:
                         processing_return_code = process_date(site_context, date, launcher_log)
                         if (processing_return_code == VALID_PROCESSING) and (os.path.isfile(daily_data_file_path)):
@@ -394,6 +462,15 @@ if len(enabled_sites) > 0:
                                 rejection_reason = "Can NOT process Era5 data."
                             elif processing_return_code == ERR_DAILY_DATA_WRITING:
                                 rejection_reason = "Can NOT write daily computed data to file."
+                            elif processing_return_code == ERR_ERA5_CREDENTIALS_FILE:
+                                launcher_log.info("Please provide a credentials file for CDS as /var/lib/cdsapi/.cdsapirc . Exitting now ...", print_msg=True)
+                                os._exit(ERR_ERA5_CREDENTIALS_FILE)
+                            elif processing_return_code == ERR_ERA5_HTTP_ERROR:
+                                launcher_log.info("CDS HTTP Error. Exitting now ... ", print_msg=True)
+                                os._exit(ERR_ERA5_HTTP_ERROR)
+                            elif processing_return_code == ERR_ERA5_CLIENT_UNKNONW_ERROR:
+                                launcher_log.info("CDS Client Unknow Error. Exitting now ... ", print_msg=True)
+                                os._exit(ERR_ERA5_CLIENT_UNKNONW_ERROR)
                             else:
                                 rejection_reason = "Unknown Error: {}.".format(processing_return_code)
                             launcher_log.error(rejection_reason, print_msg=True)
@@ -410,11 +487,7 @@ if len(enabled_sites) > 0:
                                 launcher_log
                             ) 
                     else:
-                        launcher_log.info("Era5 product with downloader history id {} was already processed {} which is >= than the maximum allowed nb retries of {}, no additional reprocessing".format(
-                            dh_id, dh_retries, MAX_NB_RETRIES
-                            ),
-                            print_msg=True
-                        )
+                        launcher_log.info(no_processing_msg, print_msg=True)
                 else:
                     pass #do nothing as product is already available
         else:

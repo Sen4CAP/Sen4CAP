@@ -10,6 +10,7 @@ import os
 import logging
 import errno
 import signal
+import requests
 
 DATE_FORMAT = "%Y%m%d"
 DEFAULT_OUTPUT_DIRECTORY = "/usr/share/weather/out/test_site/"
@@ -18,10 +19,13 @@ DEFAULT_ERA5_FILE_NAME = "era5_{}.nc"
 DEFAULT_OUTPUT_FILE_NAME = "weather_{}.nc"
 LOG_FILE_NAME = "weather.log"
 VALID_PROCESSING = 0 
-ERR_ERA5_DOWNLOAD = 2 #era5 file from cds can NOT be downloaded
-ERR_DAILY_DATA_PROCESSING = 3 #when computing the daily average there are some errors
-ERR_DAILY_DATA_WRITING = 4 #when writing the daily average data to file there are some errors
-ERR_INVALID_PARAMETERS = 5 #command line parameters are wrong
+ERR_ERA5_DOWNLOAD = 2               # era5 file from cds can NOT be downloaded
+ERR_DAILY_DATA_PROCESSING = 3       # when computing the daily average there are some errors
+ERR_DAILY_DATA_WRITING = 4          # when writing the daily average data to file there are some errors
+ERR_INVALID_PARAMETERS = 5          # command line parameters are wrong
+ERR_ERA5_CREDENTIALS_FILE = 6       # no dotrc file found
+ERR_ERA5_HTTP_ERROR = 7             # connect error
+ERR_ERA5_CLIENT_UNKNONW_ERROR = 8   # CDS client unknown error
 
 class LogHandler(object):
     def __init__(self, log_path, name, level):
@@ -96,7 +100,8 @@ def get_hourly_era5_data(cds, day, outfile, latlonbox):
     yyyy="{:02d}".format(day.year)
     cds.retrieve(
     'reanalysis-era5-land',
-    {'format': 'netcdf',
+    {'data_format': 'netcdf',
+    'download_format': 'unarchived',
     'variable': ['2m_temperature', 'potential_evaporation', 'total_precipitation','surface_solar_radiation_downwards',\
     'volumetric_soil_water_layer_1', 'volumetric_soil_water_layer_2', 'volumetric_soil_water_layer_3',
     'volumetric_soil_water_layer_4'],
@@ -107,7 +112,7 @@ def get_hourly_era5_data(cds, day, outfile, latlonbox):
     'area': latlonbox,
     'year': [yyyy]},
     outfile)
-
+    
 def get_hourly_data(cds, day, latlonbox):
     create_recursive_dirs(args.wrk)
     dwn_file_name = args.ef.replace("{}", day.strftime(DATE_FORMAT))
@@ -118,7 +123,14 @@ def get_hourly_data(cds, day, latlonbox):
         try:
             get_hourly_era5_data(cds, day, dwn_file, latlonbox)
             return dwn_file
-        except:
+        except requests.HTTPError as http_err:
+            status_code = http_err.response.status_code if http_err.response else None
+            print(f"HTTPError caught with status code: {status_code}. Detailed exception: {http_err}")
+            log.critical(f"HTTPError caught with status code: {status_code}. Detailed exception: {http_err}", print_msg=True, trace=True)
+            return os._exit(ERR_ERA5_HTTP_ERROR)
+            
+        except Exception as e:
+            print(e)
             log.critical('Era5 download failed for: {}'.format(dwn_file_name), print_msg=True, trace=True)
             return None
     else:
@@ -270,8 +282,16 @@ def export_daily_data(daily_data, day):
 def run(date):
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    cds = cdsapi.Client()
-    
+    try:
+        cds = cdsapi.Client()
+    except Exception as e:
+        msg = str(e)
+        print(f"Exception caught with message: {msg}")
+        if "missing/incomplete configuration file" in msg.lower():
+            return ERR_ERA5_CREDENTIALS_FILE  
+        else:
+            return ERR_ERA5_CLIENT_UNKNONW_ERROR
+
     log.info("Running for date: {}".format(date.strftime(DATE_FORMAT)), print_msg=True)
     
     #download era5 file

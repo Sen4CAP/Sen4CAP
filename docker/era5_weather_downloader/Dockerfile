@@ -13,7 +13,7 @@ RUN apt-get install -y software-properties-common
 RUN apt-get install -y python3-pip
 
 #python libraries
-RUN pip install cdsapi
+RUN pip install 'cdsapi>=0.7.4'
 RUN pip install numpy
 RUN pip install netCDF4
 
