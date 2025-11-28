@@ -1537,6 +1537,7 @@ def read_counts_csv(path):
 
 
 def main():
+    logging.basicConfig(format="%(levelname)s:%(message)s")
     ogr.UseExceptions()
 
     parser = argparse.ArgumentParser(description="Imports parcels")
