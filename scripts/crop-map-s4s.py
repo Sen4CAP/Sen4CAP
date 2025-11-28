@@ -1934,12 +1934,8 @@ def main():
     ]
 
     command += [
-        "parcels.csv",
-        "lut.csv",
         "tiles.csv",
-        "optical.csv",
         "radar.csv",
-        "lpis.txt",
     ]
 
     container = ContainerInfo(
