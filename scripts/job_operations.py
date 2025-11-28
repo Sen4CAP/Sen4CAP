@@ -1,10 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from __future__ import print_function
 import argparse
 import re
 import glob
-import gdal
-import osr
+from osgeo import gdal
+from osgeo import osr
 import subprocess
 import lxml.etree
 from lxml.builder import E
@@ -253,7 +253,7 @@ class L2AInfo(object):
                 print("Executing SQL command: {}".format(cmd))
             self.cursor.execute(cmd)
             self.conn.commit()
-        except Exception, e:
+        except Exception as e:
             print("Database update query failed: {}".format(e))
             self.database_disconnect()
             return False
