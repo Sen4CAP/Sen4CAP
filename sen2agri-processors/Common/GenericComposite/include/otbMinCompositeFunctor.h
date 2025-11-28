@@ -55,12 +55,14 @@ public:
       TOutput outPix = NO_DATA_VALUE;
       int i = 0;
       bool mskValidPixel = true;
+      bool isPositiveValue;
       size_t imgsCnt = this->m_HasMasks ? (input.size() / 2) : input.size();
       for (i = 0; i<imgsCnt; i++)
       {
           const auto &inPix = input[i];
           mskValidPixel = (!this->m_HasMasks || (input[i+imgsCnt] == this->m_MskValidValue));
-          if (mskValidPixel && (!this->m_UseNoDataValue || inPix != this->m_NoDataValue) && inPix > 0)
+          isPositiveValue = this->m_ZeroIsValid ? inPix >= 0 : inPix > 0;
+          if (mskValidPixel && (!this->m_UseNoDataValue || inPix != this->m_NoDataValue) && isPositiveValue)
           {
               if (outPix == NO_DATA_VALUE || inPix < outPix) {
                   outPix = inPix;

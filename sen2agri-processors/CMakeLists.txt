@@ -46,7 +46,7 @@ endif()
 
 install(FILES ../scripts/sen2agri_common.py
               ../scripts/split_shapefile.py
-        DESTINATION usr/lib/python2.7/site-packages/)
+        DESTINATION usr/lib/python3.9/site-packages/)
 
 install(FILES ../scripts/insert_l2a_product_to_db.py
               ../scripts/delete_site.py
@@ -62,6 +62,7 @@ install(FILES ../scripts/insert_l2a_product_to_db.py
               ../scripts/crop-type-wrapper.py
               ../scripts/crop-diversification.py
               ../scripts/data-preparation-s4s.py
+              ../scripts/l3b_multi_dates_composite.py
               ../scripts/s4s_perm_crops/s4s-perm-crops-extract-inputs.py
               ../scripts/s4s_perm_crops/s4s-perm-crops-build-refl-stack.py
               ../scripts/s4s_perm_crops/s4s-perm-crops-rasterization.py

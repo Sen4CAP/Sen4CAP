@@ -229,6 +229,11 @@ private:
       SetDefaultParameterInt("mosaic", 0);
       MandatoryOff("mosaic");
 
+      AddParameter(ParameterType_Int, "zv", "Zero values are considered valid");
+      SetParameterDescription("zv", "The pixels with value = 0 are considered valid. Default is false (0)");
+      SetDefaultParameterInt("zv", 0);
+      MandatoryOff("zv");
+
       // TODO : Add here also the dates of the rasters (optional)
 
       AddParameter(ParameterType_Group, "srcwin", "Source window");
@@ -491,7 +496,6 @@ private:
           SetParameterOutputImage("out", GetReader(inImages[0])->GetOutput());
           return;
       }
-
       bool useMasks = false;
       if (HasValue("msks")) {
           const auto &mskImages = GetParameterStringList("msks");
@@ -504,11 +508,27 @@ private:
       }
       // m_ReprojectedImages = ImageListType::New();
       auto first = true;
+      otb::Wrapper::ImagePixelType inType;
       for (const auto &file : inImages)
       {
           auto reader = GetReader(file);
           const auto inImage = reader->GetOutput();
+          if (first) {
+              otb::ImageIOBase* io = reader->GetImageIO();
+              auto compType = io->GetComponentType();
 
+              switch (compType)
+              {
+                  case itk::ImageIOBase::UCHAR:  inType = otb::Wrapper::ImagePixelType_uint8; break;
+                  case itk::ImageIOBase::USHORT: inType = otb::Wrapper::ImagePixelType_uint16; break;
+                  case itk::ImageIOBase::SHORT:  inType = otb::Wrapper::ImagePixelType_int16; break;
+                  case itk::ImageIOBase::UINT:   inType = otb::Wrapper::ImagePixelType_uint32; break;
+                  case itk::ImageIOBase::INT:    inType = otb::Wrapper::ImagePixelType_int32; break;
+                  case itk::ImageIOBase::FLOAT:  inType = otb::Wrapper::ImagePixelType_float; break;
+                  case itk::ImageIOBase::DOUBLE: inType = otb::Wrapper::ImagePixelType_double; break;
+                  default:                       inType = otb::Wrapper::ImagePixelType_float; break;
+              }
+          }
           if (!HasValue("outputs.ulx") || !HasValue("outputs.spacingx") || !HasValue("outputs.sizex") ||
                   !HasValue("outputs.uly") || !HasValue("outputs.spacingy") || !HasValue("outputs.sizey")) {
               m_CompositingImages.push_back(inImage);
@@ -531,6 +551,7 @@ private:
       pFunctor->SetNoDataValue(GetParameterFloat("bv"));
       pFunctor->SetHasMasksValue(useMasks);
       pFunctor->SetMskValidValue(GetParameterFloat("mskvld"));
+      pFunctor->SetZeroIsValid(GetParameterInt("zv") != 0);
 
       m_CompositeFilter = CompositeFilterType::New();
       m_CompositeFilter->GetFunctor().SetFunctor(pFunctor);
@@ -541,6 +562,7 @@ private:
           i++;
       }
       // Output Image
+      SetParameterOutputImagePixelType("out", inType);
       SetParameterOutputImage("out", m_CompositeFilter->GetOutput());
   }
 

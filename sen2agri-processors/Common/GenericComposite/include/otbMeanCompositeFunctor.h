@@ -75,7 +75,11 @@ public:
       }
       else
       {
-          outPix = 0;
+          if (this->m_UseNoDataValue) {
+            outPix = this->m_NoDataValue;
+          } else {
+            outPix = 0;
+          }
       }
       return outPix;
   }

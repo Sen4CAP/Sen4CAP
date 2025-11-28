@@ -66,7 +66,7 @@ public:
   /**
    * \throw TBD
    */
-  CompositeFunctor() : m_UseNoDataValue(false), m_NoDataValue(0.)
+  CompositeFunctor() : m_UseNoDataValue(false), m_NoDataValue(0.), m_ZeroIsValid(false)
   {
   }
 
@@ -130,6 +130,15 @@ public:
   }
 
   /**
+    * Enabled 0 values as valid
+    * otherwise default value is used
+   */
+  void SetZeroIsValid(bool val)
+  {
+      m_ZeroIsValid = val;
+  }
+
+  /**
    * \param val the mask valid value for the masks bands
    */
   void SetMskValidValue(float val)
@@ -178,6 +187,8 @@ protected:
 
     bool m_HasMasks;
     float m_MskValidValue;
+
+    bool m_ZeroIsValid;
 
 private:
 };
