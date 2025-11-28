@@ -116,7 +116,8 @@ bool MAJAL8MetadataHelper<PixelType, MasksPixelType>::LoadAndCheckMetadata(const
     // present in the metadata
     if (this->m_metadata = majaMetadataReader->ReadMetadata(file)) {
         if (this->m_metadata->Header.FixedHeader.Mission.find(LANDSAT_MISSION_STR) != std::string::npos &&
-                this->m_metadata->Header.FixedHeader.SourceSystem == "MUSCATE") {
+                (this->m_metadata->Header.FixedHeader.SourceSystem == "MUSCATE" ||
+                this->m_metadata->Header.FixedHeader.SourceSystem == "CNES")) {
 
             this->m_fAotQuantificationValue = std::stod(this->m_metadata->ImageInformation.AOTQuantificationValue);
             this->m_fAotNoDataVal = std::stod(this->m_metadata->ImageInformation.AOTNoDataValue);
