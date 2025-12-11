@@ -4,6 +4,8 @@ build-*
 # CMake shadow build directory
 *-build
 
+build
+
 # Build script output
 packaging/Sen2AgriPlatform/
 packaging/Sen2AgriProcessors/
@@ -57,3 +59,6 @@ FAQ.html
 # Eclipse
 .project
 .settings
+
+# VS Code
+.vscode
