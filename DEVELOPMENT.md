@@ -30,3 +30,36 @@ Warning: if you switch from a host to a container build, make sure to delete the
 $ cd docker/build
 $ ./build.sh
 ```
+
+## Setting up the database
+
+```sh
+$ DBNAME=sen2agri # for Sen2-Agri
+$ DBNAME=sen4cap # for Sen4CAP
+$ DBNAME=sen4stat # for Sen4Stat
+
+# for all
+$ for f in 00-database/*.sql; psql -f $f $DBNAME; end
+$ for f in 01-extensions/*.sql; psql -f $f $DBNAME; end
+$ for f in 02-types/*.sql; psql -f $f $DBNAME; end
+$ for f in 03-tables/*.sql; psql -f $f $DBNAME; end
+$ for f in 04-views/*.sql; psql -f $f $DBNAME; end
+$ for f in 05-functions/*.sql; psql -f $f $DBNAME; end
+$ for f in 06-indexes/*.sql; psql -f $f $DBNAME; end
+$ for f in 07-data/*.sql; psql -f $f $DBNAME; end
+$ for f in 08-keys/*.sql; psql -f $f $DBNAME; end
+$ for f in 09-privileges/*.sql; psql -f $f $DBNAME; end
+$ for f in 10-triggers/*.sql; psql -f $f $DBNAME; end
+
+# for Sen2-Agri
+$ for f in 07-data/sen2agri/*.sql; psql -f $f $DBNAME; end
+
+# for Sen4CAP
+$ for f in 03-tables/sen4cap/*.sql; psql -f $f $DBNAME; end
+$ for f in 07-data/sen4cap/*.sql; psql -f $f $DBNAME; end
+
+# for Sen4Stat
+$ for f in 03-tables/sen4stat/*.sql; psql -f $f $DBNAME; end
+$ for f in 07-data/sen4stat/*.sql; psql -f $f $DBNAME; end
+$ for f in 08-keys/sen4stat/*.sql; psql -f $f $DBNAME; end
+```
