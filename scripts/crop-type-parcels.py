@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 from glob import glob
 
 import dateutil.parser
-from gdal import gdalconst
 from lxml import etree
 from lxml.builder import E
 from osgeo import gdal, ogr, osr
@@ -1036,7 +1035,7 @@ class CoherenceSeasonComposite(object):
 
 
 def get_projection(file):
-    ds = gdal.Open(file, gdalconst.GA_ReadOnly)
+    ds = gdal.Open(file, gdal.GA_ReadOnly)
     srs = osr.SpatialReference(wkt=ds.GetProjectionRef())
 
     # workaround for gdal-libs-1.11.4-3 not knowing about EPSG:3035
@@ -1095,7 +1094,7 @@ def process_radar(args, pool):
             else:
                 found_products.add(product.path)
         if product.tile_id not in tile_spacing:
-            ds = gdal.Open(product.path, gdalconst.GA_ReadOnly)
+            ds = gdal.Open(product.path, gdal.GA_ReadOnly)
             if ds:
                 gt = ds.GetGeoTransform()
                 tile_spacing[product.tile_id] = int(round(gt[1]))
@@ -1157,7 +1156,7 @@ def process_radar(args, pool):
         if not ref:
             ref = tile_product_ref[tile_id]
 
-        ds = gdal.Open(ref, gdalconst.GA_ReadOnly)
+        ds = gdal.Open(ref, gdal.GA_ReadOnly)
         ref_extent_map[tile_id] = get_extent(ds)
         ref_gt_map[tile_id] = ds.GetGeoTransform()
         del ds

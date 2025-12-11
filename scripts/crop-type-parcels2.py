@@ -18,7 +18,6 @@ from glob import glob
 from lxml import etree
 from lxml.builder import E
 from osgeo import gdal, ogr, osr
-from osgeo.gdal import gdalconst
 
 import docker
 
@@ -1150,7 +1149,7 @@ class CoherenceSeasonComposite(object):
 
 
 def get_projection(file):
-    ds = gdal.Open(file, gdalconst.GA_ReadOnly)
+    ds = gdal.Open(file, gdal.GA_ReadOnly)
     srs = osr.SpatialReference(wkt=ds.GetProjectionRef())
 
     # workaround for gdal-libs-1.11.4-3 not knowing about EPSG:3035
@@ -1249,7 +1248,7 @@ def process_radar(args, volumes, pool):
     ref_size_map = {}
     if args.lpis_path:
         for tile_id, path in ref_map.items():
-            ds = gdal.Open(path, gdalconst.GA_ReadOnly)
+            ds = gdal.Open(path, gdal.GA_ReadOnly)
             ref_size_map[tile_id] = (ds.RasterXSize, ds.RasterYSize)
             ref_extent_map[tile_id] = get_extent(ds)
             ref_gt_map[tile_id] = ds.GetGeoTransform()
@@ -1257,7 +1256,7 @@ def process_radar(args, volumes, pool):
     else:
         for group, products in groups:
             if group.tile_id not in ref_extent_map:
-                ds = gdal.Open(products[0].path, gdalconst.GA_ReadOnly)
+                ds = gdal.Open(products[0].path, gdal.GA_ReadOnly)
                 ref_size_map[group.tile_id] = (ds.RasterXSize, ds.RasterYSize)
                 ref_extent_map[group.tile_id] = get_extent(ds)
                 ref_gt_map[group.tile_id] = ds.GetGeoTransform()
